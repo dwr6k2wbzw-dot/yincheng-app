@@ -107,7 +107,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
             _amount('餐食', s.foodRevenue, AppColors.warn),
             if (s.projectAmount != 0) _amount('專案', s.projectAmount, AppColors.muted),
           ]),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
+          _MixBar(drinks: s.drinksRevenue, food: s.foodRevenue),
+          const SizedBox(height: 16),
           if (s.targetAmount != null) ...[
             ClipRRect(
               borderRadius: BorderRadius.circular(6),
@@ -154,8 +156,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 6),
           const Text('雜項＝零用金-其他雜支＋酒水副材料-雜項，÷ 營業收入；不計入總進貨',
               style: TextStyle(color: AppColors.muted, fontSize: 11)),
-          const SizedBox(height: 12),
-          _MixBar(drinks: s.drinksRevenue, food: s.foodRevenue),
         ]),
       ),
       const SizedBox(height: 12),
