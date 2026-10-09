@@ -4,6 +4,8 @@ import pathlib, re
 p = pathlib.Path("web/index.html")
 s = p.read_text(encoding="utf-8")
 s = re.sub(r"<title>.*?</title>", "<title>小城外</title>", s, flags=re.S)
+# iPhone「加入主畫面」用的圖示（180×180）
+s = re.sub(r'<link rel="apple-touch-icon"[^>]*>', '<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">', s)
 # iPhone「加入主畫面」顯示的名稱
 s = re.sub(r'<meta name="apple-mobile-web-app-title"[^>]*>', '<meta name="apple-mobile-web-app-title" content="小城外">', s)
 if 'apple-mobile-web-app-title' not in s:

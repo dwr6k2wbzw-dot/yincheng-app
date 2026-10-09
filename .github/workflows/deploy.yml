@@ -25,6 +25,8 @@ jobs:
           if [ ! -d web ]; then flutter create --platforms web --project-name yincheng_ops --org tw.yincheng . ; fi
           rm -f test/widget_test.dart
           python3 tool/patch_index.py
+          # App 圖示（小城外 logo）
+          mkdir -p web/icons && cp tool/icons/Icon-*.png tool/icons/apple-touch-icon.png web/icons/ && cp tool/icons/favicon.png web/favicon.png
           sed -i 's/"name": ".*"/"name": "小城外"/; s/"short_name": ".*"/"short_name": "小城外"/; s/"background_color": ".*"/"background_color": "#0F1115"/; s/"theme_color": ".*"/"theme_color": "#0F1115"/' web/manifest.json
       - run: flutter pub get
       - name: 靜態檢查（只擋錯誤，不擋建議）
