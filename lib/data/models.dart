@@ -105,7 +105,8 @@ class Issue {
 class CostCategory {
   final String code;
   final String name;
-  CostCategory(this.code, this.name);
+  final String? storeName; // 這個類別屬於哪家店（隱城／小城外）
+  CostCategory(this.code, this.name, [this.storeName]);
 }
 
 class Supplier {
