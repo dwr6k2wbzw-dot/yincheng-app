@@ -71,9 +71,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        floatingActionButton: _synced
-            ? null
-            : FloatingActionButton.extended(
+        floatingActionButton: FloatingActionButton.extended(
                 onPressed: () async {
                   final saved = await Navigator.push<bool>(
                     context,
@@ -89,7 +87,11 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           builder: (context, snap) {
             if (snap.hasError) return ErrorView(message: friendlyError(snap.error!), onRetry: _reload);
             if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-            final (list, cats, last) = snap.data!;
+            final (all, cats, last) = snap.data!;
+            // 已被 Excel 同一筆取代的 App 暫記不計入
+            final list = all.where((p) => !p.superseded).toList();
+            final replaced = all.length - list.length;
+            final pending = list.where((p) => p.source == 'app').toList();
             final vendor = list.where((p) => p.paidBy != 'petty_cash').toList();
             final petty = list.where((p) => p.paidBy == 'petty_cash').toList();
             return RefreshIndicator(
@@ -111,7 +113,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          '進貨由 Dropbox 日報表每小時自動同步；要新增、修改或核銷請直接改 Excel。'
+                          '進貨由 Dropbox 日報表每小時自動同步。也可以按右下角在 App 先記一筆（暫記），'
+                          '之後 Excel 打進同一筆（同金額、同付款方式、日期差 7 天內）會自動取代，不會重複算。'
                           '${last == null ? '' : '\n最後一次寫入：${DateFormat('M/d HH:mm').format(last)}'}',
                           style: const TextStyle(color: AppColors.muted, fontSize: 12, height: 1.5),
                         ),
@@ -126,6 +129,19 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                 const SizedBox(height: 12),
                 Text('本月進貨合計 ${ntd(list.fold<double>(0, (t, p) => t + p.amount))}，共 ${list.length} 筆',
                     textAlign: TextAlign.center, style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+                if (_synced && (pending.isNotEmpty || replaced > 0))
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      [
+                        if (pending.isNotEmpty)
+                          '含 App 暫記 ${pending.length} 筆 ${ntd(pending.fold<double>(0, (t, p) => t + p.amount))}（Excel 還沒出現）',
+                        if (replaced > 0) '$replaced 筆暫記已由 Excel 取代',
+                      ].join('；'),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: AppColors.warn, fontSize: 12),
+                    ),
+                  ),
               ]),
             );
           },
@@ -297,7 +313,7 @@ class _PurchaseTile extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 '${DateFormat('M/d').format(p.purchaseDate)}・$categoryName'
-                '${p.paidBy == 'petty_cash' ? '・零用金' : ''}${p.source == 'import' ? '・Excel' : ''}',
+                '${p.paidBy == 'petty_cash' ? '・零用金' : ''}${p.source == 'import' ? '・Excel' : '・App 暫記'}',
                 style: const TextStyle(color: AppColors.muted, fontSize: 12),
               ),
             ]),
@@ -416,7 +432,10 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
               DropdownButtonFormField<String>(
                 value: _category,
                 decoration: const InputDecoration(labelText: '進貨類別'),
-                items: [for (final c in cats) DropdownMenuItem(value: c.code, child: Text(c.name))],
+                items: [
+                  for (final c in cats.where((c) => c.storeName == null || c.storeName == widget.membership.storeName))
+                    DropdownMenuItem(value: c.code, child: Text(c.name)),
+                ],
                 onChanged: (v) => setState(() {
                   _category = v;
                   // 只有一家預設廠商時自動帶入（例：水果＝德哥）

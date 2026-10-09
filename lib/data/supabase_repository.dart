@@ -241,7 +241,7 @@ class SupabaseRepository implements Repository {
   Future<List<Purchase>> recentPurchases(String storeId, {int limit = 30}) async {
     final rows = await _db
         .from('purchases')
-        .select('id, purchase_date, category_code, memo, amount, paid_by, reconciled, source, '
+        .select('id, purchase_date, category_code, memo, amount, paid_by, reconciled, source, superseded_by, '
             'suppliers!purchases_supplier_same_store(name)')
         .eq('store_id', storeId)
         .order('purchase_date', ascending: false)
@@ -254,7 +254,7 @@ class SupabaseRepository implements Repository {
   Future<List<Purchase>> monthPurchases(String storeId, DateTime month) async {
     final rows = await _db
         .from('purchases')
-        .select('id, purchase_date, category_code, memo, amount, paid_by, reconciled, source, '
+        .select('id, purchase_date, category_code, memo, amount, paid_by, reconciled, source, superseded_by, '
             'suppliers!purchases_supplier_same_store(name)')
         .eq('store_id', storeId)
         .eq('period_month', _day.format(DateTime(month.year, month.month, 1)))
