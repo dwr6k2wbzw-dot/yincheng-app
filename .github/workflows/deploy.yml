@@ -41,7 +41,7 @@ jobs:
       - name: 編譯網頁版
         run: |
           set +e
-          flutter build web --release --no-web-resources-cdn --pwa-strategy=none --base-href "/${{ github.event.repository.name }}/" > build.txt 2>&1
+          flutter build web --release --pwa-strategy=none --base-href "/${{ github.event.repository.name }}/" > build.txt 2>&1
           rc=$?
           cat build.txt
           if [ $rc -ne 0 ]; then
