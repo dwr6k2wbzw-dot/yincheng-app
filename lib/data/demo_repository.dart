@@ -107,6 +107,10 @@ class DemoRepository implements Repository {
   }
 
   @override
+  Future<DateTime?> lastExcelSync(String storeId) async =>
+      storeId == 'yc' ? DateTime.now().subtract(const Duration(minutes: 25)) : null;
+
+  @override
   Future<MonthlySummary> monthlySummary(String storeId, DateTime month) async {
     if (_isStaff || storeId != 'yc') {
       return MonthlySummary(month: month, revenue: 0, guests: 0, drinksRevenue: 0, foodRevenue: 0);

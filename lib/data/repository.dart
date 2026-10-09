@@ -23,6 +23,7 @@ abstract class Repository {
   Future<List<RevenueEntry>> revenueEntries(String storeId, {int limit = 60});
   Future<RevenueEntry?> revenueEntryFor(String storeId, DateTime bizDate);
   Future<void> saveRevenueEntry(String storeId, RevenueEntry e);
+  Future<DateTime?> lastExcelSync(String storeId);
 
   // 進貨
   Future<DateTime> businessDate(String storeId);

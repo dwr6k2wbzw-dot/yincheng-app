@@ -123,6 +123,18 @@ class SupabaseRepository implements Repository {
     }
   }
 
+  @override
+  Future<DateTime?> lastExcelSync(String storeId) async {
+    final r = await _db
+        .from('import_batches')
+        .select('imported_at')
+        .eq('store_id', storeId)
+        .order('imported_at', ascending: false)
+        .limit(1)
+        .maybeSingle();
+    return r == null ? null : DateTime.tryParse(r['imported_at'] as String)?.toLocal();
+  }
+
   // ---------------- 進貨 ----------------
   @override
   Future<DateTime> businessDate(String storeId) async {

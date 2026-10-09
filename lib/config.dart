@@ -13,4 +13,7 @@ class AppConfig {
 
   /// true：使用內建示範資料（不連線），方便先看畫面
   static const demo = bool.fromEnvironment('DEMO', defaultValue: false);
+
+  /// 營收以 Dropbox 日報表為準的店家：App 的營收分頁只能看，不能登記或修改（每小時自動同步）
+  static const excelSyncedStores = {'隱城'};
 }

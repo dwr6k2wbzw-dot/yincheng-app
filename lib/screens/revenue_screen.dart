@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../app_state.dart';
+import '../config.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
 import '../theme.dart';
@@ -17,18 +18,29 @@ class RevenueScreen extends StatefulWidget {
 }
 
 class _RevenueScreenState extends State<RevenueScreen> {
-  late Future<List<RevenueEntry>> _future;
+  late Future<(List<RevenueEntry>, DateTime?)> _future;
   bool _started = false;
+
+  /// 營收以 Dropbox 日報表為準的店：只能看
+  bool get _synced => AppConfig.excelSyncedStores.contains(widget.membership.storeName);
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_started) return;
     _started = true;
-    _future = AppScope.of(context).repo.revenueEntries(widget.membership.storeId);
+    _future = _load();
   }
 
-  void _reload() => setState(() => _future = AppScope.of(context).repo.revenueEntries(widget.membership.storeId));
+  Future<(List<RevenueEntry>, DateTime?)> _load() async {
+    final repo = AppScope.of(context).repo;
+    final id = widget.membership.storeId;
+    final list = await repo.revenueEntries(id);
+    final last = _synced ? await repo.lastExcelSync(id) : null;
+    return (list, last);
+  }
+
+  void _reload() => setState(() => _future = _load());
 
   Future<void> _open({RevenueEntry? entry}) async {
     final saved = await Navigator.push<bool>(
@@ -40,30 +52,40 @@ class _RevenueScreenState extends State<RevenueScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: () => _open(),
-          icon: const Icon(Icons.add),
-          label: const Text('登記營收'),
-        ),
-        body: FutureBuilder<List<RevenueEntry>>(
+        floatingActionButton: _synced
+            ? null
+            : FloatingActionButton.extended(
+                onPressed: () => _open(),
+                icon: const Icon(Icons.add),
+                label: const Text('登記營收'),
+              ),
+        body: FutureBuilder<(List<RevenueEntry>, DateTime?)>(
           future: _future,
           builder: (context, snap) {
             if (snap.hasError) return ErrorView(message: friendlyError(snap.error!), onRetry: _reload);
             if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-            final list = snap.data!;
+            final (list, last) = snap.data!;
+            final banner = _synced ? _SyncBanner(last: last) : null;
             if (list.isEmpty) {
-              return const Center(
-                child: Text('還沒有營收紀錄\n按右下角「登記營收」新增第一天', textAlign: TextAlign.center,
-                    style: TextStyle(color: AppColors.muted)),
-              );
+              return ListView(padding: const EdgeInsets.all(16), children: [
+                if (banner != null) banner,
+                const SizedBox(height: 120),
+                Text(_synced ? '還沒有同步到營收資料' : '還沒有營收紀錄\n按右下角「登記營收」新增第一天',
+                    textAlign: TextAlign.center, style: const TextStyle(color: AppColors.muted)),
+              ]);
             }
+            final offset = banner == null ? 0 : 1;
             return RefreshIndicator(
               onRefresh: () async => _reload(),
               child: ListView.separated(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-                itemCount: list.length,
+                itemCount: list.length + offset,
                 separatorBuilder: (_, __) => const SizedBox(height: 8),
-                itemBuilder: (_, i) => _RevenueTile(e: list[i], onTap: () => _open(entry: list[i])),
+                itemBuilder: (_, i) {
+                  if (i < offset) return banner!;
+                  final e = list[i - offset];
+                  return _RevenueTile(e: e, onTap: _synced ? null : () => _open(entry: e));
+                },
               ),
             );
           },
@@ -74,7 +96,7 @@ class _RevenueScreenState extends State<RevenueScreen> {
 class _RevenueTile extends StatelessWidget {
   const _RevenueTile({required this.e, required this.onTap});
   final RevenueEntry e;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -99,11 +121,35 @@ class _RevenueTile extends StatelessWidget {
             ]),
           ),
           Text(ntd(e.received), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-          const Icon(Icons.chevron_right, color: AppColors.muted),
+          if (onTap != null) const Icon(Icons.chevron_right, color: AppColors.muted) else const SizedBox(width: 8),
         ]),
       ),
     );
   }
+}
+
+/// 營收由 Dropbox 同步時，列表上方的說明
+class _SyncBanner extends StatelessWidget {
+  const _SyncBanner({required this.last});
+  final DateTime? last;
+  @override
+  Widget build(BuildContext context) => SectionCard(
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Icon(Icons.sync, color: AppColors.primary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('營收由 Dropbox 日報表自動同步', style: TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 4),
+              Text(
+                '每小時檢查一次 Excel，有變動就更新。要修改數字請直接改 Excel。\n'
+                '最後一次寫入：${last == null ? '尚無紀錄' : DateFormat('M/d HH:mm').format(last!)}',
+                style: const TextStyle(color: AppColors.muted, fontSize: 12, height: 1.5),
+              ),
+            ]),
+          ),
+        ]),
+      );
 }
 
 /// 新增／修改一天的營收
