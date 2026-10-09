@@ -22,4 +22,11 @@ class AppConfig {
 
   /// 以「廠商銷貨單」分頁取代「盤點」分頁的店家（資料來自 Dropbox 廠商進貨單資料夾）
   static const vendorSlipStores = {'隱城', '小城外'};
+
+  /// 新增進貨「類別（常用廠商）」提示的手動調整（老闆指定；其餘照日報表統計）
+  static const vendorHintHidden = {'xc_ramen_misc'}; // 布布拉麵-雜項：不顯示提示
+  static const vendorHintRename = {'二店拉麵食材': '立成'}; // 布布拉麵-食材
+  static const vendorHintAdd = {
+    'xc_bar_food': ['小郭'], // 酒吧-食材
+  };
 }

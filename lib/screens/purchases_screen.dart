@@ -373,7 +373,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
     final r = await Future.wait([repo.costCategories(), repo.suppliers(id), repo.businessDate(id)]);
     _date ??= r[2] as DateTime;
     try {
-      _hints = await repo.vendorHints(id);
+      _hints = adjustVendorHints(await repo.vendorHints(id));
     } catch (_) {} // 提示讀不到不影響新增
     _sups = r[1] as List<Supplier>;
     return (r[0] as List<CostCategory>, r[1] as List<Supplier>);
@@ -627,4 +627,21 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
           },
         ),
       );
+}
+
+
+/// 套用老闆指定的提示調整：隱藏、改名、加入（去除重複）
+Map<String, List<String>> adjustVendorHints(Map<String, List<String>> hints) {
+  final out = <String, List<String>>{};
+  final codes = {...hints.keys, ...AppConfig.vendorHintAdd.keys};
+  for (final c in codes) {
+    if (AppConfig.vendorHintHidden.contains(c)) continue;
+    final list = <String>[];
+    for (final n in [...?hints[c], ...?AppConfig.vendorHintAdd[c]]) {
+      final name = AppConfig.vendorHintRename[n] ?? n;
+      if (!list.contains(name)) list.add(name);
+    }
+    if (list.isNotEmpty) out[c] = list;
+  }
+  return out;
 }
