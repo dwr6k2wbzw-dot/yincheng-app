@@ -567,7 +567,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                   controller: ctrl,
                   focusNode: focus,
                   maxLength: 60,
-                  decoration: const InputDecoration(labelText: '廠商名稱（選填，自行輸入）', counterText: ''),
+                  decoration: const InputDecoration(labelText: '廠商名稱／品項（選填，自行輸入）', counterText: ''),
                 ),
                 optionsViewBuilder: (context, onSelected, options) => Align(
                   alignment: Alignment.topLeft,
@@ -611,7 +611,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
               TextField(
                 controller: _memo,
                 maxLines: 2,
-                decoration: const InputDecoration(labelText: '摘要／備註（選填）'),
+                decoration: const InputDecoration(labelText: '填表人／請款人（選填）'),
               ),
               const SizedBox(height: 12),
               _scanCard(sups),
