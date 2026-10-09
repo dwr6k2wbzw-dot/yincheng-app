@@ -1,0 +1,44 @@
+# 每次推送到 main：在 GitHub 雲端編譯 Flutter 網頁版，發布到 GitHub Pages
+name: 編譯並發布網頁版
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: 產生網頁平台設定（若尚未存在）
+        run: |
+          if [ ! -d web ]; then flutter create --platforms web --project-name yincheng_ops --org tw.yincheng . ; fi
+          rm -f test/widget_test.dart
+      - run: flutter pub get
+      - name: 靜態檢查（只擋錯誤，不擋建議）
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+      - name: 編譯網頁版
+        run: flutter build web --release --base-href "/${{ github.event.repository.name }}/"
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
