@@ -5,7 +5,7 @@ on:
     branches: [main]
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 concurrency:
@@ -49,6 +49,14 @@ jobs:
             echo "::error title=build::${msg}"
           fi
           exit $rc
+      - name: 另存一份編譯結果到 web-build 分支（供除錯檢查）
+        run: |
+          cd build/web
+          git init -q -b web-build
+          git -c user.email=ci@noreply -c user.name=ci add -A
+          git -c user.email=ci@noreply -c user.name=ci commit -qm "build ${{ github.sha }}"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" web-build
+          rm -rf .git
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
