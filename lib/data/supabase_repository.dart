@@ -222,8 +222,8 @@ class SupabaseRepository implements Repository {
 
   @override
   Future<List<CostCategory>> costCategories() async {
-    final rows = await _db.from('cost_categories').select('code, name').order('sort_order');
-    return rows.map((r) => CostCategory(r['code'] as String, r['name'] as String)).toList();
+    final rows = await _db.from('cost_categories').select('code, name, store_name').order('sort_order');
+    return rows.map((r) => CostCategory(r['code'] as String, r['name'] as String, r['store_name'] as String?)).toList();
   }
 
   @override

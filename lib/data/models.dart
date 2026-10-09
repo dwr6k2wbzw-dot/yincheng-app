@@ -126,6 +126,8 @@ class Purchase {
   final String paidBy; // vendor / petty_cash
   final bool reconciled;
   final String source; // app / import
+  final String? supersededBy; // App 暫記已被 Excel 同一筆取代（不再計入）
+  bool get superseded => supersededBy != null;
   Purchase({
     required this.id,
     required this.purchaseDate,
@@ -136,6 +138,7 @@ class Purchase {
     required this.paidBy,
     required this.reconciled,
     required this.source,
+    this.supersededBy,
   });
 
   factory Purchase.fromRow(Map<String, dynamic> r) => Purchase(
@@ -148,6 +151,7 @@ class Purchase {
         paidBy: r['paid_by'] as String,
         reconciled: r['reconciled'] as bool? ?? false,
         source: r['source'] as String? ?? 'app',
+        supersededBy: r['superseded_by'] as String?,
       );
 }
 
