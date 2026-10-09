@@ -323,3 +323,38 @@ class FixedCosts {
   final double? payroll;
   const FixedCosts({this.rent, this.payroll});
 }
+
+/// 成員管理：店家成員（含 Email，只有老闆看得到）
+class MemberInfo {
+  final String userId;
+  final String displayName;
+  final Role role;
+  final bool active;
+  final String email;
+  MemberInfo({required this.userId, required this.displayName, required this.role, required this.active, required this.email});
+  factory MemberInfo.fromRow(Map<String, dynamic> r) => MemberInfo(
+        userId: r['user_id'] as String,
+        displayName: r['display_name'] as String? ?? '',
+        role: roleFrom(r['role'] as String),
+        active: r['active'] as bool? ?? true,
+        email: r['email'] as String? ?? '',
+      );
+}
+
+/// 成員管理：還沒被使用的邀請
+class MemberInvite {
+  final String id;
+  final String displayName;
+  final Role role;
+  final DateTime createdAt;
+  final DateTime expiresAt;
+  MemberInvite({required this.id, required this.displayName, required this.role, required this.createdAt, required this.expiresAt});
+  bool get expired => expiresAt.isBefore(DateTime.now());
+  factory MemberInvite.fromRow(Map<String, dynamic> r) => MemberInvite(
+        id: r['id'] as String,
+        displayName: r['display_name'] as String? ?? '',
+        role: roleFrom(r['role'] as String),
+        createdAt: DateTime.parse(r['created_at'] as String).toLocal(),
+        expiresAt: DateTime.parse(r['expires_at'] as String).toLocal(),
+      );
+}

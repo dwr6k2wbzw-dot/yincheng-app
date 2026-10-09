@@ -23,6 +23,49 @@ class SupabaseRepository implements Repository {
       _db.auth.signInWithPassword(email: email.trim(), password: password);
   @override
   Future<void> signOut() => _db.auth.signOut();
+  @override
+  Future<bool> signUp(String email, String password) async {
+    // 確認信的連結回到目前這個網址（GitHub Pages）
+    final back = '${Uri.base.origin}${Uri.base.path}';
+    final r = await _db.auth.signUp(email: email.trim(), password: password, emailRedirectTo: back);
+    return r.session != null;
+  }
+
+  // ---------------- 成員管理 ----------------
+  @override
+  Future<int> claimInvite(String code) async =>
+      (await _db.rpc('claim_invite', params: {'p_code': code}) as num).toInt();
+  @override
+  Future<String> createInvite(List<String> storeIds, Role role, String name) async =>
+      await _db.rpc('create_invite', params: {'p_stores': storeIds, 'p_role': role.name, 'p_name': name}) as String;
+  @override
+  Future<List<MemberInfo>> storeMembers(String storeId) async {
+    final rows = await _db.rpc('store_member_list', params: {'p_store': storeId}) as List;
+    return rows.map((r) => MemberInfo.fromRow(r as Map<String, dynamic>)).toList();
+  }
+  @override
+  Future<List<MemberInvite>> openInvites(String storeId) async {
+    final rows = await _db
+        .from('member_invites')
+        .select('id, display_name, role, created_at, expires_at')
+        .eq('store_id', storeId)
+        .isFilter('claimed_at', null)
+        .isFilter('revoked_at', null)
+        .order('created_at', ascending: false);
+    return rows.map(MemberInvite.fromRow).toList();
+  }
+  @override
+  Future<void> revokeInvite(String inviteId) => _db.rpc('revoke_invite', params: {'p_id': inviteId});
+  @override
+  Future<void> updateMember(String storeId, String userId, {Role? role, bool? active}) async {
+    final rows = await _db
+        .from('store_members')
+        .update({if (role != null) 'role': role.name, if (active != null) 'active': active})
+        .eq('store_id', storeId)
+        .eq('user_id', userId)
+        .select('user_id');
+    if (rows.isEmpty) throw Exception('message: 沒有權限修改這位成員,');
+  }
 
   // ---------------- 店家 ----------------
   @override

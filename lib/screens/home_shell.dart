@@ -4,7 +4,9 @@ import '../app_state.dart';
 import '../data/models.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../data/repository.dart';
 import 'dashboard_screen.dart';
+import 'members_screen.dart';
 import 'purchases_screen.dart';
 import 'revenue_screen.dart';
 import 'stock_counts_screen.dart';
@@ -19,6 +21,20 @@ class _HomeShellState extends State<HomeShell> {
   int _tab = 0;
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 建立帳號時輸入的邀請碼自動使用後，顯示一次結果
+    final state = AppScope.of(context);
+    final msg = state.inviteResult;
+    if (msg != null && !state.loading) {
+      state.inviteResult = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) showMessage(context, msg, error: msg.contains('無效') || msg.contains('錯誤'));
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
     if (state.loading && state.current == null) {
@@ -30,9 +46,23 @@ class _HomeShellState extends State<HomeShell> {
     final m = state.current;
     if (m == null) {
       return Scaffold(
-        body: ErrorView(
-          message: '這個帳號還沒有加入任何店家。\n請老闆在系統中把你加入店家成員。',
-          onRetry: state.loadMemberships,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.storefront_outlined, color: AppColors.muted, size: 48),
+              const SizedBox(height: 12),
+              const Text('這個帳號還沒有加入任何店家。\n請跟老闆要邀請碼，輸入後就能加入。', textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: () => enterInviteCode(context),
+                icon: const Icon(Icons.key_outlined),
+                label: const Text('輸入邀請碼'),
+              ),
+              const SizedBox(height: 8),
+              TextButton(onPressed: state.loadMemberships, child: const Text('重新整理')),
+            ]),
+          ),
         ),
         floatingActionButton: TextButton(onPressed: state.repo.signOut, child: const Text('登出')),
       );
@@ -66,10 +96,17 @@ class _HomeShellState extends State<HomeShell> {
       appBar: AppBar(
         title: _StoreSwitcher(state: state),
         actions: [
-          IconButton(
-            tooltip: '登出',
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
+          PopupMenuButton<String>(
+            tooltip: '更多',
+            onSelected: (v) async {
+              if (v == 'members') {
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => MembersScreen(membership: m)));
+                return;
+              }
+              if (v == 'code') {
+                enterInviteCode(context);
+                return;
+              }
               final ok = await showDialog<bool>(
                 context: context,
                 builder: (c) => AlertDialog(
@@ -83,6 +120,12 @@ class _HomeShellState extends State<HomeShell> {
               );
               if (ok == true) await state.repo.signOut();
             },
+            itemBuilder: (_) => [
+              if (m.role == Role.owner)
+                const PopupMenuItem(value: 'members', child: ListTile(leading: Icon(Icons.group_outlined), title: Text('成員管理'))),
+              const PopupMenuItem(value: 'code', child: ListTile(leading: Icon(Icons.key_outlined), title: Text('輸入邀請碼'))),
+              const PopupMenuItem(value: 'logout', child: ListTile(leading: Icon(Icons.logout), title: Text('登出'))),
+            ],
           ),
         ],
       ),
@@ -140,5 +183,35 @@ class _StoreSwitcher extends StatelessWidget {
       ),
       child: Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: title),
     );
+  }
+}
+
+/// 已登入後輸入邀請碼（加入新店家）
+Future<void> enterInviteCode(BuildContext context) async {
+  final state = AppScope.of(context);
+  final c = TextEditingController();
+  final code = await showDialog<String>(
+    context: context,
+    builder: (d) => AlertDialog(
+      title: const Text('輸入邀請碼'),
+      content: TextField(
+        controller: c,
+        autofocus: true,
+        textCapitalization: TextCapitalization.characters,
+        decoration: const InputDecoration(hintText: 'XXXXX-XXXXX'),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(d), child: const Text('取消')),
+        FilledButton(onPressed: () => Navigator.pop(d, c.text.trim()), child: const Text('加入')),
+      ],
+    ),
+  );
+  if (code == null || code.isEmpty) return;
+  try {
+    final n = await state.claimCode(code);
+    if (!context.mounted) return;
+    showMessage(context, n < 0 ? '邀請碼無效、已用過或已過期，請跟老闆要新的邀請碼。' : '已加入 $n 家店', error: n < 0);
+  } catch (e) {
+    if (context.mounted) showMessage(context, friendlyError(e), error: true);
   }
 }

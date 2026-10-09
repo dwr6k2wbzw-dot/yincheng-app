@@ -62,6 +62,40 @@ class DemoRepository implements Repository {
   }
 
   @override
+  Future<bool> signUp(String email, String password) async {
+    await signIn(email, password);
+    return true;
+  }
+
+  final _demoMembers = [
+    MemberInfo(userId: 'demo-user', displayName: '示範老闆', role: Role.owner, active: true, email: 'owner@demo'),
+    MemberInfo(userId: 'u2', displayName: '示範店長', role: Role.manager, active: true, email: 'manager@demo'),
+    MemberInfo(userId: 'u3', displayName: '示範員工', role: Role.staff, active: true, email: 'staff@demo'),
+  ];
+  final _demoInvites = <MemberInvite>[];
+  @override
+  Future<int> claimInvite(String code) async => -1;
+  @override
+  Future<String> createInvite(List<String> storeIds, Role role, String name) async {
+    _demoInvites.insert(0, MemberInvite(id: 'i${_demoInvites.length}', displayName: name, role: role,
+        createdAt: DateTime.now(), expiresAt: DateTime.now().add(const Duration(days: 14))));
+    return 'DEMO2-CODE9';
+  }
+  @override
+  Future<List<MemberInfo>> storeMembers(String storeId) async => List.of(_demoMembers);
+  @override
+  Future<List<MemberInvite>> openInvites(String storeId) async => List.of(_demoInvites);
+  @override
+  Future<void> revokeInvite(String inviteId) async => _demoInvites.removeWhere((i) => i.id == inviteId);
+  @override
+  Future<void> updateMember(String storeId, String userId, {Role? role, bool? active}) async {
+    final i = _demoMembers.indexWhere((m) => m.userId == userId);
+    final m = _demoMembers[i];
+    _demoMembers[i] = MemberInfo(userId: m.userId, displayName: m.displayName, role: role ?? m.role,
+        active: active ?? m.active, email: m.email);
+  }
+
+  @override
   Future<void> signOut() async {
     _signedIn = false;
     _auth.add(false);

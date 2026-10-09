@@ -10,8 +10,20 @@ abstract class Repository {
   Future<void> signIn(String email, String password);
   Future<void> signOut();
 
+  /// 建立帳號。回傳 true：已直接登入；false：需要先到信箱點確認連結
+  Future<bool> signUp(String email, String password);
+
   // 店家
   Future<List<Membership>> myMemberships();
+
+  // 成員管理（產生邀請碼、成員清單只有老闆；資料庫函式也會檢查）
+  /// 用邀請碼加入店家。回傳加入的店家數；-1＝邀請碼無效、已用過或已過期
+  Future<int> claimInvite(String code);
+  Future<String> createInvite(List<String> storeIds, Role role, String name);
+  Future<List<MemberInfo>> storeMembers(String storeId);
+  Future<List<MemberInvite>> openInvites(String storeId);
+  Future<void> revokeInvite(String inviteId);
+  Future<void> updateMember(String storeId, String userId, {Role? role, bool? active});
 
   // 營運總覽（老闆／店長）
   Future<MonthlySummary> monthlySummary(String storeId, DateTime month);
@@ -56,5 +68,10 @@ String friendlyError(Object e) {
   if (msg.contains('row-level security')) return '沒有權限執行這個動作。';
   if (msg.contains('daily_revenue_one_per_day')) return '這一天已經有營收紀錄了，請從列表點進去修改。';
   if (msg.contains('Invalid login credentials')) return '帳號或密碼錯誤。';
+  if (msg.contains('Email not confirmed')) return '這個 Email 還沒確認，請先到信箱點確認連結。';
+  if (msg.contains('User already registered') || msg.contains('already been registered')) return '這個 Email 已經有帳號了，請直接登入。';
+  if (msg.contains('rate limit')) return '操作太頻繁，請稍後再試。';
+  if (msg.contains('Signups not allowed') || msg.contains('signups are disabled')) return '目前沒有開放建立帳號，請聯絡老闆。';
+  if (msg.contains('Password should be')) return '密碼太短，請至少 8 個字。';
   return msg;
 }
