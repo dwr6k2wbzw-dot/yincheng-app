@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide toDouble;
 
@@ -234,6 +236,108 @@ class SupabaseRepository implements Repository {
     list.sort((a, b) => rank(a).compareTo(rank(b)));
     return list;
   }
+
+  // ---------------- 班表 ----------------
+  @override
+  Future<ShiftMonth> shiftMonth(String storeId, DateTime month) async {
+    final from = DateTime(month.year, month.month, 1);
+    final to = DateTime(month.year, month.month + 1, 1);
+    final m = _day.format(from);
+    final r = await Future.wait([
+      _db.from('shift_people').select().eq('store_id', storeId).order('sort_order').order('name'),
+      _db
+          .from('shift_entries')
+          .select('person_id, work_date, mark')
+          .eq('store_id', storeId)
+          .gte('work_date', m)
+          .lt('work_date', _day.format(to))
+          .limit(5000),
+      _db.from('shift_day_notes').select('note_date, note').eq('store_id', storeId).gte('note_date', m).lt('note_date', _day.format(to)),
+      _db.from('shift_month_stats').select('person_id, should_off, prev_unused_special').eq('store_id', storeId).eq('period_month', m),
+      _db.from('shift_month_files').select('photo_path').eq('store_id', storeId).eq('period_month', m),
+    ]);
+    final people = (r[0] as List).map((x) => ShiftPerson.fromRow(x as Map<String, dynamic>)).toList();
+    final marks = <String, Map<int, String>>{};
+    for (final e in r[1] as List) {
+      final d = DateTime.parse(e['work_date'] as String).day;
+      marks.putIfAbsent(e['person_id'] as String, () => {})[d] = e['mark'] as String;
+    }
+    final notes = {for (final n in r[2] as List) DateTime.parse(n['note_date'] as String).day: n['note'] as String};
+    final stats = {
+      for (final s in r[3] as List)
+        s['person_id'] as String: (
+          s['should_off'] == null ? null : toDouble(s['should_off']),
+          s['prev_unused_special'] == null ? null : toDouble(s['prev_unused_special'])
+        )
+    };
+    final files = r[4] as List;
+    return ShiftMonth(from, people, marks, notes, stats, files.isEmpty ? null : files.first['photo_path'] as String);
+  }
+
+  @override
+  Future<void> setShift(String storeId, String personId, DateTime date, String? mark) async {
+    if (mark == null) {
+      await _db.from('shift_entries').delete().eq('person_id', personId).eq('work_date', _day.format(date));
+    } else {
+      await _db.from('shift_entries').upsert(
+          {'store_id': storeId, 'person_id': personId, 'work_date': _day.format(date), 'mark': mark},
+          onConflict: 'person_id,work_date');
+    }
+  }
+
+  @override
+  Future<void> setShiftNote(String storeId, DateTime date, String? note) async {
+    if (note == null || note.trim().isEmpty) {
+      await _db.from('shift_day_notes').delete().eq('store_id', storeId).eq('note_date', _day.format(date));
+    } else {
+      await _db.from('shift_day_notes').upsert(
+          {'store_id': storeId, 'note_date': _day.format(date), 'note': note.trim()},
+          onConflict: 'store_id,note_date');
+    }
+  }
+
+  @override
+  Future<void> saveShiftPerson(String storeId, ShiftPerson p, {bool isNew = false}) async {
+    final v = {
+      'name': p.name.trim(),
+      'kind': p.kind,
+      'sort_order': p.sortOrder,
+      'hire_date': p.hireDate == null ? null : _day.format(p.hireDate!),
+      'active': p.active,
+    };
+    if (isNew) {
+      await _db.from('shift_people').insert({...v, 'store_id': storeId});
+    } else {
+      final rows = await _db.from('shift_people').update(v).eq('id', p.id).select('id');
+      if (rows.isEmpty) throw Exception('message: 沒有權限修改班表人員,');
+    }
+  }
+
+  @override
+  Future<void> saveShiftStats(String storeId, String personId, DateTime month, double? shouldOff, double? prevUnused) =>
+      _db.from('shift_month_stats').upsert({
+        'store_id': storeId,
+        'person_id': personId,
+        'period_month': _day.format(DateTime(month.year, month.month, 1)),
+        'should_off': shouldOff,
+        'prev_unused_special': prevUnused,
+      }, onConflict: 'person_id,period_month');
+
+  @override
+  Future<void> uploadShiftPhoto(String storeId, DateTime month, Uint8List jpeg) async {
+    final m = DateFormat('yyyy-MM').format(month);
+    final path = '$storeId/schedules/$m-${DateTime.now().millisecondsSinceEpoch}.jpg';
+    await _db.storage.from('receipts').uploadBinary(path, jpeg,
+        fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: false));
+    await _db.from('shift_month_files').upsert({
+      'store_id': storeId,
+      'period_month': _day.format(DateTime(month.year, month.month, 1)),
+      'photo_path': path,
+    }, onConflict: 'store_id,period_month');
+  }
+
+  @override
+  Future<String> shiftPhotoUrl(String path) => _db.storage.from('receipts').createSignedUrl(path, 3600);
 
   @override
   Future<Map<String, List<String>>> vendorHints(String storeId) async {

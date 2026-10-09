@@ -11,6 +11,7 @@ import 'members_screen.dart';
 import 'purchases_screen.dart';
 import 'revenue_screen.dart';
 import 'stock_counts_screen.dart';
+import 'schedule_screen.dart';
 import 'vendor_slips_screen.dart';
 
 class HomeShell extends StatefulWidget {
@@ -101,6 +102,13 @@ class _HomeShellState extends State<HomeShell> {
               icon: Icon(Icons.inventory_2_outlined), selectedIcon: Icon(Icons.inventory_2), label: '盤點'),
         ),
     ];
+    if (AppConfig.scheduleStores.contains(m.storeName)) {
+      tabs.add((
+        ScheduleScreen(key: ValueKey('sc-${m.storeId}'), membership: m),
+        const NavigationDestination(
+            icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month), label: '班表'),
+      ));
+    }
     final tab = _tab.clamp(0, tabs.length - 1);
     return Scaffold(
       appBar: AppBar(

@@ -478,3 +478,43 @@ Map<String, List<String>> vendorHintsFromRows(List<Map<String, dynamic>> rows) {
   }
   return out;
 }
+
+/// 班表上的人（正職 full／兼職 part）
+class ShiftPerson {
+  final String id;
+  final String name;
+  final String kind; // full / part
+  final int sortOrder;
+  final DateTime? hireDate;
+  final bool active;
+  ShiftPerson({required this.id, required this.name, this.kind = 'full', this.sortOrder = 0, this.hireDate, this.active = true});
+  bool get isFull => kind == 'full';
+  factory ShiftPerson.fromRow(Map<String, dynamic> r) => ShiftPerson(
+        id: r['id'] as String,
+        name: r['name'] as String,
+        kind: r['kind'] as String? ?? 'full',
+        sortOrder: (r['sort_order'] as num?)?.toInt() ?? 0,
+        hireDate: _date(r['hire_date']),
+        active: r['active'] as bool? ?? true,
+      );
+}
+
+/// 一個月的班表
+class ShiftMonth {
+  final DateTime month;
+  final List<ShiftPerson> people;
+  final Map<String, Map<int, String>> marks; // 人 → 日 → 記號（V／休／指休／O）
+  final Map<int, String> notes; // 日 → 備註
+  final Map<String, (double?, double?)> stats; // 人 → (本月應休, 原未休特休)
+  final String? photoPath;
+  ShiftMonth(this.month, this.people, this.marks, this.notes, this.stats, this.photoPath);
+
+  int get days => DateTime(month.year, month.month + 1, 0).day;
+  String? mark(String personId, int day) => marks[personId]?[day];
+  static bool isOff(String? m) => m == '休' || m == '指休';
+  static bool isOn(String? m) => m == 'V' || m == 'O';
+  /// 人力＝當天 V＋O 的人數
+  int staffing(int day) => people.where((p) => isOn(mark(p.id, day))).length;
+  int offDays(String personId) => (marks[personId] ?? {}).values.where(isOff).length;
+  int workDays(String personId) => (marks[personId] ?? {}).values.where(isOn).length;
+}

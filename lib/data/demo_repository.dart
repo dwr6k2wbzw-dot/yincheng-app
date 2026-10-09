@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'models.dart';
 import 'repository.dart';
@@ -77,6 +78,28 @@ class DemoRepository implements Repository {
 
   @override
   Future<Map<String, List<String>>> vendorHints(String storeId) async => {'liquor_monthly': ['示範酒商A', '示範酒商B']};
+
+  @override
+  Future<ShiftMonth> shiftMonth(String storeId, DateTime month) async => ShiftMonth(
+        DateTime(month.year, month.month, 1),
+        [ShiftPerson(id: 'p1', name: '示範正職'), ShiftPerson(id: 'p2', name: '示範兼職', kind: 'part', sortOrder: 10)],
+        {'p1': {1: 'V', 2: '休', 3: '指休'}, 'p2': {1: 'V', 3: 'O'}},
+        {3: '月會日'},
+        {'p1': (8.0, 3.0)},
+        null,
+      );
+  @override
+  Future<void> setShift(String storeId, String personId, DateTime date, String? mark) async {}
+  @override
+  Future<void> setShiftNote(String storeId, DateTime date, String? note) async {}
+  @override
+  Future<void> saveShiftPerson(String storeId, ShiftPerson p, {bool isNew = false}) async {}
+  @override
+  Future<void> saveShiftStats(String storeId, String personId, DateTime month, double? shouldOff, double? prevUnused) async {}
+  @override
+  Future<void> uploadShiftPhoto(String storeId, DateTime month, Uint8List jpeg) async {}
+  @override
+  Future<String> shiftPhotoUrl(String path) async => '';
 
   @override
   Future<bool> signUp(String email, String password) async {

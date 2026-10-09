@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'models.dart';
 
 /// App 與資料來源之間的介面。正式使用 SupabaseRepository；示範模式使用 DemoRepository。
@@ -59,6 +61,16 @@ abstract class Repository {
   /// 新增（id 為 null）或修改一張銷貨單：表頭＋品項一次存（只有老闆／店長）
   Future<String> saveVendorSlip(String storeId, VendorSlip slip);
   Future<void> deleteVendorSlip(String slipId);
+
+  // 班表（同店成員可看；老闆／店長可改）
+  Future<ShiftMonth> shiftMonth(String storeId, DateTime month);
+  /// mark 為 null＝清除這一格
+  Future<void> setShift(String storeId, String personId, DateTime date, String? mark);
+  Future<void> setShiftNote(String storeId, DateTime date, String? note);
+  Future<void> saveShiftPerson(String storeId, ShiftPerson p, {bool isNew = false});
+  Future<void> saveShiftStats(String storeId, String personId, DateTime month, double? shouldOff, double? prevUnused);
+  Future<void> uploadShiftPhoto(String storeId, DateTime month, Uint8List jpeg);
+  Future<String> shiftPhotoUrl(String path);
 
   // 盤點
   Future<List<Product>> products(String storeId);

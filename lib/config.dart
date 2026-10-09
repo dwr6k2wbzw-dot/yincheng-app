@@ -23,6 +23,9 @@ class AppConfig {
   /// 以「廠商銷貨單」分頁取代「盤點」分頁的店家（資料來自 Dropbox 廠商進貨單資料夾）
   static const vendorSlipStores = {'隱城', '小城外'};
 
+  /// 有「班表」分頁的店家
+  static const scheduleStores = {'隱城'};
+
   /// 進貨類別的顯示順序（老闆指定；沒列到的照原本順序排在後面）
   static const categoryOrder = [
     'xc_bar_liquor', 'xc_bar_supply', 'xc_bar_food', 'xc_bar_misc', // 酒吧：酒水、酒水副材料、食材、雜項
