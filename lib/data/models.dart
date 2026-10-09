@@ -220,3 +220,66 @@ DailyRevenue dailyFromRow(Map<String, dynamic> r) =>
 
 double toDouble(dynamic v) => _d(v);
 DateTime? toDate(dynamic v) => _date(v);
+
+/// 一天的營收（對應 daily_revenue 的一列，kind = daily）
+class RevenueEntry {
+  final String? id; // null：新的一天
+  final DateTime bizDate;
+  final double cash;
+  final double creditCard;
+  final double amex;
+  final double deposit; // 訂金
+  final int guests;
+  final double drinks;
+  final double food;
+  final double project; // 專案（成本率計算時併入酒水，與 Excel 相同）
+  final String? note;
+  final String source; // app / import
+  RevenueEntry({
+    this.id,
+    required this.bizDate,
+    this.cash = 0,
+    this.creditCard = 0,
+    this.amex = 0,
+    this.deposit = 0,
+    this.guests = 0,
+    this.drinks = 0,
+    this.food = 0,
+    this.project = 0,
+    this.note,
+    this.source = 'app',
+  });
+
+  /// 收款合計（＝資料庫的 revenue）
+  double get received => cash + creditCard + amex + deposit;
+
+  /// 營業收入明細合計
+  double get detailTotal => drinks + food + project;
+
+  factory RevenueEntry.fromRow(Map<String, dynamic> r) => RevenueEntry(
+        id: r['id'] as String,
+        bizDate: _date(r['biz_date'])!,
+        cash: _d(r['cash']),
+        creditCard: _d(r['credit_card']),
+        amex: _d(r['amex']),
+        deposit: _d(r['deposit']),
+        guests: _d(r['guests']).round(),
+        drinks: _d(r['drinks_revenue']),
+        food: _d(r['food_revenue']),
+        project: _d(r['project_amount']),
+        note: r['note'] as String?,
+        source: r['source'] as String? ?? 'app',
+      );
+
+  Map<String, dynamic> toValues() => {
+        'cash': cash,
+        'credit_card': creditCard,
+        'amex': amex,
+        'deposit': deposit,
+        'guests': guests,
+        'drinks_revenue': drinks,
+        'food_revenue': food,
+        'project_amount': project,
+        'note': (note?.trim().isEmpty ?? true) ? null : note!.trim(),
+      };
+}

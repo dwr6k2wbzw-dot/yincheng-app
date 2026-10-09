@@ -73,6 +73,39 @@ class DemoRepository implements Repository {
         Membership(storeId: 'xc', storeName: '小城外', role: Role.staff, displayName: '示範'),
       ];
 
+  final _revenue = <RevenueEntry>[
+    RevenueEntry(id: 'r1', bizDate: DateTime(2026, 9, 30), cash: 8000, creditCard: 20000, guests: 28, drinks: 24000, food: 4000, source: 'import'),
+    RevenueEntry(id: 'r2', bizDate: DateTime(2026, 9, 29), cash: 5000, creditCard: 16000, amex: 1000, guests: 21, drinks: 18000, food: 4000, source: 'import'),
+  ];
+
+  @override
+  Future<List<RevenueEntry>> revenueEntries(String storeId, {int limit = 60}) async {
+    if (_isStaff) throw Exception('message: 沒有權限執行這個動作。,');
+    return storeId == 'yc' ? (List.of(_revenue)..sort((a, b) => b.bizDate.compareTo(a.bizDate))) : [];
+  }
+
+  @override
+  Future<RevenueEntry?> revenueEntryFor(String storeId, DateTime bizDate) async {
+    if (storeId != 'yc') return null;
+    for (final e in _revenue) {
+      if (e.bizDate.year == bizDate.year && e.bizDate.month == bizDate.month && e.bizDate.day == bizDate.day) return e;
+    }
+    return null;
+  }
+
+  @override
+  Future<void> saveRevenueEntry(String storeId, RevenueEntry e) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    if (_isStaff) throw Exception('message: 沒有權限執行這個動作。,');
+    final saved = RevenueEntry(
+      id: e.id ?? 'r${++_seq}', bizDate: e.bizDate, cash: e.cash, creditCard: e.creditCard, amex: e.amex,
+      deposit: e.deposit, guests: e.guests, drinks: e.drinks, food: e.food, project: e.project, note: e.note,
+      source: e.source,
+    );
+    _revenue.removeWhere((x) => x.id == saved.id);
+    _revenue.add(saved);
+  }
+
   @override
   Future<MonthlySummary> monthlySummary(String storeId, DateTime month) async {
     if (_isStaff || storeId != 'yc') {

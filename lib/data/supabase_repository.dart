@@ -79,6 +79,50 @@ class SupabaseRepository implements Repository {
     return r == null ? null : toDouble(r['closing_balance']);
   }
 
+  // ---------------- 每日營收 ----------------
+  static const _revCols = 'id, biz_date, cash, credit_card, amex, deposit, guests, '
+      'drinks_revenue, food_revenue, project_amount, note, source';
+
+  @override
+  Future<List<RevenueEntry>> revenueEntries(String storeId, {int limit = 60}) async {
+    final rows = await _db
+        .from('daily_revenue')
+        .select(_revCols)
+        .eq('store_id', storeId)
+        .eq('kind', 'daily')
+        .order('biz_date', ascending: false)
+        .limit(limit);
+    return rows.map(RevenueEntry.fromRow).toList();
+  }
+
+  @override
+  Future<RevenueEntry?> revenueEntryFor(String storeId, DateTime bizDate) async {
+    final r = await _db
+        .from('daily_revenue')
+        .select(_revCols)
+        .eq('store_id', storeId)
+        .eq('kind', 'daily')
+        .eq('biz_date', _day.format(bizDate))
+        .maybeSingle();
+    return r == null ? null : RevenueEntry.fromRow(r);
+  }
+
+  @override
+  Future<void> saveRevenueEntry(String storeId, RevenueEntry e) async {
+    if (e.id == null) {
+      // 新增：updated_by／updated_at 由資料庫填入；同一天只能有一筆（資料庫唯一索引擋重複）
+      await _db.from('daily_revenue').insert({
+        'store_id': storeId,
+        'biz_date': _day.format(e.bizDate),
+        'kind': 'daily',
+        ...e.toValues(),
+      });
+    } else {
+      final rows = await _db.from('daily_revenue').update(e.toValues()).eq('id', e.id!).select('id');
+      if (rows.isEmpty) throw Exception('message: 沒有權限修改這天的營收（可能已月結鎖帳）,');
+    }
+  }
+
   // ---------------- 進貨 ----------------
   @override
   Future<DateTime> businessDate(String storeId) async {

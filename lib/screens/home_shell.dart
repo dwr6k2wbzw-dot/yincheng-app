@@ -6,6 +6,7 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import 'dashboard_screen.dart';
 import 'purchases_screen.dart';
+import 'revenue_screen.dart';
 import 'stock_counts_screen.dart';
 
 class HomeShell extends StatefulWidget {
@@ -37,11 +38,30 @@ class _HomeShellState extends State<HomeShell> {
       );
     }
     // 以店家 id 當 key：切換店家時各分頁重新載入
-    final pages = [
-      DashboardScreen(key: ValueKey('d-${m.storeId}'), membership: m),
-      PurchasesScreen(key: ValueKey('p-${m.storeId}'), membership: m),
-      StockCountsScreen(key: ValueKey('s-${m.storeId}'), membership: m),
+    // 營收分頁只給老闆／店長（資料庫也只允許這兩種角色讀寫營收）
+    final tabs = <(Widget, NavigationDestination)>[
+      (
+        DashboardScreen(key: ValueKey('d-${m.storeId}'), membership: m),
+        const NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: '總覽'),
+      ),
+      if (m.isManager)
+        (
+          RevenueScreen(key: ValueKey('r-${m.storeId}'), membership: m),
+          const NavigationDestination(
+              icon: Icon(Icons.point_of_sale_outlined), selectedIcon: Icon(Icons.point_of_sale), label: '營收'),
+        ),
+      (
+        PurchasesScreen(key: ValueKey('p-${m.storeId}'), membership: m),
+        const NavigationDestination(
+            icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: '進貨'),
+      ),
+      (
+        StockCountsScreen(key: ValueKey('s-${m.storeId}'), membership: m),
+        const NavigationDestination(
+            icon: Icon(Icons.inventory_2_outlined), selectedIcon: Icon(Icons.inventory_2), label: '盤點'),
+      ),
     ];
+    final tab = _tab.clamp(0, tabs.length - 1);
     return Scaffold(
       appBar: AppBar(
         title: _StoreSwitcher(state: state),
@@ -66,15 +86,11 @@ class _HomeShellState extends State<HomeShell> {
           ),
         ],
       ),
-      body: IndexedStack(index: _tab, children: pages),
+      body: IndexedStack(index: tab, children: [for (final t in tabs) t.$1]),
       bottomNavigationBar: NavigationBar(
-        selectedIndex: _tab,
+        selectedIndex: tab,
         onDestinationSelected: (i) => setState(() => _tab = i),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: '總覽'),
-          NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: '進貨'),
-          NavigationDestination(icon: Icon(Icons.inventory_2_outlined), selectedIcon: Icon(Icons.inventory_2), label: '盤點'),
-        ],
+        destinations: [for (final t in tabs) t.$2],
       ),
     );
   }

@@ -19,6 +19,11 @@ abstract class Repository {
   Future<List<Issue>> consistencyIssues(String storeId);
   Future<double?> pettyCashBalance(String storeId);
 
+  // 每日營收（老闆／店長）
+  Future<List<RevenueEntry>> revenueEntries(String storeId, {int limit = 60});
+  Future<RevenueEntry?> revenueEntryFor(String storeId, DateTime bizDate);
+  Future<void> saveRevenueEntry(String storeId, RevenueEntry e);
+
   // 進貨
   Future<DateTime> businessDate(String storeId);
   Future<List<CostCategory>> costCategories();
@@ -43,6 +48,7 @@ String friendlyError(Object e) {
   final msg = m?.group(1) ?? s;
   if (msg.contains('duplicate key') && msg.contains('client_request')) return '這筆已經送出過了，不會重複新增。';
   if (msg.contains('row-level security')) return '沒有權限執行這個動作。';
+  if (msg.contains('daily_revenue_one_per_day')) return '這一天已經有營收紀錄了，請從列表點進去修改。';
   if (msg.contains('Invalid login credentials')) return '帳號或密碼錯誤。';
   return msg;
 }
