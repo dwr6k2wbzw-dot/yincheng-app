@@ -241,7 +241,7 @@ class SupabaseRepository implements Repository {
   Future<List<Purchase>> recentPurchases(String storeId, {int limit = 30}) async {
     final rows = await _db
         .from('purchases')
-        .select('id, purchase_date, category_code, memo, amount, paid_by, reconciled, source, superseded_by, '
+        .select('id, purchase_date, category_code, memo, amount, paid_by, reconciled, source, superseded_by, vendor_name, '
             'suppliers!purchases_supplier_same_store(name)')
         .eq('store_id', storeId)
         .order('purchase_date', ascending: false)
@@ -254,7 +254,7 @@ class SupabaseRepository implements Repository {
   Future<List<Purchase>> monthPurchases(String storeId, DateTime month) async {
     final rows = await _db
         .from('purchases')
-        .select('id, purchase_date, category_code, memo, amount, paid_by, reconciled, source, superseded_by, '
+        .select('id, purchase_date, category_code, memo, amount, paid_by, reconciled, source, superseded_by, vendor_name, '
             'suppliers!purchases_supplier_same_store(name)')
         .eq('store_id', storeId)
         .eq('period_month', _day.format(DateTime(month.year, month.month, 1)))
@@ -326,11 +326,25 @@ class SupabaseRepository implements Repository {
   @override
   Future<void> addPurchase(NewPurchase p) async {
     // created_by、period_month 由資料庫填入；client_request_id 防止重送重複
+    String? photoPath;
+    if (p.photoJpeg != null) {
+      // 路徑規則：receipts/{店家 id}/...（資料庫與 Storage 權限都會檢查）
+      photoPath = '${p.storeId}/slips/${p.clientRequestId}.jpg';
+      try {
+        await _db.storage.from('receipts').uploadBinary(photoPath, p.photoJpeg!,
+            fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: false));
+      } on StorageException catch (e) {
+        // 網路重送：同一張表單的照片已經上傳過
+        if (e.statusCode != '409' && !e.message.contains('exists')) rethrow;
+      }
+    }
     await _db.from('purchases').insert({
       'store_id': p.storeId,
       'purchase_date': _day.format(p.purchaseDate),
       'category_code': p.categoryCode,
       'supplier_id': p.supplierId,
+      'vendor_name': (p.vendorName?.trim().isEmpty ?? true) ? null : p.vendorName!.trim(),
+      if (photoPath != null) 'photo_path': photoPath,
       'memo': (p.memo?.trim().isEmpty ?? true) ? null : p.memo!.trim(),
       'amount': p.amount,
       'paid_by': p.paidBy,

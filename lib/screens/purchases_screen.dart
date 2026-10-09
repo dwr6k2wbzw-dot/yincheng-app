@@ -8,6 +8,7 @@ import '../config.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
 import '../theme.dart';
+import '../services/slip_scan.dart';
 import '../widgets/common.dart';
 
 /// 進貨管理：本月進貨分成「月結廠商」（廠商請款）與「零用金支出」兩大類，
@@ -346,7 +347,11 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   final _requestId = const Uuid().v4();
   DateTime? _date;
   String? _category;
-  String? _supplierId;
+  final _vendor = TextEditingController(); // 廠商名稱：自行輸入（和既有廠商同名就自動對應）
+  String? _photo; // 送貨單照片（JPEG data URL）
+  bool _scanning = false;
+  String? _scanNote;
+  List<Supplier> _sups = [];
   String _paidBy = 'vendor';
   bool _isReturn = false;
   bool _saving = false;
@@ -366,8 +371,99 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
     final id = widget.membership.storeId;
     final r = await Future.wait([repo.costCategories(), repo.suppliers(id), repo.businessDate(id)]);
     _date ??= r[2] as DateTime;
+    _sups = r[1] as List<Supplier>;
     return (r[0] as List<CostCategory>, r[1] as List<Supplier>);
   }
+
+  final _vendorFocus = FocusNode();
+
+  /// 拍照辨識送貨單：讀出廠商、日期、合計填進表單（使用者核對後再儲存）
+  Future<void> _scan(List<Supplier> sups) async {
+    String? photo;
+    try {
+      photo = await pickSlipImage();
+    } catch (e) {
+      if (mounted) showMessage(context, '照片讀取失敗：$e', error: true);
+      return;
+    }
+    if (photo == null || !mounted) return;
+    setState(() {
+      _photo = photo;
+      _scanning = true;
+      _scanNote = null;
+    });
+    try {
+      final text = await ocrSlip(photo);
+      final g = guessSlip(text, sups.map((s) => s.name).toList());
+      if (!mounted) return;
+      final got = <String>[];
+      setState(() {
+        if (g.vendor != null) {
+          _vendor.text = g.vendor!;
+          got.add('廠商');
+        }
+        if (g.date != null) {
+          _date = g.date;
+          got.add('日期');
+        }
+        if (g.total != null) {
+          _amount.text = g.total! == g.total!.roundToDouble() ? g.total!.toInt().toString() : g.total!.toString();
+          got.add('金額');
+        }
+        _scanNote = got.isEmpty
+            ? '沒有讀到可用的資料，請自己填寫（照片會一起存）'
+            : '已帶入${got.join('、')}，文字辨識可能讀錯，請對照照片核對';
+      });
+    } catch (e) {
+      if (mounted) setState(() => _scanNote = '辨識失敗（${e.toString().replaceAll('Error: ', '')}），請自己填寫；照片仍會一起存');
+    } finally {
+      if (mounted) setState(() => _scanning = false);
+    }
+  }
+
+  Widget _scanCard(List<Supplier> sups) => SectionCard(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Row(children: [
+            const Icon(Icons.photo_camera_outlined, color: AppColors.primary),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text('拍照辨識送貨單', style: TextStyle(fontWeight: FontWeight.w600)),
+            ),
+            if (_scanning)
+              const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+            else
+              TextButton(
+                onPressed: _saving ? null : () => _scan(sups),
+                child: Text(_photo == null ? '拍照／選照片' : '重拍'),
+              ),
+          ]),
+          if (_scanning)
+            const Padding(
+              padding: EdgeInsets.only(top: 6),
+              child: Text('辨識中…第一次使用要下載辨識資料，可能需要 20～60 秒',
+                  style: TextStyle(color: AppColors.muted, fontSize: 12)),
+            ),
+          if (_scanNote != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(_scanNote!, style: const TextStyle(color: AppColors.warn, fontSize: 12)),
+            ),
+          if (_photo != null) ...[
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.memory(dataUrlBytes(_photo!), height: 220, fit: BoxFit.contain),
+            ),
+            TextButton(
+              onPressed: _scanning ? null : () => setState(() {
+                _photo = null;
+                _scanNote = null;
+              }),
+              child: const Text('不附照片'),
+            ),
+          ],
+        ]),
+      );
 
   Future<void> _save() async {
     final raw = double.tryParse(_amount.text.replaceAll(',', ''));
@@ -379,13 +475,17 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
       showMessage(context, '請輸入大於 0 的金額', error: true);
       return;
     }
+    final name = _vendor.text.trim();
+    final known = _sups.where((s) => s.name == name).firstOrNull;
     setState(() => _saving = true);
     try {
       await AppScope.of(context).repo.addPurchase(NewPurchase(
             storeId: widget.membership.storeId,
             purchaseDate: _date!,
             categoryCode: _category!,
-            supplierId: _supplierId,
+            supplierId: known?.id,
+            vendorName: known == null && name.isNotEmpty ? name : null,
+            photoJpeg: _photo == null ? null : dataUrlBytes(_photo!),
             memo: _memo.text,
             amount: _isReturn ? -raw : raw,
             paidBy: _paidBy,
@@ -438,20 +538,39 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                 ],
                 onChanged: (v) => setState(() {
                   _category = v;
-                  // 只有一家預設廠商時自動帶入（例：水果＝德哥）
+                  // 只有一家預設廠商、而且還沒填廠商時自動帶入（例：水果＝德哥）
                   final match = sups.where((s) => s.defaultCategory == v).toList();
-                  if (_supplierId == null && match.length == 1) _supplierId = match.first.id;
+                  if (_vendor.text.trim().isEmpty && match.length == 1) _vendor.text = match.first.name;
                 }),
               ),
               const SizedBox(height: 12),
-              DropdownButtonFormField<String?>(
-                value: _supplierId,
-                decoration: const InputDecoration(labelText: '廠商（選填）'),
-                items: [
-                  const DropdownMenuItem<String?>(value: null, child: Text('（不指定）')),
-                  for (final s in sups) DropdownMenuItem<String?>(value: s.id, child: Text(s.name)),
-                ],
-                onChanged: (v) => setState(() => _supplierId = v),
+              RawAutocomplete<String>(
+                textEditingController: _vendor,
+                focusNode: _vendorFocus,
+                optionsBuilder: (v) {
+                  final q = v.text.trim();
+                  if (q.isEmpty) return const Iterable<String>.empty();
+                  return sups.map((s) => s.name).where((n) => n.contains(q) && n != q).take(6);
+                },
+                fieldViewBuilder: (context, ctrl, focus, onSubmit) => TextField(
+                  controller: ctrl,
+                  focusNode: focus,
+                  maxLength: 60,
+                  decoration: const InputDecoration(labelText: '廠商名稱（選填，自行輸入）', counterText: ''),
+                ),
+                optionsViewBuilder: (context, onSelected, options) => Align(
+                  alignment: Alignment.topLeft,
+                  child: Material(
+                    color: AppColors.cardHigh,
+                    borderRadius: BorderRadius.circular(12),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 240, maxWidth: 360),
+                      child: ListView(padding: EdgeInsets.zero, shrinkWrap: true, children: [
+                        for (final o in options) ListTile(dense: true, title: Text(o), onTap: () => onSelected(o)),
+                      ]),
+                    ),
+                  ),
+                ),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -484,16 +603,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                 decoration: const InputDecoration(labelText: '摘要／備註（選填）'),
               ),
               const SizedBox(height: 12),
-              const SectionCard(
-                child: Row(children: [
-                  Icon(Icons.photo_camera_outlined, color: AppColors.muted),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Text('拍照辨識送貨單：下一版加入（收據儲存空間與權限已在資料庫完成）',
-                        style: TextStyle(color: AppColors.muted, fontSize: 13)),
-                  ),
-                ]),
-              ),
+              _scanCard(sups),
               const SizedBox(height: 24),
               FilledButton(
                 onPressed: _saving ? null : _save,

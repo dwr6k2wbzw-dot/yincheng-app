@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 /// 資料模型（欄位名稱對應資料庫）
 double _d(dynamic v) => v == null ? 0 : (v is num ? v.toDouble() : double.tryParse(v.toString()) ?? 0);
 double? _dn(dynamic v) => v == null ? null : _d(v);
@@ -145,7 +147,7 @@ class Purchase {
         id: r['id'] as String,
         purchaseDate: _date(r['purchase_date'])!,
         categoryCode: r['category_code'] as String,
-        supplierName: (r['suppliers'] as Map?)?['name'] as String?,
+        supplierName: (r['suppliers'] as Map?)?['name'] as String? ?? r['vendor_name'] as String?,
         memo: r['memo'] as String?,
         amount: _d(r['amount']),
         paidBy: r['paid_by'] as String,
@@ -160,19 +162,23 @@ class NewPurchase {
   final DateTime purchaseDate;
   final String categoryCode;
   final String? supplierId;
+  final String? vendorName; // 自行輸入的廠商名稱（不是既有廠商時）
   final String? memo;
   final double amount;
   final String paidBy;
   final String clientRequestId; // 防止網路重送造成重複
+  final Uint8List? photoJpeg; // 送貨單照片（存到 receipts/{店家}/slips/）
   NewPurchase({
     required this.storeId,
     required this.purchaseDate,
     required this.categoryCode,
     this.supplierId,
+    this.vendorName,
     this.memo,
     required this.amount,
     required this.paidBy,
     required this.clientRequestId,
+    this.photoJpeg,
   });
 }
 

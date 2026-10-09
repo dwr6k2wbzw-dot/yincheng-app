@@ -73,5 +73,62 @@ padding:24px;text-align:center;white-space:pre-wrap;color:#9AA0AE;font:15px/1.6 
 })();
 </script>"""
 s = s.replace("<body>", "<body style=\"background:#0F1115\">\n" + boot, 1)
+
+# 拍照辨識送貨單（免費文字辨識 Tesseract.js，在手機上執行；辨識程式與語言資料第一次使用時才下載）
+s = re.sub(r'<script id="yc-scan">.*?</script>', "", s, flags=re.S)
+scan = r"""<script id="yc-scan">
+window.ycPickImage = function () {
+  return new Promise(function (resolve, reject) {
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.setAttribute('capture', 'environment');
+    input.style.display = 'none';
+    document.body.appendChild(input);
+    var finished = false;
+    function finish(v) { if (!finished) { finished = true; input.remove(); resolve(v); } }
+    input.addEventListener('cancel', function () { finish(null); });
+    input.addEventListener('change', function () {
+      var f = input.files && input.files[0];
+      if (!f) { finish(null); return; }
+      var url = URL.createObjectURL(f);
+      var img = new Image();
+      img.onload = function () {
+        try {
+          var max = 2000, k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+          var c = document.createElement('canvas');
+          c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+          c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+          URL.revokeObjectURL(url);
+          finish(c.toDataURL('image/jpeg', 0.85));
+        } catch (e) { finished = true; reject(e); }
+      };
+      img.onerror = function () { finished = true; reject(new Error('照片讀取失敗')); };
+      img.src = url;
+    });
+    input.click();
+  });
+};
+window.ycOcr = async function (dataUrl) {
+  if (!window.Tesseract) {
+    await new Promise(function (ok, bad) {
+      var sc = document.createElement('script');
+      sc.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+      sc.onload = ok;
+      sc.onerror = function () { bad(new Error('辨識程式下載失敗，請檢查網路')); };
+      document.head.appendChild(sc);
+    });
+  }
+  var worker = await Tesseract.createWorker(['chi_tra', 'eng']);
+  try {
+    var r = await worker.recognize(dataUrl);
+    return r.data.text || '';
+  } finally {
+    await worker.terminate();
+  }
+};
+</script>"""
+s = s.replace("</body>", scan + "\n</body>", 1)
+
 p.write_text(s, encoding="utf-8")
 print("index.html patched")
