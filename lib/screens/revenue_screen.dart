@@ -124,7 +124,14 @@ class _RevenueTile extends StatelessWidget {
                 ),
               ]),
             ),
-            Text(ntd(e.received), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Text(ntd(e.received), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+              const SizedBox(height: 2),
+              Text('現金 ${ntd(e.cash)}', style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+              Text('刷卡 ${ntd(e.creditCard + e.amex)}', style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+              if (e.deposit != 0)
+                Text('訂金 ${ntd(e.deposit)}', style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+            ]),
             if (onTap != null) const Icon(Icons.chevron_right, color: AppColors.muted),
           ]),
           if (base > 0) ...[
