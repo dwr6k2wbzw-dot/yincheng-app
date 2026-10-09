@@ -5,7 +5,9 @@ p = pathlib.Path("web/index.html")
 s = p.read_text(encoding="utf-8")
 s = re.sub(r"<title>.*?</title>", "<title>小城外</title>", s, flags=re.S)
 # iPhone「加入主畫面」用的圖示（180×180）
-s = re.sub(r'<link rel="apple-touch-icon"[^>]*>', '<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">', s)
+s = re.sub(r'<link rel="apple-touch-icon"[^>]*>', '<link rel="apple-touch-icon" sizes="180x180" href="icons/xcw-touch-180-v2.png">', s)
+# 網頁小圖示：換檔名避免 Safari 用舊的暫存
+s = re.sub(r'<link rel="icon"[^>]*>', '<link rel="icon" type="image/png" href="icons/xcw-favicon-v2.png"/>', s)
 # iPhone「加入主畫面」顯示的名稱
 s = re.sub(r'<meta name="apple-mobile-web-app-title"[^>]*>', '<meta name="apple-mobile-web-app-title" content="小城外">', s)
 if 'apple-mobile-web-app-title' not in s:
