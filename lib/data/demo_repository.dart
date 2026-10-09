@@ -110,6 +110,21 @@ class DemoRepository implements Repository {
   Future<DateTime?> lastExcelSync(String storeId) async =>
       storeId == 'yc' ? DateTime.now().subtract(const Duration(minutes: 25)) : null;
 
+  final _fixed = <String, double>{};
+
+  @override
+  Future<FixedCosts> fixedCosts(String storeId, DateTime month) async {
+    if (_isStaff) return const FixedCosts();
+    final k = '$storeId-${month.year}-${month.month}';
+    return FixedCosts(rent: _fixed['$k-rent'], payroll: _fixed['$k-payroll']);
+  }
+
+  @override
+  Future<void> saveFixedCost(String storeId, DateTime month, String category, double amount) async {
+    if (_isStaff) throw Exception('message: 沒有權限執行這個動作。,');
+    _fixed['$storeId-${month.year}-${month.month}-$category'] = amount;
+  }
+
   @override
   Future<MonthlySummary> monthlySummary(String storeId, DateTime month) async {
     if (_isStaff || storeId != 'yc') {

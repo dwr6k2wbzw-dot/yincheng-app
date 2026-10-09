@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../app_state.dart';
@@ -17,7 +18,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardData {
   MonthlySummary? summary;
-  List<Issue> issues = [];
+  FixedCosts fixed = const FixedCosts();
   double? petty;
   DateTime month = DateTime.now();
 }
@@ -44,15 +45,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (widget.membership.isManager) {
       final r = await Future.wait([
         repo.monthlySummary(id, _month),
-        repo.consistencyIssues(id),
+        if (_isOwner) repo.fixedCosts(id, _month),
       ]);
       d.summary = r[0] as MonthlySummary;
-      d.issues = r[1] as List<Issue>;
+      if (_isOwner) d.fixed = r[1] as FixedCosts;
     }
     return d;
   }
 
   void _reload() => setState(() => _future = _load());
+
+  bool get _isOwner => widget.membership.role == Role.owner;
+
+  Future<void> _editFixed(DateTime month, String category, String label, double? current) async {
+    final ctrl = TextEditingController(text: current == null ? '' : current.round().toString());
+    final v = await showDialog<double>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text('${DateFormat('M 月', 'zh_TW').format(month)}$label'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9]'))],
+          decoration: const InputDecoration(prefixText: '\$ ', labelText: '金額（元）'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(c, double.tryParse(ctrl.text)), child: const Text('儲存')),
+        ],
+      ),
+    );
+    if (v == null || !mounted) return;
+    try {
+      await AppScope.of(context).repo.saveFixedCost(widget.membership.storeId, month, category, v);
+      if (mounted) showMessage(context, '已儲存$label');
+      _reload();
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+    }
+  }
 
   void _shiftMonth(int delta) {
     _month = DateTime(_month.year, _month.month + delta);
@@ -87,8 +119,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<Widget> _managerView(_DashboardData d) {
     final s = d.summary!;
     final monthLabel = DateFormat('yyyy 年 M 月', 'zh_TW').format(d.month);
-    final errors = d.issues.where((i) => i.severity == 'error').length;
-    final warnings = d.issues.where((i) => i.severity == 'warning').length;
     return [
       Row(children: [
         IconButton(onPressed: () => _shiftMonth(-1), icon: const Icon(Icons.chevron_left)),
@@ -159,30 +189,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ]),
       ),
       const SizedBox(height: 12),
-      SectionCard(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            const Icon(Icons.notifications_active_outlined, color: AppColors.bad, size: 18),
-            const SizedBox(width: 6),
-            const Text('營運警報'),
-            const Spacer(),
-            Text('錯誤 $errors・提醒 $warnings', style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+      if (_isOwner)
+        SectionCard(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('租金與人事成本', style: TextStyle(color: AppColors.muted)),
+            const SizedBox(height: 10),
+            Row(children: [
+              _fixedItem(d, 'rent', '租金', d.fixed.rent, s.revenue),
+              const SizedBox(width: 12),
+              _fixedItem(d, 'payroll', '人事', d.fixed.payroll, s.revenue),
+            ]),
+            const SizedBox(height: 8),
+            const Text('點金額輸入或修改；占比＝金額 ÷ 本月營業收入。只有老闆看得到',
+                style: TextStyle(color: AppColors.muted, fontSize: 11)),
           ]),
-          const SizedBox(height: 8),
-          if (d.issues.isEmpty) const Text('沒有異常', style: TextStyle(color: AppColors.good)),
-          for (final i in d.issues.where((i) => i.severity != 'info').take(6))
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Icon(Icons.circle, size: 8, color: i.severity == 'error' ? AppColors.bad : AppColors.warn),
-                const SizedBox(width: 8),
-                Expanded(child: Text('${i.checkName}：${i.detail}', style: const TextStyle(fontSize: 13))),
-              ]),
-            ),
-        ]),
-      ),
+        ),
     ];
   }
+
+  Widget _fixedItem(_DashboardData d, String category, String label, double? v, double revenue) => Expanded(
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => _editFixed(d.month, category, label, v),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: AppColors.cardHigh, borderRadius: BorderRadius.circular(12)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Text(label, style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+                const Spacer(),
+                const Icon(Icons.edit_outlined, size: 14, color: AppColors.muted),
+              ]),
+              const SizedBox(height: 4),
+              Text(v == null ? '尚未輸入' : ntd(v),
+                  style: TextStyle(fontSize: v == null ? 14 : 18, fontWeight: FontWeight.w700,
+                      color: v == null ? AppColors.warn : null)),
+              const SizedBox(height: 2),
+              Text(v == null ? '' : '占營收 ${revenue > 0 ? pct(v / revenue) : '—'}',
+                  style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+            ]),
+          ),
+        ),
+      );
 
   Widget _amount(String label, double v, Color dot) => Expanded(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

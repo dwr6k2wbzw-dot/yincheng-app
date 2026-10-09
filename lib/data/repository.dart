@@ -25,6 +25,10 @@ abstract class Repository {
   Future<void> saveRevenueEntry(String storeId, RevenueEntry e);
   Future<DateTime?> lastExcelSync(String storeId);
 
+  // 租金／人事成本（只有老闆；資料庫 RLS 也只允許老闆）
+  Future<FixedCosts> fixedCosts(String storeId, DateTime month);
+  Future<void> saveFixedCost(String storeId, DateTime month, String category, double amount);
+
   // 進貨
   Future<DateTime> businessDate(String storeId);
   Future<List<CostCategory>> costCategories();

@@ -135,6 +135,41 @@ class SupabaseRepository implements Repository {
     return r == null ? null : DateTime.tryParse(r['imported_at'] as String)?.toLocal();
   }
 
+  // ---------------- 租金／人事成本 ----------------
+  @override
+  Future<FixedCosts> fixedCosts(String storeId, DateTime month) async {
+    final rows = await _db
+        .from('expenses')
+        .select('category, amount')
+        .eq('store_id', storeId)
+        .eq('period_month', _day.format(DateTime(month.year, month.month, 1)))
+        .inFilter('category', ['rent', 'payroll']);
+    double? pick(String c) {
+      final r = rows.where((x) => x['category'] == c).toList();
+      return r.isEmpty ? null : toDouble(r.first['amount']);
+    }
+
+    return FixedCosts(rent: pick('rent'), payroll: pick('payroll'));
+  }
+
+  @override
+  Future<void> saveFixedCost(String storeId, DateTime month, String category, double amount) async {
+    final m = _day.format(DateTime(month.year, month.month, 1));
+    final existing = await _db
+        .from('expenses')
+        .select('id')
+        .eq('store_id', storeId)
+        .eq('period_month', m)
+        .eq('category', category)
+        .maybeSingle();
+    if (existing == null) {
+      await _db.from('expenses').insert({'store_id': storeId, 'period_month': m, 'category': category, 'amount': amount});
+    } else {
+      final rows = await _db.from('expenses').update({'amount': amount}).eq('id', existing['id']).select('id');
+      if (rows.isEmpty) throw Exception('message: 沒有權限修改（可能已月結鎖帳）,');
+    }
+  }
+
   // ---------------- 進貨 ----------------
   @override
   Future<DateTime> businessDate(String storeId) async {

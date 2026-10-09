@@ -289,3 +289,10 @@ class RevenueEntry {
         'note': (note?.trim().isEmpty ?? true) ? null : note!.trim(),
       };
 }
+
+/// 某月的租金與人事成本（老闆手動輸入；null＝尚未輸入）
+class FixedCosts {
+  final double? rent;
+  final double? payroll;
+  const FixedCosts({this.rent, this.payroll});
+}
