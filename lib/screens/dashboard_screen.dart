@@ -130,7 +130,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Text('本月營收', style: TextStyle(color: AppColors.muted)),
           const SizedBox(height: 6),
-          Text(ntd(s.revenue), style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w800)),
+          Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+            Expanded(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(ntd(s.revenue), style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w800)),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              _payRow('現金', s.cash),
+              _payRow('刷卡', s.card),
+              if (s.deposit != 0) _payRow('訂金', s.deposit),
+            ]),
+          ]),
           const SizedBox(height: 10),
           Row(children: [
             _amount('酒水', s.drinksRevenue, AppColors.primary),
@@ -262,6 +276,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ]),
           ),
         ),
+      );
+
+  Widget _payRow(String label, double v) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 1),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Text(label, style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+          const SizedBox(width: 8),
+          Text(ntd(v), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+        ]),
       );
 
   Widget _amount(String label, double v, Color dot) => Expanded(

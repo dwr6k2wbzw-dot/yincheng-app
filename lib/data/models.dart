@@ -40,6 +40,9 @@ class MonthlySummary {
   final double drinksRevenue;
   final double foodRevenue;
   final double projectAmount; // 專案（另計收入，Excel 計成本率時併入酒水）
+  final double cash; // 收款：現金
+  final double card; // 收款：刷卡（信用卡＋AE卡）
+  final double deposit; // 收款：訂金
   final double? targetAmount;
   final double? targetRate;
   final double? drinkCostRate;
@@ -58,6 +61,9 @@ class MonthlySummary {
     required this.drinksRevenue,
     required this.foodRevenue,
     this.projectAmount = 0,
+    this.cash = 0,
+    this.card = 0,
+    this.deposit = 0,
     this.targetAmount,
     this.targetRate,
     this.drinkCostRate,
@@ -216,6 +222,9 @@ MonthlySummary summaryFromRows(Map<String, dynamic>? rev, Map<String, dynamic>? 
       drinksRevenue: _d(rev?['drinks_revenue']),
       foodRevenue: _d(rev?['food_revenue']),
       projectAmount: _d(rev?['project_amount']),
+      cash: _d(rev?['cash']),
+      card: _d(rev?['credit_card']) + _d(rev?['amex']),
+      deposit: _d(rev?['deposit']),
       targetAmount: _dn(rev?['target_amount']),
       targetRate: _dn(rev?['target_rate']),
       drinkCostRate: _dn(cost?['drink_cost_rate']),
