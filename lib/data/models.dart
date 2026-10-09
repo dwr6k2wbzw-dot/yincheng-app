@@ -44,6 +44,7 @@ class MonthlySummary {
   final double? drinkCostRate;
   final double? foodCostRate;
   final double? totalCostRate;
+  final double? miscCostRate; // 雜項成本率（不計入總進貨）
   final bool hasCostRecords;
   MonthlySummary({
     required this.month,
@@ -58,6 +59,7 @@ class MonthlySummary {
     this.drinkCostRate,
     this.foodCostRate,
     this.totalCostRate,
+    this.miscCostRate,
     this.hasCostRecords = false,
   });
 }
@@ -212,6 +214,7 @@ MonthlySummary summaryFromRows(Map<String, dynamic>? rev, Map<String, dynamic>? 
       drinkCostRate: _dn(cost?['drink_cost_rate']),
       foodCostRate: _dn(cost?['food_cost_rate']),
       totalCostRate: _dn(cost?['total_cost_rate']),
+      miscCostRate: _dn(cost?['misc_cost_rate']),
       hasCostRecords: cost?['has_cost_records'] as bool? ?? false,
     );
 

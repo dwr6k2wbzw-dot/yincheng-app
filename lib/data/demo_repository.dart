@@ -128,6 +128,7 @@ class DemoRepository implements Repository {
       drinkCostRate: 0.2200,
       foodCostRate: 0.4000,
       totalCostRate: 0.2500,
+      miscCostRate: 0.0200,
       hasCostRecords: true,
     );
   }

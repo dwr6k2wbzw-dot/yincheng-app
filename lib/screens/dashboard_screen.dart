@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -19,7 +17,6 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardData {
   MonthlySummary? summary;
-  List<DailyRevenue> days = [];
   List<Issue> issues = [];
   double? petty;
   DateTime month = DateTime.now();
@@ -43,16 +40,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final repo = AppScope.of(context).repo;
     final id = widget.membership.storeId;
     final d = _DashboardData()..month = _month;
-    d.petty = await repo.pettyCashBalance(id);
+    if (!widget.membership.isManager) d.petty = await repo.pettyCashBalance(id);
     if (widget.membership.isManager) {
       final r = await Future.wait([
         repo.monthlySummary(id, _month),
-        repo.recentDailyRevenue(id, 14),
         repo.consistencyIssues(id),
       ]);
       d.summary = r[0] as MonthlySummary;
-      d.days = r[1] as List<DailyRevenue>;
-      d.issues = r[2] as List<Issue>;
+      d.issues = r[1] as List<Issue>;
     }
     return d;
   }
@@ -148,22 +143,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
               _rate('酒水', s.drinkCostRate),
               _rate('餐食', s.foodCostRate),
               _rate('總進貨', s.totalCostRate),
+              _rate('雜項', s.miscCostRate),
             ]),
+          const SizedBox(height: 6),
+          const Text('雜項＝零用金-其他雜支＋酒水副材料-雜項，÷ 營業收入；不計入總進貨',
+              style: TextStyle(color: AppColors.muted, fontSize: 11)),
           const SizedBox(height: 12),
           _MixBar(drinks: s.drinksRevenue, food: s.foodRevenue),
         ]),
       ),
       const SizedBox(height: 12),
-      if (d.days.isNotEmpty) ...[
-        SectionCard(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('近 14 天營收', style: TextStyle(color: AppColors.muted)),
-            const SizedBox(height: 12),
-            SizedBox(height: 120, child: _Bars(days: d.days)),
-          ]),
-        ),
-        const SizedBox(height: 12),
-      ],
       SectionCard(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
@@ -186,8 +175,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
         ]),
       ),
-      const SizedBox(height: 12),
-      StatTile(label: '零用金結餘', value: d.petty == null ? '—' : ntd(d.petty!)),
     ];
   }
 
@@ -220,33 +207,6 @@ class _MixBar extends StatelessWidget {
       ),
       const SizedBox(height: 6),
       Text('酒水 ${pct(dp)}・餐食 ${pct(1 - dp)}', style: const TextStyle(color: AppColors.muted, fontSize: 12)),
-    ]);
-  }
-}
-
-/// 每日營收長條圖（不引入圖表套件）
-class _Bars extends StatelessWidget {
-  const _Bars({required this.days});
-  final List<DailyRevenue> days;
-  @override
-  Widget build(BuildContext context) {
-    final maxV = days.map((d) => d.revenue).fold<double>(1, math.max);
-    return Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-      for (final d in days)
-        Expanded(
-          child: Tooltip(
-            message: '${DateFormat('M/d').format(d.date)}　${ntd(d.revenue)}',
-            child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [
-              Container(
-                height: math.max(2.0, 96 * d.revenue / maxV),
-                margin: const EdgeInsets.symmetric(horizontal: 2),
-                decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(3)),
-              ),
-              const SizedBox(height: 4),
-              Text('${d.date.day}', style: const TextStyle(fontSize: 9, color: AppColors.muted)),
-            ]),
-          ),
-        ),
     ]);
   }
 }
