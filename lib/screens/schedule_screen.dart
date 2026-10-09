@@ -400,10 +400,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 ],
               ]),
               if (_canEdit)
-                const Padding(
-                  padding: EdgeInsets.only(top: 8),
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
                   child: Text(_codeHours != null ? '點格子改班（兼職可選時段）、點日期加備註、點下方統計填未休／補休與特休。' : '點格子改班、點日期加備註、點下方統計填應休與特休。',
-                      style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                      style: const TextStyle(color: AppColors.muted, fontSize: 12)),
                 ),
             ]),
           );
