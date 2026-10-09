@@ -52,6 +52,13 @@ jobs:
             echo "::error title=build::${msg}"
           fi
           exit $rc
+      - name: 檔名加版本號（避免手機一直用舊版的暫存）
+        run: |
+          v=$(echo "${{ github.sha }}" | cut -c1-8)
+          sed -i "s#src=\"flutter_bootstrap.js\"#src=\"flutter_bootstrap.js?v=$v\"#" build/web/index.html
+          sed -i "s#\"mainJsPath\":\"main.dart.js\"#\"mainJsPath\":\"main.dart.js?v=$v\"#" build/web/flutter_bootstrap.js
+          grep -o 'flutter_bootstrap.js?v=[0-9a-f]*' build/web/index.html
+          grep -o 'main.dart.js?v=[0-9a-f]*' build/web/flutter_bootstrap.js
       - name: 另存一份編譯結果到 web-build 分支（供除錯檢查）
         run: |
           cd build/web
