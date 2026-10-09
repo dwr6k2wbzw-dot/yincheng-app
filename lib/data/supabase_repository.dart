@@ -1,6 +1,7 @@
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide toDouble;
 
+import '../config.dart';
 import 'models.dart';
 import 'repository.dart';
 
@@ -223,7 +224,15 @@ class SupabaseRepository implements Repository {
   @override
   Future<List<CostCategory>> costCategories() async {
     final rows = await _db.from('cost_categories').select('code, name, store_name').order('sort_order');
-    return rows.map((r) => CostCategory(r['code'] as String, r['name'] as String, r['store_name'] as String?)).toList();
+    final list = rows.map((r) => CostCategory(r['code'] as String, r['name'] as String, r['store_name'] as String?)).toList();
+    // 老闆指定的順序優先（List.sort 不穩定，所以用原本位置當第二排序）
+    final pos = {for (final (i, c) in list.indexed) c.code: i};
+    int rank(CostCategory c) {
+      final i = AppConfig.categoryOrder.indexOf(c.code);
+      return i < 0 ? 1000 + pos[c.code]! : i;
+    }
+    list.sort((a, b) => rank(a).compareTo(rank(b)));
+    return list;
   }
 
   @override
