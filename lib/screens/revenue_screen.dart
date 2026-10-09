@@ -23,7 +23,8 @@ class _RevenueScreenState extends State<RevenueScreen> {
   bool _started = false;
 
   /// 營收以 Dropbox 日報表為準的店：只能看
-  bool get _synced => AppConfig.excelSyncedStores.contains(widget.membership.storeName);
+  // Excel 同步的店、或員工（只能看）：不能新增或修改
+  bool get _synced => AppConfig.excelSyncedStores.contains(widget.membership.storeName) || !widget.membership.isManager;
 
   @override
   void didChangeDependencies() {

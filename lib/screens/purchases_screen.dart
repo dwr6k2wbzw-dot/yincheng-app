@@ -42,7 +42,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     final r = await Future.wait([repo.monthPurchases(id, _month), repo.costCategories()]);
     final cats = {for (final c in r[1] as List<CostCategory>) c.code: c.name};
     DateTime? last;
-    if (_synced && widget.membership.isManager) last = await repo.lastExcelSync(id);
+    if (_synced && widget.membership.canSeeRevenue) last = await repo.lastExcelSync(id);
     return (r[0] as List<Purchase>, cats, last);
   }
 

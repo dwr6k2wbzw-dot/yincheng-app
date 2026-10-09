@@ -10,11 +10,11 @@ import '../widgets/common.dart';
 
 /// 各身分能看到什麼（顯示在邀請與修改身分的選項下方）
 const _roleHints = {
-  Role.manager: '營收、進貨、成本率都看得到；看不到租金、人事與損益',
+  Role.manager: '營收、進貨、成本率都看得到，可核銷、核准盤點；看不到租金、人事與損益',
   Role.bartender: '進貨、盤點；看不到營收與成本',
-  Role.staff: '進貨、盤點；看不到營收與成本',
+  Role.staff: '看得到營收（只能看）、進貨、盤點；看不到成本率、租金、人事與損益',
 };
-const _invitableRoles = [Role.manager, Role.bartender, Role.staff];
+const _invitableRoles = [Role.manager, Role.staff];
 
 /// 成員管理（只有老闆）：成員清單、邀請碼、修改身分、停權
 class MembersScreen extends StatefulWidget {

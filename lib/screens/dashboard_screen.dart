@@ -42,8 +42,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final repo = AppScope.of(context).repo;
     final id = widget.membership.storeId;
     final d = _DashboardData()..month = _month;
-    if (!widget.membership.isManager) d.petty = await repo.pettyCashBalance(id);
-    if (widget.membership.isManager) {
+    if (!widget.membership.canSeeRevenue) d.petty = await repo.pettyCashBalance(id);
+    if (widget.membership.canSeeRevenue) {
       final r = await Future.wait([
         repo.monthlySummary(id, _month),
         if (_isOwner) repo.fixedCosts(id, _month),
@@ -102,7 +102,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           return RefreshIndicator(
             onRefresh: () async => _reload(),
             child: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 24), children: [
-              if (widget.membership.isManager) ..._managerView(d) else ..._staffView(d),
+              if (widget.membership.canSeeRevenue) ..._managerView(d) else ..._staffView(d),
             ]),
           );
         },
@@ -110,7 +110,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   List<Widget> _staffView(_DashboardData d) => [
         const SectionCard(
-          child: Text('員工版總覽：營收與成本分析只有老闆、店長看得到。\n可以在下方分頁記錄進貨與盤點。',
+          child: Text('這個身分看不到營收與成本分析。\n可以在下方分頁記錄進貨與盤點。',
               style: TextStyle(color: AppColors.muted, height: 1.5)),
         ),
         const SizedBox(height: 12),
@@ -189,6 +189,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ),
       ]),
+      if (widget.membership.isManager) ...[
       const SizedBox(height: 12),
       SectionCard(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -211,6 +212,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               style: const TextStyle(color: AppColors.muted, fontSize: 11)),
         ]),
       ),
+      ],
       const SizedBox(height: 12),
       if (_isOwner) _profitCard(d, s),
     ];

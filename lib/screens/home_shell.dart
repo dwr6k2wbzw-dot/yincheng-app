@@ -74,7 +74,7 @@ class _HomeShellState extends State<HomeShell> {
         DashboardScreen(key: ValueKey('d-${m.storeId}'), membership: m),
         const NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: '總覽'),
       ),
-      if (m.isManager)
+      if (m.canSeeRevenue)
         (
           RevenueScreen(key: ValueKey('r-${m.storeId}'), membership: m),
           const NavigationDestination(

@@ -22,6 +22,8 @@ class Membership {
   Membership({required this.storeId, required this.storeName, required this.role, required this.displayName});
 
   bool get isManager => role == Role.owner || role == Role.manager;
+  /// 看得到營收：老闆、店長、員工（員工只能看，資料庫 0020）；調酒師看不到
+  bool get canSeeRevenue => isManager || role == Role.staff;
 
   factory Membership.fromRow(Map<String, dynamic> r) => Membership(
         storeId: r['store_id'] as String,
