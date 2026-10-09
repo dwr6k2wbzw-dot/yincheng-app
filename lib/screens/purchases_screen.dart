@@ -376,6 +376,8 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
       _hints = adjustVendorHints(await repo.vendorHints(id));
     } catch (_) {} // 提示讀不到不影響新增
     _sups = r[1] as List<Supplier>;
+    // 填表人預設帶入自己的名字（可以改成請款人）
+    if (_memo.text.isEmpty) _memo.text = widget.membership.displayName;
     return (r[0] as List<CostCategory>, r[1] as List<Supplier>);
   }
 
