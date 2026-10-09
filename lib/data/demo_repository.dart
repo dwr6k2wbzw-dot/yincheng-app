@@ -144,6 +144,8 @@ class DemoRepository implements Repository {
       foodCostRate: 0.4000,
       totalCostRate: 0.2500,
       miscCostRate: 0.0200,
+      purchaseCost: 125000,
+      miscCost: 10000,
       hasCostRecords: true,
     );
   }

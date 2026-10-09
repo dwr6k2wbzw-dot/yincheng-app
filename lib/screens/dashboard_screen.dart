@@ -189,22 +189,54 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ]),
       ),
       const SizedBox(height: 12),
-      if (_isOwner)
-        SectionCard(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('租金與人事成本', style: TextStyle(color: AppColors.muted)),
-            const SizedBox(height: 10),
-            Row(children: [
-              _fixedItem(d, 'rent', '租金', d.fixed.rent, s.revenue),
-              const SizedBox(width: 12),
-              _fixedItem(d, 'payroll', '人事', d.fixed.payroll, s.revenue),
-            ]),
-            const SizedBox(height: 8),
-            const Text('點金額輸入或修改；占比＝金額 ÷ 本月營業收入。只有老闆看得到',
-                style: TextStyle(color: AppColors.muted, fontSize: 11)),
-          ]),
-        ),
+      if (_isOwner) _profitCard(d, s),
     ];
+  }
+
+  /// 本月損益（只有老闆：含人事成本）
+  /// 損益＝營收 − 進貨（酒水＋餐食）− 雜項 − 租金 − 人事（老闆 2026-10-09 確認：照字面相加，酒水副材料-雜項會扣兩次）
+  Widget _profitCard(_DashboardData d, MonthlySummary s) {
+    final rent = d.fixed.rent ?? 0;
+    final payroll = d.fixed.payroll ?? 0;
+    final profit = s.revenue - s.purchaseCost - s.miscCost - rent - payroll;
+    final missing = [if (d.fixed.rent == null) '租金', if (d.fixed.payroll == null) '人事'];
+    Widget line(String k, double v, {bool minus = true}) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(children: [
+            Text(k, style: const TextStyle(color: AppColors.muted, fontSize: 13)),
+            const Spacer(),
+            Text('${minus ? '−' : ''}${ntd(v)}', style: const TextStyle(fontSize: 13, fontFeatures: [FontFeature.tabularFigures()])),
+          ]),
+        );
+    return SectionCard(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('本月損益', style: TextStyle(color: AppColors.muted)),
+        const SizedBox(height: 6),
+        Text(ntd(profit),
+            style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: profit >= 0 ? AppColors.good : AppColors.bad)),
+        if (missing.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text('尚未輸入${missing.join('、')}，損益還不完整',
+                style: const TextStyle(color: AppColors.warn, fontSize: 12)),
+          ),
+        const SizedBox(height: 10),
+        line('營業收入', s.revenue, minus: false),
+        line('進貨（酒水＋餐食）', s.purchaseCost),
+        line('雜項', s.miscCost),
+        line('租金', rent),
+        line('人事', payroll),
+        const Divider(height: 20),
+        Row(children: [
+          _fixedItem(d, 'rent', '租金', d.fixed.rent, s.revenue),
+          const SizedBox(width: 12),
+          _fixedItem(d, 'payroll', '人事', d.fixed.payroll, s.revenue),
+        ]),
+        const SizedBox(height: 8),
+        const Text('點租金、人事輸入或修改；占比＝金額 ÷ 本月營業收入。只有老闆看得到',
+            style: TextStyle(color: AppColors.muted, fontSize: 11)),
+      ]),
+    );
   }
 
   Widget _fixedItem(_DashboardData d, String category, String label, double? v, double revenue) => Expanded(
