@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 
 import '../app_state.dart';
+import '../config.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
 import '../theme.dart';
@@ -19,7 +20,7 @@ class PurchasesScreen extends StatefulWidget {
 }
 
 class _PurchasesScreenState extends State<PurchasesScreen> {
-  late Future<(List<Purchase>, Map<String, String>)> _future;
+  late Future<(List<Purchase>, Map<String, String>, DateTime?)> _future;
   DateTime _month = DateTime(DateTime.now().year, DateTime.now().month);
   final _open = <String>{}; // 已展開的大類
   bool _started = false;
@@ -32,11 +33,17 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     _future = _load();
   }
 
-  Future<(List<Purchase>, Map<String, String>)> _load() async {
+  /// 進貨以 Dropbox 日報表為準的店：只能看，不能新增或核銷（核銷也以 Excel 的「核銷」欄為準）
+  bool get _synced => AppConfig.excelSyncedStores.contains(widget.membership.storeName);
+
+  Future<(List<Purchase>, Map<String, String>, DateTime?)> _load() async {
     final repo = AppScope.of(context).repo;
-    final r = await Future.wait([repo.monthPurchases(widget.membership.storeId, _month), repo.costCategories()]);
+    final id = widget.membership.storeId;
+    final r = await Future.wait([repo.monthPurchases(id, _month), repo.costCategories()]);
     final cats = {for (final c in r[1] as List<CostCategory>) c.code: c.name};
-    return (r[0] as List<Purchase>, cats);
+    DateTime? last;
+    if (_synced && widget.membership.isManager) last = await repo.lastExcelSync(id);
+    return (r[0] as List<Purchase>, cats, last);
   }
 
   void _reload() => setState(() => _future = _load());
@@ -55,7 +62,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           month: _month,
           items: items,
           categoryNames: cats,
-          canReconcile: widget.membership.isManager,
+          canReconcile: widget.membership.isManager && !_synced,
         ),
       ),
     );
@@ -64,23 +71,25 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: () async {
-            final saved = await Navigator.push<bool>(
-              context,
-              MaterialPageRoute(builder: (_) => PurchaseFormScreen(membership: widget.membership)),
-            );
-            if (saved == true) _reload();
-          },
-          icon: const Icon(Icons.add),
-          label: const Text('新增進貨'),
-        ),
-        body: FutureBuilder<(List<Purchase>, Map<String, String>)>(
+        floatingActionButton: _synced
+            ? null
+            : FloatingActionButton.extended(
+                onPressed: () async {
+                  final saved = await Navigator.push<bool>(
+                    context,
+                    MaterialPageRoute(builder: (_) => PurchaseFormScreen(membership: widget.membership)),
+                  );
+                  if (saved == true) _reload();
+                },
+                icon: const Icon(Icons.add),
+                label: const Text('新增進貨'),
+              ),
+        body: FutureBuilder<(List<Purchase>, Map<String, String>, DateTime?)>(
           future: _future,
           builder: (context, snap) {
             if (snap.hasError) return ErrorView(message: friendlyError(snap.error!), onRetry: _reload);
             if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-            final (list, cats) = snap.data!;
+            final (list, cats, last) = snap.data!;
             final vendor = list.where((p) => p.paidBy != 'petty_cash').toList();
             final petty = list.where((p) => p.paidBy == 'petty_cash').toList();
             return RefreshIndicator(
@@ -95,6 +104,22 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                   IconButton(onPressed: () => _shiftMonth(1), icon: const Icon(Icons.chevron_right)),
                 ]),
                 const SizedBox(height: 4),
+                if (_synced) ...[
+                  SectionCard(
+                    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      const Icon(Icons.sync, color: AppColors.primary),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          '進貨由 Dropbox 日報表每小時自動同步；要新增、修改或核銷請直接改 Excel。'
+                          '${last == null ? '' : '\n最後一次寫入：${DateFormat('M/d HH:mm').format(last)}'}',
+                          style: const TextStyle(color: AppColors.muted, fontSize: 12, height: 1.5),
+                        ),
+                      ),
+                    ]),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 _group('vendor', '月結廠商', '廠商請款', Icons.storefront_outlined, vendor, cats),
                 const SizedBox(height: 12),
                 _group('petty', '零用金支出', '零用金付款', Icons.payments_outlined, petty, cats),
