@@ -189,7 +189,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ),
       ]),
-      if (widget.membership.isManager) ...[
+      if (widget.membership.canSeeRevenue) ...[
       const SizedBox(height: 12),
       SectionCard(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

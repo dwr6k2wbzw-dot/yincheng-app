@@ -12,7 +12,7 @@ import '../widgets/common.dart';
 const _roleHints = {
   Role.manager: '營收、進貨、成本率都看得到，可核銷、核准盤點；看不到租金、人事與損益',
   Role.bartender: '進貨、盤點；看不到營收與成本',
-  Role.staff: '看得到營收（只能看）、進貨、盤點；看不到成本率、租金、人事與損益',
+  Role.staff: '看得到營收與進貨成本率（只能看）、進貨、盤點；看不到租金、人事與損益',
 };
 const _invitableRoles = [Role.manager, Role.staff];
 
