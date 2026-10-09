@@ -39,6 +39,7 @@ class MonthlySummary {
   final double? dailyAvgTicket;
   final double drinksRevenue;
   final double foodRevenue;
+  final double projectAmount; // 專案（另計收入，Excel 計成本率時併入酒水）
   final double? targetAmount;
   final double? targetRate;
   final double? drinkCostRate;
@@ -54,6 +55,7 @@ class MonthlySummary {
     this.dailyAvgTicket,
     required this.drinksRevenue,
     required this.foodRevenue,
+    this.projectAmount = 0,
     this.targetAmount,
     this.targetRate,
     this.drinkCostRate,
@@ -209,6 +211,7 @@ MonthlySummary summaryFromRows(Map<String, dynamic>? rev, Map<String, dynamic>? 
       dailyAvgTicket: _dn(rev?['daily_avg_ticket']),
       drinksRevenue: _d(rev?['drinks_revenue']),
       foodRevenue: _d(rev?['food_revenue']),
+      projectAmount: _d(rev?['project_amount']),
       targetAmount: _dn(rev?['target_amount']),
       targetRate: _dn(rev?['target_rate']),
       drinkCostRate: _dn(cost?['drink_cost_rate']),

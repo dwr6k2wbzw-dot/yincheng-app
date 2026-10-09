@@ -101,6 +101,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const Text('本月營收', style: TextStyle(color: AppColors.muted)),
           const SizedBox(height: 6),
           Text(ntd(s.revenue), style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 10),
+          Row(children: [
+            _amount('酒水', s.drinksRevenue, AppColors.primary),
+            _amount('餐食', s.foodRevenue, AppColors.warn),
+            if (s.projectAmount != 0) _amount('專案', s.projectAmount, AppColors.muted),
+          ]),
           const SizedBox(height: 12),
           if (s.targetAmount != null) ...[
             ClipRRect(
@@ -177,6 +183,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     ];
   }
+
+  Widget _amount(String label, double v, Color dot) => Expanded(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Icon(Icons.circle, size: 8, color: dot),
+            const SizedBox(width: 6),
+            Text(label, style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+          ]),
+          const SizedBox(height: 2),
+          Text(ntd(v), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+        ]),
+      );
 
   Widget _rate(String label, double? v) => Expanded(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
