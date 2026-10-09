@@ -381,7 +381,13 @@ class VendorSlip {
   final double total;
   final String? note;
   final List<VendorSlipLine> lines;
-  VendorSlip(this.id, this.vendor, this.slipNo, this.date, this.total, this.note, this.lines);
+  final String status; // draft＝文字辨識草稿待確認、confirmed＝已確認
+  final String source; // manual／ocr／app
+  final String? sourceFile;
+  VendorSlip(this.id, this.vendor, this.slipNo, this.date, this.total, this.note, this.lines,
+      {this.status = 'confirmed', this.source = 'manual', this.sourceFile});
+  bool get isDraft => status == 'draft';
+  double get linesTotal => lines.fold(0.0, (a, l) => a + l.amount);
   factory VendorSlip.fromRow(Map<String, dynamic> r) => VendorSlip(
         r['id'] as String,
         r['vendor'] as String,
@@ -401,5 +407,8 @@ class VendorSlip {
                 ))
             .toList()
           ..sort((a, b) => a.lineNo.compareTo(b.lineNo)),
+        status: r['status'] as String? ?? 'confirmed',
+        source: r['source'] as String? ?? 'manual',
+        sourceFile: r['source_file'] as String?,
       );
 }

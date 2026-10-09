@@ -270,7 +270,7 @@ class SupabaseRepository implements Repository {
     final to = DateTime(month.year, month.month + 1, 1);
     final rows = await _db
         .from('vendor_slips')
-        .select('id, vendor, slip_no, slip_date, total, note, '
+        .select('id, vendor, slip_no, slip_date, total, note, status, source, source_file, '
             'vendor_slip_lines(line_no, item_code, item_name, qty, unit, unit_price, amount)')
         .eq('store_id', storeId)
         .gte('slip_date', _day.format(from))
@@ -279,6 +279,38 @@ class SupabaseRepository implements Repository {
         .order('slip_no')
         .limit(2000);
     return rows.map(VendorSlip.fromRow).toList();
+  }
+
+  @override
+  Future<String> saveVendorSlip(String storeId, VendorSlip s) async {
+    final id = await _db.rpc('save_vendor_slip', params: {
+      'p_id': s.id.isEmpty ? null : s.id,
+      'p_store': storeId,
+      'p_vendor': s.vendor,
+      'p_slip_no': s.slipNo,
+      'p_date': _day.format(s.date),
+      'p_total': s.total,
+      'p_note': s.note ?? '',
+      'p_status': s.status,
+      'p_lines': [
+        for (final l in s.lines)
+          {
+            'item_code': l.itemCode ?? '',
+            'item_name': l.itemName,
+            'qty': l.qty,
+            'unit': l.unit ?? '',
+            'unit_price': l.unitPrice,
+            'amount': l.amount,
+          }
+      ],
+    });
+    return id as String;
+  }
+
+  @override
+  Future<void> deleteVendorSlip(String slipId) async {
+    final rows = await _db.from('vendor_slips').delete().eq('id', slipId).select('id');
+    if (rows.isEmpty) throw Exception('message: 沒有權限刪除這張單據,');
   }
 
   @override

@@ -54,6 +54,9 @@ abstract class Repository {
   Future<List<VendorSlip>> vendorSlips(String storeId, DateTime month);
   /// 自動讀取失敗、需要確認的單據檔名
   Future<List<String>> failedSlipFiles(String storeId);
+  /// 新增（id 為 null）或修改一張銷貨單：表頭＋品項一次存（只有老闆／店長）
+  Future<String> saveVendorSlip(String storeId, VendorSlip slip);
+  Future<void> deleteVendorSlip(String slipId);
 
   // 盤點
   Future<List<Product>> products(String storeId);
@@ -73,6 +76,7 @@ String friendlyError(Object e) {
   if (msg.contains('row-level security')) return '沒有權限執行這個動作。';
   if (msg.contains('daily_revenue_one_per_day')) return '這一天已經有營收紀錄了，請從列表點進去修改。';
   if (msg.contains('Invalid login credentials')) return '帳號或密碼錯誤。';
+  if (msg.contains('vendor_slips_store_id_vendor_slip_no_key')) return '這個廠商已經有相同單號的單據了。';
   if (msg.contains('Email not confirmed')) return '這個 Email 還沒確認，請先到信箱點確認連結。';
   if (msg.contains('User already registered') || msg.contains('already been registered')) return '這個 Email 已經有帳號了，請直接登入。';
   if (msg.contains('rate limit')) return '操作太頻繁，請稍後再試。';

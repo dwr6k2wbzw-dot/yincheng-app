@@ -70,6 +70,10 @@ class DemoRepository implements Repository {
       ];
   @override
   Future<List<String>> failedSlipFiles(String storeId) async => [];
+  @override
+  Future<String> saveVendorSlip(String storeId, VendorSlip slip) async => slip.id.isEmpty ? 'v-new' : slip.id;
+  @override
+  Future<void> deleteVendorSlip(String slipId) async {}
 
   @override
   Future<bool> signUp(String email, String password) async {
