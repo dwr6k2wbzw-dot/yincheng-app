@@ -1,5 +1,5 @@
 import 'package:intl/intl.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' hide toDouble;
 
 import 'models.dart';
 import 'repository.dart';
