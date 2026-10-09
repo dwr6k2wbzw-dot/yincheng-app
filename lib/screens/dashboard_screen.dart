@@ -199,10 +199,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const Text('本月尚無進貨資料', style: TextStyle(color: AppColors.warn))
           else
             Row(children: [
-              _rate('酒水', s.drinkCostRate),
-              _rate('餐食', s.foodCostRate),
-              _rate('總進貨', s.totalCostRate),
-              _rate('雜項', s.miscCostRate),
+              _rate('酒水', s.drinkCostRate, s.drinkCost),
+              _rate('餐食', s.foodCostRate, s.foodCost),
+              _rate('總進貨', s.totalCostRate, s.totalCost),
+              _rate('雜項', s.miscCostRate, s.miscCost),
             ]),
           const SizedBox(height: 6),
           Text(
@@ -314,11 +314,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ]),
       );
 
-  Widget _rate(String label, double? v) => Expanded(
+  Widget _rate(String label, double? v, double amount) => Expanded(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(label, style: const TextStyle(color: AppColors.muted, fontSize: 12)),
           const SizedBox(height: 4),
           Text(pct(v), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 2),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(ntd(amount.round()), style: const TextStyle(fontSize: 13, color: AppColors.muted)),
+          ),
         ]),
       );
 }

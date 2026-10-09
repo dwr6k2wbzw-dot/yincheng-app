@@ -55,6 +55,9 @@ class MonthlySummary {
   final double? miscCostRate; // 雜項成本率（不計入總進貨）
   final double purchaseCost; // 損益用進貨金額：酒水＋餐食，但不含計入雜項的類別（酒水副材料-雜項只算雜項）
   final double miscCost; // 雜項總金額（零用金-其他雜支＋酒水副材料-雜項）
+  final double drinkCost; // 酒水進貨金額
+  final double foodCost; // 餐食進貨金額
+  final double totalCost; // 總進貨金額（酒水＋餐食＋咖啡＋拉麵，與總進貨成本率同一算法）
   final bool hasCostRecords;
   MonthlySummary({
     required this.month,
@@ -78,6 +81,9 @@ class MonthlySummary {
     this.miscCostRate,
     this.purchaseCost = 0,
     this.miscCost = 0,
+    this.drinkCost = 0,
+    this.foodCost = 0,
+    this.totalCost = 0,
     this.hasCostRecords = false,
   });
 }
@@ -241,6 +247,9 @@ MonthlySummary summaryFromRows(Map<String, dynamic>? rev, Map<String, dynamic>? 
       miscCostRate: _dn(cost?['misc_cost_rate']),
       purchaseCost: _d(cost?['purchase_cost_excl_misc']),
       miscCost: _d(cost?['misc_cost']),
+      drinkCost: _d(cost?['drink_cost']),
+      foodCost: _d(cost?['food_cost']),
+      totalCost: _d(cost?['drink_cost']) + _d(cost?['food_cost']) + _d(cost?['coffee_cost']) + _d(cost?['ramen_cost']),
       hasCostRecords: cost?['has_cost_records'] as bool? ?? false,
     );
 
