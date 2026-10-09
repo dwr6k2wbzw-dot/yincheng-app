@@ -360,3 +360,46 @@ class MemberInvite {
         expiresAt: DateTime.parse(r['expires_at'] as String).toLocal(),
       );
 }
+
+/// 廠商銷貨單（小城外：掃描單據整理；只是明細參考，不影響成本率）
+class VendorSlipLine {
+  final int lineNo;
+  final String? itemCode;
+  final String itemName;
+  final double qty;
+  final String? unit;
+  final double? unitPrice;
+  final double amount;
+  VendorSlipLine(this.lineNo, this.itemCode, this.itemName, this.qty, this.unit, this.unitPrice, this.amount);
+}
+
+class VendorSlip {
+  final String id;
+  final String vendor;
+  final String slipNo;
+  final DateTime date;
+  final double total;
+  final String? note;
+  final List<VendorSlipLine> lines;
+  VendorSlip(this.id, this.vendor, this.slipNo, this.date, this.total, this.note, this.lines);
+  factory VendorSlip.fromRow(Map<String, dynamic> r) => VendorSlip(
+        r['id'] as String,
+        r['vendor'] as String,
+        r['slip_no'] as String,
+        _date(r['slip_date'])!,
+        _d(r['total']),
+        r['note'] as String?,
+        ((r['vendor_slip_lines'] as List?) ?? [])
+            .map((l) => VendorSlipLine(
+                  (l['line_no'] as num).toInt(),
+                  l['item_code'] as String?,
+                  l['item_name'] as String,
+                  _d(l['qty']),
+                  l['unit'] as String?,
+                  l['unit_price'] == null ? null : _d(l['unit_price']),
+                  _d(l['amount']),
+                ))
+            .toList()
+          ..sort((a, b) => a.lineNo.compareTo(b.lineNo)),
+      );
+}

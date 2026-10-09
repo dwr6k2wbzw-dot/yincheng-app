@@ -265,6 +265,34 @@ class SupabaseRepository implements Repository {
   }
 
   @override
+  Future<List<VendorSlip>> vendorSlips(String storeId, DateTime month) async {
+    final from = DateTime(month.year, month.month, 1);
+    final to = DateTime(month.year, month.month + 1, 1);
+    final rows = await _db
+        .from('vendor_slips')
+        .select('id, vendor, slip_no, slip_date, total, note, '
+            'vendor_slip_lines(line_no, item_code, item_name, qty, unit, unit_price, amount)')
+        .eq('store_id', storeId)
+        .gte('slip_date', _day.format(from))
+        .lt('slip_date', _day.format(to))
+        .order('slip_date')
+        .order('slip_no')
+        .limit(2000);
+    return rows.map(VendorSlip.fromRow).toList();
+  }
+
+  @override
+  Future<List<String>> failedSlipFiles(String storeId) async {
+    final rows = await _db
+        .from('vendor_slip_files')
+        .select('file_name')
+        .eq('store_id', storeId)
+        .eq('status', 'failed')
+        .order('processed_at');
+    return rows.map((r) => r['file_name'] as String).toList();
+  }
+
+  @override
   Future<void> addPurchase(NewPurchase p) async {
     // created_by、period_month 由資料庫填入；client_request_id 防止重送重複
     await _db.from('purchases').insert({

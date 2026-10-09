@@ -50,6 +50,11 @@ abstract class Repository {
   Future<void> addPurchase(NewPurchase p);
   Future<void> setReconciled(String purchaseId, bool reconciled);
 
+  // 廠商銷貨單明細（小城外）
+  Future<List<VendorSlip>> vendorSlips(String storeId, DateTime month);
+  /// 自動讀取失敗、需要確認的單據檔名
+  Future<List<String>> failedSlipFiles(String storeId);
+
   // 盤點
   Future<List<Product>> products(String storeId);
   Future<List<StockCount>> stockCounts(String storeId);

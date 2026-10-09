@@ -62,6 +62,16 @@ class DemoRepository implements Repository {
   }
 
   @override
+  Future<List<VendorSlip>> vendorSlips(String storeId, DateTime month) async => [
+        VendorSlip('v1', '示範酒商', 'D-001', DateTime(month.year, month.month, 1), 1300, null, [
+          VendorSlipLine(1, 'A01', '示範琴酒 700ML', 1, '瓶', 900, 900),
+          VendorSlipLine(2, 'A02', '示範蘇打水 24入', 1, '箱', 400, 400),
+        ]),
+      ];
+  @override
+  Future<List<String>> failedSlipFiles(String storeId) async => [];
+
+  @override
   Future<bool> signUp(String email, String password) async {
     await signIn(email, password);
     return true;

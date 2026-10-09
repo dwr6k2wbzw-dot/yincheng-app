@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app_state.dart';
+import '../config.dart';
 import '../data/models.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -10,6 +11,7 @@ import 'members_screen.dart';
 import 'purchases_screen.dart';
 import 'revenue_screen.dart';
 import 'stock_counts_screen.dart';
+import 'vendor_slips_screen.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
@@ -85,11 +87,19 @@ class _HomeShellState extends State<HomeShell> {
         const NavigationDestination(
             icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: '進貨'),
       ),
-      (
-        StockCountsScreen(key: ValueKey('s-${m.storeId}'), membership: m),
-        const NavigationDestination(
-            icon: Icon(Icons.inventory_2_outlined), selectedIcon: Icon(Icons.inventory_2), label: '盤點'),
-      ),
+      // 小城外：「盤點」分頁改成「銷貨單」（Dropbox 廠商進貨單的掃描單據明細）
+      if (AppConfig.vendorSlipStores.contains(m.storeName))
+        (
+          VendorSlipsScreen(key: ValueKey('v-${m.storeId}'), membership: m),
+          const NavigationDestination(
+              icon: Icon(Icons.description_outlined), selectedIcon: Icon(Icons.description), label: '銷貨單'),
+        )
+      else
+        (
+          StockCountsScreen(key: ValueKey('s-${m.storeId}'), membership: m),
+          const NavigationDestination(
+              icon: Icon(Icons.inventory_2_outlined), selectedIcon: Icon(Icons.inventory_2), label: '盤點'),
+        ),
     ];
     final tab = _tab.clamp(0, tabs.length - 1);
     return Scaffold(

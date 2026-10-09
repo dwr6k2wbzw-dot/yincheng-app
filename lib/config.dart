@@ -19,4 +19,7 @@ class AppConfig {
 
   /// 營收照 Excel 分「咖啡／調酒／拉麵／訂金」四項顯示的店家（調酒＝酒水＋餐食；客單＝調酒收入 ÷ 來客數，與小城外 Excel 相同）
   static const multiLineStores = {'小城外'};
+
+  /// 以「廠商銷貨單」分頁取代「盤點」分頁的店家（資料來自 Dropbox 廠商進貨單資料夾）
+  static const vendorSlipStores = {'小城外'};
 }
