@@ -267,14 +267,12 @@ class SupabaseRepository implements Repository {
   @override
   Future<List<VendorSlip>> vendorSlips(String storeId, DateTime month) async {
     final from = DateTime(month.year, month.month, 1);
-    final to = DateTime(month.year, month.month + 1, 1);
     final rows = await _db
         .from('vendor_slips')
         .select('id, vendor, slip_no, slip_date, total, note, status, source, source_file, '
             'vendor_slip_lines(line_no, item_code, item_name, qty, unit, unit_price, amount)')
         .eq('store_id', storeId)
-        .gte('slip_date', _day.format(from))
-        .lt('slip_date', _day.format(to))
+        .eq('period_month', _day.format(from)) // 歸屬月份＝Dropbox「M月份」資料夾
         .order('slip_date')
         .order('slip_no')
         .limit(2000);
@@ -292,6 +290,7 @@ class SupabaseRepository implements Repository {
       'p_total': s.total,
       'p_note': s.note ?? '',
       'p_status': s.status,
+      if (s.periodMonth != null) 'p_period': _day.format(s.periodMonth!),
       'p_lines': [
         for (final l in s.lines)
           {

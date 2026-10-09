@@ -384,8 +384,9 @@ class VendorSlip {
   final String status; // draft＝文字辨識草稿待確認、confirmed＝已確認
   final String source; // manual／ocr／app
   final String? sourceFile;
+  final DateTime? periodMonth; // 歸屬月份（Dropbox「M月份」資料夾）；修改時 null＝維持原本
   VendorSlip(this.id, this.vendor, this.slipNo, this.date, this.total, this.note, this.lines,
-      {this.status = 'confirmed', this.source = 'manual', this.sourceFile});
+      {this.status = 'confirmed', this.source = 'manual', this.sourceFile, this.periodMonth});
   bool get isDraft => status == 'draft';
   double get linesTotal => lines.fold(0.0, (a, l) => a + l.amount);
   factory VendorSlip.fromRow(Map<String, dynamic> r) => VendorSlip(

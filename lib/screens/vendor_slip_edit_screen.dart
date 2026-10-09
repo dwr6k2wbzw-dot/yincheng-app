@@ -126,7 +126,9 @@ class _VendorSlipEditScreenState extends State<VendorSlipEditScreen> {
     final status = confirm ? 'confirmed' : (widget.slip?.status ?? 'confirmed');
     final slip = VendorSlip(widget.slip?.id ?? '', _vendor.text.trim(), _slipNo.text.trim(), _date, total,
         _note.text.trim(), lines,
-        status: status);
+        status: status,
+        // 新增：算在目前畫面的月份；修改：維持原本月份
+        periodMonth: _isNew ? DateTime((widget.month ?? _date).year, (widget.month ?? _date).month, 1) : null);
     final repo = AppScope.of(context).repo;
     setState(() => _busy = true);
     try {
