@@ -102,30 +102,66 @@ class _RevenueTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final mismatch = (e.received - e.detailTotal).abs() >= 1;
     final avg = e.guests > 0 ? e.received / e.guests : null;
+    // 當日占比：以「酒水＋餐食（＋專案）」為分母，與總覽的占比條同一算法
+    final base = e.drinks + e.food + e.project;
+    double share(double v) => base > 0 ? v / base : 0;
     return InkWell(
       borderRadius: BorderRadius.circular(16),
       onTap: onTap,
       child: SectionCard(
-        padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
-        child: Row(children: [
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(DateFormat('M/d（E）', 'zh_TW').format(e.bizDate), style: const TextStyle(fontWeight: FontWeight.w600)),
-              const SizedBox(height: 4),
-              Text(
-                '${e.guests} 位${avg == null ? '' : '・客單 ${ntd(avg.round())}'}'
-                '${e.source == 'import' ? '・Excel' : '・App'}'
-                '${mismatch ? '・明細不符' : ''}',
-                style: TextStyle(color: mismatch ? AppColors.warn : AppColors.muted, fontSize: 12),
-              ),
+        padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(DateFormat('M/d（E）', 'zh_TW').format(e.bizDate), style: const TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 4),
+                Text(
+                  '${e.guests} 位${avg == null ? '' : '・客單 ${ntd(avg.round())}'}'
+                  '${e.source == 'import' ? '・Excel' : '・App'}'
+                  '${mismatch ? '・明細不符' : ''}',
+                  style: TextStyle(color: mismatch ? AppColors.warn : AppColors.muted, fontSize: 12),
+                ),
+              ]),
+            ),
+            Text(ntd(e.received), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+            if (onTap != null) const Icon(Icons.chevron_right, color: AppColors.muted),
+          ]),
+          if (base > 0) ...[
+            const SizedBox(height: 10),
+            Row(children: [
+              _part('酒水', e.drinks, share(e.drinks), AppColors.primary),
+              _part('餐食', e.food, share(e.food), AppColors.warn),
+              if (e.project != 0) _part('專案', e.project, share(e.project), AppColors.muted),
             ]),
-          ),
-          Text(ntd(e.received), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-          if (onTap != null) const Icon(Icons.chevron_right, color: AppColors.muted) else const SizedBox(width: 8),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: Row(children: [
+                if (e.drinks > 0)
+                  Expanded(flex: (share(e.drinks) * 1000).round(), child: Container(height: 6, color: AppColors.primary)),
+                if (e.food > 0)
+                  Expanded(flex: (share(e.food) * 1000).round(), child: Container(height: 6, color: AppColors.warn)),
+                if (e.project > 0)
+                  Expanded(flex: (share(e.project) * 1000).round(), child: Container(height: 6, color: AppColors.muted)),
+              ]),
+            ),
+          ],
         ]),
       ),
     );
   }
+
+  Widget _part(String label, double v, double share, Color dot) => Expanded(
+        child: Row(children: [
+          Icon(Icons.circle, size: 7, color: dot),
+          const SizedBox(width: 5),
+          Flexible(
+            child: Text('$label ${ntd(v)}・${pct(share)}',
+                overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
+          ),
+        ]),
+      );
 }
 
 /// 營收由 Dropbox 同步時，列表上方的說明
