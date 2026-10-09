@@ -34,6 +34,7 @@ abstract class Repository {
   Future<List<CostCategory>> costCategories();
   Future<List<Supplier>> suppliers(String storeId);
   Future<List<Purchase>> recentPurchases(String storeId, {int limit = 30});
+  Future<List<Purchase>> monthPurchases(String storeId, DateTime month);
   Future<void> addPurchase(NewPurchase p);
   Future<void> setReconciled(String purchaseId, bool reconciled);
 

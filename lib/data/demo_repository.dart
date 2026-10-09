@@ -184,6 +184,12 @@ class DemoRepository implements Repository {
   Future<List<Purchase>> recentPurchases(String storeId, {int limit = 30}) async =>
       (List.of(_purchases)..sort((a, b) => b.purchaseDate.compareTo(a.purchaseDate))).take(limit).toList();
 
+  @override
+  Future<List<Purchase>> monthPurchases(String storeId, DateTime month) async => _purchases
+      .where((p) => p.purchaseDate.year == month.year && p.purchaseDate.month == month.month)
+      .toList()
+    ..sort((a, b) => b.purchaseDate.compareTo(a.purchaseDate));
+
   final _requestIds = <String>{};
   @override
   Future<void> addPurchase(NewPurchase p) async {

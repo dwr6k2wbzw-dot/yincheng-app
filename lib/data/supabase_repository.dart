@@ -208,6 +208,20 @@ class SupabaseRepository implements Repository {
   }
 
   @override
+  Future<List<Purchase>> monthPurchases(String storeId, DateTime month) async {
+    final rows = await _db
+        .from('purchases')
+        .select('id, purchase_date, category_code, memo, amount, paid_by, reconciled, source, '
+            'suppliers!purchases_supplier_same_store(name)')
+        .eq('store_id', storeId)
+        .eq('period_month', _day.format(DateTime(month.year, month.month, 1)))
+        .order('purchase_date', ascending: false)
+        .order('created_at', ascending: false)
+        .limit(2000);
+    return rows.map(Purchase.fromRow).toList();
+  }
+
+  @override
   Future<void> addPurchase(NewPurchase p) async {
     // created_by、period_month 由資料庫填入；client_request_id 防止重送重複
     await _db.from('purchases').insert({
