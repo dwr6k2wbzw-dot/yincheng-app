@@ -3,7 +3,11 @@ import pathlib, re
 
 p = pathlib.Path("web/index.html")
 s = p.read_text(encoding="utf-8")
-s = re.sub(r"<title>.*?</title>", "<title>隱城營運</title>", s, flags=re.S)
+s = re.sub(r"<title>.*?</title>", "<title>小城外</title>", s, flags=re.S)
+# iPhone「加入主畫面」顯示的名稱
+s = re.sub(r'<meta name="apple-mobile-web-app-title"[^>]*>', '<meta name="apple-mobile-web-app-title" content="小城外">', s)
+if 'apple-mobile-web-app-title' not in s:
+    s = s.replace("</head>", '  <meta name="apple-mobile-web-app-title" content="小城外">\n</head>', 1)
 s = re.sub(r'<div id="boot".*?</div>', "", s, flags=re.S)
 s = s.replace('<body style="background:#0F1115">', "<body>")
 s = re.sub(r"<script id=\"boot-js\">.*?</script>", "", s, flags=re.S)

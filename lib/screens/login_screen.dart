@@ -91,7 +91,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                   const Icon(Icons.local_bar_rounded, size: 56, color: AppColors.primary),
                   const SizedBox(height: 12),
-                  const Text('隱城營運管理', textAlign: TextAlign.center,
+                  const Text('小城外', textAlign: TextAlign.center,
                       style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 4),
                   Text(

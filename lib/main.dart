@@ -69,7 +69,7 @@ class YinchengApp extends StatelessWidget {
   Widget build(BuildContext context) => AppScope(
         state: state,
         child: MaterialApp(
-          title: '隱城營運',
+          title: '小城外',
           debugShowCheckedModeBanner: false,
           theme: buildTheme(),
           locale: const Locale('zh', 'TW'),
