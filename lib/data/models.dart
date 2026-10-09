@@ -455,12 +455,15 @@ Map<String, List<String>> vendorHintsFromRows(List<Map<String, dynamic>> rows) {
       final m = RegExp(r'^([^()（）]{2,10})\s*[(（]').firstMatch(memo);
       if (m != null) {
         name = m.group(1)!.trim();
-      } else if (memo.length >= 2 && memo.length <= 8 && !memo.contains(' ') && !memo.contains('.')) {
+      } else if (memo.length >= 2 && memo.length <= 8 && !RegExp(r'[\s.\d@*/]').hasMatch(memo)) {
         name = memo;
         sure = false;
       }
     }
     if (name == null) continue;
+    // 「德哥(水果)」→「德哥」
+    name = name.replaceAll(RegExp(r'\s*[(（].*$'), '').trim();
+    if (name.length < 2) continue;
     final bucket = (sure ? strong : weak).putIfAbsent(cat, () => {});
     bucket[name] = (bucket[name] ?? 0) + 1;
   }
