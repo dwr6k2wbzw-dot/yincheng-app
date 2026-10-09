@@ -33,11 +33,21 @@ padding:24px;text-align:center;white-space:pre-wrap;color:#9AA0AE;font:15px/1.6 
     }
     n.textContent = msg + '（點一下關閉）';
   }
+  function res() {
+    // 各檔案下載時間與大小（最慢的 6 個），判斷是網路慢還是檔案壞掉
+    try {
+      var list = performance.getEntriesByType('resource').map(function (r) {
+        return r.name.split('?')[0].split('/').slice(-2).join('/') + '  ' + Math.round(r.duration / 100) / 10 + 's  ' +
+          (r.transferSize ? Math.round(r.transferSize / 1024) + 'KB' : (r.responseEnd ? '快取' : '未完成'));
+      });
+      return '\n\n進度：' + (window.ycStage || 'Dart 尚未啟動') + '\n檔案：\n' + list.slice(-8).join('\n');
+    } catch (e) { return ''; }
+  }
   function show(msg) {
-    var full = msg + (failed.length ? '\n\n下載失敗：\n' + failed.slice(-3).join('\n') : '');
+    var full = msg + (failed.length ? '\n\n下載失敗：\n' + failed.slice(-3).join('\n') : '') + res();
     if (rendered) { note(full); return; }
     var b = document.getElementById('boot'); if (!b) return;
-    b.style.zIndex = '9999'; b.style.background = '#0F1115'; b.style.color = '#FF5C6C';
+    b.style.zIndex = '9999'; b.style.background = '#0F1115'; b.style.color = '#FF5C6C'; b.style.fontSize = '12px'; b.style.textAlign = 'left';
     b.textContent = '啟動失敗（請截圖給 Claude）\n\n' + full + '\n\n已等待 ' + Math.round((Date.now() - t0) / 1000) + ' 秒';
   }
   window.addEventListener('flutter-first-frame', function () {

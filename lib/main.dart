@@ -1,3 +1,5 @@
+import 'dart:js_interop';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -12,7 +14,12 @@ import 'screens/home_shell.dart';
 import 'screens/login_screen.dart';
 import 'theme.dart';
 
+/// 啟動進度（顯示在網頁的錯誤畫面上，方便診斷）
+@JS('ycStage')
+external set _ycStage(String v);
+
 Future<void> main() async {
+  _ycStage = 'Dart 已啟動';
   WidgetsFlutterBinding.ensureInitialized();
   // 畫面元件出錯時顯示錯誤文字（預設是一片灰），方便截圖回報
   ErrorWidget.builder = (d) => Material(
@@ -27,6 +34,7 @@ Future<void> main() async {
       );
   try {
     await initializeDateFormatting('zh_TW');
+    _ycStage = '日期格式完成，連線 Supabase 中';
     final Repository repo;
     if (AppConfig.demo) {
       repo = DemoRepository();
@@ -35,6 +43,7 @@ Future<void> main() async {
           .timeout(const Duration(seconds: 20));
       repo = SupabaseRepository();
     }
+    _ycStage = 'Supabase 完成，開始畫畫面';
     runApp(YinchengApp(state: AppState(repo)));
   } catch (e) {
     runApp(MaterialApp(
