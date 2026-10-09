@@ -81,7 +81,7 @@ class SupabaseRepository implements Repository {
 
   // ---------------- 每日營收 ----------------
   static const _revCols = 'id, biz_date, cash, credit_card, amex, deposit, guests, '
-      'drinks_revenue, food_revenue, project_amount, note, source';
+      'drinks_revenue, food_revenue, project_amount, coffee_revenue, ramen_revenue, note, source';
 
   @override
   Future<List<RevenueEntry>> revenueEntries(String storeId, {int limit = 60}) async {

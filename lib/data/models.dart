@@ -43,6 +43,8 @@ class MonthlySummary {
   final double cash; // 收款：現金
   final double card; // 收款：刷卡（信用卡＋AE卡）
   final double deposit; // 收款：訂金
+  final double coffeeRevenue; // 小城外：咖啡
+  final double ramenRevenue; // 小城外：拉麵
   final double? targetAmount;
   final double? targetRate;
   final double? drinkCostRate;
@@ -64,6 +66,8 @@ class MonthlySummary {
     this.cash = 0,
     this.card = 0,
     this.deposit = 0,
+    this.coffeeRevenue = 0,
+    this.ramenRevenue = 0,
     this.targetAmount,
     this.targetRate,
     this.drinkCostRate,
@@ -225,6 +229,8 @@ MonthlySummary summaryFromRows(Map<String, dynamic>? rev, Map<String, dynamic>? 
       cash: _d(rev?['cash']),
       card: _d(rev?['credit_card']) + _d(rev?['amex']),
       deposit: _d(rev?['deposit']),
+      coffeeRevenue: _d(rev?['coffee_revenue']),
+      ramenRevenue: _d(rev?['ramen_revenue']),
       targetAmount: _dn(rev?['target_amount']),
       targetRate: _dn(rev?['target_rate']),
       drinkCostRate: _dn(cost?['drink_cost_rate']),
@@ -254,6 +260,8 @@ class RevenueEntry {
   final double drinks;
   final double food;
   final double project; // 專案（成本率計算時併入酒水，與 Excel 相同）
+  final double coffee; // 小城外：咖啡
+  final double ramen; // 小城外：拉麵
   final String? note;
   final String source; // app / import
   RevenueEntry({
@@ -267,6 +275,8 @@ class RevenueEntry {
     this.drinks = 0,
     this.food = 0,
     this.project = 0,
+    this.coffee = 0,
+    this.ramen = 0,
     this.note,
     this.source = 'app',
   });
@@ -275,7 +285,7 @@ class RevenueEntry {
   double get received => cash + creditCard + amex + deposit;
 
   /// 營業收入明細合計
-  double get detailTotal => drinks + food + project;
+  double get detailTotal => drinks + food + project + coffee + ramen;
 
   factory RevenueEntry.fromRow(Map<String, dynamic> r) => RevenueEntry(
         id: r['id'] as String,
@@ -288,6 +298,8 @@ class RevenueEntry {
         drinks: _d(r['drinks_revenue']),
         food: _d(r['food_revenue']),
         project: _d(r['project_amount']),
+        coffee: _d(r['coffee_revenue']),
+        ramen: _d(r['ramen_revenue']),
         note: r['note'] as String?,
         source: r['source'] as String? ?? 'app',
       );

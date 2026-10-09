@@ -7,6 +7,7 @@ import '../data/models.dart';
 import '../data/repository.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/revenue_mix.dart';
 
 /// 營運總覽（PRD 畫面 01）。老闆／店長看營收與成本；員工版只顯示零用金與快速操作（營收由資料庫權限隱藏）。
 class DashboardScreen extends StatefulWidget {
@@ -119,6 +120,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<Widget> _managerView(_DashboardData d) {
     final s = d.summary!;
     final monthLabel = DateFormat('yyyy 年 M 月', 'zh_TW').format(d.month);
+    final multi = isMultiLineStore(widget.membership.storeName);
+    final parts = revenueParts(widget.membership.storeName,
+        drinks: s.drinksRevenue, food: s.foodRevenue, project: s.projectAmount,
+        coffee: s.coffeeRevenue, ramen: s.ramenRevenue, deposit: s.deposit);
+    // 小城外的客單＝調酒收入 ÷ 來客數（與小城外 Excel 相同）
+    final cocktail = s.drinksRevenue + s.foodRevenue + s.projectAmount;
+    final avgTicket = multi ? (s.guests > 0 ? cocktail / s.guests : null) : s.avgTicket;
     return [
       Row(children: [
         IconButton(onPressed: () => _shiftMonth(-1), icon: const Icon(Icons.chevron_left)),
@@ -142,17 +150,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
               _payRow('現金', s.cash),
               _payRow('刷卡', s.card),
-              if (s.deposit != 0) _payRow('訂金', s.deposit),
+              if (s.deposit != 0 && !multi) _payRow('訂金', s.deposit),
             ]),
           ]),
           const SizedBox(height: 10),
-          Row(children: [
-            _amount('酒水', s.drinksRevenue, AppColors.primary),
-            _amount('餐食', s.foodRevenue, AppColors.warn),
-            if (s.projectAmount != 0) _amount('專案', s.projectAmount, AppColors.muted),
-          ]),
+          Row(children: [for (final p in parts) _amount(p.label, p.amount, p.color)]),
           const SizedBox(height: 10),
-          _MixBar(drinks: s.drinksRevenue, food: s.foodRevenue),
+          MixBar(parts: parts),
           const SizedBox(height: 16),
           if (s.targetAmount != null) ...[
             ClipRRect(
@@ -178,8 +182,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Expanded(
           child: StatTile(
             label: '客單價',
-            value: s.avgTicket == null ? '—' : ntd(s.avgTicket!),
-            sub: s.dailyAvgTicket != null && s.dailyAvgTicket != s.avgTicket ? '不含活動 ${ntd(s.dailyAvgTicket!)}' : null,
+            value: avgTicket == null ? '—' : ntd(avgTicket.round()),
+            sub: multi
+                ? '調酒收入 ÷ 來客數'
+                : s.dailyAvgTicket != null && s.dailyAvgTicket != s.avgTicket ? '不含活動 ${ntd(s.dailyAvgTicket!)}' : null,
           ),
         ),
       ]),
@@ -198,8 +204,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
               _rate('雜項', s.miscCostRate),
             ]),
           const SizedBox(height: 6),
-          const Text('雜項＝零用金-其他雜支＋酒水副材料-雜項，÷ 營業收入；不計入總進貨',
-              style: TextStyle(color: AppColors.muted, fontSize: 11)),
+          Text(
+              multi
+                  ? '酒水、餐食只算酒吧；總進貨含咖啡吧與拉麵；雜項＝各區雜項 ÷ 營業收入，不計入總進貨'
+                  : '雜項＝零用金-其他雜支＋酒水副材料-雜項，÷ 營業收入；不計入總進貨',
+              style: const TextStyle(color: AppColors.muted, fontSize: 11)),
         ]),
       ),
       const SizedBox(height: 12),
@@ -295,7 +304,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Text(label, style: const TextStyle(color: AppColors.muted, fontSize: 12)),
           ]),
           const SizedBox(height: 2),
-          Text(ntd(v), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(ntd(v), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+          ),
         ]),
       );
 
@@ -306,28 +319,4 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Text(pct(v), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
         ]),
       );
-}
-
-/// 酒水／餐食占比橫條
-class _MixBar extends StatelessWidget {
-  const _MixBar({required this.drinks, required this.food});
-  final double drinks;
-  final double food;
-  @override
-  Widget build(BuildContext context) {
-    final total = drinks + food;
-    if (total <= 0) return const SizedBox.shrink();
-    final dp = drinks / total;
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      ClipRRect(
-        borderRadius: BorderRadius.circular(6),
-        child: Row(children: [
-          Expanded(flex: (dp * 1000).round(), child: Container(height: 8, color: AppColors.primary)),
-          Expanded(flex: ((1 - dp) * 1000).round(), child: Container(height: 8, color: AppColors.warn)),
-        ]),
-      ),
-      const SizedBox(height: 6),
-      Text('酒水 ${pct(dp)}・餐食 ${pct(1 - dp)}', style: const TextStyle(color: AppColors.muted, fontSize: 12)),
-    ]);
-  }
 }

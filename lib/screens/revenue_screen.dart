@@ -8,6 +8,7 @@ import '../data/models.dart';
 import '../data/repository.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/revenue_mix.dart';
 
 /// 每日營收：列表＋新增／修改（老闆／店長；資料庫 RLS 也只允許這兩種角色）
 class RevenueScreen extends StatefulWidget {
@@ -84,7 +85,7 @@ class _RevenueScreenState extends State<RevenueScreen> {
                 itemBuilder: (_, i) {
                   if (i < offset) return banner!;
                   final e = list[i - offset];
-                  return _RevenueTile(e: e, onTap: _synced ? null : () => _open(entry: e));
+                  return _RevenueTile(e: e, storeName: widget.membership.storeName, onTap: _synced ? null : () => _open(entry: e));
                 },
               ),
             );
@@ -94,16 +95,21 @@ class _RevenueScreenState extends State<RevenueScreen> {
 }
 
 class _RevenueTile extends StatelessWidget {
-  const _RevenueTile({required this.e, required this.onTap});
+  const _RevenueTile({required this.e, required this.onTap, required this.storeName});
   final RevenueEntry e;
+  final String storeName;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final mismatch = (e.received - e.detailTotal).abs() >= 1;
-    final avg = e.guests > 0 ? e.received / e.guests : null;
-    // 當日占比：以「酒水＋餐食（＋專案）」為分母，與總覽的占比條同一算法
-    final base = e.drinks + e.food + e.project;
+    final multi = isMultiLineStore(storeName);
+    // 小城外的客單＝調酒收入 ÷ 來客數（與小城外 Excel 相同）
+    final avg = e.guests > 0 ? (multi ? e.drinks + e.food + e.project : e.received) / e.guests : null;
+    // 當日占比：分母＝各項合計，與總覽的占比條同一算法
+    final parts = revenueParts(storeName,
+        drinks: e.drinks, food: e.food, project: e.project, coffee: e.coffee, ramen: e.ramen, deposit: e.deposit);
+    final base = parts.fold<double>(0, (a, p) => a + p.amount);
     double share(double v) => base > 0 ? v / base : 0;
     return InkWell(
       borderRadius: BorderRadius.circular(16),
@@ -129,46 +135,37 @@ class _RevenueTile extends StatelessWidget {
               const SizedBox(height: 2),
               Text('現金 ${ntd(e.cash)}', style: const TextStyle(color: AppColors.muted, fontSize: 12)),
               Text('刷卡 ${ntd(e.creditCard + e.amex)}', style: const TextStyle(color: AppColors.muted, fontSize: 12)),
-              if (e.deposit != 0)
+              if (e.deposit != 0 && !multi)
                 Text('訂金 ${ntd(e.deposit)}', style: const TextStyle(color: AppColors.muted, fontSize: 12)),
             ]),
             if (onTap != null) const Icon(Icons.chevron_right, color: AppColors.muted),
           ]),
           if (base > 0) ...[
             const SizedBox(height: 10),
-            Row(children: [
-              _part('酒水', e.drinks, share(e.drinks), AppColors.primary),
-              _part('餐食', e.food, share(e.food), AppColors.warn),
-              if (e.project != 0) _part('專案', e.project, share(e.project), AppColors.muted),
-            ]),
-            const SizedBox(height: 8),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: Row(children: [
-                if (e.drinks > 0)
-                  Expanded(flex: (share(e.drinks) * 1000).round(), child: Container(height: 6, color: AppColors.primary)),
-                if (e.food > 0)
-                  Expanded(flex: (share(e.food) * 1000).round(), child: Container(height: 6, color: AppColors.warn)),
-                if (e.project > 0)
-                  Expanded(flex: (share(e.project) * 1000).round(), child: Container(height: 6, color: AppColors.muted)),
+            if (multi)
+              Wrap(spacing: 12, runSpacing: 4, children: [
+                for (final p in parts) _chip(p.label, p.amount, share(p.amount), p.color),
+              ])
+            else
+              Row(children: [
+                for (final p in parts) Expanded(child: _chip(p.label, p.amount, share(p.amount), p.color)),
               ]),
-            ),
+            const SizedBox(height: 8),
+            MixBar(parts: parts, height: 6, showLegend: false),
           ],
         ]),
       ),
     );
   }
 
-  Widget _part(String label, double v, double share, Color dot) => Expanded(
-        child: Row(children: [
-          Icon(Icons.circle, size: 7, color: dot),
-          const SizedBox(width: 5),
-          Flexible(
-            child: Text('$label ${ntd(v)}・${pct(share)}',
-                overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
-          ),
-        ]),
-      );
+  Widget _chip(String label, double v, double share, Color dot) => Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(Icons.circle, size: 7, color: dot),
+        const SizedBox(width: 5),
+        Flexible(
+          child: Text('$label ${ntd(v)}・${pct(share)}',
+              overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
+        ),
+      ]);
 }
 
 /// 營收由 Dropbox 同步時，列表上方的說明
