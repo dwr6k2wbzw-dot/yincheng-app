@@ -46,7 +46,7 @@ class MonthlySummary {
   final double? foodCostRate;
   final double? totalCostRate;
   final double? miscCostRate; // 雜項成本率（不計入總進貨）
-  final double purchaseCost; // 進貨總金額（酒水＋餐食，與「總進貨」成本率同口徑）
+  final double purchaseCost; // 損益用進貨金額：酒水＋餐食，但不含計入雜項的類別（酒水副材料-雜項只算雜項）
   final double miscCost; // 雜項總金額（零用金-其他雜支＋酒水副材料-雜項）
   final bool hasCostRecords;
   MonthlySummary({
@@ -222,7 +222,7 @@ MonthlySummary summaryFromRows(Map<String, dynamic>? rev, Map<String, dynamic>? 
       foodCostRate: _dn(cost?['food_cost_rate']),
       totalCostRate: _dn(cost?['total_cost_rate']),
       miscCostRate: _dn(cost?['misc_cost_rate']),
-      purchaseCost: _d(cost?['drink_cost']) + _d(cost?['food_cost']),
+      purchaseCost: _d(cost?['purchase_cost_excl_misc']),
       miscCost: _d(cost?['misc_cost']),
       hasCostRecords: cost?['has_cost_records'] as bool? ?? false,
     );

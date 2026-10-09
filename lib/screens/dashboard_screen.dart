@@ -194,7 +194,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   /// 本月損益（只有老闆：含人事成本）
-  /// 損益＝營收 − 進貨（酒水＋餐食）− 雜項 − 租金 − 人事（老闆 2026-10-09 確認：照字面相加，酒水副材料-雜項會扣兩次）
+  /// 損益＝營收 − 進貨 − 雜項 − 租金 − 人事（老闆 2026-10-09 確認：酒水副材料-雜項歸雜項，不重複扣）
   Widget _profitCard(_DashboardData d, MonthlySummary s) {
     final rent = d.fixed.rent ?? 0;
     final payroll = d.fixed.payroll ?? 0;
@@ -222,7 +222,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         const SizedBox(height: 10),
         line('營業收入', s.revenue, minus: false),
-        line('進貨（酒水＋餐食）', s.purchaseCost),
+        line('進貨（不含雜項類）', s.purchaseCost),
         line('雜項', s.miscCost),
         line('租金', rent),
         line('人事', payroll),
