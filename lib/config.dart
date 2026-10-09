@@ -21,5 +21,5 @@ class AppConfig {
   static const multiLineStores = {'小城外'};
 
   /// 以「廠商銷貨單」分頁取代「盤點」分頁的店家（資料來自 Dropbox 廠商進貨單資料夾）
-  static const vendorSlipStores = {'小城外'};
+  static const vendorSlipStores = {'隱城', '小城外'};
 }

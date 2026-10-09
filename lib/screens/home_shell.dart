@@ -87,7 +87,7 @@ class _HomeShellState extends State<HomeShell> {
         const NavigationDestination(
             icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: '進貨'),
       ),
-      // 小城外：「盤點」分頁改成「銷貨單」（Dropbox 廠商進貨單的掃描單據明細）
+      // 隱城、小城外：「盤點」分頁改成「銷貨單」（Dropbox 廠商進貨單的掃描單據明細）
       if (AppConfig.vendorSlipStores.contains(m.storeName))
         (
           VendorSlipsScreen(key: ValueKey('v-${m.storeId}'), membership: m),

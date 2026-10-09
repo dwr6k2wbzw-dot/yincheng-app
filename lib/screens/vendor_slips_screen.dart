@@ -8,7 +8,7 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import 'vendor_slip_edit_screen.dart';
 
-/// 廠商銷貨單明細（小城外）：依廠商分組，展開後看每張單據的日期、品項、數量、金額。
+/// 廠商銷貨單明細（隱城、小城外）：依廠商分組，展開後看每張單據的日期、品項、數量、金額。
 /// 資料來自 Dropbox「有戲創藝_2026年廠商進貨單」的掃描單據，只能看；不影響成本率（成本率以日報表為準）。
 class VendorSlipsScreen extends StatefulWidget {
   const VendorSlipsScreen({super.key, required this.membership});
@@ -130,7 +130,7 @@ class _VendorSlipsScreenState extends State<VendorSlipsScreen> {
               ],
               const SizedBox(height: 8),
               const Text(
-                '資料來自 Dropbox「有戲創藝_2026年廠商進貨單」的掃描單據：新的單據每小時自動文字辨識成草稿，老闆或店長核對修改後確認。'
+                '資料來自 Dropbox 廠商進貨單資料夾（各月份資料夾）的掃描單據：新的單據每小時自動文字辨識成草稿，老闆或店長核對修改後確認。'
                 '這裡只是明細參考，成本率與進貨金額仍以日報表為準。',
                 style: TextStyle(color: AppColors.muted, fontSize: 11, height: 1.5),
               ),
