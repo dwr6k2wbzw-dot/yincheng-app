@@ -14,15 +14,42 @@ import 'theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await initializeDateFormatting('zh_TW');
-  final Repository repo;
-  if (AppConfig.demo) {
-    repo = DemoRepository();
-  } else {
-    await Supabase.initialize(url: AppConfig.supabaseUrl, anonKey: AppConfig.supabaseKey);
-    repo = SupabaseRepository();
+  // 畫面元件出錯時顯示錯誤文字（預設是一片灰），方便截圖回報
+  ErrorWidget.builder = (d) => Material(
+        color: AppColors.bg,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text('畫面發生錯誤（請截圖給 Claude）\n\n${d.exceptionAsString()}',
+                style: const TextStyle(color: AppColors.bad, fontSize: 14)),
+          ),
+        ),
+      );
+  try {
+    await initializeDateFormatting('zh_TW');
+    final Repository repo;
+    if (AppConfig.demo) {
+      repo = DemoRepository();
+    } else {
+      await Supabase.initialize(url: AppConfig.supabaseUrl, anonKey: AppConfig.supabaseKey)
+          .timeout(const Duration(seconds: 20));
+      repo = SupabaseRepository();
+    }
+    runApp(YinchengApp(state: AppState(repo)));
+  } catch (e) {
+    runApp(MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        backgroundColor: AppColors.bg,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text('啟動失敗（請截圖給 Claude）\n\n$e', style: const TextStyle(color: AppColors.bad, fontSize: 14)),
+          ),
+        ),
+      ),
+    ));
   }
-  runApp(YinchengApp(state: AppState(repo)));
 }
 
 class YinchengApp extends StatelessWidget {

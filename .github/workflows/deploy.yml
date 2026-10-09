@@ -24,17 +24,7 @@ jobs:
         run: |
           if [ ! -d web ]; then flutter create --platforms web --project-name yincheng_ops --org tw.yincheng . ; fi
           rm -f test/widget_test.dart
-          # 載入中提示：Flutter 還沒啟動前不會是一片空白；啟動後 Flutter 會蓋掉它
-          python3 - <<'PY'
-          import re, pathlib
-          p = pathlib.Path("web/index.html"); s = p.read_text()
-          s = re.sub(r"<title>.*?</title>", "<title>隱城營運</title>", s)
-          if "id=\"boot\"" not in s:
-              s = s.replace("<body>", "<body style=\"background:#0F1115\">"
-                  "<div id=\"boot\" style=\"position:fixed;inset:0;display:flex;align-items:center;justify-content:center;"
-                  "color:#9AA0AE;font:16px -apple-system,sans-serif\">載入中…</div>", 1)
-          p.write_text(s)
-          PY
+          python3 tool/patch_index.py
           sed -i 's/"name": ".*"/"name": "隱城營運"/; s/"short_name": ".*"/"short_name": "隱城營運"/; s/"background_color": ".*"/"background_color": "#0F1115"/; s/"theme_color": ".*"/"theme_color": "#0F1115"/' web/manifest.json
       - run: flutter pub get
       - name: 靜態檢查（只擋錯誤，不擋建議）
