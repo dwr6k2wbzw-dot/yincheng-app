@@ -2,14 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../app_state.dart';
+import '../config.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
 import '../services/slip_scan.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 
-/// 班表（隱城）：一週一張表；正職看「本週休」、兼職看「本週上班」，最下面是每天人力。
-/// 老闆／店長可點格子改班、點日期加備註、管理人員、填本月應休／特休、上傳原始班表照片。
+/// 班表（隱城、小城外）：一週一張表；最下面是每天人力。
+/// 隱城：記號 V／休／指休／O，正職看「本週休」、兼職看「本週上班」。
+/// 小城外：班別代碼 B／BH／RBK、休、指休；兼職填時段；以時數統計。
+/// 老闆／店長可點格子改班、點日期加備註、管理人員、填統計數字、上傳原始班表照片。
 class ScheduleScreen extends StatefulWidget {
   const ScheduleScreen({super.key, required this.membership});
   final Membership membership;
@@ -17,7 +20,6 @@ class ScheduleScreen extends StatefulWidget {
   State<ScheduleScreen> createState() => _ScheduleScreenState();
 }
 
-const _marks = ['V', '休', '指休', 'O'];
 const _offColor = Color(0xFFE0A34A);
 const _assignedColor = Color(0xFFE5735F);
 
@@ -25,8 +27,18 @@ Color? _markBg(String? m) => switch (m) {
       '休' => _offColor.withValues(alpha: 0.85),
       '指休' => _assignedColor.withValues(alpha: 0.85),
       'O' => AppColors.primary.withValues(alpha: 0.35),
+      'B' => const Color(0xFF4F8FD9).withValues(alpha: 0.45),
+      'BH' => const Color(0xFF8A6FD1).withValues(alpha: 0.5),
+      'RBK' => const Color(0xFF3FA97A).withValues(alpha: 0.5),
+      _ when m != null && ShiftMonth.isRange(m) => AppColors.primary.withValues(alpha: 0.22),
       _ => null,
     };
+
+const _markLabel = {'V': '上班', '休': '休假', '指休': '指定休', 'O': 'O', 'B': 'B 班', 'BH': 'BH 班', 'RBK': 'RBK 班'};
+final _rangeRe = RegExp(r'^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$');
+
+/// 格子裡顯示的字：時段拆成兩行
+String _cellText(String? m) => m == null ? '' : (ShiftMonth.isRange(m) ? m.replaceFirst('-', '\n') : m);
 
 class _ScheduleScreenState extends State<ScheduleScreen> {
   DateTime _month = DateTime(DateTime.now().year, DateTime.now().month);
@@ -38,6 +50,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   bool get _canEdit => widget.membership.isManager;
   Repository get _repo => AppScope.of(context).repo;
   String get _store => widget.membership.storeId;
+  String get _storeName => widget.membership.storeName;
+  List<String> get _marks => AppConfig.shiftMarks[_storeName] ?? const ['V', '休', '指休', 'O'];
+  /// 以時數統計（小城外）：null 表示看天數（隱城）
+  Map<String, double>? get _codeHours => AppConfig.shiftHours[_storeName];
 
   @override
   void didChangeDependencies() {
@@ -105,6 +121,27 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 ),
               ActionChip(label: const Text('清除'), onPressed: () => Navigator.pop(c, '')),
             ]),
+            if (_codeHours != null) ...[
+              const SizedBox(height: 16),
+              const Text('兼職時段', style: TextStyle(color: AppColors.muted)),
+              const SizedBox(height: 8),
+              Wrap(spacing: 8, runSpacing: 8, children: [
+                for (final r in AppConfig.shiftQuickRanges)
+                  ChoiceChip(
+                    label: Text(r),
+                    selected: r == current,
+                    onSelected: (_) => Navigator.pop(c, r),
+                  ),
+                ActionChip(
+                  avatar: const Icon(Icons.edit_outlined, size: 16),
+                  label: const Text('其他時段'),
+                  onPressed: () async {
+                    final v = await _askRange(c, current);
+                    if (v != null && c.mounted) Navigator.pop(c, v);
+                  },
+                ),
+              ]),
+            ],
           ]),
         ),
       ),
@@ -126,6 +163,38 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       if (mounted) showMessage(context, friendlyError(e), error: true);
       _reload();
     }
+  }
+
+  Future<String?> _askRange(BuildContext ctx, String? current) async {
+    final t = TextEditingController(text: ShiftMonth.isRange(current) ? current! : '');
+    String? err;
+    return showDialog<String>(
+      context: ctx,
+      builder: (d) => StatefulBuilder(
+        builder: (d, set) => AlertDialog(
+          title: const Text('輸入時段'),
+          content: TextField(
+            controller: t,
+            autofocus: true,
+            decoration: InputDecoration(hintText: '例：18:00-00:30', errorText: err),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(d), child: const Text('取消')),
+            FilledButton(
+              onPressed: () {
+                final v = t.text.trim().replaceAll('：', ':').replaceAll(RegExp(r'\s'), '').replaceAll(RegExp('[~～－—–]'), '-');
+                if (!_rangeRe.hasMatch(v)) {
+                  set(() => err = '格式：開始-結束，例 18:00-00:30');
+                  return;
+                }
+                Navigator.pop(d, v);
+              },
+              child: const Text('確定'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _editNote(int day, String? current) async {
@@ -152,10 +221,11 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   Future<void> _editStats(ShiftPerson p, ShiftMonth d) async {
-    final (should, prev) = d.stats[p.id] ?? (null, null);
+    final st = d.stats[p.id] ?? const ShiftStats();
+    final hoursMode = _codeHours != null;
     String f(double? v) => v == null ? '' : (v == v.roundToDouble() ? v.toInt().toString() : v.toString());
-    final s = TextEditingController(text: f(should));
-    final u = TextEditingController(text: f(prev));
+    final s = TextEditingController(text: f(hoursMode ? st.compUnused : st.shouldOff));
+    final u = TextEditingController(text: f(hoursMode ? st.specialTotal : st.prevUnused));
     DateTime? hire = p.hireDate;
     final ok = await showDialog<bool>(
       context: context,
@@ -164,9 +234,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           title: Text('${p.name}・${_month.month} 月'),
           content: Column(mainAxisSize: MainAxisSize.min, children: [
             TextField(controller: s, keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(labelText: '本月應休（天）')),
+                decoration: InputDecoration(labelText: hoursMode ? '未休／補休（天）' : '本月應休（天）')),
             TextField(controller: u, keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(labelText: '原未休特休（天）')),
+                decoration: InputDecoration(labelText: hoursMode ? '累計特休（天）' : '原未休特休（天）')),
             const SizedBox(height: 8),
             ListTile(
               contentPadding: EdgeInsets.zero,
@@ -188,9 +258,16 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     );
     if (ok != true) return;
     try {
-      await _repo.saveShiftStats(_store, p.id, _month, double.tryParse(s.text), double.tryParse(u.text));
+      final a = double.tryParse(s.text), b = double.tryParse(u.text);
+      await _repo.saveShiftStats(
+          _store,
+          p.id,
+          _month,
+          hoursMode
+              ? ShiftStats(shouldOff: st.shouldOff, prevUnused: st.prevUnused, compUnused: a, specialTotal: b)
+              : ShiftStats(shouldOff: a, prevUnused: b, compUnused: st.compUnused, specialTotal: st.specialTotal));
       if (hire != p.hireDate) {
-        await _repo.saveShiftPerson(_store, ShiftPerson(id: p.id, name: p.name, kind: p.kind, sortOrder: p.sortOrder, hireDate: hire, active: p.active));
+        await _repo.saveShiftPerson(_store, ShiftPerson(id: p.id, name: p.name, kind: p.kind, sortOrder: p.sortOrder, hireDate: hire, active: p.active, roleCode: p.roleCode));
       }
       _reload();
     } catch (e) {
@@ -286,13 +363,21 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 SectionCard(padding: const EdgeInsets.fromLTRB(8, 10, 8, 10), child: _weekGrid(d, wk, full, part)),
               const SizedBox(height: 8),
               Wrap(spacing: 12, runSpacing: 4, children: [
-                _legend('V', null, '上班'),
-                _legend('休', _markBg('休'), '休假'),
-                _legend('指休', _markBg('指休'), '指定休'),
-                _legend('O', _markBg('O'), 'O'),
+                for (final m in _marks) _legend(m, _markBg(m), _markLabel[m] ?? m),
+                if (_codeHours != null) _legend('時段', _markBg('18:00-00:30'), '兼職時段'),
               ]),
+              if (_codeHours != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                      '時數：${_codeHours!.entries.map((e) => '${e.key} ${_num(e.value)} 小時').join('、')}；時段照實際時間算（未驗證：班別時數是依 10 月總時數反推）',
+                      style: const TextStyle(color: AppColors.muted, fontSize: 11)),
+                ),
               const SizedBox(height: 16),
-              if (full.isNotEmpty) _monthSummary(d, full),
+              if (_codeHours != null)
+                _hoursSummary(d, [...full, ...part])
+              else if (full.isNotEmpty)
+                _monthSummary(d, full),
               const SizedBox(height: 12),
               Wrap(spacing: 8, runSpacing: 8, children: [
                 if (d.photoPath != null)
@@ -317,7 +402,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               if (_canEdit)
                 const Padding(
                   padding: EdgeInsets.only(top: 8),
-                  child: Text('點格子改班、點日期加備註、點下方統計填應休與特休。',
+                  child: Text(_codeHours != null ? '點格子改班（兼職可選時段）、點日期加備註、點下方統計填未休／補休與特休。' : '點格子改班、點日期加備註、點下方統計填應休與特休。',
                       style: TextStyle(color: AppColors.muted, fontSize: 12)),
                 ),
             ]),
@@ -387,6 +472,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       Widget name(String t, {bool bold = false, Color? color}) => SizedBox(
             width: nameW,
             child: Text(t,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(fontSize: 12, fontWeight: bold ? FontWeight.w700 : FontWeight.w500, color: color)),
           );
@@ -395,23 +481,35 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             child: Text(t, textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: color ?? AppColors.muted)),
           );
       Widget personRow(ShiftPerson p) {
-        final count = cols.whereType<int>().where((day) {
-          final m = d.mark(p.id, day);
-          return p.isFull ? ShiftMonth.isOff(m) : ShiftMonth.isOn(m);
-        }).length;
+        final ch = _codeHours;
+        final String total;
+        if (ch != null && !p.isFull) {
+          total = _num(cols.whereType<int>().fold(0.0, (a, day) => a + ShiftMonth.hoursOf(d.mark(p.id, day), ch)));
+        } else {
+          total = '${cols.whereType<int>().where((day) {
+            final m = d.mark(p.id, day);
+            return p.isFull ? ShiftMonth.isOff(m) : ShiftMonth.isOn(m);
+          }).length}';
+        }
         return Row(children: [
-          name(p.name),
+          name(p.roleCode == null ? p.name : '${p.name}\n${p.roleCode}'),
           for (final day in cols)
             if (day == null)
               cell(const SizedBox.shrink())
             else
               cell(
-                Text(d.mark(p.id, day) ?? '', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                Text(_cellText(d.mark(p.id, day)),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontSize: ShiftMonth.isRange(d.mark(p.id, day)) ? 9 : 12,
+                        height: 1.1,
+                        fontWeight: FontWeight.w600)),
+                h: _codeHours != null ? 34 : 30,
                 bg: _markBg(d.mark(p.id, day)),
                 border: _markBg(d.mark(p.id, day)) == null ? Border.all(color: AppColors.cardHigh) : null,
                 onTap: _canEdit ? () => _editCell(p, day, d.mark(p.id, day)) : null,
               ),
-          sum('$count'),
+          sum(total),
         ]);
       }
 
@@ -461,7 +559,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             const SizedBox(height: 6),
             SizedBox(
               width: nameW + sumW + (cellW + 2) * 7,
-              child: Row(children: [name('兼職', color: AppColors.muted), const Spacer(), sum('班', color: AppColors.muted)]),
+              child: Row(children: [name('兼職', color: AppColors.muted), const Spacer(), sum(_codeHours != null ? '時' : '班', color: AppColors.muted)]),
             ),
             for (final p in part) personRow(p),
           ],
@@ -507,7 +605,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             row(['', '應休', '已休', '原未休\n特休', '剩餘未休\n特休', '報到日'], head: true),
             for (final p in full)
               () {
-                final (should, prev) = d.stats[p.id] ?? (null, null);
+                final st = d.stats[p.id] ?? const ShiftStats();
+                final should = st.shouldOff, prev = st.prevUnused;
                 final taken = d.offDays(p.id).toDouble();
                 final remain = (should != null && prev != null) ? prev - (taken - should) : null;
                 return row([
@@ -527,7 +626,57 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       ]),
     );
   }
+
+  /// 小城外：總時數（自動算）、月休（自動算）、未休／補休、累計特休（手動）
+  Widget _hoursSummary(ShiftMonth d, List<ShiftPerson> people) {
+    final ch = _codeHours!;
+    String n(double? v) => v == null ? '—' : _num(v);
+    TableRow row(List<String> cells, {bool head = false, VoidCallback? onTap}) => TableRow(children: [
+          for (final (i, c) in cells.indexed)
+            InkWell(
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
+                child: Text(c,
+                    textAlign: i == 0 ? TextAlign.left : TextAlign.center,
+                    style: TextStyle(
+                        fontSize: head ? 11 : 13,
+                        color: head ? AppColors.muted : null,
+                        fontWeight: i == 0 && !head ? FontWeight.w600 : null)),
+              ),
+            ),
+        ]);
+    return SectionCard(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('${_month.month} 月統計', style: const TextStyle(color: AppColors.muted)),
+        const SizedBox(height: 6),
+        Table(
+          columnWidths: const {0: FlexColumnWidth(1.3)},
+          children: [
+            row(['', '總時數', '上班\n天數', '月休', '未休\n補休', '累計\n特休'], head: true),
+            for (final p in people)
+              () {
+                final st = d.stats[p.id] ?? const ShiftStats();
+                return row([
+                  p.isFull ? p.name : '${p.name}（兼）',
+                  _num(d.hours(p.id, ch)),
+                  '${d.workDays(p.id)}',
+                  p.isFull ? '${d.offDays(p.id)}' : '—',
+                  p.isFull ? n(st.compUnused) : '—',
+                  p.isFull ? n(st.specialTotal) : '—',
+                ], onTap: _canEdit && p.isFull ? () => _editStats(p, d) : null);
+              }(),
+          ],
+        ),
+        const SizedBox(height: 6),
+        const Text('總時數＝整個月（含月底最後一天）；月休＝休＋指休；未休／補休、累計特休由老闆或店長填。',
+            style: TextStyle(color: AppColors.muted, fontSize: 11)),
+      ]),
+    );
+  }
 }
+
+String _num(double v) => v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
 
 /// 班表人員：新增、改名、正職／兼職、排序、隱藏
 class _PeopleScreen extends StatefulWidget {
@@ -545,6 +694,7 @@ class _PeopleScreenState extends State<_PeopleScreen> {
     final name = TextEditingController(text: p?.name ?? '');
     final order = TextEditingController(text: '${p?.sortOrder ?? (_people.length + 1) * 10}');
     var kind = p?.kind ?? 'full';
+    final role = TextEditingController(text: p?.roleCode ?? '');
     var active = p?.active ?? true;
     final ok = await showDialog<bool>(
       context: context,
@@ -558,6 +708,7 @@ class _PeopleScreenState extends State<_PeopleScreen> {
               selected: {kind},
               onSelectionChanged: (v) => set(() => kind = v.first),
             ),
+            TextField(controller: role, maxLength: 10, decoration: const InputDecoration(labelText: '職務／班別（選填，例 B/R）')),
             TextField(controller: order, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '排序（數字小的在上面）')),
             if (p != null)
               SwitchListTile(
@@ -582,7 +733,8 @@ class _PeopleScreenState extends State<_PeopleScreen> {
         kind: kind,
         sortOrder: int.tryParse(order.text) ?? 0,
         hireDate: p?.hireDate,
-        active: active);
+        active: active,
+        roleCode: role.text.trim().isEmpty ? null : role.text.trim());
     try {
       await repo.saveShiftPerson(widget.storeId, np, isNew: p == null);
       final d = await repo.shiftMonth(widget.storeId, DateTime.now());
@@ -604,7 +756,7 @@ class _PeopleScreenState extends State<_PeopleScreen> {
           for (final p in _people)
             ListTile(
               title: Text(p.name, style: TextStyle(color: p.active ? null : AppColors.muted)),
-              subtitle: Text('${p.isFull ? '正職' : '兼職'}・排序 ${p.sortOrder}${p.active ? '' : '・已隱藏'}',
+              subtitle: Text('${p.isFull ? '正職' : '兼職'}${p.roleCode == null ? '' : '・${p.roleCode}'}・排序 ${p.sortOrder}${p.active ? '' : '・已隱藏'}',
                   style: const TextStyle(fontSize: 12)),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => _edit(p),

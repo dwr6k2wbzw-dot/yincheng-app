@@ -253,7 +253,7 @@ class SupabaseRepository implements Repository {
           .lt('work_date', _day.format(to))
           .limit(5000),
       _db.from('shift_day_notes').select('note_date, note').eq('store_id', storeId).gte('note_date', m).lt('note_date', _day.format(to)),
-      _db.from('shift_month_stats').select('person_id, should_off, prev_unused_special').eq('store_id', storeId).eq('period_month', m),
+      _db.from('shift_month_stats').select('person_id, should_off, prev_unused_special, comp_unused, special_total').eq('store_id', storeId).eq('period_month', m),
       _db.from('shift_month_files').select('photo_path').eq('store_id', storeId).eq('period_month', m),
     ]);
     final people = (r[0] as List).map((x) => ShiftPerson.fromRow(x as Map<String, dynamic>)).toList();
@@ -263,11 +263,14 @@ class SupabaseRepository implements Repository {
       marks.putIfAbsent(e['person_id'] as String, () => {})[d] = e['mark'] as String;
     }
     final notes = {for (final n in r[2] as List) DateTime.parse(n['note_date'] as String).day: n['note'] as String};
+    double? n(dynamic v) => v == null ? null : toDouble(v);
     final stats = {
       for (final s in r[3] as List)
-        s['person_id'] as String: (
-          s['should_off'] == null ? null : toDouble(s['should_off']),
-          s['prev_unused_special'] == null ? null : toDouble(s['prev_unused_special'])
+        s['person_id'] as String: ShiftStats(
+          shouldOff: n(s['should_off']),
+          prevUnused: n(s['prev_unused_special']),
+          compUnused: n(s['comp_unused']),
+          specialTotal: n(s['special_total']),
         )
     };
     final files = r[4] as List;
@@ -304,6 +307,7 @@ class SupabaseRepository implements Repository {
       'sort_order': p.sortOrder,
       'hire_date': p.hireDate == null ? null : _day.format(p.hireDate!),
       'active': p.active,
+      'role_code': (p.roleCode?.trim().isEmpty ?? true) ? null : p.roleCode!.trim(),
     };
     if (isNew) {
       await _db.from('shift_people').insert({...v, 'store_id': storeId});
@@ -314,13 +318,15 @@ class SupabaseRepository implements Repository {
   }
 
   @override
-  Future<void> saveShiftStats(String storeId, String personId, DateTime month, double? shouldOff, double? prevUnused) =>
+  Future<void> saveShiftStats(String storeId, String personId, DateTime month, ShiftStats s) =>
       _db.from('shift_month_stats').upsert({
         'store_id': storeId,
         'person_id': personId,
         'period_month': _day.format(DateTime(month.year, month.month, 1)),
-        'should_off': shouldOff,
-        'prev_unused_special': prevUnused,
+        'should_off': s.shouldOff,
+        'prev_unused_special': s.prevUnused,
+        'comp_unused': s.compUnused,
+        'special_total': s.specialTotal,
       }, onConflict: 'person_id,period_month');
 
   @override

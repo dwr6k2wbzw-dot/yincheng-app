@@ -68,7 +68,7 @@ abstract class Repository {
   Future<void> setShift(String storeId, String personId, DateTime date, String? mark);
   Future<void> setShiftNote(String storeId, DateTime date, String? note);
   Future<void> saveShiftPerson(String storeId, ShiftPerson p, {bool isNew = false});
-  Future<void> saveShiftStats(String storeId, String personId, DateTime month, double? shouldOff, double? prevUnused);
+  Future<void> saveShiftStats(String storeId, String personId, DateTime month, ShiftStats s);
   Future<void> uploadShiftPhoto(String storeId, DateTime month, Uint8List jpeg);
   Future<String> shiftPhotoUrl(String path);
 

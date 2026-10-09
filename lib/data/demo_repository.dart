@@ -85,7 +85,7 @@ class DemoRepository implements Repository {
         [ShiftPerson(id: 'p1', name: '示範正職'), ShiftPerson(id: 'p2', name: '示範兼職', kind: 'part', sortOrder: 10)],
         {'p1': {1: 'V', 2: '休', 3: '指休'}, 'p2': {1: 'V', 3: 'O'}},
         {3: '月會日'},
-        {'p1': (8.0, 3.0)},
+        {'p1': const ShiftStats(shouldOff: 8, prevUnused: 3)},
         null,
       );
   @override
@@ -95,7 +95,7 @@ class DemoRepository implements Repository {
   @override
   Future<void> saveShiftPerson(String storeId, ShiftPerson p, {bool isNew = false}) async {}
   @override
-  Future<void> saveShiftStats(String storeId, String personId, DateTime month, double? shouldOff, double? prevUnused) async {}
+  Future<void> saveShiftStats(String storeId, String personId, DateTime month, ShiftStats s) async {}
   @override
   Future<void> uploadShiftPhoto(String storeId, DateTime month, Uint8List jpeg) async {}
   @override

@@ -24,7 +24,19 @@ class AppConfig {
   static const vendorSlipStores = {'隱城', '小城外'};
 
   /// 有「班表」分頁的店家
-  static const scheduleStores = {'隱城'};
+  static const scheduleStores = {'隱城', '小城外'};
+
+  /// 班表可選的記號（依店家）
+  static const shiftMarks = {
+    '隱城': ['V', '休', '指休', 'O'],
+    '小城外': ['B', 'BH', 'RBK', '休', '指休'],
+  };
+
+  /// 以「時數」統計的店家：班別代碼的時數（由老闆 10 月班表的總時數反推，三位正職完全吻合）；兼職填時段
+  static const shiftHours = {
+    '小城外': {'B': 7.5, 'BH': 8.5, 'RBK': 7.0},
+  };
+  static const shiftQuickRanges = ['17:00-01:30', '18:00-00:30', '18:00-01:30', '19:00-00:30', '19:00-01:30', '20:00-01:30'];
 
   /// 進貨類別的顯示順序（老闆指定；沒列到的照原本順序排在後面）
   static const categoryOrder = [

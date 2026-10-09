@@ -487,7 +487,9 @@ class ShiftPerson {
   final int sortOrder;
   final DateTime? hireDate;
   final bool active;
-  ShiftPerson({required this.id, required this.name, this.kind = 'full', this.sortOrder = 0, this.hireDate, this.active = true});
+  final String? roleCode; // 班別（例 B／R）
+  ShiftPerson(
+      {required this.id, required this.name, this.kind = 'full', this.sortOrder = 0, this.hireDate, this.active = true, this.roleCode});
   bool get isFull => kind == 'full';
   factory ShiftPerson.fromRow(Map<String, dynamic> r) => ShiftPerson(
         id: r['id'] as String,
@@ -496,7 +498,17 @@ class ShiftPerson {
         sortOrder: (r['sort_order'] as num?)?.toInt() ?? 0,
         hireDate: _date(r['hire_date']),
         active: r['active'] as bool? ?? true,
+        roleCode: r['role_code'] as String?,
       );
+}
+
+/// 每人每月手動填的數字
+class ShiftStats {
+  final double? shouldOff; // 本月應休
+  final double? prevUnused; // 原未休特休
+  final double? compUnused; // 未休／補休（小城外）
+  final double? specialTotal; // 累計特休（小城外）
+  const ShiftStats({this.shouldOff, this.prevUnused, this.compUnused, this.specialTotal});
 }
 
 /// 一個月的班表
@@ -505,14 +517,37 @@ class ShiftMonth {
   final List<ShiftPerson> people;
   final Map<String, Map<int, String>> marks; // 人 → 日 → 記號（V／休／指休／O）
   final Map<int, String> notes; // 日 → 備註
-  final Map<String, (double?, double?)> stats; // 人 → (本月應休, 原未休特休)
+  final Map<String, ShiftStats> stats; // 人 → 手動填的數字
   final String? photoPath;
   ShiftMonth(this.month, this.people, this.marks, this.notes, this.stats, this.photoPath);
 
   int get days => DateTime(month.year, month.month + 1, 0).day;
   String? mark(String personId, int day) => marks[personId]?[day];
   static bool isOff(String? m) => m == '休' || m == '指休';
-  static bool isOn(String? m) => m == 'V' || m == 'O';
+  /// 有排班（V、O、班別代碼、時段）＝上班；休、指休、空白＝沒上班
+  static bool isOn(String? m) => m != null && m.isNotEmpty && !isOff(m);
+  static bool isRange(String? m) => m != null && m.contains(':') && m.contains('-');
+
+  /// 一格的時數：時段照實際（過午夜算隔天）；班別代碼查表；其他 0
+  static double hoursOf(String? m, Map<String, double> codeHours) {
+    if (m == null) return 0;
+    if (isRange(m)) {
+      final p = m.split('-');
+      double t(String s) {
+        final x = s.split(':');
+        return int.parse(x[0]) + int.parse(x[1]) / 60;
+      }
+      var a = t(p[0]), b = t(p[1]);
+      if (b <= a) b += 24;
+      return b - a;
+    }
+    return codeHours[m] ?? 0;
+  }
+
+  double hours(String personId, Map<String, double> codeHours, {int? throughDay}) => (marks[personId] ?? {})
+      .entries
+      .where((e) => throughDay == null || e.key <= throughDay)
+      .fold(0.0, (a, e) => a + hoursOf(e.value, codeHours));
   /// 人力＝當天 V＋O 的人數
   int staffing(int day) => people.where((p) => isOn(mark(p.id, day))).length;
   int offDays(String personId) => (marks[personId] ?? {}).values.where(isOff).length;
