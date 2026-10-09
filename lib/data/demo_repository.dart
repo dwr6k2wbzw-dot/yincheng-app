@@ -76,6 +76,9 @@ class DemoRepository implements Repository {
   Future<void> deleteVendorSlip(String slipId) async {}
 
   @override
+  Future<Map<String, List<String>>> vendorHints(String storeId) async => {'liquor_monthly': ['示範酒商A', '示範酒商B']};
+
+  @override
   Future<bool> signUp(String email, String password) async {
     await signIn(email, password);
     return true;

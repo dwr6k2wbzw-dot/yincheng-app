@@ -352,6 +352,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   bool _scanning = false;
   String? _scanNote;
   List<Supplier> _sups = [];
+  Map<String, List<String>> _hints = {}; // 類別 → 常用廠商（日報表統計）
   String _paidBy = 'vendor';
   bool _isReturn = false;
   bool _saving = false;
@@ -371,6 +372,9 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
     final id = widget.membership.storeId;
     final r = await Future.wait([repo.costCategories(), repo.suppliers(id), repo.businessDate(id)]);
     _date ??= r[2] as DateTime;
+    try {
+      _hints = await repo.vendorHints(id);
+    } catch (_) {} // 提示讀不到不影響新增
     _sups = r[1] as List<Supplier>;
     return (r[0] as List<CostCategory>, r[1] as List<Supplier>);
   }
@@ -531,10 +535,17 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
                 value: _category,
+                isExpanded: true,
                 decoration: const InputDecoration(labelText: '進貨類別'),
                 items: [
                   for (final c in cats.where((c) => c.storeName == null || c.storeName == widget.membership.storeName))
-                    DropdownMenuItem(value: c.code, child: Text(c.name)),
+                    DropdownMenuItem(
+                      value: c.code,
+                      child: Text(
+                        _hints[c.code] == null ? c.name : '${c.name}（${_hints[c.code]!.join('、')}）',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                 ],
                 onChanged: (v) => setState(() {
                   _category = v;

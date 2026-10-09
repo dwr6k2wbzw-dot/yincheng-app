@@ -45,6 +45,8 @@ abstract class Repository {
   Future<DateTime> businessDate(String storeId);
   Future<List<CostCategory>> costCategories();
   Future<List<Supplier>> suppliers(String storeId);
+  /// 各進貨類別常用的廠商（依日報表匯入的近半年進貨統計，最多 4 家）
+  Future<Map<String, List<String>>> vendorHints(String storeId);
   Future<List<Purchase>> recentPurchases(String storeId, {int limit = 30});
   Future<List<Purchase>> monthPurchases(String storeId, DateTime month);
   Future<void> addPurchase(NewPurchase p);

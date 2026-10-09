@@ -227,6 +227,18 @@ class SupabaseRepository implements Repository {
   }
 
   @override
+  Future<Map<String, List<String>>> vendorHints(String storeId) async {
+    final now = DateTime.now();
+    final rows = await _db
+        .from('purchases')
+        .select('category_code, memo, vendor_name, suppliers!purchases_supplier_same_store(name)')
+        .eq('store_id', storeId)
+        .gte('period_month', _day.format(DateTime(now.year, now.month - 6, 1)))
+        .limit(5000);
+    return vendorHintsFromRows(rows);
+  }
+
+  @override
   Future<List<Supplier>> suppliers(String storeId) async {
     final rows = await _db
         .from('suppliers')

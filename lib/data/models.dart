@@ -433,3 +433,45 @@ class VendorSlip {
         sourceFile: r['source_file'] as String?,
       );
 }
+
+
+/// 從進貨紀錄統計各類別常用廠商：廠商資料的名稱 > 自行輸入的名稱 > 摘要「廠商(品項)」括號前的名稱 >
+/// 出現 2 次以上、像店名的摘要。每類取次數最多的 4 個
+Map<String, List<String>> vendorHintsFromRows(List<Map<String, dynamic>> rows) {
+  final strong = <String, Map<String, int>>{}; // 確定是廠商
+  final weak = <String, Map<String, int>>{}; // 可能是品項，出現 2 次以上才採用
+  for (final r in rows) {
+    final cat = r['category_code'] as String;
+    final sup = (r['suppliers'] as Map?)?['name'] as String?;
+    final vn = r['vendor_name'] as String?;
+    final memo = (r['memo'] as String?)?.trim() ?? '';
+    String? name;
+    var sure = true;
+    if (sup != null && sup.isNotEmpty) {
+      name = sup;
+    } else if (vn != null && vn.trim().isNotEmpty) {
+      name = vn.trim();
+    } else {
+      final m = RegExp(r'^([^()（）]{2,10})\s*[(（]').firstMatch(memo);
+      if (m != null) {
+        name = m.group(1)!.trim();
+      } else if (memo.length >= 2 && memo.length <= 8 && !memo.contains(' ') && !memo.contains('.')) {
+        name = memo;
+        sure = false;
+      }
+    }
+    if (name == null) continue;
+    final bucket = (sure ? strong : weak).putIfAbsent(cat, () => {});
+    bucket[name] = (bucket[name] ?? 0) + 1;
+  }
+  final out = <String, List<String>>{};
+  for (final cat in {...strong.keys, ...weak.keys}) {
+    final counts = <String, int>{...?strong[cat]};
+    weak[cat]?.forEach((k, v) {
+      if (v >= 2 && !counts.containsKey(k)) counts[k] = v;
+    });
+    final list = counts.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    if (list.isNotEmpty) out[cat] = list.take(4).map((e) => e.key).toList();
+  }
+  return out;
+}
