@@ -27,14 +27,17 @@ Color? _markBg(String? m) => switch (m) {
       '休' => _offColor.withValues(alpha: 0.85),
       '指休' => _assignedColor.withValues(alpha: 0.85),
       'O' => AppColors.primary.withValues(alpha: 0.35),
-      'B' => const Color(0xFF4F8FD9).withValues(alpha: 0.45),
-      'BH' => const Color(0xFF8A6FD1).withValues(alpha: 0.5),
-      'RBK' => const Color(0xFF3FA97A).withValues(alpha: 0.5),
+      // 顏色照老闆班別表：R 白、R1 灰、RBK 粉紫、B 系藍、BHP 系黃
+      'R' => const Color(0xFFE8E8E8).withValues(alpha: 0.30),
+      'R1' => const Color(0xFFB0B0B0).withValues(alpha: 0.45),
+      'RBK' => const Color(0xFFC77DB0).withValues(alpha: 0.55),
+      'B' || 'BP' || 'BP+' || 'BH' || 'BH-' => const Color(0xFF6F9BE0).withValues(alpha: 0.50),
+      'BHP' || 'BHP-' => const Color(0xFFF2C94C).withValues(alpha: 0.55),
       _ when m != null && ShiftMonth.isRange(m) => AppColors.primary.withValues(alpha: 0.22),
       _ => null,
     };
 
-const _markLabel = {'V': '上班', '休': '休假', '指休': '指定休', 'O': 'O', 'B': 'B 班', 'BH': 'BH 班', 'RBK': 'RBK 班'};
+const _markLabel = {'V': '上班', '休': '休假', '指休': '指定休', 'O': 'O'};
 final _rangeRe = RegExp(r'^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$');
 
 /// 格子裡顯示的字：時段拆成兩行
@@ -54,6 +57,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   List<String> get _marks => AppConfig.shiftMarks[_storeName] ?? const ['V', '休', '指休', 'O'];
   /// 以時數統計（小城外）：null 表示看天數（隱城）
   Map<String, double>? get _codeHours => AppConfig.shiftHours[_storeName];
+  Map<String, String> get _codeTimes => AppConfig.shiftCodeTimes[_storeName] ?? const {};
+  /// 班別說明：B → 17:00~00:30（沒有時段的記號用中文說明）
+  String _markDesc(String m) => _codeTimes[m]?.replaceFirst('-', '~') ?? _markLabel[m] ?? m;
 
   @override
   void didChangeDependencies() {
@@ -114,7 +120,11 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             Wrap(spacing: 10, runSpacing: 10, children: [
               for (final m in _marks)
                 ChoiceChip(
-                  label: Text(m == 'V' ? 'V 上班' : m),
+                  label: Text(m == 'V'
+                      ? 'V 上班'
+                      : _codeTimes.containsKey(m)
+                          ? '$m  ${_markDesc(m)}'
+                          : m),
                   selected: m == current,
                   selectedColor: _markBg(m) ?? AppColors.cardHigh,
                   onSelected: (_) => Navigator.pop(c, m),
@@ -363,14 +373,14 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 SectionCard(padding: const EdgeInsets.fromLTRB(8, 10, 8, 10), child: _weekGrid(d, wk, full, part)),
               const SizedBox(height: 8),
               Wrap(spacing: 12, runSpacing: 4, children: [
-                for (final m in _marks) _legend(m, _markBg(m), _markLabel[m] ?? m),
+                for (final m in _marks) _legend(m, _markBg(m), _markDesc(m)),
                 if (_codeHours != null) _legend('時段', _markBg('18:00-00:30'), '兼職時段'),
               ]),
               if (_codeHours != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
                   child: Text(
-                      '時數：${_codeHours!.entries.map((e) => '${e.key} ${_num(e.value)} 小時').join('、')}；時段照實際時間算（未驗證：班別時數是依 10 月總時數反推）',
+                      '時數：${_codeHours!.entries.map((e) => '${e.key} ${_num(e.value)}').join('、')}（小時）；兼職時段照實際時間算',
                       style: const TextStyle(color: AppColors.muted, fontSize: 11)),
                 ),
               const SizedBox(height: 16),
@@ -412,8 +422,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
   Widget _legend(String m, Color? bg, String label) => Row(mainAxisSize: MainAxisSize.min, children: [
         Container(
-          width: 30,
+          constraints: const BoxConstraints(minWidth: 30),
           height: 20,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
           alignment: Alignment.center,
           decoration: BoxDecoration(
               color: bg ?? Colors.transparent,
