@@ -487,7 +487,7 @@ class SupabaseRepository implements Repository {
     final from = DateTime(month.year, month.month, 1);
     final rows = await _db
         .from('vendor_slips')
-        .select('id, vendor, slip_no, slip_date, total, note, status, source, source_file, '
+        .select('id, vendor, slip_no, slip_date, total, note, status, source, source_file, photo_path, '
             'vendor_slip_lines(line_no, item_code, item_name, qty, unit, unit_price, amount)')
         .eq('store_id', storeId)
         .eq('period_month', _day.format(from)) // 歸屬月份＝Dropbox「M月份」資料夾
@@ -568,6 +568,23 @@ class SupabaseRepository implements Repository {
       'paid_by': p.paidBy,
       'client_request_id': p.clientRequestId,
     });
+    // 送貨單照片 → 每小時的同步辨識成銷貨單草稿（0034）。進貨已存好，這步失敗不影響進貨
+    if (photoPath != null && p.amount > 0 && p.slipDraft) {
+      try {
+        final hex = StringBuffer(r'\x');
+        for (final b in p.photoJpeg!) {
+          hex.write(b.toRadixString(16).padLeft(2, '0'));
+        }
+        await _db.from('slip_photo_queue').insert({
+          'store_id': p.storeId,
+          'photo_path': photoPath,
+          'image': hex.toString(),
+          'vendor_name': (p.slipVendor?.trim().isEmpty ?? true) ? null : p.slipVendor!.trim(),
+          'amount': p.amount,
+          'purchase_date': _day.format(p.purchaseDate),
+        });
+      } catch (_) {}
+    }
   }
 
   @override

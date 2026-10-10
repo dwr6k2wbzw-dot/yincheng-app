@@ -125,12 +125,16 @@ class _VendorSlipsScreenState extends State<VendorSlipsScreen> {
                   child: Text('這個月還沒有銷貨單', textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted)),
                 ),
               for (final v in vendors) ...[
-                _VendorCard(vendor: v.key, slips: v.value, onTap: _canEdit ? _edit : null),
+                _VendorCard(
+                    vendor: v.key,
+                    slips: v.value,
+                    onTap: _canEdit ? _edit : null,
+                    onPhoto: (p) => showStoragePhoto(context, p)),
                 const SizedBox(height: 10),
               ],
               const SizedBox(height: 8),
               const Text(
-                '資料來自 Dropbox 廠商進貨單資料夾（各月份資料夾）的掃描單據：新的單據每小時自動文字辨識成草稿，老闆或店長核對修改後確認。'
+                '資料來自 Dropbox 廠商進貨單資料夾（各月份資料夾）的掃描單據，以及「新增進貨」時拍的送貨單：每小時自動文字辨識成草稿，老闆或店長核對修改後確認。'
                 '這裡只是明細參考，成本率與進貨金額仍以日報表為準。',
                 style: TextStyle(color: AppColors.muted, fontSize: 11, height: 1.5),
               ),
@@ -143,10 +147,11 @@ class _VendorSlipsScreenState extends State<VendorSlipsScreen> {
 }
 
 class _VendorCard extends StatelessWidget {
-  const _VendorCard({required this.vendor, required this.slips, this.onTap});
+  const _VendorCard({required this.vendor, required this.slips, this.onTap, required this.onPhoto});
   final String vendor;
   final List<VendorSlip> slips;
   final void Function(VendorSlip)? onTap;
+  final void Function(String path) onPhoto;
 
   @override
   Widget build(BuildContext context) {
@@ -204,6 +209,16 @@ class _VendorCard extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 2),
               child: Text(s.note!, style: const TextStyle(color: AppColors.muted, fontSize: 11)),
+            ),
+          if (s.photoPath != null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
+                onPressed: () => onPhoto(s.photoPath!),
+                icon: const Icon(Icons.image_outlined, size: 18),
+                label: const Text('看照片'),
+              ),
             ),
           const SizedBox(height: 6),
           for (final l in s.lines)

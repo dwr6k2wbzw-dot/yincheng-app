@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import '../app_state.dart';
+import '../data/repository.dart';
 import 'package:intl/intl.dart';
 
 import '../theme.dart';
@@ -67,4 +70,22 @@ void showMessage(BuildContext context, String msg, {bool error = false}) {
     backgroundColor: error ? AppColors.bad : null,
     behavior: SnackBarBehavior.floating,
   ));
+}
+
+
+/// 顯示 Storage 裡的照片（送貨單、交接、班表；路徑 receipts/{店家}/...）
+Future<void> showStoragePhoto(BuildContext context, String path) async {
+  try {
+    final url = await AppScope.of(context).repo.shiftPhotoUrl(path);
+    if (!context.mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (c) => Dialog(
+        insetPadding: const EdgeInsets.all(8),
+        child: InteractiveViewer(maxScale: 6, child: Image.network(url, fit: BoxFit.contain)),
+      ),
+    );
+  } catch (e) {
+    if (context.mounted) showMessage(context, friendlyError(e), error: true);
+  }
 }

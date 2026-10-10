@@ -171,6 +171,8 @@ class NewPurchase {
   final String paidBy;
   final String clientRequestId; // 防止網路重送造成重複
   final Uint8List? photoJpeg; // 送貨單照片（存到 receipts/{店家}/slips/）
+  final bool slipDraft; // 照片要不要辨識成銷貨單草稿（有銷貨單分頁的店）
+  final String? slipVendor; // 銷貨單草稿用的廠商名稱（選既有廠商時也帶名稱）
   NewPurchase({
     required this.storeId,
     required this.purchaseDate,
@@ -182,6 +184,8 @@ class NewPurchase {
     required this.paidBy,
     required this.clientRequestId,
     this.photoJpeg,
+    this.slipDraft = false,
+    this.slipVendor,
   });
 }
 
@@ -408,8 +412,9 @@ class VendorSlip {
   final String source; // manual／ocr／app
   final String? sourceFile;
   final DateTime? periodMonth; // 歸屬月份（Dropbox「M月份」資料夾）；修改時 null＝維持原本
+  final String? photoPath; // App 拍的送貨單照片（0034）
   VendorSlip(this.id, this.vendor, this.slipNo, this.date, this.total, this.note, this.lines,
-      {this.status = 'confirmed', this.source = 'manual', this.sourceFile, this.periodMonth});
+      {this.status = 'confirmed', this.source = 'manual', this.sourceFile, this.periodMonth, this.photoPath});
   bool get isDraft => status == 'draft';
   double get linesTotal => lines.fold(0.0, (a, l) => a + l.amount);
   factory VendorSlip.fromRow(Map<String, dynamic> r) => VendorSlip(
@@ -434,6 +439,7 @@ class VendorSlip {
         status: r['status'] as String? ?? 'confirmed',
         source: r['source'] as String? ?? 'manual',
         sourceFile: r['source_file'] as String?,
+        photoPath: r['photo_path'] as String?,
       );
 }
 

@@ -183,6 +183,8 @@ class _VendorSlipEditScreenState extends State<VendorSlipEditScreen> {
       appBar: AppBar(
         title: Text(_isNew ? '新增銷貨單' : (s!.isDraft ? '核對草稿' : '修改銷貨單')),
         actions: [
+          if (s?.photoPath != null)
+            IconButton(tooltip: '看照片', icon: const Icon(Icons.image_outlined), onPressed: () => showStoragePhoto(context, s!.photoPath!)),
           if (!_isNew) IconButton(tooltip: '刪除', icon: const Icon(Icons.delete_outline), onPressed: _busy ? null : _delete),
         ],
       ),

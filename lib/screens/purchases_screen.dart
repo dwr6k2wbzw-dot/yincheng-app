@@ -454,6 +454,12 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
               padding: const EdgeInsets.only(top: 6),
               child: Text(_scanNote!, style: const TextStyle(color: AppColors.warn, fontSize: 12)),
             ),
+          if (_photo != null && AppConfig.vendorSlipStores.contains(widget.membership.storeName) && !_isReturn)
+            const Padding(
+              padding: EdgeInsets.only(top: 6),
+              child: Text('儲存後，這張送貨單會在一小時內自動變成「銷貨單」分頁的草稿，再由老闆或店長核對品項。',
+                  style: TextStyle(color: AppColors.muted, fontSize: 12, height: 1.4)),
+            ),
           if (_photo != null) ...[
             const SizedBox(height: 8),
             ClipRRect(
@@ -496,6 +502,8 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
             amount: _isReturn ? -raw : raw,
             paidBy: _paidBy,
             clientRequestId: _requestId,
+            slipDraft: AppConfig.vendorSlipStores.contains(widget.membership.storeName),
+            slipVendor: name.isEmpty ? null : name,
           ));
       if (mounted) {
         showMessage(context, '已新增');
