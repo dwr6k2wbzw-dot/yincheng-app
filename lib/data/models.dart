@@ -132,7 +132,12 @@ class Purchase {
   final bool reconciled;
   final String source; // app / import
   final String? supersededBy; // App 暫記已被 Excel 同一筆取代（不再計入）
+  final bool excelCovered; // App 暫記：日報表已涵蓋那天，以日報表為準（不再計入，0035）
+  final String? createdBy;
   bool get superseded => supersededBy != null;
+  /// 有沒有計入成本、零用金（被 Excel 取代或以日報表為準的 App 暫記不計入）
+  bool get counted => supersededBy == null && !excelCovered;
+  bool get fromExcel => source == 'import';
   Purchase({
     required this.id,
     required this.purchaseDate,
@@ -144,6 +149,8 @@ class Purchase {
     required this.reconciled,
     required this.source,
     this.supersededBy,
+    this.excelCovered = false,
+    this.createdBy,
   });
 
   factory Purchase.fromRow(Map<String, dynamic> r) => Purchase(
@@ -157,6 +164,8 @@ class Purchase {
         reconciled: r['reconciled'] as bool? ?? false,
         source: r['source'] as String? ?? 'app',
         supersededBy: r['superseded_by'] as String?,
+        excelCovered: r['excel_covered_at'] != null,
+        createdBy: r['created_by'] as String?,
       );
 }
 

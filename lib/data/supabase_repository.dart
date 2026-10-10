@@ -459,7 +459,7 @@ class SupabaseRepository implements Repository {
   Future<List<Purchase>> recentPurchases(String storeId, {int limit = 30}) async {
     final rows = await _db
         .from('purchases')
-        .select('id, purchase_date, category_code, memo, amount, paid_by, reconciled, source, superseded_by, vendor_name, '
+        .select('id, purchase_date, category_code, memo, amount, paid_by, reconciled, source, superseded_by, excel_covered_at, created_by, vendor_name, '
             'suppliers!purchases_supplier_same_store(name)')
         .eq('store_id', storeId)
         .order('purchase_date', ascending: false)
@@ -472,7 +472,7 @@ class SupabaseRepository implements Repository {
   Future<List<Purchase>> monthPurchases(String storeId, DateTime month) async {
     final rows = await _db
         .from('purchases')
-        .select('id, purchase_date, category_code, memo, amount, paid_by, reconciled, source, superseded_by, vendor_name, '
+        .select('id, purchase_date, category_code, memo, amount, paid_by, reconciled, source, superseded_by, excel_covered_at, created_by, vendor_name, '
             'suppliers!purchases_supplier_same_store(name)')
         .eq('store_id', storeId)
         .eq('period_month', _day.format(DateTime(month.year, month.month, 1)))
@@ -585,6 +585,31 @@ class SupabaseRepository implements Repository {
         });
       } catch (_) {}
     }
+  }
+
+  @override
+  Future<void> updatePurchase(String purchaseId, NewPurchase p) async {
+    final rows = await _db
+        .from('purchases')
+        .update({
+          'purchase_date': _day.format(p.purchaseDate),
+          'period_month': _day.format(DateTime(p.purchaseDate.year, p.purchaseDate.month, 1)),
+          'category_code': p.categoryCode,
+          'supplier_id': p.supplierId,
+          'vendor_name': (p.vendorName?.trim().isEmpty ?? true) ? null : p.vendorName!.trim(),
+          'memo': (p.memo?.trim().isEmpty ?? true) ? null : p.memo!.trim(),
+          'amount': p.amount,
+          'paid_by': p.paidBy,
+        })
+        .eq('id', purchaseId)
+        .select('id');
+    if (rows.isEmpty) throw Exception('message: 沒有權限修改這筆進貨（只有建立的人或老闆、店長可以改）,');
+  }
+
+  @override
+  Future<void> deletePurchase(String purchaseId) async {
+    final rows = await _db.from('purchases').delete().eq('id', purchaseId).select('id');
+    if (rows.isEmpty) throw Exception('message: 沒有權限刪除這筆進貨（只有建立的人或老闆、店長可以刪）,');
   }
 
   @override

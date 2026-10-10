@@ -329,6 +329,19 @@ class DemoRepository implements Repository {
   }
 
   @override
+  Future<void> updatePurchase(String purchaseId, NewPurchase p) async {
+    final i = _purchases.indexWhere((x) => x.id == purchaseId);
+    final o = _purchases[i];
+    _purchases[i] = Purchase(
+        id: o.id, purchaseDate: p.purchaseDate, categoryCode: p.categoryCode,
+        supplierName: p.vendorName ?? o.supplierName, memo: p.memo, amount: p.amount, paidBy: p.paidBy,
+        reconciled: o.reconciled, source: o.source, createdBy: o.createdBy);
+  }
+
+  @override
+  Future<void> deletePurchase(String purchaseId) async => _purchases.removeWhere((x) => x.id == purchaseId);
+
+  @override
   Future<void> setReconciled(String purchaseId, bool reconciled) async {
     if (_isStaff) throw Exception('message: 只有老闆或店長可以核銷,');
     final i = _purchases.indexWhere((p) => p.id == purchaseId);

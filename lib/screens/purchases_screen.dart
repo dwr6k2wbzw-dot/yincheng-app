@@ -64,6 +64,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           items: items,
           categoryNames: cats,
           canReconcile: widget.membership.isManager && !_synced,
+          membership: widget.membership,
         ),
       ),
     );
@@ -89,9 +90,10 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
             if (snap.hasError) return ErrorView(message: friendlyError(snap.error!), onRetry: _reload);
             if (!snap.hasData) return const Center(child: CircularProgressIndicator());
             final (all, cats, last) = snap.data!;
-            // 已被 Excel 同一筆取代的 App 暫記不計入
-            final list = all.where((p) => !p.superseded).toList();
-            final replaced = all.length - list.length;
+            // 已被 Excel 同一筆取代、或日報表已涵蓋（以日報表為準）的 App 暫記不計入
+            final list = all.where((p) => p.counted).toList();
+            final replaced = all.where((p) => p.superseded).length;
+            final covered = all.where((p) => !p.superseded && p.excelCovered).toList();
             final pending = list.where((p) => p.source == 'app').toList();
             final vendor = list.where((p) => p.paidBy != 'petty_cash').toList();
             final petty = list.where((p) => p.paidBy == 'petty_cash').toList();
@@ -114,8 +116,9 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          '進貨由 Dropbox 日報表每小時自動同步。也可以按右下角在 App 先記一筆（暫記），'
-                          '之後 Excel 打進同一筆（同金額、同付款方式、日期差 7 天內）會自動取代，不會重複算。'
+                          '進貨由 Dropbox 日報表每小時自動同步，內容和金額一律以日報表為準（日報表的進貨在 App 不能改、不能刪）。'
+                          '也可以按右下角在 App 先記一筆（暫記），暫記可以點進去修改或刪除；'
+                          '日報表打進同一筆、或日報表已經記到更晚的日期，暫記就不再計入，不會重複算。'
                           '${last == null ? '' : '\n最後一次寫入：${DateFormat('M/d HH:mm').format(last)}'}',
                           style: const TextStyle(color: AppColors.muted, fontSize: 12, height: 1.5),
                         ),
@@ -130,7 +133,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                 const SizedBox(height: 12),
                 Text('本月進貨合計 ${ntd(list.fold<double>(0, (t, p) => t + p.amount))}，共 ${list.length} 筆',
                     textAlign: TextAlign.center, style: const TextStyle(color: AppColors.muted, fontSize: 12)),
-                if (_synced && (pending.isNotEmpty || replaced > 0))
+                if (_synced && (pending.isNotEmpty || replaced > 0 || covered.isNotEmpty))
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
                     child: Text(
@@ -138,9 +141,17 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                         if (pending.isNotEmpty)
                           '含 App 暫記 ${pending.length} 筆 ${ntd(pending.fold<double>(0, (t, p) => t + p.amount))}（Excel 還沒出現）',
                         if (replaced > 0) '$replaced 筆暫記已由 Excel 取代',
+                        if (covered.isNotEmpty) '${covered.length} 筆暫記以日報表為準、不計入（點下方查看）',
                       ].join('；'),
                       textAlign: TextAlign.center,
                       style: const TextStyle(color: AppColors.warn, fontSize: 12),
+                    ),
+                  ),
+                if (covered.isNotEmpty)
+                  Center(
+                    child: TextButton(
+                      onPressed: () => _openCategory('以日報表為準（不計入）的暫記', covered, cats),
+                      child: const Text('查看以日報表為準的暫記'),
                     ),
                   ),
               ]),
@@ -222,7 +233,9 @@ class _CategoryPurchasesScreen extends StatefulWidget {
     required this.items,
     required this.categoryNames,
     required this.canReconcile,
+    required this.membership,
   });
+  final Membership membership;
   final String title;
   final DateTime month;
   final List<Purchase> items;
@@ -243,8 +256,79 @@ class _CategoryPurchasesScreenState extends State<_CategoryPurchasesScreen> {
         _items[i] = Purchase(
           id: p.id, purchaseDate: p.purchaseDate, categoryCode: p.categoryCode, supplierName: p.supplierName,
           memo: p.memo, amount: p.amount, paidBy: p.paidBy, reconciled: !p.reconciled, source: p.source,
+          supersededBy: p.supersededBy, excelCovered: p.excelCovered, createdBy: p.createdBy,
         );
       });
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+    }
+  }
+
+  /// 點一筆：日報表的 → 說明要改日報表；App 暫記 → 修改／刪除
+  Future<void> _actions(Purchase p) async {
+    final repo = AppScope.of(context).repo;
+    final mine = p.createdBy != null && p.createdBy == repo.currentUserId;
+    if (p.fromExcel) {
+      showMessage(context, '這筆來自 Dropbox 日報表，以日報表為準；要改請改日報表，下一次同步（每小時）就會更新');
+      return;
+    }
+    if (!widget.membership.isManager && !mine) {
+      showMessage(context, '只有建立這筆的人或老闆、店長可以修改、刪除');
+      return;
+    }
+    if (p.reconciled) {
+      showMessage(context, '已核銷的進貨不能修改或刪除，請先由老闆或店長取消核銷');
+      return;
+    }
+    final locked = !p.counted; // 已被取代或以日報表為準：只能刪
+    final act = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppColors.card,
+      builder: (c) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            title: Text('${p.supplierName ?? p.memo ?? '進貨'}・${ntd(p.amount)}',
+                style: const TextStyle(fontWeight: FontWeight.w700)),
+            subtitle: Text(locked ? '這筆已以日報表為準（不計入），只能刪除' : 'App 暫記：可以修改或刪除'),
+          ),
+          if (!locked)
+            ListTile(leading: const Icon(Icons.edit_outlined), title: const Text('修改'), onTap: () => Navigator.pop(c, 'edit')),
+          ListTile(
+            leading: const Icon(Icons.delete_outline, color: AppColors.bad),
+            title: const Text('刪除', style: TextStyle(color: AppColors.bad)),
+            onTap: () => Navigator.pop(c, 'delete'),
+          ),
+        ]),
+      ),
+    );
+    if (!mounted || act == null) return;
+    if (act == 'edit') {
+      final saved = await Navigator.push<bool>(
+          context, MaterialPageRoute(builder: (_) => PurchaseFormScreen(membership: widget.membership, editing: p)));
+      if (saved == true && mounted) Navigator.pop(context);
+      return;
+    }
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('刪除這筆進貨？'),
+        content: Text('${DateFormat('M/d').format(p.purchaseDate)}　${p.supplierName ?? p.memo ?? ''}　${ntd(p.amount)}'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.bad),
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('刪除'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await repo.deletePurchase(p.id);
+      if (!mounted) return;
+      showMessage(context, '已刪除');
+      setState(() => _items.removeWhere((x) => x.id == p.id));
     } catch (e) {
       if (mounted) showMessage(context, friendlyError(e), error: true);
     }
@@ -288,6 +372,7 @@ class _CategoryPurchasesScreenState extends State<_CategoryPurchasesScreen> {
               categoryName: widget.categoryNames[p.categoryCode] ?? p.categoryCode,
               canReconcile: widget.canReconcile,
               onToggle: () => _toggle(p),
+              onTap: () => _actions(p),
             ),
             const SizedBox(height: 8),
           ],
@@ -298,14 +383,18 @@ class _CategoryPurchasesScreenState extends State<_CategoryPurchasesScreen> {
 }
 
 class _PurchaseTile extends StatelessWidget {
-  const _PurchaseTile({required this.p, required this.categoryName, required this.canReconcile, required this.onToggle});
+  const _PurchaseTile(
+      {required this.p, required this.categoryName, required this.canReconcile, required this.onToggle, required this.onTap});
   final Purchase p;
   final String categoryName;
   final bool canReconcile;
   final VoidCallback onToggle;
+  final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => SectionCard(
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        child: SectionCard(
         padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
         child: Row(children: [
           Expanded(
@@ -314,7 +403,7 @@ class _PurchaseTile extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 '${DateFormat('M/d').format(p.purchaseDate)}・$categoryName'
-                '${p.paidBy == 'petty_cash' ? '・零用金' : ''}${p.source == 'import' ? '・Excel' : '・App 暫記'}',
+                '${p.paidBy == 'petty_cash' ? '・零用金' : ''}${p.source == 'import' ? '・日報表' : (p.counted ? '・App 暫記（點一下可改）' : '・以日報表為準，不計入')}',
                 style: const TextStyle(color: AppColors.muted, fontSize: 12),
               ),
             ]),
@@ -329,13 +418,16 @@ class _PurchaseTile extends StatelessWidget {
                 color: p.reconciled ? AppColors.good : AppColors.muted),
           ),
         ]),
+      ),
       );
 }
 
 /// 新增進貨（PRD 畫面 04）
 class PurchaseFormScreen extends StatefulWidget {
-  const PurchaseFormScreen({super.key, required this.membership});
+  const PurchaseFormScreen({super.key, required this.membership, this.editing});
   final Membership membership;
+  /// 修改既有的 App 暫記（null＝新增）
+  final Purchase? editing;
   @override
   State<PurchaseFormScreen> createState() => _PurchaseFormScreenState();
 }
@@ -371,13 +463,23 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
     final repo = AppScope.of(context).repo;
     final id = widget.membership.storeId;
     final r = await Future.wait([repo.costCategories(), repo.suppliers(id), repo.businessDate(id)]);
+    final e = widget.editing;
+    if (e != null && _category == null) {
+      _date = e.purchaseDate;
+      _category = e.categoryCode;
+      _vendor.text = e.supplierName ?? '';
+      _amount.text = e.amount.abs() == e.amount.abs().roundToDouble() ? e.amount.abs().toInt().toString() : e.amount.abs().toString();
+      _isReturn = e.amount < 0;
+      _paidBy = e.paidBy;
+      _memo.text = e.memo ?? '';
+    }
     _date ??= r[2] as DateTime;
     try {
       _hints = adjustVendorHints(await repo.vendorHints(id));
     } catch (_) {} // 提示讀不到不影響新增
     _sups = r[1] as List<Supplier>;
     // 填表人預設帶入自己的名字（可以改成請款人）
-    if (_memo.text.isEmpty) _memo.text = widget.membership.displayName;
+    if (_memo.text.isEmpty && e == null) _memo.text = widget.membership.displayName;
     return (r[0] as List<CostCategory>, r[1] as List<Supplier>);
   }
 
@@ -491,6 +593,26 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
     final known = _sups.where((s) => s.name == name).firstOrNull;
     setState(() => _saving = true);
     try {
+      if (widget.editing != null) {
+        await AppScope.of(context).repo.updatePurchase(
+            widget.editing!.id,
+            NewPurchase(
+              storeId: widget.membership.storeId,
+              purchaseDate: _date!,
+              categoryCode: _category!,
+              supplierId: known?.id,
+              vendorName: known == null && name.isNotEmpty ? name : null,
+              memo: _memo.text,
+              amount: _isReturn ? -raw : raw,
+              paidBy: _paidBy,
+              clientRequestId: _requestId,
+            ));
+        if (mounted) {
+          showMessage(context, '已修改');
+          Navigator.pop(context, true);
+        }
+        return;
+      }
       await AppScope.of(context).repo.addPurchase(NewPurchase(
             storeId: widget.membership.storeId,
             purchaseDate: _date!,
@@ -518,7 +640,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('新增進貨')),
+        appBar: AppBar(title: Text(widget.editing == null ? '新增進貨' : '修改進貨（App 暫記）')),
         body: FutureBuilder<(List<CostCategory>, List<Supplier>)>(
           future: _future,
           builder: (context, snap) {
@@ -615,7 +737,9 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                   ButtonSegment(value: 'petty_cash', label: Text('零用金'), icon: Icon(Icons.payments_outlined)),
                 ],
                 selected: {_paidBy},
-                onSelectionChanged: (v) => setState(() => _paidBy = v.first),
+                onSelectionChanged: widget.editing != null && !widget.membership.isManager
+                    ? null // 付款方式建立後只有老闆、店長能改（資料庫也會擋）
+                    : (v) => setState(() => _paidBy = v.first),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -624,7 +748,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                 decoration: const InputDecoration(labelText: '填表人／請款人（選填）'),
               ),
               const SizedBox(height: 12),
-              _scanCard(sups),
+              if (widget.editing == null) _scanCard(sups),
               const SizedBox(height: 24),
               FilledButton(
                 onPressed: _saving ? null : _save,

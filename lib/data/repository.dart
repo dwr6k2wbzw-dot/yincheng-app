@@ -53,6 +53,9 @@ abstract class Repository {
   Future<List<Purchase>> monthPurchases(String storeId, DateTime month);
   Future<void> addPurchase(NewPurchase p);
   Future<void> setReconciled(String purchaseId, bool reconciled);
+  /// 修改、刪除 App 暫記（日報表匯入的進貨不能改刪：以日報表為準，資料庫 0035）
+  Future<void> updatePurchase(String purchaseId, NewPurchase p);
+  Future<void> deletePurchase(String purchaseId);
 
   // 廠商銷貨單明細（小城外）
   Future<List<VendorSlip>> vendorSlips(String storeId, DateTime month);
