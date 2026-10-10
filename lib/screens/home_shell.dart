@@ -73,6 +73,12 @@ class _HomeShellState extends State<HomeShell> {
     // 以店家 id 當 key：切換店家時各分頁重新載入
     // 營收分頁只給老闆／店長（資料庫也只允許這兩種角色讀寫營收）
     final tabs = <(Widget, NavigationDestination)>[
+      if (m.isPartTime)
+        (
+          DashboardScreen(key: ValueKey('d-${m.storeId}'), membership: m),
+          const NavigationDestination(icon: Icon(Icons.checklist_outlined), selectedIcon: Icon(Icons.checklist), label: '交接'),
+        )
+      else ...[
       (
         DashboardScreen(key: ValueKey('d-${m.storeId}'), membership: m),
         const NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: '總覽'),
@@ -101,6 +107,7 @@ class _HomeShellState extends State<HomeShell> {
           const NavigationDestination(
               icon: Icon(Icons.inventory_2_outlined), selectedIcon: Icon(Icons.inventory_2), label: '盤點'),
         ),
+      ],
     ];
     if (AppConfig.scheduleStores.contains(m.storeName)) {
       tabs.add((

@@ -13,8 +13,9 @@ const _roleHints = {
   Role.manager: '營收、進貨、成本率都看得到，可核銷、核准盤點；看不到租金、人事與損益',
   Role.bartender: '進貨、盤點；看不到營收與成本',
   Role.staff: '看得到營收與進貨成本率（只能看）、進貨、盤點；看不到租金、人事與損益',
+  Role.parttime: '只看得到班表與交接、提醒（可以寫交接、打勾）；看不到營收、進貨、成本',
 };
-const _invitableRoles = [Role.manager, Role.staff];
+const _invitableRoles = [Role.manager, Role.staff, Role.parttime];
 
 /// 成員管理（只有老闆）：成員清單、邀請碼、修改身分、停權
 class MembersScreen extends StatefulWidget {

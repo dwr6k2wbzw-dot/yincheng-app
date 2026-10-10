@@ -5,7 +5,7 @@ double _d(dynamic v) => v == null ? 0 : (v is num ? v.toDouble() : double.tryPar
 double? _dn(dynamic v) => v == null ? null : _d(v);
 DateTime? _date(dynamic v) => v == null ? null : DateTime.tryParse(v.toString());
 
-enum Role { owner, manager, bartender, staff }
+enum Role { owner, manager, bartender, staff, parttime }
 
 Role roleFrom(String s) => Role.values.firstWhere((r) => r.name == s, orElse: () => Role.staff);
 
@@ -14,6 +14,7 @@ String roleLabel(Role r) => switch (r) {
       Role.manager => '店長',
       Role.bartender => '調酒師',
       Role.staff => '員工',
+      Role.parttime => '兼職',
     };
 
 class Membership {
@@ -26,6 +27,8 @@ class Membership {
   bool get isManager => role == Role.owner || role == Role.manager;
   /// 看得到營收：老闆、店長、員工（員工只能看，資料庫 0020）；調酒師看不到
   bool get canSeeRevenue => isManager || role == Role.staff;
+  /// 兼職：只看得到班表與交接、提醒（資料庫 0033）
+  bool get isPartTime => role == Role.parttime;
 
   factory Membership.fromRow(Map<String, dynamic> r) => Membership(
         storeId: r['store_id'] as String,

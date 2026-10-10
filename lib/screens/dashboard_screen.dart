@@ -43,6 +43,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final repo = AppScope.of(context).repo;
     final id = widget.membership.storeId;
     final d = _DashboardData()..month = _month;
+    if (widget.membership.isPartTime) return d; // 兼職只看交接、提醒
     if (!widget.membership.canSeeRevenue) d.petty = await repo.pettyCashBalance(id);
     if (widget.membership.canSeeRevenue) {
       final r = await Future.wait([
@@ -104,7 +105,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onRefresh: () async => _reload(),
             child: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 24), children: [
               HandoverSummaryCard(key: ValueKey('hs-${widget.membership.storeId}'), membership: widget.membership),
-              if (widget.membership.canSeeRevenue) ..._managerView(d) else ..._staffView(d),
+              if (widget.membership.isPartTime)
+                const Text('兼職帳號：可以看班表、交接與提醒。點上面的卡片寫交接、打勾提醒。',
+                    style: TextStyle(color: AppColors.muted, fontSize: 13, height: 1.5))
+              else if (widget.membership.canSeeRevenue)
+                ..._managerView(d)
+              else
+                ..._staffView(d),
             ]),
           );
         },
