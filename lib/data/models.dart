@@ -13,7 +13,7 @@ String roleLabel(Role r) => switch (r) {
       Role.owner => '老闆',
       Role.manager => '店長',
       Role.bartender => '調酒師',
-      Role.staff => '員工',
+      Role.staff => '正職',
       Role.parttime => '兼職',
     };
 
