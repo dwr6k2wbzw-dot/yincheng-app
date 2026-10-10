@@ -347,7 +347,7 @@ class SupabaseRepository implements Repository {
   Future<HandoverBoard> handoverBoard(String storeId, {bool withSchedule = false}) async {
     final today = bizToday();
     final since = _day.format(today.subtract(const Duration(days: 62)));
-    final r = await Future.wait([
+    final r = await Future.wait(<Future<dynamic>>[
       _db
           .from('handover_notes')
           .select('id, body, photo_path, author_id, author_name, created_at, resolved_at, resolved_name, handover_reads(user_id, user_name)')
