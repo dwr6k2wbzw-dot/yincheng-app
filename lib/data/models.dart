@@ -553,3 +553,194 @@ class ShiftMonth {
   int offDays(String personId) => (marks[personId] ?? {}).values.where(isOff).length;
   int workDays(String personId) => (marks[personId] ?? {}).values.where(isOn).length;
 }
+
+// ---------------- 交接事項與工作提醒（0031） ----------------
+
+/// 營業日：早上 6 點前算前一天（酒吧凌晨還在營業）
+DateTime bizToday([DateTime? now]) {
+  final n = now ?? DateTime.now();
+  final d = DateTime(n.year, n.month, n.day);
+  return n.hour < 6 ? d.subtract(const Duration(days: 1)) : d;
+}
+
+class HandoverNote {
+  final String id;
+  final String body;
+  final String? photoPath;
+  final String authorId;
+  final String authorName;
+  final DateTime createdAt;
+  final DateTime? resolvedAt;
+  final String? resolvedName;
+  final Map<String, String> readers; // userId → 名字
+  HandoverNote({
+    required this.id,
+    required this.body,
+    this.photoPath,
+    required this.authorId,
+    required this.authorName,
+    required this.createdAt,
+    this.resolvedAt,
+    this.resolvedName,
+    this.readers = const {},
+  });
+  bool get resolved => resolvedAt != null;
+  /// 對我來說是未讀：不是我寫的、我沒讀過、還沒處理
+  bool unreadFor(String? me) => !resolved && me != null && authorId != me && !readers.containsKey(me);
+
+  factory HandoverNote.fromRow(Map<String, dynamic> r) => HandoverNote(
+        id: r['id'] as String,
+        body: r['body'] as String,
+        photoPath: r['photo_path'] as String?,
+        authorId: r['author_id'] as String,
+        authorName: r['author_name'] as String? ?? '',
+        createdAt: DateTime.parse(r['created_at'] as String).toLocal(),
+        resolvedAt: r['resolved_at'] == null ? null : DateTime.parse(r['resolved_at'] as String).toLocal(),
+        resolvedName: r['resolved_name'] as String?,
+        readers: {
+          for (final x in (r['handover_reads'] as List? ?? const []))
+            (x as Map)['user_id'] as String: x['user_name'] as String? ?? '',
+        },
+      );
+}
+
+class WorkReminder {
+  final String id;
+  final String title;
+  final String? detail;
+  final String repeat; // once / daily / weekly / monthly
+  final DateTime? dueDate;
+  final int? weekday; // 0＝週日
+  final int? monthDay;
+  final DateTime startDate;
+  final String? assignPersonId;
+  final bool assignOnShift;
+  final bool active;
+  WorkReminder({
+    required this.id,
+    required this.title,
+    this.detail,
+    required this.repeat,
+    this.dueDate,
+    this.weekday,
+    this.monthDay,
+    required this.startDate,
+    this.assignPersonId,
+    this.assignOnShift = false,
+    this.active = true,
+  });
+
+  factory WorkReminder.fromRow(Map<String, dynamic> r) => WorkReminder(
+        id: r['id'] as String,
+        title: r['title'] as String,
+        detail: r['detail'] as String?,
+        repeat: r['repeat'] as String,
+        dueDate: r['due_date'] == null ? null : DateTime.parse(r['due_date'] as String),
+        weekday: (r['weekday'] as num?)?.toInt(),
+        monthDay: (r['month_day'] as num?)?.toInt(),
+        startDate: DateTime.parse(r['start_date'] as String),
+        assignPersonId: r['assign_person_id'] as String?,
+        assignOnShift: r['assign_on_shift'] as bool? ?? false,
+        active: r['active'] as bool? ?? true,
+      );
+
+  static const weekdayNames = ['日', '一', '二', '三', '四', '五', '六'];
+
+  String get repeatLabel => switch (repeat) {
+        'daily' => '每天',
+        'weekly' => '每週${weekdayNames[weekday ?? 0]}',
+        'monthly' => '每月 $monthDay 號',
+        _ => dueDate == null ? '一次' : '${dueDate!.month}/${dueDate!.day}',
+      };
+
+  /// 到 today 為止最近的一次（還沒開始、或一次性的日子還沒到 → null）
+  DateTime? lastOccurrence(DateTime today) {
+    DateTime? d;
+    switch (repeat) {
+      case 'once':
+        d = dueDate;
+        if (d != null && d.isAfter(today)) return null;
+        return d; // 一次性的不受開始日限制
+      case 'daily':
+        d = today;
+      case 'weekly':
+        d = today.subtract(Duration(days: (today.weekday % 7 - (weekday ?? 0) + 7) % 7));
+      case 'monthly':
+        DateTime inMonth(int y, int m) {
+          final last = DateTime(y, m + 1, 0).day;
+          return DateTime(y, m, (monthDay ?? 1).clamp(1, last));
+        }
+        d = inMonth(today.year, today.month);
+        if (d.isAfter(today)) d = inMonth(today.year, today.month - 1);
+    }
+    if (d == null || d.isBefore(DateTime(startDate.year, startDate.month, startDate.day))) return null;
+    return d;
+  }
+
+  /// 下一次（今天之後）；一次性的已過就是 null
+  DateTime? nextOccurrence(DateTime today) {
+    for (var i = 1; i <= 62; i++) {
+      final d = today.add(Duration(days: i));
+      final ok = switch (repeat) {
+        'once' => dueDate != null && _same(dueDate!, d),
+        'daily' => true,
+        'weekly' => d.weekday % 7 == weekday,
+        'monthly' => d.day == (monthDay ?? 1).clamp(1, DateTime(d.year, d.month + 1, 0).day),
+        _ => false,
+      };
+      if (ok) return d;
+    }
+    return null;
+  }
+
+  static bool _same(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
+}
+
+class ReminderDone {
+  final String reminderId;
+  final DateTime occurrence;
+  final String doneBy;
+  final String doneName;
+  final DateTime doneAt;
+  ReminderDone(this.reminderId, this.occurrence, this.doneBy, this.doneName, this.doneAt);
+  factory ReminderDone.fromRow(Map<String, dynamic> r) => ReminderDone(
+        r['reminder_id'] as String,
+        DateTime.parse(r['occurrence'] as String),
+        r['done_by'] as String,
+        r['done_name'] as String? ?? '',
+        DateTime.parse(r['done_at'] as String).toLocal(),
+      );
+  String get key => '$reminderId|${occurrence.year}-${occurrence.month}-${occurrence.day}';
+  static String keyOf(String id, DateTime d) => '$id|${d.year}-${d.month}-${d.day}';
+}
+
+/// 交接・提醒一次載入的資料
+class HandoverBoard {
+  final List<HandoverNote> notes;
+  final List<WorkReminder> reminders;
+  final Map<String, ReminderDone> done; // key → 完成紀錄
+  final List<ShiftPerson> people;
+  final Map<String, String?> todayMarks; // personId → 今天的班表記號
+  HandoverBoard(this.notes, this.reminders, this.done, this.people, this.todayMarks);
+
+  /// 今天要看的提醒：最近一次（今天或之前）還沒做的，或今天剛做完的
+  List<(WorkReminder, DateTime, ReminderDone?)> todayItems(DateTime today) {
+    final out = <(WorkReminder, DateTime, ReminderDone?)>[];
+    for (final r in reminders.where((r) => r.active)) {
+      final occ = r.lastOccurrence(today);
+      if (occ == null) continue;
+      final dn = done[ReminderDone.keyOf(r.id, occ)];
+      if (dn != null && occ.isBefore(today)) continue; // 之前那次已做完 → 今天沒事
+      out.add((r, occ, dn));
+    }
+    // 沒做的在前（過期的最前面），做完的在後
+    out.sort((a, b) {
+      int rank((WorkReminder, DateTime, ReminderDone?) x) => x.$3 != null ? 2 : (x.$2.isBefore(today) ? 0 : 1);
+      return rank(a).compareTo(rank(b));
+    });
+    return out;
+  }
+
+  int pendingCount(DateTime today) => todayItems(today).where((x) => x.$3 == null).length;
+  int unreadCount(String? me) => notes.where((n) => n.unreadFor(me)).length;
+}

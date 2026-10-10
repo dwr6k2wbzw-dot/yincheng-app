@@ -101,6 +101,52 @@ class DemoRepository implements Repository {
   @override
   Future<String> shiftPhotoUrl(String path) async => '';
 
+  // 交接・提醒（示範：只存在記憶體）
+  final _notes = <HandoverNote>[];
+  final _reminders = <WorkReminder>[];
+  final _done = <String, ReminderDone>{};
+  @override
+  Future<HandoverBoard> handoverBoard(String storeId, {bool withSchedule = false}) async {
+    final sm = withSchedule ? await shiftMonth(storeId, bizToday()) : null;
+    return HandoverBoard([..._notes.reversed], [..._reminders], {..._done}, sm?.people ?? const [],
+        {for (final p in sm?.people ?? const <ShiftPerson>[]) p.id: sm!.mark(p.id, bizToday().day)});
+  }
+  @override
+  Future<void> addHandover(String storeId, String body, Uint8List? jpeg) async => _notes.add(HandoverNote(
+      id: 'n${_seq++}', body: body, authorId: 'demo-user', authorName: '示範老闆', createdAt: DateTime.now()));
+  @override
+  Future<void> setHandoverResolved(String noteId, bool resolved) async {
+    final i = _notes.indexWhere((n) => n.id == noteId);
+    final n = _notes[i];
+    _notes[i] = HandoverNote(
+        id: n.id, body: n.body, authorId: n.authorId, authorName: n.authorName, createdAt: n.createdAt,
+        resolvedAt: resolved ? DateTime.now() : null, resolvedName: resolved ? '示範老闆' : null, readers: n.readers);
+  }
+  @override
+  Future<void> markHandoverRead(String storeId, List<String> noteIds) async {}
+  @override
+  Future<void> deleteHandover(String noteId) async => _notes.removeWhere((n) => n.id == noteId);
+  @override
+  Future<void> saveReminder(String storeId, WorkReminder r, {bool isNew = false}) async {
+    final x = WorkReminder(
+        id: isNew ? 'r${_seq++}' : r.id, title: r.title, detail: r.detail, repeat: r.repeat, dueDate: r.dueDate,
+        weekday: r.weekday, monthDay: r.monthDay, startDate: isNew ? bizToday() : r.startDate,
+        assignPersonId: r.assignPersonId, assignOnShift: r.assignOnShift, active: r.active);
+    _reminders.removeWhere((e) => e.id == x.id);
+    _reminders.add(x);
+  }
+  @override
+  Future<void> deleteReminder(String reminderId) async => _reminders.removeWhere((e) => e.id == reminderId);
+  @override
+  Future<void> setReminderDone(String storeId, String reminderId, DateTime occurrence, bool done) async {
+    final k = ReminderDone.keyOf(reminderId, occurrence);
+    if (done) {
+      _done[k] = ReminderDone(reminderId, occurrence, 'demo-user', '示範老闆', DateTime.now());
+    } else {
+      _done.remove(k);
+    }
+  }
+
   @override
   Future<bool> signUp(String email, String password) async {
     await signIn(email, password);

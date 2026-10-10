@@ -342,6 +342,93 @@ class SupabaseRepository implements Repository {
     }, onConflict: 'store_id,period_month');
   }
 
+  // ---------------- 交接事項與工作提醒 ----------------
+  @override
+  Future<HandoverBoard> handoverBoard(String storeId, {bool withSchedule = false}) async {
+    final today = bizToday();
+    final since = _day.format(today.subtract(const Duration(days: 62)));
+    final r = await Future.wait([
+      _db
+          .from('handover_notes')
+          .select('id, body, photo_path, author_id, author_name, created_at, resolved_at, resolved_name, handover_reads(user_id, user_name)')
+          .eq('store_id', storeId)
+          .order('created_at', ascending: false)
+          .limit(80),
+      _db.from('work_reminders').select().eq('store_id', storeId).order('created_at'),
+      _db.from('reminder_done').select().eq('store_id', storeId).gte('occurrence', since),
+      if (withSchedule) shiftMonth(storeId, today),
+    ]);
+    final notes = (r[0] as List).map((x) => HandoverNote.fromRow(x as Map<String, dynamic>)).toList();
+    final rem = (r[1] as List).map((x) => WorkReminder.fromRow(x as Map<String, dynamic>)).toList();
+    final done = {
+      for (final x in (r[2] as List).map((x) => ReminderDone.fromRow(x as Map<String, dynamic>))) x.key: x,
+    };
+    final sm = withSchedule ? r[3] as ShiftMonth : null;
+    return HandoverBoard(notes, rem, done, sm?.people ?? const [],
+        {for (final p in sm?.people ?? const <ShiftPerson>[]) p.id: sm!.mark(p.id, today.day)});
+  }
+
+  @override
+  Future<void> addHandover(String storeId, String body, Uint8List? jpeg) async {
+    String? path;
+    if (jpeg != null) {
+      path = '$storeId/handover/${DateTime.now().millisecondsSinceEpoch}.jpg';
+      await _db.storage.from('receipts').uploadBinary(path, jpeg,
+          fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: false));
+    }
+    await _db.from('handover_notes').insert({'store_id': storeId, 'body': body, 'photo_path': path});
+  }
+
+  @override
+  Future<void> setHandoverResolved(String noteId, bool resolved) => _db
+      .from('handover_notes')
+      .update({'resolved_at': resolved ? DateTime.now().toUtc().toIso8601String() : null}).eq('id', noteId);
+
+  @override
+  Future<void> markHandoverRead(String storeId, List<String> noteIds) async {
+    if (noteIds.isEmpty) return;
+    await _db.from('handover_reads').upsert(
+      [for (final id in noteIds) {'store_id': storeId, 'note_id': id}],
+      onConflict: 'note_id,user_id',
+      ignoreDuplicates: true,
+    );
+  }
+
+  @override
+  Future<void> deleteHandover(String noteId) => _db.from('handover_notes').delete().eq('id', noteId);
+
+  @override
+  Future<void> saveReminder(String storeId, WorkReminder r, {bool isNew = false}) async {
+    final row = {
+      'title': r.title.trim(),
+      'detail': (r.detail?.trim().isEmpty ?? true) ? null : r.detail!.trim(),
+      'repeat': r.repeat,
+      'due_date': r.repeat == 'once' && r.dueDate != null ? _day.format(r.dueDate!) : null,
+      'weekday': r.repeat == 'weekly' ? r.weekday : null,
+      'month_day': r.repeat == 'monthly' ? r.monthDay : null,
+      'assign_person_id': r.assignOnShift ? null : r.assignPersonId,
+      'assign_on_shift': r.assignOnShift,
+      'active': r.active,
+    };
+    if (isNew) {
+      await _db.from('work_reminders').insert({...row, 'store_id': storeId, 'start_date': _day.format(bizToday())});
+    } else {
+      await _db.from('work_reminders').update(row).eq('id', r.id);
+    }
+  }
+
+  @override
+  Future<void> deleteReminder(String reminderId) => _db.from('work_reminders').delete().eq('id', reminderId);
+
+  @override
+  Future<void> setReminderDone(String storeId, String reminderId, DateTime occurrence, bool done) async {
+    if (done) {
+      await _db.from('reminder_done').insert({'store_id': storeId, 'reminder_id': reminderId, 'occurrence': _day.format(occurrence)});
+    } else {
+      await _db.from('reminder_done').delete().eq('reminder_id', reminderId).eq('occurrence', _day.format(occurrence));
+    }
+  }
+
   @override
   Future<String> shiftPhotoUrl(String path) => _db.storage.from('receipts').createSignedUrl(path, 3600);
 

@@ -72,6 +72,16 @@ abstract class Repository {
   Future<void> uploadShiftPhoto(String storeId, DateTime month, Uint8List jpeg);
   Future<String> shiftPhotoUrl(String path);
 
+  // 交接事項與工作提醒（同店成員可看、可寫交接、可打勾；提醒只有老闆／店長能建立）
+  Future<HandoverBoard> handoverBoard(String storeId, {bool withSchedule = false});
+  Future<void> addHandover(String storeId, String body, Uint8List? jpeg);
+  Future<void> setHandoverResolved(String noteId, bool resolved);
+  Future<void> markHandoverRead(String storeId, List<String> noteIds);
+  Future<void> deleteHandover(String noteId);
+  Future<void> saveReminder(String storeId, WorkReminder r, {bool isNew = false});
+  Future<void> deleteReminder(String reminderId);
+  Future<void> setReminderDone(String storeId, String reminderId, DateTime occurrence, bool done);
+
   // 盤點
   Future<List<Product>> products(String storeId);
   Future<List<StockCount>> stockCounts(String storeId);

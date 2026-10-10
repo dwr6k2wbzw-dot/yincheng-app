@@ -8,6 +8,7 @@ import '../data/repository.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/revenue_mix.dart';
+import 'handover_screen.dart';
 
 /// 營運總覽（PRD 畫面 01）。老闆／店長看營收與成本；員工版只顯示零用金與快速操作（營收由資料庫權限隱藏）。
 class DashboardScreen extends StatefulWidget {
@@ -102,6 +103,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           return RefreshIndicator(
             onRefresh: () async => _reload(),
             child: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 24), children: [
+              HandoverSummaryCard(key: ValueKey('hs-${widget.membership.storeId}'), membership: widget.membership),
               if (widget.membership.canSeeRevenue) ..._managerView(d) else ..._staffView(d),
             ]),
           );
