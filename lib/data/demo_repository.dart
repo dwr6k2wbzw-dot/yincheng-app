@@ -245,17 +245,24 @@ class DemoRepository implements Repository {
     _fixed['$storeId-${month.year}-${month.month}-$category'] = amount;
   }
 
-  final _expItems = <ExpenseItem>[];
+  final _expItems = <String, List<ExpenseItem>>{};  // 店家-年月 → 明細
+  String _ek(String s, DateTime m) => '$s-${m.year}-${m.month}';
   @override
-  Future<List<ExpenseItem>> expenseItems(String storeId, DateTime month) async => _isStaff ? [] : [..._expItems];
+  Future<List<ExpenseItem>> expenseItems(String storeId, DateTime month) async =>
+      _isStaff ? [] : [...?_expItems[_ek(storeId, month)]];
   @override
   Future<void> saveExpenseItem(String storeId, DateTime month, ExpenseItem item, {bool isNew = false}) async {
     if (_isStaff) throw Exception('message: 沒有權限,');
-    _expItems.removeWhere((e) => e.id == item.id);
-    _expItems.add(ExpenseItem(id: isNew ? 'e${_seq++}' : item.id, name: item.name, category: item.category, amount: item.amount));
+    final list = _expItems.putIfAbsent(_ek(storeId, month), () => []);
+    list.removeWhere((e) => e.id == item.id);
+    list.add(ExpenseItem(id: isNew ? 'e${_seq++}' : item.id, name: item.name, category: item.category, amount: item.amount));
   }
   @override
-  Future<void> deleteExpenseItem(String itemId) async => _expItems.removeWhere((e) => e.id == itemId);
+  Future<void> deleteExpenseItem(String itemId) async {
+    for (final l in _expItems.values) {
+      l.removeWhere((e) => e.id == itemId);
+    }
+  }
 
   @override
   Future<MonthlySummary> monthlySummary(String storeId, DateTime month) async {

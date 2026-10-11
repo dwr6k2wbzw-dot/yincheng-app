@@ -210,7 +210,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Text('進貨成本率', style: TextStyle(color: AppColors.muted)),
           const SizedBox(height: 10),
-          if (!s.hasCostRecords && s.revenue > 0)
+          if (!s.hasCostRecords && s.revenue > 0 && !(_isOwner && d.itemsOf('misc') != 0))
             const Text('本月尚無進貨資料', style: TextStyle(color: AppColors.warn))
           else
             () {
@@ -341,7 +341,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       builder: (c) => StatefulBuilder(
         builder: (c, setSheet) => Padding(
           padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(c).viewInsets.bottom + 16),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          child: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Text(item == null ? '新增支出' : '修改支出', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
             const SizedBox(height: 12),
             TextField(controller: name, maxLength: 40, decoration: const InputDecoration(labelText: '項目（例：勞保、電費、營業稅）')),
@@ -384,6 +385,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ]),
           ]),
+          ),
         ),
       ),
     );
