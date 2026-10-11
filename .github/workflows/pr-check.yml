@@ -1,0 +1,49 @@
+# PR 階段檢查：只在 Pull Request 跑靜態檢查與編譯，確認 PR 不會把 App 弄壞。
+# 不發佈、不碰 GitHub Pages、不推 web-build 分支 → 合併到 main 才會真的發佈（deploy.yml）。
+name: PR 檢查（編譯測試，不發佈）
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: pr-check-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: 產生網頁平台設定與前置處理（與 deploy.yml 一致，才能在 PR 就抓到 patch_index／資產錯誤）
+        run: |
+          if [ ! -d web ]; then flutter create --platforms web --project-name yincheng_ops --org tw.yincheng . ; fi
+          rm -f test/widget_test.dart
+          python3 tool/patch_index.py
+          mkdir -p web/icons && cp tool/icons/Icon-*.png tool/icons/apple-touch-icon.png web/icons/ && cp tool/icons/favicon.png web/favicon.png
+          cp tool/icons/apple-touch-icon.png web/icons/xcw-touch-180-v2.png && cp tool/icons/favicon.png web/icons/xcw-favicon-v2.png
+          sed -i 's/"name": ".*"/"name": "小城外"/; s/"short_name": ".*"/"short_name": "小城外"/; s/"background_color": ".*"/"background_color": "#0F1115"/; s/"theme_color": ".*"/"theme_color": "#0F1115"/' web/manifest.json
+      - run: flutter pub get
+      - name: 靜態檢查（只擋錯誤）
+        run: |
+          set +e
+          flutter analyze --no-fatal-infos --no-fatal-warnings > analyze.txt 2>&1
+          rc=$?; cat analyze.txt
+          if [ $rc -ne 0 ]; then
+            msg=$(grep -E "error|warning" analyze.txt | head -60 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=analyze::${msg}"
+          fi
+          exit $rc
+      - name: 編譯網頁版（不發佈）
+        run: |
+          set +e
+          flutter build web --release --pwa-strategy=none --base-href "/pr-check/" > build.txt 2>&1
+          rc=$?; cat build.txt
+          if [ $rc -ne 0 ]; then
+            msg=$(grep -iE "error" build.txt | head -60 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=build::${msg}"
+          fi
+          exit $rc
