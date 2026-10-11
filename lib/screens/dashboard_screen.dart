@@ -303,24 +303,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // 其他支出明細：刷卡手續費（自動）＋每月固定＋一次性；老闆新增，金額加進所選大類
   Widget _expenseItemsSection(_DashboardData d, MonthlySummary s) {
     final cardFee = d.cardFee(s);
-    final empty = d.items.isEmpty && d.recurring.isEmpty && cardFee == 0;
+    final noManual = d.items.isEmpty && d.recurring.isEmpty;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
         const Text('其他支出明細', style: TextStyle(fontWeight: FontWeight.w600)),
         const Spacer(),
         TextButton.icon(onPressed: () => _editItem(d, null), icon: const Icon(Icons.add, size: 18), label: const Text('新增')),
       ]),
-      if (empty)
+      if (noManual)
         const Padding(
           padding: EdgeInsets.symmetric(vertical: 4),
-          child: Text('還沒有。可新增勞保、健保、電費、營業稅…，選租金／人事／雜項、可設每月固定；金額會加進該大項。',
+          child: Text('可新增勞保、健保、電費、營業稅…，選租金／人事／雜項、可設每月固定；金額會加進該大項。',
               style: TextStyle(color: AppColors.muted, fontSize: 12)),
         ),
-      // 刷卡手續費（自動：當月刷卡金額 × 費率）
-      if (cardFee != 0)
-        _expItemRow('雜項', '刷卡手續費', cardFee,
-            tag: '自動 ${(d.cardFeeRate * 100).toStringAsFixed(d.cardFeeRate * 100 % 1 == 0 ? 0 : 1)}%',
-            onTap: () => _editCardFeeRate(d)),
+      // 刷卡手續費（自動：當月刷卡金額 × 費率）——一律顯示，讓老闆隨時能改費率（即使本月刷卡 0 或費率設 0）
+      _expItemRow('雜項', '刷卡手續費', cardFee, tag: '自動 ${_ratePct(d.cardFeeRate)}%', onTap: () => _editCardFeeRate(d)),
       // 每月固定支出
       for (final it in d.recurring)
         _expItemRow(ExpenseItem.categoryLabels[it.category] ?? it.category, it.name, it.amount,
@@ -330,6 +327,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _expItemRow(ExpenseItem.categoryLabels[it.category] ?? it.category, it.name, it.amount,
             onTap: () => _editItem(d, it)),
     ]);
+  }
+
+  /// 費率顯示：百分比最多兩位小數、去掉尾端的 0（2 → "2"、2.25 → "2.25"、2.5 → "2.5"）
+  String _ratePct(double rate) {
+    var s = (rate * 100).toStringAsFixed(2);
+    if (s.contains('.')) s = s.replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
+    return s;
   }
 
   Widget _expItemRow(String catLabel, String name, double amount, {String? tag, required VoidCallback onTap}) => Padding(
@@ -532,7 +536,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // 修改刷卡手續費率
   Future<void> _editCardFeeRate(_DashboardData d) async {
-    final ctrl = TextEditingController(text: (d.cardFeeRate * 100).toStringAsFixed(d.cardFeeRate * 100 % 1 == 0 ? 0 : 2));
+    final ctrl = TextEditingController(text: _ratePct(d.cardFeeRate));
     final v = await showDialog<double>(
       context: context,
       builder: (c) => AlertDialog(
