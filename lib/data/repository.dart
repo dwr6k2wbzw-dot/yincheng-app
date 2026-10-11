@@ -42,6 +42,10 @@ abstract class Repository {
   // 租金／人事成本（只有老闆；資料庫 RLS 也只允許老闆）
   Future<FixedCosts> fixedCosts(String storeId, DateTime month);
   Future<void> saveFixedCost(String storeId, DateTime month, String category, double amount);
+  // 損益手動支出明細（只有老闆；資料庫 0037 RLS 也只允許老闆）
+  Future<List<ExpenseItem>> expenseItems(String storeId, DateTime month);
+  Future<void> saveExpenseItem(String storeId, DateTime month, ExpenseItem item, {bool isNew = false});
+  Future<void> deleteExpenseItem(String itemId);
 
   // 進貨
   Future<DateTime> businessDate(String storeId);

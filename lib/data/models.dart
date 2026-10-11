@@ -362,6 +362,26 @@ class FixedCosts {
   const FixedCosts({this.rent, this.payroll});
 }
 
+/// 損益手動支出明細（0037，老闆專屬）。category：rent 租金／payroll 人事／misc 雜項
+class ExpenseItem {
+  final String id;
+  final String name;
+  final String category; // rent / payroll / misc
+  final double amount;
+  ExpenseItem({required this.id, required this.name, required this.category, required this.amount});
+  factory ExpenseItem.fromRow(Map<String, dynamic> r) => ExpenseItem(
+        id: r['id'] as String,
+        name: r['name'] as String,
+        category: r['category'] as String,
+        amount: (r['amount'] as num).toDouble(),
+      );
+  static const categoryLabels = {'rent': '租金', 'payroll': '人事', 'misc': '雜項'};
+  /// 常見支出項（可自行輸入其他）
+  static const commonNames = [
+    '勞保', '健保', '勞退', '電費', '水費', '電信費', '刷卡手續費', '營業稅', '會計費', '租賃稅', '其他',
+  ];
+}
+
 /// 成員管理：店家成員（含 Email，只有老闆看得到）
 class MemberInfo {
   final String userId;

@@ -215,6 +215,38 @@ class SupabaseRepository implements Repository {
       if (rows.isEmpty) throw Exception('message: 沒有權限修改（可能已月結鎖帳）,');
     }
   }
+  @override
+  Future<List<ExpenseItem>> expenseItems(String storeId, DateTime month) async {
+    final rows = await _db
+        .from('expense_items')
+        .select('id, name, category, amount')
+        .eq('store_id', storeId)
+        .eq('period_month', _day.format(DateTime(month.year, month.month, 1)))
+        .order('created_at');
+    return rows.map(ExpenseItem.fromRow).toList();
+  }
+
+  @override
+  Future<void> saveExpenseItem(String storeId, DateTime month, ExpenseItem item, {bool isNew = false}) async {
+    final row = {'name': item.name.trim(), 'category': item.category, 'amount': item.amount};
+    if (isNew) {
+      await _db.from('expense_items').insert({
+        ...row,
+        'store_id': storeId,
+        'period_month': _day.format(DateTime(month.year, month.month, 1)),
+      });
+    } else {
+      final r = await _db.from('expense_items').update(row).eq('id', item.id).select('id');
+      if (r.isEmpty) throw Exception('message: 沒有權限修改（只有老闆可以）,');
+    }
+  }
+
+  @override
+  Future<void> deleteExpenseItem(String itemId) async {
+    final r = await _db.from('expense_items').delete().eq('id', itemId).select('id');
+    if (r.isEmpty) throw Exception('message: 沒有權限刪除（只有老闆可以）,');
+  }
+
 
   // ---------------- 進貨 ----------------
   @override
