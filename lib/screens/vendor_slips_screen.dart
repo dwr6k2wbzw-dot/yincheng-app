@@ -82,9 +82,9 @@ class _VendorSlipsScreenState extends State<VendorSlipsScreen> {
             for (final g in slipGroups)
               if (byGroup[g] != null) MapEntry(g, byGroup[g]!..sort((a, b) => a.date.compareTo(b.date)))
           ];
-          // 例：「・酒水 $8,630・餐食 $1,200」
+          // 例：「・酒水 $8,630・餐食 $1,200・其他 $500」（各組加起來＝總額）
           final summary = [
-            for (final g in slipGroups.take(3))
+            for (final g in slipGroups)
               if (byGroup[g] != null) '・$g ${ntd(_sum(byGroup[g]!))}'
           ].join();
           return RefreshIndicator(
