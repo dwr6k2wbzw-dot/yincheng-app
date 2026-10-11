@@ -10,7 +10,8 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/revenue_mix.dart';
 
-/// 每日營收：列表＋新增／修改（老闆／店長；資料庫 RLS 也只允許這兩種角色）
+/// 每日營收：列表＋手動登記／修改。老闆／店長／正職可手動登記暫記（source=app）；
+/// 營收以 Dropbox 日報表為準，匯入同一天會自動覆蓋暫記。Excel 匯入的那筆只有老闆／店長能改。
 class RevenueScreen extends StatefulWidget {
   const RevenueScreen({super.key, required this.membership});
   final Membership membership;
@@ -22,9 +23,15 @@ class _RevenueScreenState extends State<RevenueScreen> {
   late Future<(List<RevenueEntry>, DateTime?)> _future;
   bool _started = false;
 
-  /// 營收以 Dropbox 日報表為準的店：只能看
-  // Excel 同步的店、或員工（只能看）：不能新增或修改
-  bool get _synced => AppConfig.excelSyncedStores.contains(widget.membership.storeName) || !widget.membership.isManager;
+  /// 可手動登記營收：老闆／店長／正職（兼職、調酒師看不到這頁）
+  bool get _canWrite => widget.membership.canSeeRevenue;
+
+  /// 這店營收是否由 Dropbox 日報表同步（隱城、小城外都是）
+  bool get _excelSynced => AppConfig.excelSyncedStores.contains(widget.membership.storeName);
+
+  /// 能不能點開這一筆：老闆／店長／正職都能點開看；
+  /// 能不能「改」由表單判斷（Excel 匯入的那筆正職只能看，見 RevenueFormScreen._readOnly）
+  bool _canOpenRow(RevenueEntry e) => _canWrite;
 
   @override
   void didChangeDependencies() {
@@ -38,7 +45,7 @@ class _RevenueScreenState extends State<RevenueScreen> {
     final repo = AppScope.of(context).repo;
     final id = widget.membership.storeId;
     final list = await repo.revenueEntries(id);
-    final last = _synced ? await repo.lastExcelSync(id) : null;
+    final last = _excelSynced ? await repo.lastExcelSync(id) : null;
     return (list, last);
   }
 
@@ -54,7 +61,7 @@ class _RevenueScreenState extends State<RevenueScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        floatingActionButton: _synced
+        floatingActionButton: !_canWrite
             ? null
             : FloatingActionButton.extended(
                 onPressed: () => _open(),
@@ -67,13 +74,17 @@ class _RevenueScreenState extends State<RevenueScreen> {
             if (snap.hasError) return ErrorView(message: friendlyError(snap.error!), onRetry: _reload);
             if (!snap.hasData) return const Center(child: CircularProgressIndicator());
             final (list, last) = snap.data!;
-            final banner = _synced ? _SyncBanner(last: last) : null;
+            final banner = _excelSynced ? _SyncBanner(last: last, canWrite: _canWrite) : null;
             if (list.isEmpty) {
               return ListView(padding: const EdgeInsets.all(16), children: [
                 if (banner != null) banner,
                 const SizedBox(height: 120),
-                Text(_synced ? '還沒有同步到營收資料' : '還沒有營收紀錄\n按右下角「登記營收」新增第一天',
-                    textAlign: TextAlign.center, style: const TextStyle(color: AppColors.muted)),
+                Text(
+                    !_canWrite
+                        ? '還沒有同步到營收資料'
+                        : '還沒有營收紀錄\n按右下角「登記營收」新增第一天',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: AppColors.muted)),
               ]);
             }
             final offset = banner == null ? 0 : 1;
@@ -86,7 +97,10 @@ class _RevenueScreenState extends State<RevenueScreen> {
                 itemBuilder: (_, i) {
                   if (i < offset) return banner!;
                   final e = list[i - offset];
-                  return _RevenueTile(e: e, storeName: widget.membership.storeName, onTap: _synced ? null : () => _open(entry: e));
+                  return _RevenueTile(
+                      e: e,
+                      storeName: widget.membership.storeName,
+                      onTap: _canOpenRow(e) ? () => _open(entry: e) : null);
                 },
               ),
             );
@@ -171,8 +185,9 @@ class _RevenueTile extends StatelessWidget {
 
 /// 營收由 Dropbox 同步時，列表上方的說明
 class _SyncBanner extends StatelessWidget {
-  const _SyncBanner({required this.last});
+  const _SyncBanner({required this.last, required this.canWrite});
   final DateTime? last;
+  final bool canWrite;
   @override
   Widget build(BuildContext context) => SectionCard(
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -180,11 +195,15 @@ class _SyncBanner extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('營收由 Dropbox 日報表自動同步', style: TextStyle(fontWeight: FontWeight.w600)),
+              const Text('營收以 Dropbox 日報表為準', style: TextStyle(fontWeight: FontWeight.w600)),
               const SizedBox(height: 4),
               Text(
-                '每小時檢查一次 Excel，有變動就更新。要修改數字請直接改 Excel。\n'
-                '最後一次寫入：${last == null ? '尚無紀錄' : DateFormat('M/d HH:mm').format(last!)}',
+                canWrite
+                    ? '每小時自動同步日報表。還沒進日報表的日子可以先手動登記（暫記）；'
+                        '之後 Excel 匯入同一天時，會自動以日報表為準覆蓋暫記。\n'
+                        '最後一次同步：${last == null ? '尚無紀錄' : DateFormat('M/d HH:mm').format(last!)}'
+                    : '每小時檢查一次 Excel，有變動就更新。\n'
+                        '最後一次同步：${last == null ? '尚無紀錄' : DateFormat('M/d HH:mm').format(last!)}',
                 style: const TextStyle(color: AppColors.muted, fontSize: 12, height: 1.5),
               ),
             ]),
@@ -203,7 +222,7 @@ class RevenueFormScreen extends StatefulWidget {
 }
 
 class _RevenueFormScreenState extends State<RevenueFormScreen> {
-  static const _fields = ['cash', 'card', 'amex', 'deposit', 'guests', 'drinks', 'food', 'project'];
+  static const _fields = ['cash', 'card', 'amex', 'deposit', 'guests', 'drinks', 'food', 'project', 'coffee', 'ramen'];
   final _c = {for (final f in _fields) f: TextEditingController()};
   final _note = TextEditingController();
   RevenueEntry? _existing; // 這一天已有的紀錄（修改模式）
@@ -276,8 +295,15 @@ class _RevenueFormScreenState extends State<RevenueFormScreen> {
     _c['drinks']!.text = t(e.drinks);
     _c['food']!.text = t(e.food);
     _c['project']!.text = t(e.project);
+    _c['coffee']!.text = t(e.coffee);
+    _c['ramen']!.text = t(e.ramen);
     _note.text = e.note ?? '';
   }
+
+  bool get _multi => isMultiLineStore(widget.membership.storeName);
+
+  /// Excel 匯入的那筆，只有老闆／店長能改；正職打開只能看
+  bool get _readOnly => _existing?.source == 'import' && !widget.membership.isManager;
 
   double _v(String f) => double.tryParse(_c[f]!.text.replaceAll(',', '')) ?? 0;
 
@@ -292,6 +318,8 @@ class _RevenueFormScreenState extends State<RevenueFormScreen> {
         drinks: _v('drinks'),
         food: _v('food'),
         project: _v('project'),
+        coffee: _v('coffee'),
+        ramen: _v('ramen'),
         note: _note.text,
         source: _existing?.source ?? 'app',
       );
@@ -345,6 +373,7 @@ class _RevenueFormScreenState extends State<RevenueFormScreen> {
 
   Widget _num(String f, String label, {bool money = true}) => TextField(
         controller: _c[f],
+        enabled: !_readOnly,
         keyboardType: TextInputType.numberWithOptions(decimal: money),
         inputFormatters: [FilteringTextInputFormatter.allow(RegExp(money ? r'[0-9.,]' : r'[0-9]'))],
         decoration: InputDecoration(labelText: label, prefixText: money ? '\$ ' : null, suffixText: money ? null : '位'),
@@ -401,6 +430,25 @@ class _RevenueFormScreenState extends State<RevenueFormScreen> {
               },
       ),
       const SizedBox(height: 8),
+      if (_readOnly)
+        SectionCard(
+          child: Row(children: const [
+            Icon(Icons.lock_outline, color: AppColors.muted, size: 20),
+            SizedBox(width: 10),
+            Expanded(child: Text('這天是從日報表 Excel 匯入的，只有老闆／店長能修改。', style: TextStyle(fontSize: 12))),
+          ]),
+        )
+      else if (!editing)
+        SectionCard(
+          child: Row(children: const [
+            Icon(Icons.info_outline, color: AppColors.primary, size: 20),
+            SizedBox(width: 10),
+            Expanded(
+                child: Text('手動登記是「暫記」，之後日報表匯入同一天時，會自動以日報表為準覆蓋這筆。',
+                    style: TextStyle(fontSize: 12))),
+          ]),
+        ),
+      const SizedBox(height: 8),
       const _Label('收款方式'),
       _pair(_num('cash', '現金'), _num('card', '信用卡')),
       const SizedBox(height: 12),
@@ -409,14 +457,20 @@ class _RevenueFormScreenState extends State<RevenueFormScreen> {
       _pair(_num('guests', '來客數', money: false), const SizedBox()),
       const SizedBox(height: 20),
       const _Label('營業收入明細'),
-      _pair(_num('drinks', '酒水'), _num('food', '餐食')),
-      const SizedBox(height: 12),
-      _pair(_num('project', '專案'), const SizedBox()),
+      if (_multi) ...[
+        _pair(_num('coffee', '咖啡'), _num('drinks', '酒水')),
+        const SizedBox(height: 12),
+        _pair(_num('food', '餐食'), _num('ramen', '拉麵')),
+      ] else ...[
+        _pair(_num('drinks', '酒水'), _num('food', '餐食')),
+        const SizedBox(height: 12),
+        _pair(_num('project', '專案'), const SizedBox()),
+      ],
       const SizedBox(height: 16),
       SectionCard(
         child: Column(children: [
           _sumRow('收款合計', ntd(d.received), bold: true),
-          _sumRow('酒水＋餐食＋專案', ntd(d.detailTotal)),
+          _sumRow('明細合計', ntd(d.detailTotal)),
           if (d.guests > 0 && d.received > 0) _sumRow('客單價', ntd((d.received / d.guests).round())),
           if (mismatch) _sumRow('差額', ntd(diff), color: AppColors.warn),
         ]),
@@ -424,13 +478,14 @@ class _RevenueFormScreenState extends State<RevenueFormScreen> {
       const SizedBox(height: 12),
       TextField(controller: _note, maxLines: 2, decoration: const InputDecoration(labelText: '備註（選填）')),
       const SizedBox(height: 24),
-      FilledButton(
-        onPressed: _saving ? null : _save,
-        style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-        child: _saving
-            ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
-            : Text(editing ? '更新' : '儲存', style: const TextStyle(fontSize: 16)),
-      ),
+      if (!_readOnly)
+        FilledButton(
+          onPressed: _saving ? null : _save,
+          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+          child: _saving
+              ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
+              : Text(editing ? '更新' : '儲存', style: const TextStyle(fontSize: 16)),
+        ),
     ]);
   }
 

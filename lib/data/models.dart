@@ -351,6 +351,8 @@ class RevenueEntry {
         'drinks_revenue': drinks,
         'food_revenue': food,
         'project_amount': project,
+        'coffee_revenue': coffee,
+        'ramen_revenue': ramen,
         'note': (note?.trim().isEmpty ?? true) ? null : note!.trim(),
       };
 }
