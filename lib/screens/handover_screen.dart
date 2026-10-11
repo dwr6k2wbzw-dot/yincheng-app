@@ -209,21 +209,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
         ok: '已送出交接');
   }
 
-  Future<void> _showPhoto(String path) async {
-    try {
-      final url = await _repo.shiftPhotoUrl(path);
-      if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        builder: (c) => Dialog(
-          insetPadding: const EdgeInsets.all(8),
-          child: InteractiveViewer(maxScale: 5, child: Image.network(url, fit: BoxFit.contain)),
-        ),
-      );
-    } catch (e) {
-      if (mounted) showMessage(context, friendlyError(e), error: true);
-    }
-  }
+  Future<void> _showPhoto(String path) => showStoragePhoto(context, path);
 
   Future<void> _deleteHandover(HandoverNote n) async {
     final ok = await showDialog<bool>(
