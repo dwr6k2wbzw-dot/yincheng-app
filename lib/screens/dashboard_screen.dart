@@ -554,8 +554,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
             controller: ctrl,
             autofocus: true,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-            decoration: const InputDecoration(suffixText: '%', labelText: '比率'),
+            // 最多兩位小數（資料庫存到 0.01%）
+            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d{0,3}(\.\d{0,2})?'))],
+            decoration: const InputDecoration(suffixText: '%', labelText: '比率（最多兩位小數）'),
           ),
         ]),
         actions: [
@@ -570,7 +571,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return;
     }
     try {
-      await AppScope.of(context).repo.saveCardFeeRate(widget.membership.storeId, v / 100);
+      await AppScope.of(context).repo.saveCardFeeRate(widget.membership.storeId, (v * 100).round() / 10000);
       if (mounted) { showMessage(context, '已儲存'); _reload(); }
     } catch (e) {
       if (mounted) showMessage(context, friendlyError(e), error: true);
