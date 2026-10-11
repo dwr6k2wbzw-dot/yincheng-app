@@ -138,7 +138,8 @@ class DemoRepository implements Repository {
     final x = WorkReminder(
         id: isNew ? 'r${_seq++}' : r.id, title: r.title, detail: r.detail, repeat: r.repeat, dueDate: r.dueDate,
         weekday: r.weekday, monthDay: r.monthDay, startDate: isNew ? bizToday() : r.startDate,
-        assignPersonId: r.assignPersonId, assignOnShift: r.assignOnShift, active: r.active);
+        assignPersonId: r.assignPersonId, assignOnShift: r.assignOnShift, active: r.active,
+        createdBy: isNew ? currentUserId : r.createdBy);
     _reminders.removeWhere((e) => e.id == x.id);
     _reminders.add(x);
   }
