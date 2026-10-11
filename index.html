@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="/yincheng-app/">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="A new Flutter project.">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="小城外">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/xcw-touch-180-v2.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="icons/xcw-favicon-v2.png"/>
+
+  <title>小城外</title>
+  <link rel="manifest" href="manifest.json">
+</head>
+<body style="background:#0F1115">
+<div id="boot" style="position:fixed;inset:0;z-index:-1;display:flex;align-items:center;justify-content:center;
+padding:24px;text-align:center;white-space:pre-wrap;color:#9AA0AE;font:15px/1.6 -apple-system,sans-serif">載入中…</div>
+<script id="boot-js">
+(function () {
+  var t0 = Date.now(), rendered = false, failed = [];
+  // 記錄下載失敗的網址（只記路徑，不含查詢參數），方便回報
+  var origFetch = window.fetch;
+  window.fetch = function (input, init) {
+    var url = typeof input === 'string' ? input : (input && input.url) || '';
+    return origFetch.apply(this, arguments).catch(function (e) {
+      failed.push(String(url).split('?')[0]); throw e;
+    });
+  };
+  function note(msg) {
+    // App 已經畫出畫面：只在底部顯示一行小提示，不擋住操作
+    var n = document.getElementById('boot-note');
+    if (!n) {
+      n = document.createElement('div'); n.id = 'boot-note';
+      n.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;z-index:9999;padding:8px 12px;border-radius:8px;' +
+        'background:#232733;color:#FFB547;font:12px/1.5 -apple-system,sans-serif;white-space:pre-wrap';
+      n.onclick = function () { n.remove(); };
+      document.body.appendChild(n);
+    }
+    n.textContent = msg + '（點一下關閉）';
+  }
+  function res() {
+    // 各檔案下載時間與大小（最慢的 6 個），判斷是網路慢還是檔案壞掉
+    try {
+      var list = performance.getEntriesByType('resource').map(function (r) {
+        return r.name.split('?')[0].split('/').slice(-2).join('/') + '  ' + Math.round(r.duration / 100) / 10 + 's  ' +
+          (r.transferSize ? Math.round(r.transferSize / 1024) + 'KB' : (r.responseEnd ? '快取' : '未完成'));
+      });
+      return '\n\n進度：' + (window.ycStage || 'Dart 尚未啟動') + '\n檔案：\n' + list.slice(-8).join('\n');
+    } catch (e) { return ''; }
+  }
+  function show(msg) {
+    var full = msg + (failed.length ? '\n\n下載失敗：\n' + failed.slice(-3).join('\n') : '') + res();
+    if (rendered) { note(full); return; }
+    var b = document.getElementById('boot'); if (!b) return;
+    b.style.zIndex = '9999'; b.style.background = '#0F1115'; b.style.color = '#FF5C6C'; b.style.fontSize = '12px'; b.style.textAlign = 'left';
+    b.textContent = '啟動失敗（請截圖給 Claude）\n\n' + full + '\n\n已等待 ' + Math.round((Date.now() - t0) / 1000) + ' 秒';
+  }
+  window.addEventListener('flutter-first-frame', function () {
+    rendered = true; var b = document.getElementById('boot'); if (b) b.remove();
+  });
+  window.addEventListener('error', function (e) {
+    show((e.message || e.error || '未知錯誤') + (e.filename ? '\n' + e.filename.split('/').pop() + ':' + e.lineno : ''));
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    var r = e.reason; show(r && (r.message || r.toString()) || '未知錯誤');
+  });
+  setTimeout(function () {
+    if (!rendered && !document.querySelector('flutter-view, flt-glass-pane')) show('載入超過 30 秒還沒完成');
+  }, 30000);
+})();
+</script>
+  <!--
+    You can customize the "flutter_bootstrap.js" script.
+    This is useful to provide a custom configuration to the Flutter loader
+    or to give the user feedback during the initialization process.
+
+    For more details:
+    * https://docs.flutter.dev/platform-integration/web/initialization
+  -->
+  <script src="flutter_bootstrap.js?v=62c2a554" async></script>
+<script id="yc-scan">
+window.ycPickImage = function () {
+  return new Promise(function (resolve, reject) {
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.setAttribute('capture', 'environment');
+    input.style.display = 'none';
+    document.body.appendChild(input);
+    var finished = false;
+    function finish(v) { if (!finished) { finished = true; input.remove(); resolve(v); } }
+    input.addEventListener('cancel', function () { finish(null); });
+    input.addEventListener('change', function () {
+      var f = input.files && input.files[0];
+      if (!f) { finish(null); return; }
+      var url = URL.createObjectURL(f);
+      var img = new Image();
+      img.onload = function () {
+        try {
+          var max = 2000, k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+          var c = document.createElement('canvas');
+          c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+          c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+          URL.revokeObjectURL(url);
+          finish(c.toDataURL('image/jpeg', 0.85));
+        } catch (e) { finished = true; reject(e); }
+      };
+      img.onerror = function () { finished = true; reject(new Error('照片讀取失敗')); };
+      img.src = url;
+    });
+    input.click();
+  });
+};
+window.ycOcr = async function (dataUrl) {
+  if (!window.Tesseract) {
+    await new Promise(function (ok, bad) {
+      var sc = document.createElement('script');
+      sc.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+      sc.onload = ok;
+      sc.onerror = function () { bad(new Error('辨識程式下載失敗，請檢查網路')); };
+      document.head.appendChild(sc);
+    });
+  }
+  var worker = await Tesseract.createWorker(['chi_tra', 'eng']);
+  try {
+    var r = await worker.recognize(dataUrl);
+    return r.data.text || '';
+  } finally {
+    await worker.terminate();
+  }
+};
+</script>
+</body>
+</html>
