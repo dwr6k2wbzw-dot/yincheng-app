@@ -73,7 +73,11 @@ void showMessage(BuildContext context, String msg, {bool error = false}) {
 }
 
 
+/// 照片自動清理（老闆 2026-10-11）：上傳超過 2 個月的照片會被刪掉
+const photoExpiredMessage = '這張照片已超過保存期限（上傳後 2 個月）自動刪除，資料本身還在';
+
 /// 顯示 Storage 裡的照片（送貨單、交接、班表；路徑 receipts/{店家}/...）
+/// 照片已被自動清理時，顯示「已超過保存期限」而不是錯誤訊息
 Future<void> showStoragePhoto(BuildContext context, String path) async {
   try {
     final url = await AppScope.of(context).repo.shiftPhotoUrl(path);
@@ -82,10 +86,22 @@ Future<void> showStoragePhoto(BuildContext context, String path) async {
       context: context,
       builder: (c) => Dialog(
         insetPadding: const EdgeInsets.all(8),
-        child: InteractiveViewer(maxScale: 6, child: Image.network(url, fit: BoxFit.contain)),
+        child: InteractiveViewer(
+          maxScale: 6,
+          child: Image.network(
+            url,
+            fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) => const Padding(
+              padding: EdgeInsets.all(24),
+              child: Text(photoExpiredMessage, textAlign: TextAlign.center),
+            ),
+          ),
+        ),
       ),
     );
   } catch (e) {
-    if (context.mounted) showMessage(context, friendlyError(e), error: true);
+    if (!context.mounted) return;
+    final missing = RegExp(r'not.?found|404|does not exist', caseSensitive: false).hasMatch(e.toString());
+    showMessage(context, missing ? photoExpiredMessage : friendlyError(e), error: !missing);
   }
 }
