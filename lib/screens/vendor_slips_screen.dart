@@ -8,8 +8,9 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import 'vendor_slip_edit_screen.dart';
 
-/// 廠商銷貨單明細（隱城、小城外）：依廠商分組，展開後看每張單據的日期、品項、數量、金額。
-/// 資料來自 Dropbox「有戲創藝_2026年廠商進貨單」的掃描單據，只能看；不影響成本率（成本率以日報表為準）。
+/// 廠商銷貨單明細（隱城、小城外）：依當初新增進貨選的類別分酒水／餐食／雜項（老闆 2026-10-12），
+/// 展開後看每張單據的廠商、日期、品項、金額。資料以「新增進貨」拍的送貨單照片為主（不再讀 Dropbox）；
+/// 只是明細參考，不影響成本率（成本率以日報表為準）。
 class VendorSlipsScreen extends StatefulWidget {
   const VendorSlipsScreen({super.key, required this.membership});
   final Membership membership;
@@ -19,7 +20,7 @@ class VendorSlipsScreen extends StatefulWidget {
 
 class _VendorSlipsScreenState extends State<VendorSlipsScreen> {
   DateTime _month = DateTime(DateTime.now().year, DateTime.now().month);
-  late Future<(List<VendorSlip>, List<String>)> _future;
+  late Future<(List<VendorSlip>, List<String>, Map<String, CostCategory>)> _future;
   bool _started = false;
 
   @override
@@ -31,11 +32,12 @@ class _VendorSlipsScreenState extends State<VendorSlipsScreen> {
     }
   }
 
-  Future<(List<VendorSlip>, List<String>)> _load() async {
+  Future<(List<VendorSlip>, List<String>, Map<String, CostCategory>)> _load() async {
     final repo = AppScope.of(context).repo;
     final id = widget.membership.storeId;
-    final r = await Future.wait([repo.vendorSlips(id, _month), repo.failedSlipFiles(id)]);
-    return (r[0] as List<VendorSlip>, r[1] as List<String>);
+    final r = await Future.wait([repo.vendorSlips(id, _month), repo.failedSlipFiles(id), repo.costCategories()]);
+    final cats = {for (final c in r[2] as List<CostCategory>) c.code: c};
+    return (r[0] as List<VendorSlip>, r[1] as List<String>, cats);
   }
 
   void _reload() => setState(() => _future = _load());
@@ -69,14 +71,22 @@ class _VendorSlipsScreenState extends State<VendorSlipsScreen> {
         builder: (context, snap) {
           if (snap.hasError) return ErrorView(message: friendlyError(snap.error!), onRetry: _reload);
           if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-          final (slips, failed) = snap.data!;
-          final byVendor = <String, List<VendorSlip>>{};
+          final (slips, failed, cats) = snap.data!;
+          // 依進貨類別分組：酒水／餐食／雜項；對不到進貨（舊 Dropbox 單、手動新增）的放「其他」
+          final byGroup = <String, List<VendorSlip>>{};
           for (final s in slips) {
-            byVendor.putIfAbsent(s.vendor, () => []).add(s);
+            byGroup.putIfAbsent(slipGroupOf(cats[s.categoryCode]), () => []).add(s);
           }
           final drafts = slips.where((s) => s.isDraft).length;
-          final vendors = byVendor.entries.toList()
-            ..sort((a, b) => _sum(b.value).compareTo(_sum(a.value)));
+          final groups = [
+            for (final g in slipGroups)
+              if (byGroup[g] != null) MapEntry(g, byGroup[g]!..sort((a, b) => a.date.compareTo(b.date)))
+          ];
+          // 例：「・酒水 $8,630・餐食 $1,200」
+          final summary = [
+            for (final g in slipGroups.take(3))
+              if (byGroup[g] != null) '・$g ${ntd(_sum(byGroup[g]!))}'
+          ].join();
           return RefreshIndicator(
             onRefresh: () async => _reload(),
             child: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 96), children: [
@@ -94,8 +104,7 @@ class _VendorSlipsScreenState extends State<VendorSlipsScreen> {
                   const Icon(Icons.receipt_long, color: AppColors.primary),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Text('${slips.length} 張銷貨單・${vendors.length} 家廠商',
-                        style: const TextStyle(color: AppColors.muted)),
+                    child: Text('${slips.length} 張銷貨單$summary', style: const TextStyle(color: AppColors.muted)),
                   ),
                   Text(ntd(_sum(slips)), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
                 ]),
@@ -104,7 +113,7 @@ class _VendorSlipsScreenState extends State<VendorSlipsScreen> {
                 const SizedBox(height: 8),
                 SectionCard(
                   child: Text(
-                    '有 $drafts 張文字辨識的草稿待確認${_canEdit ? '：展開廠商、點單據核對修改' : '（老闆或店長核對）'}',
+                    '有 $drafts 張文字辨識的草稿待確認${_canEdit ? '：展開類別、點單據核對修改' : '（老闆或店長核對）'}',
                     style: const TextStyle(color: AppColors.warn, fontSize: 13, height: 1.5),
                   ),
                 ),
@@ -119,22 +128,24 @@ class _VendorSlipsScreenState extends State<VendorSlipsScreen> {
                 ),
               ],
               const SizedBox(height: 12),
-              if (vendors.isEmpty)
+              if (groups.isEmpty)
                 const Padding(
                   padding: EdgeInsets.only(top: 48),
                   child: Text('這個月還沒有銷貨單', textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted)),
                 ),
-              for (final v in vendors) ...[
+              for (final g in groups) ...[
                 _VendorCard(
-                    vendor: v.key,
-                    slips: v.value,
+                    vendor: g.key == '其他' ? '其他（舊 Dropbox 單／手動新增）' : g.key,
+                    slips: g.value,
+                    showVendor: true,
                     onTap: _canEdit ? _edit : null,
                     onPhoto: (p) => showStoragePhoto(context, p)),
                 const SizedBox(height: 10),
               ],
               const SizedBox(height: 8),
               const Text(
-                '資料來自 Dropbox 廠商進貨單資料夾（各月份資料夾）的掃描單據，以及「新增進貨」時拍的送貨單：每小時自動文字辨識成草稿，老闆或店長核對修改後確認。'
+                '資料來自「新增進貨」時拍的送貨單照片：每小時自動文字辨識成草稿，老闆或店長核對修改後確認；'
+                '依新增進貨選的類別分酒水／餐食／雜項。照片上傳 2 個月後自動刪除。'
                 '這裡只是明細參考，成本率與進貨金額仍以日報表為準。',
                 style: TextStyle(color: AppColors.muted, fontSize: 11, height: 1.5),
               ),
@@ -147,8 +158,10 @@ class _VendorSlipsScreenState extends State<VendorSlipsScreen> {
 }
 
 class _VendorCard extends StatelessWidget {
-  const _VendorCard({required this.vendor, required this.slips, this.onTap, required this.onPhoto});
+  const _VendorCard(
+      {required this.vendor, required this.slips, this.onTap, required this.onPhoto, this.showVendor = false});
   final String vendor;
+  final bool showVendor; // 分組不是依廠商時，每張單據顯示廠商名稱
   final List<VendorSlip> slips;
   final void Function(VendorSlip)? onTap;
   final void Function(String path) onPhoto;
@@ -200,7 +213,7 @@ class _VendorCard extends StatelessWidget {
             Text(DateFormat('M/d（E）', 'zh_TW').format(s.date), style: const TextStyle(fontWeight: FontWeight.w600)),
             const SizedBox(width: 8),
             Expanded(
-              child: Text('單號 ${s.slipNo}',
+              child: Text(showVendor ? '${s.vendor}・單號 ${s.slipNo}' : '單號 ${s.slipNo}',
                   overflow: TextOverflow.ellipsis, style: const TextStyle(color: AppColors.muted, fontSize: 12)),
             ),
             Text(ntd(s.total), style: const TextStyle(fontWeight: FontWeight.w700)),

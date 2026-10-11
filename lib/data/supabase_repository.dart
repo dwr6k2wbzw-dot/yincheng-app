@@ -298,8 +298,12 @@ class SupabaseRepository implements Repository {
 
   @override
   Future<List<CostCategory>> costCategories() async {
-    final rows = await _db.from('cost_categories').select('code, name, store_name').order('sort_order');
-    final list = rows.map((r) => CostCategory(r['code'] as String, r['name'] as String, r['store_name'] as String?)).toList();
+    final rows =
+        await _db.from('cost_categories').select('code, name, store_name, cost_group, in_misc_rate').order('sort_order');
+    final list = rows
+        .map((r) => CostCategory.full(r['code'] as String, r['name'] as String, r['store_name'] as String?,
+            costGroup: r['cost_group'] as String? ?? 'other', inMiscRate: r['in_misc_rate'] as bool? ?? false))
+        .toList();
     // 老闆指定的順序優先（List.sort 不穩定，所以用原本位置當第二排序）
     final pos = {for (final (i, c) in list.indexed) c.code: i};
     int rank(CostCategory c) {
@@ -567,7 +571,27 @@ class SupabaseRepository implements Repository {
         .order('slip_date')
         .order('slip_no')
         .limit(2000);
-    return rows.map(VendorSlip.fromRow).toList();
+    final slips = rows.map(VendorSlip.fromRow).toList();
+    // 類別：照片路徑與當初那筆進貨相同，用它找回進貨類別（老闆 2026-10-12）
+    final paths = slips.map((s) => s.photoPath).whereType<String>().toSet().toList();
+    if (paths.isNotEmpty) {
+      final cats = <String, String>{};
+      for (var i = 0; i < paths.length; i += 100) {
+        final part = paths.sublist(i, i + 100 > paths.length ? paths.length : i + 100);
+        final ps = await _db
+            .from('purchases')
+            .select('photo_path, category_code')
+            .eq('store_id', storeId)
+            .inFilter('photo_path', part);
+        for (final p in ps) {
+          cats[p['photo_path'] as String] = p['category_code'] as String;
+        }
+      }
+      for (final s in slips) {
+        if (s.photoPath != null) s.categoryCode = cats[s.photoPath];
+      }
+    }
+    return slips;
   }
 
   @override
