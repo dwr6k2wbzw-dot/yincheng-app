@@ -572,23 +572,27 @@ class SupabaseRepository implements Repository {
         .order('slip_no')
         .limit(2000);
     final slips = rows.map(VendorSlip.fromRow).toList();
-    // 類別：照片路徑與當初那筆進貨相同，用它找回進貨類別（老闆 2026-10-12）
+    // 類別、付款方式：照片路徑與當初那筆進貨相同，用它找回（老闆 2026-10-12）
     final paths = slips.map((s) => s.photoPath).whereType<String>().toSet().toList();
     if (paths.isNotEmpty) {
-      final cats = <String, String>{};
+      final cats = <String, String>{}, paid = <String, String>{};
       for (var i = 0; i < paths.length; i += 100) {
         final part = paths.sublist(i, i + 100 > paths.length ? paths.length : i + 100);
         final ps = await _db
             .from('purchases')
-            .select('photo_path, category_code')
+            .select('photo_path, category_code, paid_by')
             .eq('store_id', storeId)
             .inFilter('photo_path', part);
         for (final p in ps) {
           cats[p['photo_path'] as String] = p['category_code'] as String;
+          paid[p['photo_path'] as String] = p['paid_by'] as String;
         }
       }
       for (final s in slips) {
-        if (s.photoPath != null) s.categoryCode = cats[s.photoPath];
+        if (s.photoPath != null) {
+          s.categoryCode = cats[s.photoPath];
+          s.paidBy = paid[s.photoPath];
+        }
       }
     }
     return slips;
