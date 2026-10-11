@@ -223,7 +223,7 @@ class DemoRepository implements Repository {
     // 0038：正職只能動自己手動登記的（source=app），不能改 Excel 匯入的那筆
     if (_isStaff && e.source == 'import') throw Exception('message: 沒有權限執行這個動作。,');
     final saved = RevenueEntry(
-      id: e.id ?? 'r${++_seq}', bizDate: e.bizDate, cash: e.cash, creditCard: e.creditCard, amex: e.amex,
+      id: e.id ?? 'rev${++_seq}', bizDate: e.bizDate, cash: e.cash, creditCard: e.creditCard, amex: e.amex,
       deposit: e.deposit, guests: e.guests, drinks: e.drinks, food: e.food, project: e.project,
       coffee: e.coffee, ramen: e.ramen, note: e.note, source: e.source,
     );

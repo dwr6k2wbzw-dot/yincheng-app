@@ -117,7 +117,6 @@ class _RevenueTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final mismatch = (e.received - e.detailTotal).abs() >= 1;
     final multi = isMultiLineStore(storeName);
     // 小城外的客單＝調酒收入 ÷ 來客數（與小城外 Excel 相同）
     final avg = e.guests > 0 ? (multi ? e.drinks + e.food + e.project : e.received) / e.guests : null;
@@ -125,6 +124,8 @@ class _RevenueTile extends StatelessWidget {
     final parts = revenueParts(storeName,
         drinks: e.drinks, food: e.food, project: e.project, coffee: e.coffee, ramen: e.ramen, deposit: e.deposit);
     final base = parts.fold<double>(0, (a, p) => a + p.amount);
+    // 收款合計 vs 明細合計：小城外的明細含訂金，隱城不含（用各組成項加總，依店別）
+    final mismatch = (e.received - base).abs() >= 1;
     double share(double v) => base > 0 ? v / base : 0;
     return InkWell(
       borderRadius: BorderRadius.circular(16),
@@ -324,6 +325,15 @@ class _RevenueFormScreenState extends State<RevenueFormScreen> {
         source: _existing?.source ?? 'app',
       );
 
+  /// 明細合計（依店別；小城外含訂金，隱城不含）＝各組成項加總
+  double _detailOf(RevenueEntry d) => revenueParts(widget.membership.storeName,
+          drinks: d.drinks, food: d.food, project: d.project, coffee: d.coffee, ramen: d.ramen, deposit: d.deposit)
+      .fold<double>(0, (a, p) => a + p.amount);
+
+  /// 客單價（小城外＝調酒收入÷來客數；其他＝收款合計÷來客數，與列表、總覽一致）
+  int? _avgOf(RevenueEntry d) =>
+      d.guests > 0 ? ((_multi ? d.drinks + d.food + d.project : d.received) / d.guests).round() : null;
+
   Future<bool> _confirm(String title, String body) async =>
       await showDialog<bool>(
         context: context,
@@ -345,10 +355,11 @@ class _RevenueFormScreenState extends State<RevenueFormScreen> {
       return;
     }
     if (d.guests <= 0 && !await _confirm('來客數是 0', '客單價會無法計算。確定這天沒有來客嗎？')) return;
-    final diff = d.received - d.detailTotal;
+    final detail = _detailOf(d);
+    final diff = d.received - detail;
     if (diff.abs() >= 1 &&
         !await _confirm('收款與明細不符',
-            '收款合計 ${ntd(d.received)}，酒水＋餐食＋專案 ${ntd(d.detailTotal)}，相差 ${ntd(diff)}。\n成本率是用酒水、餐食計算，建議先核對。')) {
+            '收款合計 ${ntd(d.received)}，明細合計 ${ntd(detail)}，相差 ${ntd(diff)}。\n成本率是用營業收入明細計算，建議先核對。')) {
       return;
     }
     if (_existing?.source == 'import' &&
@@ -396,8 +407,10 @@ class _RevenueFormScreenState extends State<RevenueFormScreen> {
 
   Widget _form(bool editing) {
     final d = _draft;
-    final diff = d.received - d.detailTotal;
-    final mismatch = diff.abs() >= 1 && d.detailTotal > 0;
+    final detail = _detailOf(d);
+    final diff = d.received - detail;
+    final mismatch = diff.abs() >= 1 && detail > 0;
+    final avg = _avgOf(d);
     return ListView(padding: const EdgeInsets.all(16), children: [
       ListTile(
         contentPadding: EdgeInsets.zero,
@@ -470,8 +483,8 @@ class _RevenueFormScreenState extends State<RevenueFormScreen> {
       SectionCard(
         child: Column(children: [
           _sumRow('收款合計', ntd(d.received), bold: true),
-          _sumRow('明細合計', ntd(d.detailTotal)),
-          if (d.guests > 0 && d.received > 0) _sumRow('客單價', ntd((d.received / d.guests).round())),
+          _sumRow('明細合計', ntd(detail)),
+          if (avg != null && d.received > 0) _sumRow(_multi ? '客單（調酒）' : '客單價', ntd(avg)),
           if (mismatch) _sumRow('差額', ntd(diff), color: AppColors.warn),
         ]),
       ),
