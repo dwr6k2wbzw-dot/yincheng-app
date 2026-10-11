@@ -432,6 +432,14 @@ class PurchaseFormScreen extends StatefulWidget {
   State<PurchaseFormScreen> createState() => _PurchaseFormScreenState();
 }
 
+/// 隱城新增進貨：各付款方式不提供的進貨類別（老闆 2026-10-11 決定）
+const _hiddenCatsByPaidBy = <String, Set<String>>{
+  // 廠商請款不出現：零用金-其他雜支、現結酒商
+  'vendor': {'petty_misc', 'liquor_cash'},
+  // 零用金不出現：月結酒商、酒水副材料-德哥、清運／滅蟲／花藝
+  'petty_cash': {'liquor_monthly', 'fruit', 'service'},
+};
+
 class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   final _amount = TextEditingController();
   final _memo = TextEditingController();
@@ -446,6 +454,10 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   List<Supplier> _sups = [];
   Map<String, List<String>> _hints = {}; // 類別 → 常用廠商（日報表統計）
   String _paidBy = 'vendor';
+  // 依付款方式隱藏的類別（只隱城套用）
+  Set<String> get _hiddenCats => widget.membership.storeName == '隱城'
+      ? (_hiddenCatsByPaidBy[_paidBy] ?? const <String>{})
+      : const <String>{};
   bool _isReturn = false;
   bool _saving = false;
   late Future<(List<CostCategory>, List<Supplier>)> _future;
@@ -670,7 +682,10 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                 isExpanded: true,
                 decoration: const InputDecoration(labelText: '進貨類別'),
                 items: [
-                  for (final c in cats.where((c) => c.storeName == null || c.storeName == widget.membership.storeName))
+                  for (final c in cats.where((c) =>
+                      (c.storeName == null || c.storeName == widget.membership.storeName) &&
+                      // 依付款方式隱藏；但正在編輯的那筆既有類別仍保留，避免下拉值不在清單內
+                      (!_hiddenCats.contains(c.code) || c.code == _category)))
                     DropdownMenuItem(
                       value: c.code,
                       child: Text(
@@ -739,7 +754,17 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                 selected: {_paidBy},
                 onSelectionChanged: widget.editing != null && !widget.membership.isManager
                     ? null // 付款方式建立後只有老闆、店長能改（資料庫也會擋）
-                    : (v) => setState(() => _paidBy = v.first),
+                    : (v) => setState(() {
+                          final old = _category;
+                          _paidBy = v.first;
+                          // 切換付款方式後，若原本選的類別在新付款方式下不提供，就清掉；
+                          // 廠商若是依原類別自動帶入的（例：德哥），一併清掉，不留沒有類別的廠商
+                          if (_hiddenCats.contains(old)) {
+                            _category = null;
+                            final auto = sups.where((s) => s.defaultCategory == old).map((s) => s.name).toList();
+                            if (auto.length == 1 && _vendor.text.trim() == auto.first) _vendor.clear();
+                          }
+                        }),
               ),
               const SizedBox(height: 12),
               TextField(
