@@ -247,6 +247,47 @@ class SupabaseRepository implements Repository {
     if (r.isEmpty) throw Exception('message: 沒有權限刪除（只有老闆可以）,');
   }
 
+  // ---------------- 0039 刷卡手續費率 ----------------
+  @override
+  Future<double> cardFeeRate(String storeId) async {
+    final r = await _db.from('store_settings').select('card_fee_rate').eq('store_id', storeId).maybeSingle();
+    return r == null ? 0.02 : toDouble(r['card_fee_rate']);
+  }
+
+  @override
+  Future<void> saveCardFeeRate(String storeId, double rate) async {
+    await _db.from('store_settings').upsert({'store_id': storeId, 'card_fee_rate': rate}, onConflict: 'store_id');
+  }
+
+  // ---------------- 0039 每月固定支出 ----------------
+  @override
+  Future<List<RecurringExpenseItem>> recurringExpenseItems(String storeId) async {
+    final rows = await _db
+        .from('recurring_expense_items')
+        .select('id, name, category, amount')
+        .eq('store_id', storeId)
+        .eq('active', true)
+        .order('created_at');
+    return rows.map(RecurringExpenseItem.fromRow).toList();
+  }
+
+  @override
+  Future<void> saveRecurringExpenseItem(String storeId, RecurringExpenseItem item, {bool isNew = false}) async {
+    final row = {'name': item.name.trim(), 'category': item.category, 'amount': item.amount};
+    if (isNew) {
+      await _db.from('recurring_expense_items').insert({...row, 'store_id': storeId});
+    } else {
+      final r = await _db.from('recurring_expense_items').update(row).eq('id', item.id).select('id');
+      if (r.isEmpty) throw Exception('message: 沒有權限修改（只有老闆可以）,');
+    }
+  }
+
+  @override
+  Future<void> deleteRecurringExpenseItem(String itemId) async {
+    final r = await _db.from('recurring_expense_items').delete().eq('id', itemId).select('id');
+    if (r.isEmpty) throw Exception('message: 沒有權限刪除（只有老闆可以）,');
+  }
+
 
   // ---------------- 進貨 ----------------
   @override
