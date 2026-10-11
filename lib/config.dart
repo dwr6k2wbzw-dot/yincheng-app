@@ -65,7 +65,12 @@ class AppConfig {
   ];
 
   /// 新增進貨「類別（常用廠商）」提示的手動調整（老闆指定；其餘照日報表統計）
-  static const vendorHintHidden = {'xc_ramen_misc'}; // 布布拉麵-雜項：不顯示提示
+  // 不顯示廠商提示的類別：布布拉麵-雜項；布布拉麵-食材（老闆 2026-10-11 拿掉信功、立成）；
+  // 酒吧-酒水（新增進貨改顯示為「現結酒商」，月結酒商名稱不適用）
+  static const vendorHintHidden = {'xc_ramen_misc', 'xc_ramen_food', 'xc_bar_liquor'};
+  // 新增進貨下拉選單的顯示名稱（只改顯示，類別代碼不變，日報表匯入與成本率不受影響）
+  // 小城外：酒吧-酒水 → 現結酒商（老闆 2026-10-11）
+  static const purchaseCategoryLabel = {'xc_bar_liquor': '現結酒商'};
   static const vendorHintRename = {'二店拉麵食材': '立成'}; // 布布拉麵-食材
   static const vendorHintAdd = {
     'xc_bar_food': ['小郭'], // 酒吧-食材

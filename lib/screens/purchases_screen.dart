@@ -689,7 +689,10 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                     DropdownMenuItem(
                       value: c.code,
                       child: Text(
-                        _hints[c.code] == null ? c.name : '${c.name}（${_hints[c.code]!.join('、')}）',
+                        () {
+                          final label = AppConfig.purchaseCategoryLabel[c.code] ?? c.name;
+                          return _hints[c.code] == null ? label : '$label（${_hints[c.code]!.join('、')}）';
+                        }(),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
