@@ -144,7 +144,7 @@ class _VendorSlipsScreenState extends State<VendorSlipsScreen> {
               ],
               const SizedBox(height: 8),
               const Text(
-                '資料來自「新增進貨」時拍的送貨單照片：每小時自動文字辨識成草稿，老闆或店長核對修改後確認；'
+                '資料來自「新增進貨」時拍的送貨單照片：存檔時就自動建立草稿，老闆或店長對照照片補上單號與品項後確認；'
                 '依新增進貨選的類別分酒水／餐食／雜項。照片上傳 2 個月後自動刪除。'
                 '這裡只是明細參考，成本率與進貨金額仍以日報表為準。',
                 style: TextStyle(color: AppColors.muted, fontSize: 11, height: 1.5),

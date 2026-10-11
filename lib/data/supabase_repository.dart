@@ -665,8 +665,15 @@ class SupabaseRepository implements Repository {
       'paid_by': p.paidBy,
       'client_request_id': p.clientRequestId,
     });
-    // 送貨單照片 → 每小時的同步辨識成銷貨單草稿（0034）。進貨已存好，這步失敗不影響進貨
+    // 送貨單照片 → 銷貨單草稿。進貨已存好，這步失敗不影響進貨
     if (photoPath != null && p.amount > 0 && p.slipDraft) {
+      // 0040：存檔當下就建立草稿（內容由資料庫從這筆進貨讀）
+      try {
+        await _db.rpc('create_photo_slip_draft', params: {'p_photo_path': photoPath});
+        return;
+      } catch (_) {
+        // 失敗（例如網路斷了）才放進佇列，由每小時的同步補做（0034）
+      }
       try {
         final hex = StringBuffer(r'\x');
         for (final b in p.photoJpeg!) {
