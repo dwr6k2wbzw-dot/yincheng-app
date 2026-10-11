@@ -111,7 +111,20 @@ class CostCategory {
   final String code;
   final String name;
   final String? storeName; // 這個類別屬於哪家店（隱城／小城外）
-  CostCategory(this.code, this.name, [this.storeName]);
+  final String costGroup; // drink／food／coffee／ramen／other
+  final bool inMiscRate; // 算進雜項成本率
+  CostCategory(this.code, this.name, [this.storeName]) : costGroup = 'other', inMiscRate = false;
+  CostCategory.full(this.code, this.name, this.storeName, {required this.costGroup, required this.inMiscRate});
+}
+
+/// 銷貨單分組（老闆 2026-10-12）：依當初新增進貨選的類別分酒水／餐食／雜項；對不到進貨的放「其他」
+const slipGroups = ['酒水', '餐食', '雜項', '其他'];
+String slipGroupOf(CostCategory? c) {
+  if (c == null) return '其他';
+  if (c.inMiscRate) return '雜項';
+  if (c.costGroup == 'drink') return '酒水';
+  if (const {'food', 'coffee', 'ramen'}.contains(c.costGroup)) return '餐食';
+  return '雜項';
 }
 
 class Supplier {
@@ -459,6 +472,8 @@ class VendorSlip {
   final String? sourceFile;
   final DateTime? periodMonth; // 歸屬月份（Dropbox「M月份」資料夾）；修改時 null＝維持原本
   final String? photoPath; // App 拍的送貨單照片（0034）
+  /// 當初那筆進貨的類別（由 photo_path 對回 purchases；對不到是 null）
+  String? categoryCode;
   VendorSlip(this.id, this.vendor, this.slipNo, this.date, this.total, this.note, this.lines,
       {this.status = 'confirmed', this.source = 'manual', this.sourceFile, this.periodMonth, this.photoPath});
   bool get isDraft => status == 'draft';

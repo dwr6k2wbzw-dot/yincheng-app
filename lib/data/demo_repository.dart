@@ -13,13 +13,13 @@ class DemoRepository implements Repository {
   int _seq = 0;
 
   final _categories = [
-    CostCategory('liquor_monthly', '月結酒商'),
-    CostCategory('liquor_cash', '現結酒商'),
-    CostCategory('fruit', '酒水副材料-德哥'),
-    CostCategory('ice', '酒水副材料-冰塊'),
-    CostCategory('bar_misc', '酒水副材料-雜項'),
-    CostCategory('food', '餐食進貨'),
-    CostCategory('petty_misc', '零用金-其他雜支'),
+    CostCategory.full('liquor_monthly', '月結酒商', null, costGroup: 'drink', inMiscRate: false),
+    CostCategory.full('liquor_cash', '現結酒商', null, costGroup: 'drink', inMiscRate: false),
+    CostCategory.full('fruit', '酒水副材料-德哥', null, costGroup: 'drink', inMiscRate: false),
+    CostCategory.full('ice', '酒水副材料-冰塊', null, costGroup: 'drink', inMiscRate: false),
+    CostCategory.full('bar_misc', '酒水副材料-雜項', null, costGroup: 'drink', inMiscRate: true),
+    CostCategory.full('food', '餐食進貨', null, costGroup: 'food', inMiscRate: false),
+    CostCategory.full('petty_misc', '零用金-其他雜支', null, costGroup: 'other', inMiscRate: true),
   ];
   final _suppliers = [
     Supplier('s1', '示範酒商A', 'liquor_monthly'),
@@ -67,7 +67,14 @@ class DemoRepository implements Repository {
         VendorSlip('v1', '示範酒商', 'D-001', DateTime(month.year, month.month, 1), 1300, null, [
           VendorSlipLine(1, 'A01', '示範琴酒 700ML', 1, '瓶', 900, 900),
           VendorSlipLine(2, 'A02', '示範蘇打水 24入', 1, '箱', 400, 400),
-        ]),
+        ])
+          ..categoryCode = 'liquor_monthly',
+        VendorSlip('v2', '示範食材行', 'F-002', DateTime(month.year, month.month, 2), 850, null, [
+          VendorSlipLine(1, null, '示範牛肉片', 2, '包', 425, 850),
+        ])
+          ..categoryCode = 'food',
+        VendorSlip('v3', '示範雜貨', 'M-003', DateTime(month.year, month.month, 3), 320, null, [])
+          ..categoryCode = 'petty_misc',
       ];
   @override
   Future<List<String>> failedSlipFiles(String storeId) async => [];
