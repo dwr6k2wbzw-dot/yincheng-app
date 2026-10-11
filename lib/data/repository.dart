@@ -46,6 +46,12 @@ abstract class Repository {
   Future<List<ExpenseItem>> expenseItems(String storeId, DateTime month);
   Future<void> saveExpenseItem(String storeId, DateTime month, ExpenseItem item, {bool isNew = false});
   Future<void> deleteExpenseItem(String itemId);
+  // 0039：刷卡手續費率（預設 0.02）＋每月固定支出
+  Future<double> cardFeeRate(String storeId);
+  Future<void> saveCardFeeRate(String storeId, double rate);
+  Future<List<RecurringExpenseItem>> recurringExpenseItems(String storeId);
+  Future<void> saveRecurringExpenseItem(String storeId, RecurringExpenseItem item, {bool isNew = false});
+  Future<void> deleteRecurringExpenseItem(String itemId);
 
   // 進貨
   Future<DateTime> businessDate(String storeId);

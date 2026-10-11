@@ -23,9 +23,17 @@ class _DashboardData {
   FixedCosts fixed = const FixedCosts();
   double? petty;
   List<ExpenseItem> items = const [];
+  List<RecurringExpenseItem> recurring = const []; // 每月固定支出（0039）
+  double cardFeeRate = 0.02; // 刷卡手續費率（0039）
   DateTime month = DateTime.now();
 
   double itemsOf(String category) => items.where((e) => e.category == category).fold(0.0, (a, e) => a + e.amount);
+  double recurringOf(String category) =>
+      recurring.where((e) => e.category == category).fold(0.0, (a, e) => a + e.amount);
+  /// 當月刷卡手續費＝刷卡金額 × 費率（歸雜項）
+  double cardFee(MonthlySummary s) => s.card * cardFeeRate;
+  /// 老闆視角：加進雜項的手動金額＝一次性雜項＋每月固定雜項＋刷卡手續費
+  double ownerMiscAdd(MonthlySummary s) => itemsOf('misc') + recurringOf('misc') + cardFee(s);
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
@@ -57,6 +65,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (_isOwner) {
         d.fixed = r[1] as FixedCosts;
         d.items = await repo.expenseItems(id, _month);
+        d.recurring = await repo.recurringExpenseItems(id);
+        d.cardFeeRate = await repo.cardFeeRate(id);
       }
     }
     return d;
@@ -210,12 +220,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Text('進貨成本率', style: TextStyle(color: AppColors.muted)),
           const SizedBox(height: 10),
-          if (!s.hasCostRecords && s.revenue > 0 && !(_isOwner && d.itemsOf('misc') != 0))
+          if (!s.hasCostRecords && s.revenue > 0 && !(_isOwner && d.ownerMiscAdd(s) != 0))
             const Text('本月尚無進貨資料', style: TextStyle(color: AppColors.warn))
           else
             () {
-              // 老闆：雜項＝進貨雜項＋手動雜項支出（老闆 2026-10-11 決定）；員工看進貨口徑
-              final miscAmt = s.miscCost + (_isOwner ? d.itemsOf('misc') : 0);
+              // 老闆：雜項＝進貨雜項＋手動雜項支出＋每月固定雜項＋刷卡手續費（老闆 2026-10-11）；員工看進貨口徑
+              final miscAmt = s.miscCost + (_isOwner ? d.ownerMiscAdd(s) : 0);
               final miscRate = s.revenue > 0 ? miscAmt / s.revenue : null;
               return Row(children: [
                 _rate('酒水', s.drinkCostRate, s.drinkCost),
@@ -241,8 +251,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// 本月損益（只有老闆：含人事成本）
   /// 損益＝營收 − 進貨 − 雜項 − 租金 − 人事（老闆 2026-10-09 確認：酒水副材料-雜項歸雜項，不重複扣）
   Widget _profitCard(_DashboardData d, MonthlySummary s) {
-    // 手動支出明細：加在既有租金／人事之上；雜項＝進貨雜項＋手動雜項
-    final rentItems = d.itemsOf('rent'), payrollItems = d.itemsOf('payroll'), miscItems = d.itemsOf('misc');
+    // 手動支出明細（一次性＋每月固定）＋刷卡手續費：加在既有租金／人事之上；雜項＝進貨雜項＋手動雜項＋刷卡手續費
+    final rentItems = d.itemsOf('rent') + d.recurringOf('rent');
+    final payrollItems = d.itemsOf('payroll') + d.recurringOf('payroll');
+    final miscItems = d.itemsOf('misc') + d.recurringOf('misc') + d.cardFee(s);
     final rent = (d.fixed.rent ?? 0) + rentItems;
     final payroll = (d.fixed.payroll ?? 0) + payrollItems;
     final misc = s.miscCost + miscItems;
@@ -271,9 +283,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         const SizedBox(height: 10),
         line('營業收入', s.revenue, minus: false),
         line('進貨（不含雜項類）', s.purchaseCost),
-        line('雜項${miscItems != 0 ? '（含手動 ${ntd(miscItems)}）' : ''}', misc),
-        line('租金${rentItems != 0 ? '（含手動 ${ntd(rentItems)}）' : ''}', rent),
-        line('人事${payrollItems != 0 ? '（含手動 ${ntd(payrollItems)}）' : ''}', payroll),
+        line('雜項${miscItems != 0 ? '（含明細 ${ntd(miscItems)}）' : ''}', misc),
+        line('租金${rentItems != 0 ? '（含明細 ${ntd(rentItems)}）' : ''}', rent),
+        line('人事${payrollItems != 0 ? '（含明細 ${ntd(payrollItems)}）' : ''}', payroll),
         const Divider(height: 20),
         Row(children: [
           _fixedItem(d, 'rent', '租金（基底）', d.fixed.rent, s.revenue),
@@ -283,57 +295,78 @@ class _DashboardScreenState extends State<DashboardScreen> {
         const SizedBox(height: 4),
         const Text('租金、人事的單一金額當基底；下面的支出明細會另外加上去。', style: TextStyle(color: AppColors.muted, fontSize: 11)),
         const SizedBox(height: 12),
-        _expenseItemsSection(d),
+        _expenseItemsSection(d, s),
       ]),
     );
   }
 
-  // 其他支出明細（勞保、電費、營業稅…）：老闆新增，金額加進所選大類
-  Widget _expenseItemsSection(_DashboardData d) {
-    const catLabel = ExpenseItem.categoryLabels;
+  // 其他支出明細：刷卡手續費（自動）＋每月固定＋一次性；老闆新增，金額加進所選大類
+  Widget _expenseItemsSection(_DashboardData d, MonthlySummary s) {
+    final cardFee = d.cardFee(s);
+    final empty = d.items.isEmpty && d.recurring.isEmpty && cardFee == 0;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
         const Text('其他支出明細', style: TextStyle(fontWeight: FontWeight.w600)),
         const Spacer(),
         TextButton.icon(onPressed: () => _editItem(d, null), icon: const Icon(Icons.add, size: 18), label: const Text('新增')),
       ]),
-      if (d.items.isEmpty)
+      if (empty)
         const Padding(
           padding: EdgeInsets.symmetric(vertical: 4),
-          child: Text('還沒有。可新增勞保、健保、電費、營業稅…，選租金／人事／雜項，金額會加進該大項。',
+          child: Text('還沒有。可新增勞保、健保、電費、營業稅…，選租金／人事／雜項、可設每月固定；金額會加進該大項。',
               style: TextStyle(color: AppColors.muted, fontSize: 12)),
-        )
-      else
-        for (final it in d.items)
-          Material(
-            color: AppColors.cardHigh,
-            borderRadius: BorderRadius.circular(10),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(10),
-              onTap: () => _editItem(d, it),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                child: Row(children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                    decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.25), borderRadius: BorderRadius.circular(6)),
-                    child: Text(catLabel[it.category] ?? it.category, style: const TextStyle(fontSize: 11)),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(it.name, style: const TextStyle(fontSize: 13))),
-                  Text(ntd(it.amount), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                  const Icon(Icons.chevron_right, size: 16, color: AppColors.muted),
-                ]),
-              ),
-            ),
-          ),
+        ),
+      // 刷卡手續費（自動：當月刷卡金額 × 費率）
+      if (cardFee != 0)
+        _expItemRow('雜項', '刷卡手續費', cardFee,
+            tag: '自動 ${(d.cardFeeRate * 100).toStringAsFixed(d.cardFeeRate * 100 % 1 == 0 ? 0 : 1)}%',
+            onTap: () => _editCardFeeRate(d)),
+      // 每月固定支出
+      for (final it in d.recurring)
+        _expItemRow(ExpenseItem.categoryLabels[it.category] ?? it.category, it.name, it.amount,
+            tag: '每月固定', onTap: () => _editRecurring(d, it)),
+      // 一次性支出
+      for (final it in d.items)
+        _expItemRow(ExpenseItem.categoryLabels[it.category] ?? it.category, it.name, it.amount,
+            onTap: () => _editItem(d, it)),
     ]);
   }
+
+  Widget _expItemRow(String catLabel, String name, double amount, {String? tag, required VoidCallback onTap}) => Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Material(
+          color: AppColors.cardHigh,
+          borderRadius: BorderRadius.circular(10),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                  decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.25), borderRadius: BorderRadius.circular(6)),
+                  child: Text(catLabel, style: const TextStyle(fontSize: 11)),
+                ),
+                const SizedBox(width: 8),
+                Expanded(child: Text(name, style: const TextStyle(fontSize: 13))),
+                if (tag != null) ...[
+                  Text(tag, style: const TextStyle(fontSize: 11, color: AppColors.muted)),
+                  const SizedBox(width: 8),
+                ],
+                Text(ntd(amount), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                const Icon(Icons.chevron_right, size: 16, color: AppColors.muted),
+              ]),
+            ),
+          ),
+        ),
+      );
 
   Future<void> _editItem(_DashboardData d, ExpenseItem? item) async {
     final name = TextEditingController(text: item?.name ?? '');
     final amount = TextEditingController(text: item == null ? '' : item.amount.round().toString());
     var category = item?.category ?? 'misc';
+    var recurring = false; // 每月固定（只在新增時可選）
     final result = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
@@ -369,6 +402,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
               selected: {category},
               onSelectionChanged: (v) => setSheet(() => category = v.first),
             ),
+            if (item == null)
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('每月固定', style: TextStyle(fontSize: 14)),
+                subtitle: const Text('設一次，之後每個月自動帶入，不用再輸入', style: TextStyle(fontSize: 12)),
+                value: recurring,
+                onChanged: (v) => setSheet(() => recurring = v),
+              ),
             const SizedBox(height: 16),
             Row(children: [
               if (item != null)
@@ -395,12 +436,131 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (result == 'delete' && item != null) {
         await repo.deleteExpenseItem(item.id);
       } else if (result == 'save') {
-        await repo.saveExpenseItem(
-          widget.membership.storeId, d.month,
-          ExpenseItem(id: item?.id ?? '', name: name.text.trim(), category: category, amount: double.parse(amount.text)),
-          isNew: item == null,
+        if (recurring && item == null) {
+          await repo.saveRecurringExpenseItem(
+            widget.membership.storeId,
+            RecurringExpenseItem(id: '', name: name.text.trim(), category: category, amount: double.parse(amount.text)),
+            isNew: true,
+          );
+        } else {
+          await repo.saveExpenseItem(
+            widget.membership.storeId, d.month,
+            ExpenseItem(id: item?.id ?? '', name: name.text.trim(), category: category, amount: double.parse(amount.text)),
+            isNew: item == null,
+          );
+        }
+      }
+      if (mounted) { showMessage(context, '已儲存'); _reload(); }
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+    }
+  }
+
+  // 修改／刪除每月固定支出
+  Future<void> _editRecurring(_DashboardData d, RecurringExpenseItem item) async {
+    final name = TextEditingController(text: item.name);
+    final amount = TextEditingController(text: item.amount.round().toString());
+    var category = item.category;
+    final result = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.card,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setSheet) => Padding(
+          padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(c).viewInsets.bottom + 16),
+          child: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              const Text('每月固定支出', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              const Text('改金額會套用到每個月；不要了就刪除。', style: TextStyle(color: AppColors.muted, fontSize: 12)),
+              const SizedBox(height: 12),
+              TextField(controller: name, maxLength: 40, decoration: const InputDecoration(labelText: '項目')),
+              const SizedBox(height: 12),
+              TextField(
+                controller: amount,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9]'))],
+                decoration: const InputDecoration(prefixText: '\$ ', labelText: '金額'),
+              ),
+              const SizedBox(height: 12),
+              const Text('算進哪個大項', style: TextStyle(color: AppColors.muted, fontSize: 12)),
+              const SizedBox(height: 6),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: 'rent', label: Text('租金')),
+                  ButtonSegment(value: 'payroll', label: Text('人事')),
+                  ButtonSegment(value: 'misc', label: Text('雜項')),
+                ],
+                selected: {category},
+                onSelectionChanged: (v) => setSheet(() => category = v.first),
+              ),
+              const SizedBox(height: 16),
+              Row(children: [
+                TextButton(onPressed: () => Navigator.pop(c, 'delete'), child: const Text('刪除', style: TextStyle(color: AppColors.bad))),
+                const Spacer(),
+                TextButton(onPressed: () => Navigator.pop(c), child: const Text('取消')),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: () {
+                    if (name.text.trim().isEmpty || (double.tryParse(amount.text) ?? 0) <= 0) return;
+                    Navigator.pop(c, 'save');
+                  },
+                  child: const Text('儲存'),
+                ),
+              ]),
+            ]),
+          ),
+        ),
+      ),
+    );
+    if (result == null || !mounted) return;
+    final repo = AppScope.of(context).repo;
+    try {
+      if (result == 'delete') {
+        await repo.deleteRecurringExpenseItem(item.id);
+      } else {
+        await repo.saveRecurringExpenseItem(
+          widget.membership.storeId,
+          RecurringExpenseItem(id: item.id, name: name.text.trim(), category: category, amount: double.parse(amount.text)),
         );
       }
+      if (mounted) { showMessage(context, '已儲存'); _reload(); }
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+    }
+  }
+
+  // 修改刷卡手續費率
+  Future<void> _editCardFeeRate(_DashboardData d) async {
+    final ctrl = TextEditingController(text: (d.cardFeeRate * 100).toStringAsFixed(d.cardFeeRate * 100 % 1 == 0 ? 0 : 2));
+    final v = await showDialog<double>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('刷卡手續費率'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Text('刷卡手續費＝當月刷卡金額 × 此比率，自動算進雜項。', style: TextStyle(fontSize: 12, color: AppColors.muted)),
+          const SizedBox(height: 12),
+          TextField(
+            controller: ctrl,
+            autofocus: true,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+            decoration: const InputDecoration(suffixText: '%', labelText: '比率'),
+          ),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(c, double.tryParse(ctrl.text)), child: const Text('儲存')),
+        ],
+      ),
+    );
+    if (v == null || !mounted) return;
+    if (v < 0 || v > 100) {
+      showMessage(context, '比率要在 0～100% 之間', error: true);
+      return;
+    }
+    try {
+      await AppScope.of(context).repo.saveCardFeeRate(widget.membership.storeId, v / 100);
       if (mounted) { showMessage(context, '已儲存'); _reload(); }
     } catch (e) {
       if (mounted) showMessage(context, friendlyError(e), error: true);

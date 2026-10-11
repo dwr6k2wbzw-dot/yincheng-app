@@ -270,6 +270,34 @@ class DemoRepository implements Repository {
     }
   }
 
+  // 0039 刷卡手續費率（預設 0.02）＋每月固定支出（示範用，依店別）
+  final _cardFeeRate = <String, double>{};
+  final _recurring = <String, List<RecurringExpenseItem>>{};
+  @override
+  Future<double> cardFeeRate(String storeId) async => _cardFeeRate[storeId] ?? 0.02;
+  @override
+  Future<void> saveCardFeeRate(String storeId, double rate) async {
+    if (_isStaff) throw Exception('message: 沒有權限,');
+    _cardFeeRate[storeId] = rate;
+  }
+  @override
+  Future<List<RecurringExpenseItem>> recurringExpenseItems(String storeId) async =>
+      _isStaff ? [] : [...?_recurring[storeId]];
+  @override
+  Future<void> saveRecurringExpenseItem(String storeId, RecurringExpenseItem item, {bool isNew = false}) async {
+    if (_isStaff) throw Exception('message: 沒有權限,');
+    final list = _recurring.putIfAbsent(storeId, () => []);
+    list.removeWhere((e) => e.id == item.id);
+    list.add(RecurringExpenseItem(
+        id: isNew ? 'rc${_seq++}' : item.id, name: item.name, category: item.category, amount: item.amount));
+  }
+  @override
+  Future<void> deleteRecurringExpenseItem(String itemId) async {
+    for (final l in _recurring.values) {
+      l.removeWhere((e) => e.id == itemId);
+    }
+  }
+
   @override
   Future<MonthlySummary> monthlySummary(String storeId, DateTime month) async {
     if (_isStaff || storeId != 'yc') {
