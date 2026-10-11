@@ -91,9 +91,10 @@ Future<void> showStoragePhoto(BuildContext context, String path) async {
           child: Image.network(
             url,
             fit: BoxFit.contain,
+            // 圖片下載失敗（網路不穩、暫時錯誤…）不一定是過期，訊息不要說死
             errorBuilder: (_, __, ___) => const Padding(
               padding: EdgeInsets.all(24),
-              child: Text(photoExpiredMessage, textAlign: TextAlign.center),
+              child: Text('照片載入失敗，請檢查網路後再試一次', textAlign: TextAlign.center),
             ),
           ),
         ),
