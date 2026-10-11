@@ -690,8 +690,11 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                       value: c.code,
                       child: Text(
                         () {
-                          final label = AppConfig.purchaseCategoryLabel[c.code] ?? c.name;
-                          return _hints[c.code] == null ? label : '$label（${_hints[c.code]!.join('、')}）';
+                          // 零用金付款時：部分類別改顯示名稱、不顯示廠商提示（廠商請款維持原樣）
+                          final petty = _paidBy == 'petty_cash';
+                          final label = (petty ? AppConfig.pettyCashCategoryLabel[c.code] : null) ?? c.name;
+                          final hint = petty && AppConfig.pettyCashHintHidden.contains(c.code) ? null : _hints[c.code];
+                          return hint == null ? label : '$label（${hint.join('、')}）';
                         }(),
                         overflow: TextOverflow.ellipsis,
                       ),
