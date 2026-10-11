@@ -30,8 +30,11 @@ class _DashboardData {
   double itemsOf(String category) => items.where((e) => e.category == category).fold(0.0, (a, e) => a + e.amount);
   double recurringOf(String category) =>
       recurring.where((e) => e.category == category).fold(0.0, (a, e) => a + e.amount);
-  /// 當月刷卡手續費＝刷卡金額 × 費率（歸雜項）
-  double cardFee(MonthlySummary s) => s.card * cardFeeRate;
+  /// 這個月有沒有舊版手動輸入的「刷卡手續費」明細（0037 舊 UI 可能已輸入過）
+  bool get hasManualCardFee => items.any((e) => e.name.trim() == '刷卡手續費');
+  /// 當月刷卡手續費＝刷卡金額 × 費率（歸雜項）。
+  /// 若該月已有手動輸入的「刷卡手續費」明細，則自動費用不計（避免與舊資料重複計算）。
+  double cardFee(MonthlySummary s) => hasManualCardFee ? 0 : s.card * cardFeeRate;
   /// 老闆視角：加進雜項的手動金額＝一次性雜項＋每月固定雜項＋刷卡手續費
   double ownerMiscAdd(MonthlySummary s) => itemsOf('misc') + recurringOf('misc') + cardFee(s);
 }
@@ -236,9 +239,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             }(),
           const SizedBox(height: 6),
           Text(
-              multi
-                  ? '酒水、餐食只算酒吧；總進貨含咖啡吧與拉麵；雜項＝各區雜項 ÷ 營業收入，不計入總進貨'
-                  : '雜項＝零用金-其他雜支＋酒水副材料-雜項，÷ 營業收入；不計入總進貨',
+              (multi
+                      ? '酒水、餐食只算酒吧；總進貨含咖啡吧與拉麵；雜項＝各區雜項 ÷ 營業收入，不計入總進貨'
+                      : '雜項＝零用金-其他雜支＋酒水副材料-雜項，÷ 營業收入；不計入總進貨') +
+                  (_isOwner ? '；老闆另含手動支出、每月固定與刷卡手續費' : ''),
               style: const TextStyle(color: AppColors.muted, fontSize: 11)),
         ]),
       ),
@@ -317,7 +321,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               style: TextStyle(color: AppColors.muted, fontSize: 12)),
         ),
       // 刷卡手續費（自動：當月刷卡金額 × 費率）——一律顯示，讓老闆隨時能改費率（即使本月刷卡 0 或費率設 0）
-      _expItemRow('雜項', '刷卡手續費', cardFee, tag: '自動 ${_ratePct(d.cardFeeRate)}%', onTap: () => _editCardFeeRate(d)),
+      _expItemRow('雜項', '刷卡手續費', cardFee,
+          tag: d.hasManualCardFee ? '本月已有手動、未重複計' : '自動 ${_ratePct(d.cardFeeRate)}%',
+          onTap: () => _editCardFeeRate(d)),
       // 每月固定支出
       for (final it in d.recurring)
         _expItemRow(ExpenseItem.categoryLabels[it.category] ?? it.category, it.name, it.amount,
