@@ -245,6 +245,18 @@ class DemoRepository implements Repository {
     _fixed['$storeId-${month.year}-${month.month}-$category'] = amount;
   }
 
+  final _expItems = <ExpenseItem>[];
+  @override
+  Future<List<ExpenseItem>> expenseItems(String storeId, DateTime month) async => _isStaff ? [] : [..._expItems];
+  @override
+  Future<void> saveExpenseItem(String storeId, DateTime month, ExpenseItem item, {bool isNew = false}) async {
+    if (_isStaff) throw Exception('message: 沒有權限,');
+    _expItems.removeWhere((e) => e.id == item.id);
+    _expItems.add(ExpenseItem(id: isNew ? 'e${_seq++}' : item.id, name: item.name, category: item.category, amount: item.amount));
+  }
+  @override
+  Future<void> deleteExpenseItem(String itemId) async => _expItems.removeWhere((e) => e.id == itemId);
+
   @override
   Future<MonthlySummary> monthlySummary(String storeId, DateTime month) async {
     if (_isStaff || storeId != 'yc') {
