@@ -25,6 +25,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   DateTime _month = DateTime(DateTime.now().year, DateTime.now().month);
   final _open = <String>{}; // 已展開的大類
   bool _started = false;
+  /// 今天的營業日（早上 6 點前算前一天）；用來標出「當日新增」（老闆 2026-10-12）
+  DateTime? _today;
 
   @override
   void didChangeDependencies() {
@@ -41,6 +43,11 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     final repo = AppScope.of(context).repo;
     final id = widget.membership.storeId;
     final r = await Future.wait([repo.monthPurchases(id, _month), repo.costCategories()]);
+    try {
+      _today = await repo.businessDate(id);
+    } catch (_) {
+      _today = null; // 取不到就不顯示當日新增，不影響列表
+    }
     final cats = {for (final c in r[1] as List<CostCategory>) c.code: c.name};
     DateTime? last;
     if (_synced && widget.membership.canSeeRevenue) last = await repo.lastExcelSync(id);
@@ -63,6 +70,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           month: _month,
           items: items,
           categoryNames: cats,
+          today: _today,
           canReconcile: widget.membership.isManager && !_synced,
           membership: widget.membership,
         ),
@@ -160,6 +168,10 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         ),
       );
 
+  /// 這些進貨裡，進貨日期是今天（營業日）的合計
+  double _todayAmount(List<Purchase> items) =>
+      _today == null ? 0 : items.where((p) => isSameDay(p.purchaseDate, _today!)).fold(0.0, (t, p) => t + p.amount);
+
   /// 一個大類：標題列（總金額）＋展開後各進貨類別小計
   Widget _group(String key, String title, String sub, IconData icon, List<Purchase> items, Map<String, String> cats) {
     final total = items.fold<double>(0, (t, p) => t + p.amount);
@@ -212,6 +224,12 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
               title: Text(cats[c] ?? c),
               subtitle: Text('${byCat[c]!.length} 筆', style: const TextStyle(fontSize: 12)),
               trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                // 當日新增金額（例：10/12 新增 $886）
+                if (_todayAmount(byCat[c]!) != 0) ...[
+                  Text('${DateFormat('M/d').format(_today!)} 新增${ntd(_todayAmount(byCat[c]!))}',
+                      style: const TextStyle(color: AppColors.warn, fontSize: 12, fontWeight: FontWeight.w600)),
+                  const SizedBox(width: 10),
+                ],
                 Text(ntd(byCat[c]!.fold<double>(0, (t, p) => t + p.amount)),
                     style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                 const Icon(Icons.chevron_right, color: AppColors.muted),
@@ -234,8 +252,10 @@ class _CategoryPurchasesScreen extends StatefulWidget {
     required this.categoryNames,
     required this.canReconcile,
     required this.membership,
+    this.today,
   });
   final Membership membership;
+  final DateTime? today; // 今天的營業日：當日新增的品項用橘色
   final String title;
   final DateTime month;
   final List<Purchase> items;
@@ -369,6 +389,7 @@ class _CategoryPurchasesScreenState extends State<_CategoryPurchasesScreen> {
           for (final p in groups[n]!) ...[
             _PurchaseTile(
               p: p,
+              isToday: widget.today != null && isSameDay(p.purchaseDate, widget.today!),
               categoryName: widget.categoryNames[p.categoryCode] ?? p.categoryCode,
               canReconcile: widget.canReconcile,
               onToggle: () => _toggle(p),
@@ -384,8 +405,14 @@ class _CategoryPurchasesScreenState extends State<_CategoryPurchasesScreen> {
 
 class _PurchaseTile extends StatelessWidget {
   const _PurchaseTile(
-      {required this.p, required this.categoryName, required this.canReconcile, required this.onToggle, required this.onTap});
+      {required this.p,
+      required this.categoryName,
+      required this.canReconcile,
+      required this.onToggle,
+      required this.onTap,
+      this.isToday = false});
   final Purchase p;
+  final bool isToday; // 當日新增：廠商／品項與金額用橘色
   final String categoryName;
   final bool canReconcile;
   final VoidCallback onToggle;
@@ -399,7 +426,8 @@ class _PurchaseTile extends StatelessWidget {
         child: Row(children: [
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(p.supplierName ?? p.memo ?? categoryName, style: const TextStyle(fontWeight: FontWeight.w600)),
+              Text(p.supplierName ?? p.memo ?? categoryName,
+                  style: TextStyle(fontWeight: FontWeight.w600, color: isToday ? AppColors.warn : null)),
               const SizedBox(height: 4),
               Text(
                 '${DateFormat('M/d').format(p.purchaseDate)}・$categoryName'
@@ -409,7 +437,9 @@ class _PurchaseTile extends StatelessWidget {
             ]),
           ),
           Text(ntd(p.amount),
-              style: TextStyle(fontWeight: FontWeight.w700, color: p.amount < 0 ? AppColors.good : null)),
+              style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: isToday ? AppColors.warn : (p.amount < 0 ? AppColors.good : null))),
           const SizedBox(width: 4),
           IconButton(
             tooltip: p.reconciled ? '已核銷' : (canReconcile ? '核銷' : '未核銷'),
@@ -810,3 +840,5 @@ Map<String, List<String>> adjustVendorHints(Map<String, List<String>> hints) {
   }
   return out;
 }
+
+bool isSameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
