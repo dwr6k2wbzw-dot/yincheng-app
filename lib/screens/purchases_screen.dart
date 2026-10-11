@@ -755,9 +755,15 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                 onSelectionChanged: widget.editing != null && !widget.membership.isManager
                     ? null // 付款方式建立後只有老闆、店長能改（資料庫也會擋）
                     : (v) => setState(() {
+                          final old = _category;
                           _paidBy = v.first;
-                          // 切換付款方式後，若原本選的類別在新付款方式下不提供，就清掉
-                          if (_hiddenCats.contains(_category)) _category = null;
+                          // 切換付款方式後，若原本選的類別在新付款方式下不提供，就清掉；
+                          // 廠商若是依原類別自動帶入的（例：德哥），一併清掉，不留沒有類別的廠商
+                          if (_hiddenCats.contains(old)) {
+                            _category = null;
+                            final auto = sups.where((s) => s.defaultCategory == old).map((s) => s.name).toList();
+                            if (auto.length == 1 && _vendor.text.trim() == auto.first) _vendor.clear();
+                          }
                         }),
               ),
               const SizedBox(height: 12),
