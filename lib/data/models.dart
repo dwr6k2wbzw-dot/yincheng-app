@@ -686,6 +686,7 @@ class WorkReminder {
   final String? assignPersonId;
   final bool assignOnShift;
   final bool active;
+  final String? createdBy; // 建立者（0041 起任何成員都能新增；建立者可改、刪自己的）
   WorkReminder({
     required this.id,
     required this.title,
@@ -698,6 +699,7 @@ class WorkReminder {
     this.assignPersonId,
     this.assignOnShift = false,
     this.active = true,
+    this.createdBy,
   });
 
   factory WorkReminder.fromRow(Map<String, dynamic> r) => WorkReminder(
@@ -712,6 +714,7 @@ class WorkReminder {
         assignPersonId: r['assign_person_id'] as String?,
         assignOnShift: r['assign_on_shift'] as bool? ?? false,
         active: r['active'] as bool? ?? true,
+        createdBy: r['created_by'] as String?,
       );
 
   static const weekdayNames = ['日', '一', '二', '三', '四', '五', '六'];

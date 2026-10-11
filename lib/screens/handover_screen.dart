@@ -103,6 +103,8 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
   String get _store => widget.membership.storeId;
   bool get _canManage => widget.membership.isManager;
   String? get _me => _repo.currentUserId;
+  // 提醒：任何成員都能新增；自己建的可以改、刪，老闆／店長可管理全部（0041）
+  bool _canEditReminder(WorkReminder r) => _canManage || (_me != null && r.createdBy == _me);
   bool get _hasSchedule => AppConfig.scheduleStores.contains(widget.membership.storeName);
 
   @override
@@ -443,8 +445,8 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
                     ].join('・'),
                     style: const TextStyle(fontSize: 12),
                   ),
-                  trailing: _canManage ? const Icon(Icons.edit_outlined, size: 18) : null,
-                  onTap: _canManage ? () => _editReminder(r, b) : null,
+                  trailing: _canEditReminder(r) ? const Icon(Icons.edit_outlined, size: 18) : null,
+                  onTap: _canEditReminder(r) ? () => _editReminder(r, b) : null,
                 ),
             ]),
           ),
@@ -452,7 +454,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
         if (!_canManage)
           const Padding(
             padding: EdgeInsets.only(top: 12),
-            child: Text('提醒由老闆或店長建立。', style: TextStyle(color: AppColors.muted, fontSize: 11)),
+            child: Text('每個人都能新增提醒；自己建的可以修改、刪除。', style: TextStyle(color: AppColors.muted, fontSize: 11)),
           ),
       ]),
     );
@@ -626,7 +628,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
         ]),
       ),
       floatingActionButton: onReminders
-          ? (_canManage && b != null
+          ? (b != null
               ? FloatingActionButton.extended(
                   onPressed: () => _editReminder(null, b), icon: const Icon(Icons.add_alarm), label: const Text('新增提醒'))
               : null)
