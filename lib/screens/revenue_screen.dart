@@ -29,9 +29,9 @@ class _RevenueScreenState extends State<RevenueScreen> {
   /// 這店營收是否由 Dropbox 日報表同步（隱城、小城外都是）
   bool get _excelSynced => AppConfig.excelSyncedStores.contains(widget.membership.storeName);
 
-  /// 這一筆能不能在 App 改：Excel 匯入的只有老闆／店長能動，手動暫記老闆／店長／正職都能動
-  bool _canEditRow(RevenueEntry e) =>
-      e.source == 'import' ? widget.membership.isManager : _canWrite;
+  /// 能不能點開這一筆：老闆／店長／正職都能點開看；
+  /// 能不能「改」由表單判斷（Excel 匯入的那筆正職只能看，見 RevenueFormScreen._readOnly）
+  bool _canOpenRow(RevenueEntry e) => _canWrite;
 
   @override
   void didChangeDependencies() {
@@ -100,7 +100,7 @@ class _RevenueScreenState extends State<RevenueScreen> {
                   return _RevenueTile(
                       e: e,
                       storeName: widget.membership.storeName,
-                      onTap: _canEditRow(e) ? () => _open(entry: e) : null);
+                      onTap: _canOpenRow(e) ? () => _open(entry: e) : null);
                 },
               ),
             );
