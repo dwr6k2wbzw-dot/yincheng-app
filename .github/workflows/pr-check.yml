@@ -18,10 +18,14 @@ jobs:
         with:
           channel: stable
           cache: true
-      - name: 產生網頁平台設定（若尚未存在）
+      - name: 產生網頁平台設定與前置處理（與 deploy.yml 一致，才能在 PR 就抓到 patch_index／資產錯誤）
         run: |
           if [ ! -d web ]; then flutter create --platforms web --project-name yincheng_ops --org tw.yincheng . ; fi
           rm -f test/widget_test.dart
+          python3 tool/patch_index.py
+          mkdir -p web/icons && cp tool/icons/Icon-*.png tool/icons/apple-touch-icon.png web/icons/ && cp tool/icons/favicon.png web/favicon.png
+          cp tool/icons/apple-touch-icon.png web/icons/xcw-touch-180-v2.png && cp tool/icons/favicon.png web/icons/xcw-favicon-v2.png
+          sed -i 's/"name": ".*"/"name": "小城外"/; s/"short_name": ".*"/"short_name": "小城外"/; s/"background_color": ".*"/"background_color": "#0F1115"/; s/"theme_color": ".*"/"theme_color": "#0F1115"/' web/manifest.json
       - run: flutter pub get
       - name: 靜態檢查（只擋錯誤）
         run: |
