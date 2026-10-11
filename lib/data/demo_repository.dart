@@ -74,7 +74,8 @@ class DemoRepository implements Repository {
         ])
           ..categoryCode = 'food',
         VendorSlip('v3', '示範雜貨', 'M-003', DateTime(month.year, month.month, 3), 320, null, [])
-          ..categoryCode = 'petty_misc',
+          ..categoryCode = 'petty_misc'
+          ..paidBy = 'petty_cash',
       ];
   @override
   Future<List<String>> failedSlipFiles(String storeId) async => [];

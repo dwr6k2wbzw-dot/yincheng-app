@@ -8,7 +8,7 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import 'vendor_slip_edit_screen.dart';
 
-/// 廠商銷貨單明細（隱城、小城外）：依當初新增進貨選的類別分酒水／餐食／雜項（老闆 2026-10-12），
+/// 廠商銷貨單明細（隱城、小城外）：依當初新增進貨的付款方式分月結銷貨單／零用金發票・收據（老闆 2026-10-12），
 /// 展開後看每張單據的廠商、日期、品項、金額。資料以「新增進貨」拍的送貨單照片為主（不再讀 Dropbox）；
 /// 只是明細參考，不影響成本率（成本率以日報表為準）。
 class VendorSlipsScreen extends StatefulWidget {
@@ -71,17 +71,17 @@ class _VendorSlipsScreenState extends State<VendorSlipsScreen> {
         builder: (context, snap) {
           if (snap.hasError) return ErrorView(message: friendlyError(snap.error!), onRetry: _reload);
           if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-          final (slips, _, cats) = snap.data!;
-          // 依進貨類別分組：酒水／餐食／雜項；對不到進貨（舊 Dropbox 單、手動新增）的放「其他」
+          final (slips, _, _) = snap.data!;
+          // 依付款方式分組：月結廠商→月結銷貨單、零用金→零用金發票／收據；對不到進貨的歸月結銷貨單
           final byGroup = <String, List<VendorSlip>>{};
           for (final s in slips) {
-            byGroup.putIfAbsent(slipGroupOf(cats[s.categoryCode]), () => []).add(s);
+            byGroup.putIfAbsent(slipGroupOf(s.paidBy), () => []).add(s);
           }
           final groups = [
             for (final g in slipGroups)
               if (byGroup[g] != null) MapEntry(g, byGroup[g]!..sort((a, b) => a.date.compareTo(b.date)))
           ];
-          // 例：「・酒水 $8,630・餐食 $1,200・其他 $500」（各組加起來＝總額）
+          // 例：「・月結銷貨單 $8,630・零用金發票／收據 $500」（各組加起來＝總額）
           final summary = [
             for (final g in slipGroups)
               if (byGroup[g] != null) '・$g ${ntd(_sum(byGroup[g]!))}'
@@ -116,7 +116,7 @@ class _VendorSlipsScreenState extends State<VendorSlipsScreen> {
                 ),
               for (final g in groups) ...[
                 _VendorCard(
-                    vendor: g.key == '其他' ? '其他（舊 Dropbox 單／手動新增）' : g.key,
+                    vendor: g.key,
                     slips: g.value,
                     showVendor: true,
                     onTap: _canEdit ? _edit : null,
@@ -125,7 +125,7 @@ class _VendorSlipsScreenState extends State<VendorSlipsScreen> {
               ],
               const SizedBox(height: 8),
               const Text(
-                '資料來自「新增進貨」時拍的送貨單照片，存檔時自動建立；依新增進貨選的類別分酒水／餐食／雜項。'
+                '資料來自「新增進貨」時拍的送貨單照片，存檔時自動建立；依新增進貨的付款方式分「月結銷貨單」與「零用金發票／收據」。'
                 '點照片可放大；照片上傳 2 個月後自動刪除。'
                 '這裡只是明細參考，成本率與進貨金額仍以日報表為準。',
                 style: TextStyle(color: AppColors.muted, fontSize: 11, height: 1.5),

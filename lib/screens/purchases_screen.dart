@@ -11,7 +11,7 @@ import '../theme.dart';
 import '../services/slip_scan.dart';
 import '../widgets/common.dart';
 
-/// 進貨管理：本月進貨分成「月結廠商」（廠商請款）與「零用金支出」兩大類，
+/// 進貨管理：本月進貨分成「月結廠商」與「零用金支出」兩大類，
 /// 點大類展開各進貨類別的小計，點類別看該類別依廠商分組的明細（老闆／店長可在明細核銷）
 class PurchasesScreen extends StatefulWidget {
   const PurchasesScreen({super.key, required this.membership});
@@ -135,7 +135,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                   ),
                   const SizedBox(height: 12),
                 ],
-                _group('vendor', '月結廠商', '廠商請款', Icons.storefront_outlined, vendor, cats),
+                _group('vendor', '月結廠商', '月結付款', Icons.storefront_outlined, vendor, cats),
                 const SizedBox(height: 12),
                 _group('petty', '零用金支出', '零用金付款', Icons.payments_outlined, petty, cats),
                 const SizedBox(height: 12),
@@ -464,7 +464,7 @@ class PurchaseFormScreen extends StatefulWidget {
 
 /// 隱城新增進貨：各付款方式不提供的進貨類別（老闆 2026-10-11 決定）
 const _hiddenCatsByPaidBy = <String, Set<String>>{
-  // 廠商請款不出現：零用金-其他雜支、現結酒商
+  // 月結廠商不出現：零用金-其他雜支、現結酒商
   'vendor': {'petty_misc', 'liquor_cash'},
   // 零用金不出現：月結酒商、酒水副材料-德哥、清運／滅蟲／花藝
   'petty_cash': {'liquor_monthly', 'fruit', 'service'},
@@ -720,7 +720,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                       value: c.code,
                       child: Text(
                         () {
-                          // 零用金付款時：部分類別改顯示名稱、不顯示廠商提示（廠商請款維持原樣）
+                          // 零用金付款時：部分類別改顯示名稱、不顯示廠商提示（月結廠商維持原樣）
                           final petty = _paidBy == 'petty_cash';
                           final label = (petty ? AppConfig.pettyCashCategoryLabel[c.code] : null) ?? c.name;
                           final hint = petty && AppConfig.pettyCashHintHidden.contains(c.code) ? null : _hints[c.code];
@@ -784,7 +784,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
               const SizedBox(height: 4),
               SegmentedButton<String>(
                 segments: const [
-                  ButtonSegment(value: 'vendor', label: Text('廠商請款'), icon: Icon(Icons.storefront)),
+                  ButtonSegment(value: 'vendor', label: Text('月結廠商'), icon: Icon(Icons.storefront)),
                   ButtonSegment(value: 'petty_cash', label: Text('零用金'), icon: Icon(Icons.payments_outlined)),
                 ],
                 selected: {_paidBy},
