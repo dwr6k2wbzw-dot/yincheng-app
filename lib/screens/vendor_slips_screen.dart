@@ -71,13 +71,12 @@ class _VendorSlipsScreenState extends State<VendorSlipsScreen> {
         builder: (context, snap) {
           if (snap.hasError) return ErrorView(message: friendlyError(snap.error!), onRetry: _reload);
           if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-          final (slips, failed, cats) = snap.data!;
+          final (slips, _, cats) = snap.data!;
           // 依進貨類別分組：酒水／餐食／雜項；對不到進貨（舊 Dropbox 單、手動新增）的放「其他」
           final byGroup = <String, List<VendorSlip>>{};
           for (final s in slips) {
             byGroup.putIfAbsent(slipGroupOf(cats[s.categoryCode]), () => []).add(s);
           }
-          final drafts = slips.where((s) => s.isDraft).length;
           final groups = [
             for (final g in slipGroups)
               if (byGroup[g] != null) MapEntry(g, byGroup[g]!..sort((a, b) => a.date.compareTo(b.date)))
@@ -109,24 +108,6 @@ class _VendorSlipsScreenState extends State<VendorSlipsScreen> {
                   Text(ntd(_sum(slips)), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
                 ]),
               ),
-              if (drafts > 0) ...[
-                const SizedBox(height: 8),
-                SectionCard(
-                  child: Text(
-                    '有 $drafts 張文字辨識的草稿待確認${_canEdit ? '：展開類別、點單據核對修改' : '（老闆或店長核對）'}',
-                    style: const TextStyle(color: AppColors.warn, fontSize: 13, height: 1.5),
-                  ),
-                ),
-              ],
-              if (failed.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                SectionCard(
-                  child: Text(
-                    '有 ${failed.length} 個單據檔案文字辨識失敗，請手動新增：\n${failed.join('、')}',
-                    style: const TextStyle(color: AppColors.warn, fontSize: 13, height: 1.5),
-                  ),
-                ),
-              ],
               const SizedBox(height: 12),
               if (groups.isEmpty)
                 const Padding(
@@ -144,8 +125,8 @@ class _VendorSlipsScreenState extends State<VendorSlipsScreen> {
               ],
               const SizedBox(height: 8),
               const Text(
-                '資料來自「新增進貨」時拍的送貨單照片：每小時自動文字辨識成草稿，老闆或店長核對修改後確認；'
-                '依新增進貨選的類別分酒水／餐食／雜項。照片上傳 2 個月後自動刪除。'
+                '資料來自「新增進貨」時拍的送貨單照片，存檔時自動建立；依新增進貨選的類別分酒水／餐食／雜項。'
+                '點照片可放大；照片上傳 2 個月後自動刪除。'
                 '這裡只是明細參考，成本率與進貨金額仍以日報表為準。',
                 style: TextStyle(color: AppColors.muted, fontSize: 11, height: 1.5),
               ),
@@ -169,7 +150,6 @@ class _VendorCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final total = slips.fold(0.0, (a, x) => a + x.total);
-    final items = slips.fold(0, (a, x) => a + x.lines.length);
     return SectionCard(
       padding: EdgeInsets.zero,
       child: Theme(
@@ -178,10 +158,7 @@ class _VendorCard extends StatelessWidget {
           tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
           title: Text(vendor, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-          subtitle: Text(
-              '${slips.length} 張單・$items 項${slips.any((s) => s.isDraft) ? '・${slips.where((s) => s.isDraft).length} 張草稿' : ''}',
-              style: TextStyle(
-                  color: slips.any((s) => s.isDraft) ? AppColors.warn : AppColors.muted, fontSize: 12)),
+          subtitle: Text('${slips.length} 張', style: const TextStyle(color: AppColors.muted, fontSize: 12)),
           trailing: Text(ntd(total), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
           children: [for (final s in slips) _slip(s)],
         ),
@@ -189,6 +166,7 @@ class _VendorCard extends StatelessWidget {
     );
   }
 
+  // 每張單只顯示：照片、日期、廠商／品項、金額（老闆 2026-10-12）
   Widget _slip(VendorSlip s) => Padding(
         padding: const EdgeInsets.only(top: 8),
         child: Material(
@@ -197,80 +175,84 @@ class _VendorCard extends StatelessWidget {
           child: InkWell(
             borderRadius: BorderRadius.circular(12),
             onTap: onTap == null ? null : () => onTap!(s),
-            child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: s.isDraft ? Border.all(color: AppColors.warn.withValues(alpha: 0.6)) : null),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          if (s.isDraft)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Text(onTap == null ? '草稿・待確認' : '草稿・待確認（點一下核對）',
-                  style: const TextStyle(color: AppColors.warn, fontSize: 11, fontWeight: FontWeight.w600)),
-            ),
-          Row(children: [
-            Text(DateFormat('M/d（E）', 'zh_TW').format(s.date), style: const TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(showVendor ? '${s.vendor}・單號 ${s.slipNo}' : '單號 ${s.slipNo}',
-                  overflow: TextOverflow.ellipsis, style: const TextStyle(color: AppColors.muted, fontSize: 12)),
-            ),
-            Text(ntd(s.total), style: const TextStyle(fontWeight: FontWeight.w700)),
-          ]),
-          if (s.note != null && s.note!.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Text(s.note!, style: const TextStyle(color: AppColors.muted, fontSize: 11)),
-            ),
-          if (s.photoPath != null)
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
-                onPressed: () => onPhoto(s.photoPath!),
-                icon: const Icon(Icons.image_outlined, size: 18),
-                label: const Text('看照片'),
-              ),
-            ),
-          const SizedBox(height: 6),
-          for (final l in s.lines)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Row(children: [
+                if (s.photoPath != null) ...[
+                  _PhotoThumb(path: s.photoPath!, onTap: () => onPhoto(s.photoPath!)),
+                  const SizedBox(width: 12),
+                ],
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(l.itemName, style: const TextStyle(fontSize: 13)),
-                    Text(
-                      [
-                        if (l.itemCode != null && l.itemCode!.isNotEmpty) l.itemCode!,
-                        if (l.unitPrice != null) '單價 ${ntd(l.unitPrice!)}',
-                      ].join('・'),
-                      style: const TextStyle(color: AppColors.muted, fontSize: 11),
-                    ),
+                    Text(DateFormat('M/d（E）', 'zh_TW').format(s.date),
+                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 2),
+                    Text(_itemText(s),
+                        maxLines: 2, overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: AppColors.muted, fontSize: 13)),
                   ]),
                 ),
                 const SizedBox(width: 8),
-                SizedBox(
-                  width: 52,
-                  child: Text('${_qty(l.qty)} ${l.unit ?? ''}',
-                      textAlign: TextAlign.right, style: const TextStyle(fontSize: 13)),
-                ),
-                SizedBox(
-                  width: 80,
-                  child: Text(ntd(l.amount),
-                      textAlign: TextAlign.right, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                ),
+                Text(ntd(s.total), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
               ]),
-            ),
-          if ((s.linesTotal - s.total).abs() > 0.001)
-            Text('品項合計 ${ntd(s.linesTotal)}，與單據合計不符',
-                style: const TextStyle(color: AppColors.bad, fontSize: 11)),
-        ]),
             ),
           ),
         ),
       );
 
-  static String _qty(double q) => q == q.roundToDouble() ? q.toInt().toString() : q.toString();
+  /// 廠商／品項：新增進貨填的那一欄；手動單有品項明細時接在後面
+  static String _itemText(VendorSlip s) {
+    final items = s.lines.map((l) => l.itemName.trim()).where((n) => n.isNotEmpty).toList();
+    return items.isEmpty ? s.vendor : '${s.vendor}：${items.join('、')}';
+  }
+
+}
+
+/// 送貨單照片縮圖：點一下放大；照片已刪除或載入失敗就顯示圖示
+class _PhotoThumb extends StatefulWidget {
+  const _PhotoThumb({required this.path, required this.onTap});
+  final String path;
+  final VoidCallback onTap;
+  @override
+  State<_PhotoThumb> createState() => _PhotoThumbState();
+}
+
+class _PhotoThumbState extends State<_PhotoThumb> {
+  Future<String>? _url;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _url ??= AppScope.of(context).repo.shiftPhotoUrl(widget.path);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const size = 56.0;
+    Widget placeholder(IconData icon) => Container(
+          width: size,
+          height: size,
+          color: AppColors.card,
+          child: Icon(icon, color: AppColors.muted, size: 22),
+        );
+    return GestureDetector(
+      onTap: widget.onTap,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: FutureBuilder<String>(
+          future: _url,
+          builder: (context, snap) {
+            if (snap.hasError) return placeholder(Icons.image_not_supported_outlined);
+            if (!snap.hasData) return placeholder(Icons.image_outlined);
+            return Image.network(snap.data!,
+                width: size,
+                height: size,
+                fit: BoxFit.cover,
+                cacheWidth: 168,
+                errorBuilder: (_, __, ___) => placeholder(Icons.image_not_supported_outlined));
+          },
+        ),
+      ),
+    );
+  }
 }
