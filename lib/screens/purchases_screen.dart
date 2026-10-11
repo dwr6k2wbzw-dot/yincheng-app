@@ -690,6 +690,28 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
             if (!snap.hasData) return const Center(child: CircularProgressIndicator());
             final (cats, sups) = snap.data!;
             return ListView(padding: const EdgeInsets.all(16), children: [
+              // 付款方式放第一排（老闆 2026-10-12）：先選月結廠商／零用金，下面的類別選項才會對
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: 'vendor', label: Text('月結廠商'), icon: Icon(Icons.storefront)),
+                  ButtonSegment(value: 'petty_cash', label: Text('零用金'), icon: Icon(Icons.payments_outlined)),
+                ],
+                selected: {_paidBy},
+                onSelectionChanged: widget.editing != null && !widget.membership.isManager
+                    ? null // 付款方式建立後只有老闆、店長能改（資料庫也會擋）
+                    : (v) => setState(() {
+                          final old = _category;
+                          _paidBy = v.first;
+                          // 切換付款方式後，若原本選的類別在新付款方式下不提供，就清掉；
+                          // 廠商若是依原類別自動帶入的（例：德哥），一併清掉，不留沒有類別的廠商
+                          if (_hiddenCats.contains(old)) {
+                            _category = null;
+                            final auto = sups.where((s) => s.defaultCategory == old).map((s) => s.name).toList();
+                            if (auto.length == 1 && _vendor.text.trim() == auto.first) _vendor.clear();
+                          }
+                        }),
+              ),
+              const SizedBox(height: 8),
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.event),
@@ -780,27 +802,6 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                 subtitle: const Text('會以負數記錄，沖減當月成本', style: TextStyle(fontSize: 12)),
                 value: _isReturn,
                 onChanged: (v) => setState(() => _isReturn = v),
-              ),
-              const SizedBox(height: 4),
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'vendor', label: Text('月結廠商'), icon: Icon(Icons.storefront)),
-                  ButtonSegment(value: 'petty_cash', label: Text('零用金'), icon: Icon(Icons.payments_outlined)),
-                ],
-                selected: {_paidBy},
-                onSelectionChanged: widget.editing != null && !widget.membership.isManager
-                    ? null // 付款方式建立後只有老闆、店長能改（資料庫也會擋）
-                    : (v) => setState(() {
-                          final old = _category;
-                          _paidBy = v.first;
-                          // 切換付款方式後，若原本選的類別在新付款方式下不提供，就清掉；
-                          // 廠商若是依原類別自動帶入的（例：德哥），一併清掉，不留沒有類別的廠商
-                          if (_hiddenCats.contains(old)) {
-                            _category = null;
-                            final auto = sups.where((s) => s.defaultCategory == old).map((s) => s.name).toList();
-                            if (auto.length == 1 && _vendor.text.trim() == auto.first) _vendor.clear();
-                          }
-                        }),
               ),
               const SizedBox(height: 12),
               TextField(
