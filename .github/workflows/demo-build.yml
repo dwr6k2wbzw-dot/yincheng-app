@@ -1,0 +1,30 @@
+# 臨時：編譯「示範模式」（假資料、不連資料庫）供製作員工教學截圖，結果推到 demo-build 分支。不發佈。
+name: 示範版編譯（教學截圖用）
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: |
+          if [ ! -d web ]; then flutter create --platforms web --project-name yincheng_ops --org tw.yincheng . ; fi
+          rm -f test/widget_test.dart
+          python3 tool/patch_index.py
+          mkdir -p web/icons && cp tool/icons/Icon-*.png tool/icons/apple-touch-icon.png web/icons/ && cp tool/icons/favicon.png web/favicon.png
+          cp tool/icons/apple-touch-icon.png web/icons/xcw-touch-180-v2.png && cp tool/icons/favicon.png web/icons/xcw-favicon-v2.png
+      - run: flutter pub get
+      - run: flutter build web --release --pwa-strategy=none --dart-define=DEMO=true --base-href "/"
+      - run: |
+          cd build/web
+          git init -q -b demo-build
+          git -c user.email=ci@noreply -c user.name=ci add -A
+          git -c user.email=ci@noreply -c user.name=ci commit -qm "demo build"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" demo-build
