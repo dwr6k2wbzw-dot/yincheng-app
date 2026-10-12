@@ -142,6 +142,7 @@ class Purchase {
   final String? supersededBy; // App 暫記已被 Excel 同一筆取代（不再計入）
   final bool excelCovered; // App 暫記：日報表已涵蓋那天，以日報表為準（不再計入，0035）
   final String? createdBy;
+  final bool noReceipt; // 新增時沒附照片、選了「缺憑」（0043）
   bool get superseded => supersededBy != null;
   /// 有沒有計入成本、零用金（被 Excel 取代或以日報表為準的 App 暫記不計入）
   bool get counted => supersededBy == null && !excelCovered;
@@ -159,6 +160,7 @@ class Purchase {
     this.supersededBy,
     this.excelCovered = false,
     this.createdBy,
+    this.noReceipt = false,
   });
 
   factory Purchase.fromRow(Map<String, dynamic> r) => Purchase(
@@ -174,6 +176,7 @@ class Purchase {
         supersededBy: r['superseded_by'] as String?,
         excelCovered: r['excel_covered_at'] != null,
         createdBy: r['created_by'] as String?,
+        noReceipt: r['no_receipt'] as bool? ?? false,
       );
 }
 
@@ -190,6 +193,7 @@ class NewPurchase {
   final Uint8List? photoJpeg; // 送貨單照片（存到 receipts/{店家}/slips/）
   final bool slipDraft; // 照片要不要辨識成銷貨單草稿（有銷貨單分頁的店）
   final String? slipVendor; // 銷貨單草稿用的廠商名稱（選既有廠商時也帶名稱）
+  final bool noReceipt; // 沒有照片、選了「缺憑」（0043）
   NewPurchase({
     required this.storeId,
     required this.purchaseDate,
@@ -203,6 +207,7 @@ class NewPurchase {
     this.photoJpeg,
     this.slipDraft = false,
     this.slipVendor,
+    this.noReceipt = false,
   });
 }
 
@@ -467,9 +472,10 @@ class VendorSlip {
   final String? sourceFile;
   final DateTime? periodMonth; // 歸屬月份（Dropbox「M月份」資料夾）；修改時 null＝維持原本
   final String? photoPath; // App 拍的送貨單照片（0034）
-  /// 當初那筆進貨的類別與付款方式（由 photo_path 對回 purchases；對不到是 null）
+  /// 當初那筆進貨的類別、付款方式、填表人／請款人（由 photo_path 對回 purchases；對不到是 null）
   String? categoryCode;
   String? paidBy;
+  String? filer;
   VendorSlip(this.id, this.vendor, this.slipNo, this.date, this.total, this.note, this.lines,
       {this.status = 'confirmed', this.source = 'manual', this.sourceFile, this.periodMonth, this.photoPath});
   bool get isDraft => status == 'draft';

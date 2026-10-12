@@ -562,7 +562,7 @@ class SupabaseRepository implements Repository {
   Future<List<Purchase>> recentPurchases(String storeId, {int limit = 30}) async {
     final rows = await _db
         .from('purchases')
-        .select('id, purchase_date, category_code, memo, amount, paid_by, reconciled, source, superseded_by, excel_covered_at, created_by, vendor_name, '
+        .select('id, purchase_date, category_code, memo, amount, paid_by, reconciled, source, superseded_by, excel_covered_at, created_by, vendor_name, no_receipt, '
             'suppliers!purchases_supplier_same_store(name)')
         .eq('store_id', storeId)
         .order('purchase_date', ascending: false)
@@ -575,7 +575,7 @@ class SupabaseRepository implements Repository {
   Future<List<Purchase>> monthPurchases(String storeId, DateTime month) async {
     final rows = await _db
         .from('purchases')
-        .select('id, purchase_date, category_code, memo, amount, paid_by, reconciled, source, superseded_by, excel_covered_at, created_by, vendor_name, '
+        .select('id, purchase_date, category_code, memo, amount, paid_by, reconciled, source, superseded_by, excel_covered_at, created_by, vendor_name, no_receipt, '
             'suppliers!purchases_supplier_same_store(name)')
         .eq('store_id', storeId)
         .eq('period_month', _day.format(DateTime(month.year, month.month, 1)))
@@ -601,23 +601,26 @@ class SupabaseRepository implements Repository {
     // 類別、付款方式：照片路徑與當初那筆進貨相同，用它找回（老闆 2026-10-12）
     final paths = slips.map((s) => s.photoPath).whereType<String>().toSet().toList();
     if (paths.isNotEmpty) {
-      final cats = <String, String>{}, paid = <String, String>{};
+      final cats = <String, String>{}, paid = <String, String>{}, filer = <String, String>{};
       for (var i = 0; i < paths.length; i += 100) {
         final part = paths.sublist(i, i + 100 > paths.length ? paths.length : i + 100);
         final ps = await _db
             .from('purchases')
-            .select('photo_path, category_code, paid_by')
+            .select('photo_path, category_code, paid_by, memo')
             .eq('store_id', storeId)
             .inFilter('photo_path', part);
         for (final p in ps) {
           cats[p['photo_path'] as String] = p['category_code'] as String;
           paid[p['photo_path'] as String] = p['paid_by'] as String;
+          final memo = (p['memo'] as String?)?.trim();
+          if (memo != null && memo.isNotEmpty) filer[p['photo_path'] as String] = memo;
         }
       }
       for (final s in slips) {
         if (s.photoPath != null) {
           s.categoryCode = cats[s.photoPath];
           s.paidBy = paid[s.photoPath];
+          s.filer = filer[s.photoPath];
         }
       }
     }
@@ -694,6 +697,7 @@ class SupabaseRepository implements Repository {
       'amount': p.amount,
       'paid_by': p.paidBy,
       'client_request_id': p.clientRequestId,
+      if (p.noReceipt && photoPath == null) 'no_receipt': true,
     });
     // 送貨單照片 → 銷貨單草稿。進貨已存好，這步失敗不影響進貨
     if (photoPath != null && p.amount > 0 && p.slipDraft) {

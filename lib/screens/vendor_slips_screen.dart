@@ -190,6 +190,10 @@ class _VendorCard extends StatelessWidget {
                     Text(_itemText(s),
                         maxLines: 2, overflow: TextOverflow.ellipsis,
                         style: const TextStyle(color: AppColors.muted, fontSize: 13)),
+                    // 月結銷貨單顯示填表人、零用金發票／收據顯示請款人（新增進貨時填的那一欄）
+                    Text('${s.paidBy == 'petty_cash' ? '請款人' : '填表人'}：${s.filer ?? '未填'}',
+                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: AppColors.muted, fontSize: 12)),
                   ]),
                 ),
                 const SizedBox(width: 8),

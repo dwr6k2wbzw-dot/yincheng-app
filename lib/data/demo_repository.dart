@@ -68,14 +68,16 @@ class DemoRepository implements Repository {
           VendorSlipLine(1, 'A01', '示範琴酒 700ML', 1, '瓶', 900, 900),
           VendorSlipLine(2, 'A02', '示範蘇打水 24入', 1, '箱', 400, 400),
         ])
-          ..categoryCode = 'liquor_monthly',
+          ..categoryCode = 'liquor_monthly'
+          ..filer = 'Eason',
         VendorSlip('v2', '示範食材行', 'F-002', DateTime(month.year, month.month, 2), 850, null, [
           VendorSlipLine(1, null, '示範牛肉片', 2, '包', 425, 850),
         ])
           ..categoryCode = 'food',
         VendorSlip('v3', '示範雜貨', 'M-003', DateTime(month.year, month.month, 3), 320, null, [])
           ..categoryCode = 'petty_misc'
-          ..paidBy = 'petty_cash',
+          ..paidBy = 'petty_cash'
+          ..filer = '小郭',
       ];
   @override
   Future<List<String>> failedSlipFiles(String storeId) async => [];
