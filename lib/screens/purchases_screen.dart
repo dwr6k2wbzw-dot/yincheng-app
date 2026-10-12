@@ -431,7 +431,7 @@ class _PurchaseTile extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 '${DateFormat('M/d').format(p.purchaseDate)}・$categoryName'
-                '${p.paidBy == 'petty_cash' ? '・零用金' : ''}${p.source == 'import' ? '・日報表' : (p.counted ? '・App 暫記（點一下可改）' : '・以日報表為準，不計入')}',
+                '${p.paidBy == 'petty_cash' ? '・零用金' : ''}${p.noReceipt ? '・缺憑' : ''}${p.source == 'import' ? '・日報表' : (p.counted ? '・App 暫記（點一下可改）' : '・以日報表為準，不計入')}',
                 style: const TextStyle(color: AppColors.muted, fontSize: 12),
               ),
             ]),
@@ -489,6 +489,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
       ? (_hiddenCatsByPaidBy[_paidBy] ?? const <String>{})
       : const <String>{};
   bool _isReturn = false;
+  bool _noReceipt = false; // 沒有照片時一定要勾「缺憑」才能儲存（老闆 2026-10-12）
   bool _saving = false;
   late Future<(List<CostCategory>, List<Supplier>)> _future;
   bool _started = false;
@@ -577,7 +578,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
             const Icon(Icons.photo_camera_outlined, color: AppColors.primary),
             const SizedBox(width: 12),
             const Expanded(
-              child: Text('拍照辨識送貨單', style: TextStyle(fontWeight: FontWeight.w600)),
+              child: Text('送貨單／發票照片（必附）', style: TextStyle(fontWeight: FontWeight.w600)),
             ),
             if (_scanning)
               const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
@@ -601,7 +602,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
           if (_photo != null && AppConfig.vendorSlipStores.contains(widget.membership.storeName) && !_isReturn)
             const Padding(
               padding: EdgeInsets.only(top: 6),
-              child: Text('儲存後，這張送貨單會在一小時內自動變成「銷貨單」分頁的草稿，再由老闆或店長核對品項。',
+              child: Text('儲存後，這張照片會自動出現在「銷貨單」分頁。',
                   style: TextStyle(color: AppColors.muted, fontSize: 12, height: 1.4)),
             ),
           if (_photo != null) ...[
@@ -615,9 +616,18 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                 _photo = null;
                 _scanNote = null;
               }),
-              child: const Text('不附照片'),
+              child: const Text('移除照片'),
             ),
           ],
+          if (_photo == null && !_scanning)
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              value: _noReceipt,
+              onChanged: (v) => setState(() => _noReceipt = v ?? false),
+              title: const Text('缺憑（沒有單據可拍）'),
+              subtitle: const Text('沒有照片時一定要勾選才能儲存', style: TextStyle(fontSize: 12)),
+            ),
         ]),
       );
 
@@ -629,6 +639,11 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
     }
     if (raw == null || raw <= 0) {
       showMessage(context, '請輸入大於 0 的金額', error: true);
+      return;
+    }
+    // 新增進貨一定要附照片；沒有照片要勾「缺憑」（老闆 2026-10-12；修改舊資料不檢查）
+    if (widget.editing == null && _photo == null && !_noReceipt) {
+      showMessage(context, '請拍照或選照片附上單據；沒有單據請勾選「缺憑」', error: true);
       return;
     }
     final name = _vendor.text.trim();
@@ -668,6 +683,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
             clientRequestId: _requestId,
             slipDraft: AppConfig.vendorSlipStores.contains(widget.membership.storeName),
             slipVendor: name.isEmpty ? null : name,
+            noReceipt: _photo == null && _noReceipt,
           ));
       if (mounted) {
         showMessage(context, '已新增');
