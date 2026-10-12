@@ -71,6 +71,9 @@ class AppConfig {
   static const pettyCashCategoryLabel = {'xc_bar_liquor': '現結酒商'};
   // 零用金時不顯示廠商提示：酒吧-酒水（月結廠商不適用）、布布拉麵-食材（信功、立成）
   static const pettyCashHintHidden = {'xc_bar_liquor', 'xc_ramen_food'};
+  static const vendorHintRemove = {
+    'xc_cafe_food': {'柳橙汁'}, // 咖啡吧-餐食（老闆 2026-10-13 移除）
+  };
   static const vendorHintRename = {'二店拉麵食材': '立成'}; // 布布拉麵-食材
   static const vendorHintAdd = {
     'xc_bar_food': ['小郭'], // 酒吧-食材
