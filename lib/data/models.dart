@@ -114,9 +114,11 @@ class CostCategory {
   final String costGroup; // drink／food／coffee／ramen／other
   final bool inMiscRate; // 算進雜項成本率
   final bool selectable; // 新增進貨可不可以選（0046：停用的類別歷史資料照常顯示）
-  CostCategory(this.code, this.name, [this.storeName]) : costGroup = 'other', inMiscRate = false, selectable = true;
+  final String? displayAs; // 進貨頁顯示時併入哪個類別（0047：小城外三個餐食→餐食、三個雜支→其他雜支）
+  CostCategory(this.code, this.name, [this.storeName])
+      : costGroup = 'other', inMiscRate = false, selectable = true, displayAs = null;
   CostCategory.full(this.code, this.name, this.storeName,
-      {required this.costGroup, required this.inMiscRate, this.selectable = true});
+      {required this.costGroup, required this.inMiscRate, this.selectable = true, this.displayAs});
 }
 
 /// 銷貨單分組（老闆 2026-10-12 改）：依當初新增進貨的付款方式分「月結銷貨單」「零用金發票／收據」。

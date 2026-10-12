@@ -299,11 +299,11 @@ class SupabaseRepository implements Repository {
   @override
   Future<List<CostCategory>> costCategories() async {
     final rows =
-        await _db.from('cost_categories').select('code, name, store_name, cost_group, in_misc_rate, selectable').order('sort_order');
+        await _db.from('cost_categories').select('code, name, store_name, cost_group, in_misc_rate, selectable, display_as').order('sort_order');
     final list = rows
         .map((r) => CostCategory.full(r['code'] as String, r['name'] as String, r['store_name'] as String?,
             costGroup: r['cost_group'] as String? ?? 'other', inMiscRate: r['in_misc_rate'] as bool? ?? false,
-            selectable: r['selectable'] as bool? ?? true))
+            selectable: r['selectable'] as bool? ?? true, displayAs: r['display_as'] as String?))
         .toList();
     // 老闆指定的順序優先（List.sort 不穩定，所以用原本位置當第二排序）
     final pos = {for (final (i, c) in list.indexed) c.code: i};

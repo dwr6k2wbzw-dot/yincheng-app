@@ -39,6 +39,9 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   /// 進貨以 Dropbox 日報表為準的店：只能看，不能新增或核銷（核銷也以 Excel 的「核銷」欄為準）
   bool get _synced => AppConfig.excelSyncedStores.contains(widget.membership.storeName);
 
+  /// 顯示時合併的類別（0047）：例 咖啡吧-餐食、布布拉麵-餐食 → 餐食；只影響進貨頁分組，不改資料
+  Map<String, String> _displayAs = {};
+
   Future<(List<Purchase>, Map<String, String>, DateTime?)> _load() async {
     final repo = AppScope.of(context).repo;
     final id = widget.membership.storeId;
@@ -49,6 +52,10 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       _today = null; // 取不到就不顯示當日新增，不影響列表
     }
     final cats = {for (final c in r[1] as List<CostCategory>) c.code: c.name};
+    _displayAs = {
+      for (final c in r[1] as List<CostCategory>)
+        if (c.displayAs != null) c.code: c.displayAs!
+    };
     DateTime? last;
     if (_synced && widget.membership.canSeeRevenue) last = await repo.lastExcelSync(id);
     return (r[0] as List<Purchase>, cats, last);
@@ -174,7 +181,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     final total = items.fold<double>(0, (t, p) => t + p.amount);
     final byCat = <String, List<Purchase>>{};
     for (final p in items) {
-      byCat.putIfAbsent(p.categoryCode, () => []).add(p);
+      byCat.putIfAbsent(_displayAs[p.categoryCode] ?? p.categoryCode, () => []).add(p);
     }
     // 依類別在設定中的順序排列
     final order = cats.keys.toList();
