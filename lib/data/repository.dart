@@ -95,6 +95,10 @@ abstract class Repository {
   Future<void> deleteReminder(String reminderId);
   Future<void> setReminderDone(String storeId, String reminderId, DateTime occurrence, bool done);
 
+  // App 內通知（小鈴鐺，0042）：最近 30 天、最多 50 則，不含自己做的事
+  Future<NotificationFeed> notifications(String storeId);
+  Future<void> markNotificationsSeen(String storeId);
+
   // 盤點
   Future<List<Product>> products(String storeId);
   Future<List<StockCount>> stockCounts(String storeId);

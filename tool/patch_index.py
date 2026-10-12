@@ -110,6 +110,19 @@ window.ycPickImage = function (fromLibrary) {
     input.click();
   });
 };
+// App 新版本檢查（小鈴鐺）：deploy.yml 會寫入 window.ycBuild 與 version.txt，兩者不同就代表有新版
+window.ycCheckUpdate = async function () {
+  try {
+    if (!window.ycBuild) return false;
+    var r = await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) return false;
+    var v = (await r.text()).trim();
+    return /^[0-9a-f]{6,40}$/.test(v) && v !== window.ycBuild;
+  } catch (e) { return false; }
+};
+window.ycReload = function () {
+  location.replace(location.pathname + '?u=' + Date.now() + location.hash);
+};
 window.ycOcr = async function (dataUrl) {
   if (!window.Tesseract) {
     await new Promise(function (ok, bad) {

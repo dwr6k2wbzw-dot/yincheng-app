@@ -8,6 +8,7 @@ import '../widgets/common.dart';
 import '../data/repository.dart';
 import 'dashboard_screen.dart';
 import 'members_screen.dart';
+import 'notifications_screen.dart';
 import 'purchases_screen.dart';
 import 'revenue_screen.dart';
 import 'stock_counts_screen.dart';
@@ -109,7 +110,9 @@ class _HomeShellState extends State<HomeShell> {
         ),
       ],
     ];
+    int? scheduleTab;
     if (AppConfig.scheduleStores.contains(m.storeName)) {
+      scheduleTab = tabs.length;
       tabs.add((
         ScheduleScreen(key: ValueKey('sc-${m.storeId}'), membership: m),
         const NavigationDestination(
@@ -121,6 +124,11 @@ class _HomeShellState extends State<HomeShell> {
       appBar: AppBar(
         title: _StoreSwitcher(state: state),
         actions: [
+          NotificationBell(
+            key: ValueKey('bell-${m.storeId}'),
+            membership: m,
+            onOpenSchedule: scheduleTab == null ? null : () => setState(() => _tab = scheduleTab!),
+          ),
           PopupMenuButton<String>(
             tooltip: '更多',
             onSelected: (v) async {
