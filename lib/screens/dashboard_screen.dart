@@ -264,20 +264,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final misc = s.miscCost + miscItems;
     final profit = s.revenue - s.purchaseCost - misc - rent - payroll;
     final missing = [if (d.fixed.rent == null) '租金', if (d.fixed.payroll == null) '人事'];
+    // 百分比＝占當月營業收入（老闆 2026-10-12）；營收 0 時顯示 —
+    String ofRevenue(double v) => pct(s.revenue > 0 ? v / s.revenue : null);
     Widget line(String k, double v, {bool minus = true}) => Padding(
           padding: const EdgeInsets.symmetric(vertical: 2),
           child: Row(children: [
-            Text(k, style: const TextStyle(color: AppColors.muted, fontSize: 13)),
-            const Spacer(),
+            Expanded(child: Text(k, style: const TextStyle(color: AppColors.muted, fontSize: 13))),
             Text('${minus ? '−' : ''}${ntd(v)}', style: const TextStyle(fontSize: 13, fontFeatures: [FontFeature.tabularFigures()])),
+            SizedBox(
+              width: 58,
+              child: Text(ofRevenue(v),
+                  textAlign: TextAlign.right,
+                  style: const TextStyle(color: AppColors.muted, fontSize: 12, fontFeatures: [FontFeature.tabularFigures()])),
+            ),
           ]),
         );
     return SectionCard(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const Text('本月損益', style: TextStyle(color: AppColors.muted)),
         const SizedBox(height: 6),
-        Text(ntd(profit),
-            style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: profit >= 0 ? AppColors.good : AppColors.bad)),
+        Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
+          Text(ntd(profit),
+              style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: profit >= 0 ? AppColors.good : AppColors.bad)),
+          const SizedBox(width: 8),
+          Text(ofRevenue(profit),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: profit >= 0 ? AppColors.good : AppColors.bad)),
+        ]),
         if (missing.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 4),
@@ -290,6 +302,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         line('雜項${miscItems != 0 ? '（含明細 ${ntd(miscItems)}）' : ''}', misc),
         line('租金${rentItems != 0 ? '（含明細 ${ntd(rentItems)}）' : ''}', rent),
         line('人事${payrollItems != 0 ? '（含明細 ${ntd(payrollItems)}）' : ''}', payroll),
+        const SizedBox(height: 2),
+        const Text('百分比＝占本月營業收入', style: TextStyle(color: AppColors.muted, fontSize: 11)),
         const Divider(height: 20),
         Row(children: [
           _fixedItem(d, 'rent', '租金（基底）', d.fixed.rent, s.revenue),
