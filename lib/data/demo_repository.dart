@@ -134,6 +134,21 @@ class DemoRepository implements Repository {
   Future<void> markHandoverRead(String storeId, List<String> noteIds) async {}
   @override
   Future<void> deleteHandover(String noteId) async => _notes.removeWhere((n) => n.id == noteId);
+  DateTime? _notifSeen;
+  @override
+  Future<NotificationFeed> notifications(String storeId) async {
+    final now = DateTime.now();
+    return NotificationFeed([
+      AppNotification(id: 3, kind: 'schedule', title: '班表更新', body: '${now.month} 月班表有 3 處修改',
+          refMonth: DateTime(now.year, now.month), actorName: '示範店長', createdAt: now.subtract(const Duration(minutes: 20))),
+      AppNotification(id: 2, kind: 'reminder', title: '新提醒', body: '跟大倉捷叫貨', actorName: '示範正職',
+          createdAt: now.subtract(const Duration(hours: 3))),
+      AppNotification(id: 1, kind: 'handover', title: '新交接', body: '冰塊機漏水，已叫修', actorName: '示範正職',
+          createdAt: now.subtract(const Duration(days: 1))),
+    ], _notifSeen);
+  }
+  @override
+  Future<void> markNotificationsSeen(String storeId) async => _notifSeen = DateTime.now();
   @override
   Future<void> saveReminder(String storeId, WorkReminder r, {bool isNew = false}) async {
     final x = WorkReminder(

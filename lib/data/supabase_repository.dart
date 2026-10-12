@@ -475,6 +475,32 @@ class SupabaseRepository implements Repository {
   Future<void> deleteHandover(String noteId) => _db.from('handover_notes').delete().eq('id', noteId);
 
   @override
+  Future<NotificationFeed> notifications(String storeId) async {
+    final since = DateTime.now().subtract(const Duration(days: 30)).toUtc().toIso8601String();
+    final r = await Future.wait<dynamic>([
+      _db
+          .from('app_notifications')
+          .select()
+          .eq('store_id', storeId)
+          .gte('created_at', since)
+          .order('created_at', ascending: false)
+          .limit(50),
+      _db.from('notification_reads').select('seen_at').eq('store_id', storeId).maybeSingle(),
+    ]);
+    final me = currentUserId;
+    final items = (r[0] as List)
+        .map((x) => AppNotification.fromRow(x as Map<String, dynamic>))
+        .where((n) => me == null || n.actorId != me)
+        .toList();
+    final seen = (r[1] as Map<String, dynamic>?)?['seen_at'] as String?;
+    return NotificationFeed(items, seen == null ? null : DateTime.parse(seen).toLocal());
+  }
+
+  @override
+  Future<void> markNotificationsSeen(String storeId) =>
+      _db.rpc('mark_notifications_seen', params: {'p_store': storeId});
+
+  @override
   Future<void> saveReminder(String storeId, WorkReminder r, {bool isNew = false}) async {
     final row = {
       'title': r.title.trim(),

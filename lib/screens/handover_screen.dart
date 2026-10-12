@@ -86,14 +86,15 @@ class _HandoverSummaryCardState extends State<HandoverSummaryCard> {
 
 /// 交接・提醒頁：兩個分頁「交接」「提醒」
 class HandoverScreen extends StatefulWidget {
-  const HandoverScreen({super.key, required this.membership});
+  const HandoverScreen({super.key, required this.membership, this.initialTab = 0});
   final Membership membership;
+  final int initialTab; // 0＝交接、1＝提醒（從小鈴鐺通知點進來）
   @override
   State<HandoverScreen> createState() => _HandoverScreenState();
 }
 
 class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProviderStateMixin {
-  late final TabController _tabs = TabController(length: 2, vsync: this);
+  late final TabController _tabs = TabController(length: 2, vsync: this, initialIndex: widget.initialTab);
   late Future<HandoverBoard> _future;
   HandoverBoard? _board;
   bool _started = false;

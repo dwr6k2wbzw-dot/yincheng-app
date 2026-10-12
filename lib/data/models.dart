@@ -670,6 +670,47 @@ class HandoverNote {
       );
 }
 
+/// App 內通知（小鈴鐺，0042）：新交接、新提醒、班表修改；由資料庫觸發器產生
+class AppNotification {
+  final int id;
+  final String kind; // handover／reminder／schedule
+  final String title;
+  final String? body;
+  final DateTime? refMonth;
+  final String? actorId;
+  final String actorName;
+  final DateTime createdAt;
+  AppNotification({
+    required this.id,
+    required this.kind,
+    required this.title,
+    this.body,
+    this.refMonth,
+    this.actorId,
+    this.actorName = '',
+    required this.createdAt,
+  });
+  factory AppNotification.fromRow(Map<String, dynamic> r) => AppNotification(
+        id: (r['id'] as num).toInt(),
+        kind: r['kind'] as String,
+        title: r['title'] as String,
+        body: r['body'] as String?,
+        refMonth: r['ref_month'] == null ? null : DateTime.parse(r['ref_month'] as String),
+        actorId: r['actor_id'] as String?,
+        actorName: r['actor_name'] as String? ?? '',
+        createdAt: DateTime.parse(r['created_at'] as String).toLocal(),
+      );
+}
+
+/// 通知清單（已排除自己做的事）＋上次查看時間；查看時間之後的算未讀
+class NotificationFeed {
+  final List<AppNotification> items;
+  final DateTime? seenAt;
+  NotificationFeed(this.items, this.seenAt);
+  bool isUnread(AppNotification n) => seenAt == null || n.createdAt.isAfter(seenAt!);
+  int get unreadCount => items.where(isUnread).length;
+}
+
 class WorkReminder {
   final String id;
   final String title;

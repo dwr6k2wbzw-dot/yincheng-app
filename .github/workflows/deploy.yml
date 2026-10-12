@@ -59,6 +59,10 @@ jobs:
           sed -i "s#\"mainJsPath\":\"main.dart.js\"#\"mainJsPath\":\"main.dart.js?v=$v\"#" build/web/flutter_bootstrap.js
           grep -o 'flutter_bootstrap.js?v=[0-9a-f]*' build/web/index.html
           grep -o 'main.dart.js?v=[0-9a-f]*' build/web/flutter_bootstrap.js
+          # 小鈴鐺的「App 有新版本」：目前版本寫進網頁，最新版本寫進 version.txt（App 定期比對）
+          echo "$v" > build/web/version.txt
+          sed -i "s#</head>#<script>window.ycBuild='$v';</script>\n</head>#" build/web/index.html
+          grep -q "window.ycBuild='$v'" build/web/index.html
       - name: 另存一份編譯結果到 web-build 分支（供除錯檢查）
         run: |
           cd build/web
