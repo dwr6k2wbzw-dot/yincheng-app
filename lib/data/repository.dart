@@ -91,6 +91,7 @@ abstract class Repository {
   Future<void> setHandoverResolved(String noteId, bool resolved);
   Future<void> markHandoverRead(String storeId, List<String> noteIds);
   Future<void> deleteHandover(String noteId);
+  Future<void> updateHandover(String noteId, String body); // 0044：任何成員都能改內容
   Future<void> saveReminder(String storeId, WorkReminder r, {bool isNew = false});
   Future<void> deleteReminder(String reminderId);
   Future<void> setReminderDone(String storeId, String reminderId, DateTime occurrence, bool done);

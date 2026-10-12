@@ -645,6 +645,8 @@ class HandoverNote {
   final DateTime? resolvedAt;
   final String? resolvedName;
   final Map<String, String> readers; // userId → 名字
+  final DateTime? editedAt; // 內容最後修改時間（0044：任何成員都能改）
+  final String? editedName;
   HandoverNote({
     required this.id,
     required this.body,
@@ -655,6 +657,8 @@ class HandoverNote {
     this.resolvedAt,
     this.resolvedName,
     this.readers = const {},
+    this.editedAt,
+    this.editedName,
   });
   bool get resolved => resolvedAt != null;
   /// 對我來說是未讀：不是我寫的、我沒讀過、還沒處理
@@ -669,6 +673,8 @@ class HandoverNote {
         createdAt: DateTime.parse(r['created_at'] as String).toLocal(),
         resolvedAt: r['resolved_at'] == null ? null : DateTime.parse(r['resolved_at'] as String).toLocal(),
         resolvedName: r['resolved_name'] as String?,
+        editedAt: r['edited_at'] == null ? null : DateTime.parse(r['edited_at'] as String).toLocal(),
+        editedName: r['edited_name'] as String?,
         readers: {
           for (final x in (r['handover_reads'] as List? ?? const []))
             (x as Map)['user_id'] as String: x['user_name'] as String? ?? '',
