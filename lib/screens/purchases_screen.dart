@@ -102,7 +102,6 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
             final list = all.where((p) => p.counted).toList();
             final replaced = all.where((p) => p.superseded).length;
             final covered = all.where((p) => !p.superseded && p.excelCovered).toList();
-            final pending = list.where((p) => p.source == 'app').toList();
             final vendor = list.where((p) => p.paidBy != 'petty_cash').toList();
             final petty = list.where((p) => p.paidBy == 'petty_cash').toList();
             return RefreshIndicator(
@@ -124,10 +123,10 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          '進貨由 Dropbox 日報表每小時自動同步，內容和金額一律以日報表為準（日報表的進貨在 App 不能改、不能刪）。'
-                          '也可以按右下角在 App 先記一筆（暫記），暫記可以點進去修改或刪除；'
-                          '日報表打進同一筆、或日報表已經記到更晚的日期，暫記就不再計入，不會重複算。'
-                          '${last == null ? '' : '\n最後一次寫入：${DateFormat('M/d HH:mm').format(last)}'}',
+                          // 進貨改由 App 輸入（老闆 2026-10-13，0045）；營收仍從日報表同步
+                          '10/13 起進貨一律按右下角「新增進貨」在 App 輸入，日報表不再匯入進貨（營收照常同步）。'
+                          '自己新增的可以點進去修改或刪除。10/12 以前的進貨來自日報表，不能在 App 修改。'
+                          '${last == null ? '' : '\n日報表最後一次匯入進貨：${DateFormat('M/d HH:mm').format(last)}'}',
                           style: const TextStyle(color: AppColors.muted, fontSize: 12, height: 1.5),
                         ),
                       ),
@@ -141,15 +140,13 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                 const SizedBox(height: 12),
                 Text('本月進貨合計 ${ntd(list.fold<double>(0, (t, p) => t + p.amount))}，共 ${list.length} 筆',
                     textAlign: TextAlign.center, style: const TextStyle(color: AppColors.muted, fontSize: 12)),
-                if (_synced && (pending.isNotEmpty || replaced > 0 || covered.isNotEmpty))
+                if (_synced && (replaced > 0 || covered.isNotEmpty))
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
                     child: Text(
                       [
-                        if (pending.isNotEmpty)
-                          '含 App 暫記 ${pending.length} 筆 ${ntd(pending.fold<double>(0, (t, p) => t + p.amount))}（Excel 還沒出現）',
-                        if (replaced > 0) '$replaced 筆暫記已由 Excel 取代',
-                        if (covered.isNotEmpty) '${covered.length} 筆暫記以日報表為準、不計入（點下方查看）',
+                        if (replaced > 0) '$replaced 筆 App 進貨已由日報表取代',
+                        if (covered.isNotEmpty) '${covered.length} 筆 10/12 以前的 App 進貨以日報表為準、不計入（點下方查看）',
                       ].join('；'),
                       textAlign: TextAlign.center,
                       style: const TextStyle(color: AppColors.warn, fontSize: 12),
@@ -289,7 +286,7 @@ class _CategoryPurchasesScreenState extends State<_CategoryPurchasesScreen> {
     final repo = AppScope.of(context).repo;
     final mine = p.createdBy != null && p.createdBy == repo.currentUserId;
     if (p.fromExcel) {
-      showMessage(context, '這筆來自 Dropbox 日報表，以日報表為準；要改請改日報表，下一次同步（每小時）就會更新');
+      showMessage(context, '這筆是 10/12 以前從日報表匯入的進貨，不能在 App 修改或刪除');
       return;
     }
     if (!widget.membership.isManager && !mine) {
@@ -309,7 +306,7 @@ class _CategoryPurchasesScreenState extends State<_CategoryPurchasesScreen> {
           ListTile(
             title: Text('${p.supplierName ?? p.memo ?? '進貨'}・${ntd(p.amount)}',
                 style: const TextStyle(fontWeight: FontWeight.w700)),
-            subtitle: Text(locked ? '這筆已以日報表為準（不計入），只能刪除' : 'App 暫記：可以修改或刪除'),
+            subtitle: Text(locked ? '這筆已以日報表為準（不計入），只能刪除' : 'App 新增的進貨：可以修改或刪除'),
           ),
           if (!locked)
             ListTile(leading: const Icon(Icons.edit_outlined), title: const Text('修改'), onTap: () => Navigator.pop(c, 'edit')),
@@ -431,7 +428,7 @@ class _PurchaseTile extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 '${DateFormat('M/d').format(p.purchaseDate)}・$categoryName'
-                '${p.paidBy == 'petty_cash' ? '・零用金' : ''}${p.noReceipt ? '・缺憑' : ''}${p.source == 'import' ? '・日報表' : (p.counted ? '・App 暫記（點一下可改）' : '・以日報表為準，不計入')}',
+                '${p.paidBy == 'petty_cash' ? '・零用金' : ''}${p.noReceipt ? '・缺憑' : ''}${p.source == 'import' ? '・日報表' : (p.counted ? '・App（點一下可改）' : '・以日報表為準，不計入')}',
                 style: const TextStyle(color: AppColors.muted, fontSize: 12),
               ),
             ]),
@@ -698,7 +695,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: Text(widget.editing == null ? '新增進貨' : '修改進貨（App 暫記）')),
+        appBar: AppBar(title: Text(widget.editing == null ? '新增進貨' : '修改進貨')),
         body: FutureBuilder<(List<CostCategory>, List<Supplier>)>(
           future: _future,
           builder: (context, snap) {
