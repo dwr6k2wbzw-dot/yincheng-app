@@ -123,6 +123,26 @@ window.ycCheckUpdate = async function () {
 window.ycReload = function () {
   location.replace(location.pathname + '?u=' + Date.now() + location.hash);
 };
+// 存檔（損益表）：手機用分享選單（可選「儲存到檔案」），不支援就直接下載
+window.ycSaveFile = async function (bytes, name, mime) {
+  var file = new File([bytes], name, { type: mime });
+  if (navigator.canShare && navigator.share) {
+    try {
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: name });
+        return 'shared';
+      }
+    } catch (e) {
+      if (e && e.name === 'AbortError') return 'cancel';
+    }
+  }
+  var url = URL.createObjectURL(file);
+  var a = document.createElement('a');
+  a.href = url; a.download = name; a.style.display = 'none';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
+  return 'downloaded';
+};
 window.ycOcr = async function (dataUrl) {
   if (!window.Tesseract) {
     await new Promise(function (ok, bad) {
