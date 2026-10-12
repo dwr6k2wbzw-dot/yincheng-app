@@ -44,7 +44,7 @@ class _RevenueScreenState extends State<RevenueScreen> {
   Future<(List<RevenueEntry>, DateTime?)> _load() async {
     final repo = AppScope.of(context).repo;
     final id = widget.membership.storeId;
-    final list = await repo.revenueEntries(id);
+    final list = await repo.revenueEntries(id, limit: 120); // 星期平均可看近 12 週
     final last = _excelSynced ? await repo.lastExcelSync(id) : null;
     return (list, last);
   }
@@ -87,7 +87,12 @@ class _RevenueScreenState extends State<RevenueScreen> {
                     style: const TextStyle(color: AppColors.muted)),
               ]);
             }
-            final offset = banner == null ? 0 : 1;
+            // 列表上方：同步說明（若有）＋星期平均
+            final headers = <Widget>[
+              if (banner != null) banner,
+              _WeekdayStats(entries: list, multi: isMultiLineStore(widget.membership.storeName)),
+            ];
+            final offset = headers.length;
             return RefreshIndicator(
               onRefresh: () async => _reload(),
               child: ListView.separated(
@@ -95,7 +100,7 @@ class _RevenueScreenState extends State<RevenueScreen> {
                 itemCount: list.length + offset,
                 separatorBuilder: (_, __) => const SizedBox(height: 8),
                 itemBuilder: (_, i) {
-                  if (i < offset) return banner!;
+                  if (i < offset) return headers[i];
                   final e = list[i - offset];
                   return _RevenueTile(
                       e: e,
@@ -182,6 +187,110 @@ class _RevenueTile extends StatelessWidget {
               overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
         ),
       ]);
+}
+
+/// 星期平均（老闆 2026-10-12）：週一～週日各自的平均營業額、平均來客數、客單價。
+/// 營業額＝收款合計（與列表大字相同）；客單＝合計營業額÷合計來客（小城外用調酒收入，與小城外 Excel 相同）。
+class _WeekdayStats extends StatefulWidget {
+  const _WeekdayStats({required this.entries, required this.multi});
+  final List<RevenueEntry> entries;
+  final bool multi;
+  @override
+  State<_WeekdayStats> createState() => _WeekdayStatsState();
+}
+
+class _WeekdayStatsState extends State<_WeekdayStats> {
+  String _range = '4w'; // month＝本月、4w＝近 4 週、12w＝近 12 週
+  static const _ranges = {'month': '本月', '4w': '近 4 週', '12w': '近 12 週'};
+  static const _names = ['一', '二', '三', '四', '五', '六', '日'];
+
+  List<RevenueEntry> _pick() {
+    final today = bizToday();
+    if (_range == 'month') {
+      return widget.entries.where((e) => e.bizDate.year == today.year && e.bizDate.month == today.month).toList();
+    }
+    final days = _range == '4w' ? 28 : 84;
+    final from = today.subtract(Duration(days: days));
+    return widget.entries.where((e) => e.bizDate.isAfter(from) && !e.bizDate.isAfter(today)).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = List.generate(7, (_) => <RevenueEntry>[]);
+    for (final e in _pick()) {
+      rows[e.bizDate.weekday - 1].add(e);
+    }
+    final avg = <double?>[];
+    for (final r in rows) {
+      avg.add(r.isEmpty ? null : r.fold<double>(0, (a, e) => a + e.received) / r.length);
+    }
+    final best = avg.whereType<double>().fold<double>(0, (a, v) => v > a ? v : a);
+    const head = TextStyle(color: AppColors.muted, fontSize: 12);
+    const cell = TextStyle(fontSize: 13, fontFeatures: [FontFeature.tabularFigures()]);
+    return SectionCard(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Expanded(child: Text('星期平均', style: TextStyle(fontWeight: FontWeight.w600))),
+          for (final k in _ranges.keys)
+            Padding(
+              padding: const EdgeInsets.only(left: 6),
+              child: ChoiceChip(
+                label: Text(_ranges[k]!, style: const TextStyle(fontSize: 12)),
+                selected: _range == k,
+                visualDensity: VisualDensity.compact,
+                onSelected: (_) => setState(() => _range = k),
+              ),
+            ),
+        ]),
+        const SizedBox(height: 8),
+        Row(children: const [
+          SizedBox(width: 44, child: Text('星期', style: head)),
+          Expanded(child: Text('平均營業額', textAlign: TextAlign.right, style: head)),
+          SizedBox(width: 64, child: Text('來客', textAlign: TextAlign.right, style: head)),
+          SizedBox(width: 72, child: Text('客單', textAlign: TextAlign.right, style: head)),
+        ]),
+        const Divider(height: 12),
+        for (var i = 0; i < 7; i++)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 3),
+            child: () {
+              final r = rows[i];
+              if (r.isEmpty) {
+                return Row(children: [
+                  SizedBox(width: 44, child: Text('週${_names[i]}', style: cell)),
+                  const Expanded(child: Text('—', textAlign: TextAlign.right, style: TextStyle(color: AppColors.muted))),
+                ]);
+              }
+              final guests = r.fold<int>(0, (a, e) => a + e.guests);
+              final base = r.fold<double>(0, (a, e) => a + (widget.multi ? e.drinks + e.food + e.project : e.received));
+              final top = avg[i] == best && best > 0;
+              return Row(children: [
+                SizedBox(
+                  width: 44,
+                  child: Text('週${_names[i]}',
+                      style: cell.copyWith(fontWeight: top ? FontWeight.w700 : null, color: top ? AppColors.good : null)),
+                ),
+                Expanded(
+                  child: Text('${ntd(avg[i]!.round())}（${r.length}天）',
+                      textAlign: TextAlign.right,
+                      style: cell.copyWith(fontWeight: top ? FontWeight.w700 : null, color: top ? AppColors.good : null)),
+                ),
+                SizedBox(width: 64, child: Text('${(guests / r.length).toStringAsFixed(1)} 位', textAlign: TextAlign.right, style: cell)),
+                SizedBox(
+                  width: 72,
+                  child: Text(guests > 0 ? ntd((base / guests).round()) : '—', textAlign: TextAlign.right, style: cell),
+                ),
+              ]);
+            }(),
+          ),
+        const SizedBox(height: 6),
+        Text(
+          '平均營業額、來客＝該星期幾每天的平均；客單＝${widget.multi ? '調酒收入' : '營業額'}合計÷來客合計。綠色是平均最高的那天。',
+          style: const TextStyle(color: AppColors.muted, fontSize: 11, height: 1.4),
+        ),
+      ]),
+    );
+  }
 }
 
 /// 營收由 Dropbox 同步時，列表上方的說明
