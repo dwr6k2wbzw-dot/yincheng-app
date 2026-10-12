@@ -4,13 +4,14 @@ import 'dart:typed_data';
 
 /// 拍照辨識送貨單：手機上選照片／拍照（JS ycPickImage），再用免費文字辨識讀出文字（JS ycOcr，Tesseract.js）
 @JS('ycPickImage')
-external JSPromise<JSAny?> _ycPickImage();
+external JSPromise<JSAny?> _ycPickImage(JSBoolean fromLibrary);
 @JS('ycOcr')
 external JSPromise<JSString> _ycOcr(JSString dataUrl);
 
-/// 選照片（或拍照）。取消時回傳 null。回傳壓縮後的 JPEG data URL
-Future<String?> pickSlipImage() async {
-  final r = await _ycPickImage().toDart;
+/// 選照片（或拍照）。取消時回傳 null。回傳壓縮後的 JPEG data URL。
+/// fromLibrary＝true 直接開手機相簿（不開相機），例：班表照片
+Future<String?> pickSlipImage({bool fromLibrary = false}) async {
+  final r = await _ycPickImage(fromLibrary.toJS).toDart;
   if (r == null) return null;
   return (r as JSString).toDart;
 }

@@ -293,7 +293,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   Future<void> _uploadPhoto() async {
     String? photo;
     try {
-      photo = await pickSlipImage();
+      photo = await pickSlipImage(fromLibrary: true); // 從相簿選已拍好的班表照片
     } catch (e) {
       if (mounted) showMessage(context, '照片讀取失敗：$e', error: true);
       return;
@@ -385,8 +385,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 if (_canEdit) ...[
                   OutlinedButton.icon(
                     onPressed: _uploadPhoto,
-                    icon: const Icon(Icons.upload_outlined),
-                    label: Text(d.photoPath == null ? '上傳班表照片' : '更換班表照片'),
+                    icon: const Icon(Icons.photo_library_outlined),
+                    label: Text(d.photoPath == null ? '從相簿上傳班表照片' : '從相簿更換班表照片'),
                   ),
                   OutlinedButton.icon(
                     onPressed: () => _managePeople(d),

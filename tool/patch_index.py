@@ -77,12 +77,13 @@ s = s.replace("<body>", "<body style=\"background:#0F1115\">\n" + boot, 1)
 # 拍照辨識送貨單（免費文字辨識 Tesseract.js，在手機上執行；辨識程式與語言資料第一次使用時才下載）
 s = re.sub(r'<script id="yc-scan">.*?</script>', "", s, flags=re.S)
 scan = r"""<script id="yc-scan">
-window.ycPickImage = function () {
+window.ycPickImage = function (fromLibrary) {
   return new Promise(function (resolve, reject) {
     var input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
-    input.setAttribute('capture', 'environment');
+    // fromLibrary：直接開相簿（班表照片，老闆 2026-10-12）；否則直接開相機（送貨單、交接）
+    if (!fromLibrary) input.setAttribute('capture', 'environment');
     input.style.display = 'none';
     document.body.appendChild(input);
     var finished = false;
