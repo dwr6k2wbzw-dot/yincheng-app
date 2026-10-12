@@ -7,6 +7,7 @@ import '../data/models.dart';
 import '../data/repository.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../services/pl_export.dart';
 import '../widgets/revenue_mix.dart';
 import 'handover_screen.dart';
 
@@ -281,8 +282,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
         );
     return SectionCard(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('本月損益', style: TextStyle(color: AppColors.muted)),
-        const SizedBox(height: 6),
+        Row(children: [
+          const Expanded(child: Text('本月損益', style: TextStyle(color: AppColors.muted))),
+          TextButton.icon(
+            onPressed: () => _exportPl(d, s),
+            icon: const Icon(Icons.ios_share, size: 18),
+            label: const Text('匯出損益表'),
+          ),
+        ]),
         Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
           Text(ntd(profit),
               style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: profit >= 0 ? AppColors.good : AppColors.bad)),
@@ -316,6 +323,55 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _expenseItemsSection(d, s),
       ]),
     );
+  }
+
+  /// 一鍵匯出當月損益表（Excel），數字與上面卡片同一算法（老闆 2026-10-12）
+  Future<void> _exportPl(_DashboardData d, MonthlySummary s) async {
+    List<PlLine> detail(String cat, double? base, String baseLabel) => [
+          if (base != null) PlLine(baseLabel, base),
+          for (final it in d.recurring.where((e) => e.category == cat)) PlLine(it.name, it.amount, '每月固定'),
+          for (final it in d.items.where((e) => e.category == cat)) PlLine(it.name, it.amount),
+        ];
+    final cardFee = d.cardFee(s);
+    final rent = (d.fixed.rent ?? 0) + d.itemsOf('rent') + d.recurringOf('rent');
+    final payroll = (d.fixed.payroll ?? 0) + d.itemsOf('payroll') + d.recurringOf('payroll');
+    final misc = s.miscCost + d.itemsOf('misc') + d.recurringOf('misc') + cardFee;
+    final parts = revenueParts(widget.membership.storeName,
+        drinks: s.drinksRevenue, food: s.foodRevenue, project: s.projectAmount,
+        coffee: s.coffeeRevenue, ramen: s.ramenRevenue, deposit: s.deposit);
+    final p = ProfitStatement(
+      storeName: widget.membership.storeName,
+      month: d.month,
+      revenue: s.revenue,
+      revenueParts: [for (final x in parts) PlLine(x.label, x.amount)],
+      guests: s.guests,
+      cash: s.cash,
+      card: s.card,
+      purchaseCost: s.purchaseCost,
+      drinkCost: s.drinkCost,
+      foodCost: s.foodCost,
+      misc: misc,
+      rent: rent,
+      payroll: payroll,
+      miscDetail: [
+        PlLine('進貨雜項', s.miscCost, '零用金-其他雜支＋酒水副材料-雜項'),
+        if (cardFee != 0) PlLine('刷卡手續費', cardFee, '刷卡 ${ntd(s.card)} × ${_ratePct(d.cardFeeRate)}%'),
+        ...detail('misc', null, ''),
+      ],
+      rentDetail: detail('rent', d.fixed.rent, '租金（基底）'),
+      payrollDetail: detail('payroll', d.fixed.payroll, '人事（基底）'),
+      warnings: [
+        if (d.fixed.rent == null) '尚未輸入租金',
+        if (d.fixed.payroll == null) '尚未輸入人事',
+      ],
+    );
+    try {
+      final r = await saveFile(buildProfitXlsx(p), p.fileName, xlsxMime);
+      if (!mounted) return;
+      if (r == 'downloaded') showMessage(context, '已下載 ${p.fileName}');
+    } catch (e) {
+      if (mounted) showMessage(context, '匯出失敗：$e', error: true);
+    }
   }
 
   // 其他支出明細：刷卡手續費（自動）＋每月固定＋一次性；老闆新增，金額加進所選大類
