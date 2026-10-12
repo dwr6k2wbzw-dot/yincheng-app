@@ -749,8 +749,8 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                 items: [
                   for (final c in cats.where((c) =>
                       (c.storeName == null || c.storeName == widget.membership.storeName) &&
-                      // 依付款方式隱藏；但正在編輯的那筆既有類別仍保留，避免下拉值不在清單內
-                      (!_hiddenCats.contains(c.code) || c.code == _category)))
+                      // 依付款方式隱藏、停用的類別（0046）不出現；但正在編輯的那筆既有類別仍保留，避免下拉值不在清單內
+                      ((!_hiddenCats.contains(c.code) && c.selectable) || c.code == _category)))
                     DropdownMenuItem(
                       value: c.code,
                       child: Text(
@@ -847,6 +847,7 @@ Map<String, List<String>> adjustVendorHints(Map<String, List<String>> hints) {
     if (AppConfig.vendorHintHidden.contains(c)) continue;
     final list = <String>[];
     for (final n in [...?hints[c], ...?AppConfig.vendorHintAdd[c]]) {
+      if (AppConfig.vendorHintRemove[c]?.contains(n) ?? false) continue;
       final name = AppConfig.vendorHintRename[n] ?? n;
       if (!list.contains(name)) list.add(name);
     }
