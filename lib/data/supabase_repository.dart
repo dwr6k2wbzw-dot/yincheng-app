@@ -427,7 +427,7 @@ class SupabaseRepository implements Repository {
     final r = await Future.wait(<Future<dynamic>>[
       _db
           .from('handover_notes')
-          .select('id, body, photo_path, author_id, author_name, created_at, resolved_at, resolved_name, handover_reads(user_id, user_name)')
+          .select('id, body, photo_path, author_id, author_name, created_at, resolved_at, resolved_name, edited_at, edited_name, handover_reads(user_id, user_name)')
           .eq('store_id', storeId)
           .order('created_at', ascending: false)
           .limit(80),
@@ -454,6 +454,12 @@ class SupabaseRepository implements Repository {
           fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: false));
     }
     await _db.from('handover_notes').insert({'store_id': storeId, 'body': body, 'photo_path': path});
+  }
+
+  @override
+  Future<void> updateHandover(String noteId, String body) async {
+    final rows = await _db.from('handover_notes').update({'body': body.trim()}).eq('id', noteId).select('id');
+    if (rows.isEmpty) throw Exception('message: 這則交接已被刪除或沒有權限修改,');
   }
 
   @override

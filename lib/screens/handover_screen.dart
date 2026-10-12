@@ -229,6 +229,27 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
     if (ok == true) await _run(() => _repo.deleteHandover(n.id), ok: '已刪除');
   }
 
+  Future<void> _editHandover(HandoverNote n) async {
+    final c = TextEditingController(text: n.body);
+    final body = await showDialog<String>(
+      context: context,
+      builder: (d) => AlertDialog(
+        title: const Text('修改交接'),
+        content: TextField(controller: c, autofocus: true, maxLines: 6, minLines: 3, maxLength: 1000),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(d), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(d, c.text.trim()), child: const Text('儲存')),
+        ],
+      ),
+    );
+    if (body == null || body == n.body.trim()) return;
+    if (body.isEmpty) {
+      if (mounted) showMessage(context, '內容不能空白；不需要了可以直接刪除', error: true);
+      return;
+    }
+    await _run(() => _repo.updateHandover(n.id, body), ok: '已修改');
+  }
+
   static String _when(DateTime t) {
     final now = DateTime.now();
     final sameDay = t.year == now.year && t.month == now.month && t.day == now.day;
@@ -253,16 +274,25 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
             Text(n.authorName.isEmpty ? '—' : n.authorName, style: const TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(width: 8),
             Expanded(child: Text(_when(n.createdAt), style: const TextStyle(color: AppColors.muted, fontSize: 12))),
-            if (_canManage)
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                tooltip: '刪除',
-                onPressed: () => _deleteHandover(n),
-                icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.muted),
-              ),
+            // 任何成員都能修改、刪除（老闆 2026-10-12，0044）
+            PopupMenuButton<String>(
+              tooltip: '修改／刪除',
+              icon: const Icon(Icons.more_vert, size: 18, color: AppColors.muted),
+              onSelected: (v) => v == 'edit' ? _editHandover(n) : _deleteHandover(n),
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'edit', child: ListTile(leading: Icon(Icons.edit_outlined), title: Text('修改內容'))),
+                PopupMenuItem(value: 'delete', child: ListTile(leading: Icon(Icons.delete_outline), title: Text('刪除'))),
+              ],
+            ),
           ]),
           const SizedBox(height: 6),
           SelectableText(n.body, style: TextStyle(fontSize: 15, height: 1.5, color: n.resolved ? AppColors.muted : null)),
+          if (n.editedAt != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text('已修改・${n.editedName ?? ''}・${_when(n.editedAt!)}',
+                  style: const TextStyle(color: AppColors.muted, fontSize: 11)),
+            ),
           if (n.photoPath != null)
             Padding(
               padding: const EdgeInsets.only(top: 6),

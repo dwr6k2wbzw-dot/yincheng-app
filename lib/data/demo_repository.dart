@@ -125,6 +125,15 @@ class DemoRepository implements Repository {
   Future<void> addHandover(String storeId, String body, Uint8List? jpeg) async => _notes.add(HandoverNote(
       id: 'n${_seq++}', body: body, authorId: 'demo-user', authorName: '示範老闆', createdAt: DateTime.now()));
   @override
+  Future<void> updateHandover(String noteId, String body) async {
+    final i = _notes.indexWhere((n) => n.id == noteId);
+    final n = _notes[i];
+    _notes[i] = HandoverNote(
+        id: n.id, body: body, photoPath: n.photoPath, authorId: n.authorId, authorName: n.authorName,
+        createdAt: n.createdAt, resolvedAt: n.resolvedAt, resolvedName: n.resolvedName, readers: n.readers,
+        editedAt: DateTime.now(), editedName: '示範老闆');
+  }
+  @override
   Future<void> setHandoverResolved(String noteId, bool resolved) async {
     final i = _notes.indexWhere((n) => n.id == noteId);
     final n = _notes[i];
