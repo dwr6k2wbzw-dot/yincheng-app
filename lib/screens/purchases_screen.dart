@@ -491,6 +491,13 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   Map<String, List<String>> _hintsPetty = {}; // 零用金用的提示（排除 pettyCashHintHidden 的來源類別）
   String _paidBy = 'vendor';
   // 依付款方式隱藏的類別（只隱城套用）
+  /// 這個來源類別在某付款方式下要不要排除（合併提示、自動帶入廠商用）：
+  /// 隱城依付款方式不提供的類別＋零用金不顯示提示的類別（Codex 審查）
+  bool _sourceHidden(String? code, String paidBy) =>
+      code != null &&
+      ((widget.membership.storeName == '隱城' && (_hiddenCatsByPaidBy[paidBy]?.contains(code) ?? false)) ||
+          (paidBy == 'petty_cash' && AppConfig.pettyCashHintHidden.contains(code)));
+
   Set<String> get _hiddenCats => widget.membership.storeName == '隱城'
       ? (_hiddenCatsByPaidBy[_paidBy] ?? const <String>{})
       : const <String>{};
@@ -544,7 +551,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
             if (!list.contains(n) && list.length < 6) list.add(n);
           }
         }
-        bool skip(String code) => petty && AppConfig.pettyCashHintHidden.contains(code);
+        bool skip(String code) => _sourceHidden(code, petty ? 'petty_cash' : 'vendor');
         reserved.forEach((code, names) {
           if (!skip(code)) add(code, names);
         });
@@ -811,7 +818,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                   // 依合併後類別比對；零用金時排除 pettyCashHintHidden 來源類別的廠商（與提示一致）
                   final match = sups
                       .where((s) => (_displayAs[s.defaultCategory] ?? s.defaultCategory) == v)
-                      .where((s) => !(_paidBy == 'petty_cash' && AppConfig.pettyCashHintHidden.contains(s.defaultCategory)))
+                      .where((s) => !_sourceHidden(s.defaultCategory, _paidBy))
                       .toList();
                   if (_vendor.text.trim().isEmpty && match.length == 1) _vendor.text = match.first.name;
                 }),
