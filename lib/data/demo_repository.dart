@@ -91,7 +91,10 @@ class DemoRepository implements Repository {
   Future<void> deleteVendorSlip(String slipId) async {}
 
   @override
-  Future<Map<String, List<String>>> vendorHints(String storeId) async => {'liquor_monthly': ['示範酒商A', '示範酒商B']};
+  Future<VendorHints> vendorHints(String storeId) async => (
+        vendor: {'yc_drink': ['示範酒商A', '示範酒商B']},
+        petty: {'yc_misc': ['示範五金行']},
+      );
 
   @override
   Future<ShiftMonth> shiftMonth(String storeId, DateTime month) async => ShiftMonth(

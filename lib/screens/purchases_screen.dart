@@ -491,6 +491,13 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   Map<String, List<String>> _hintsPetty = {}; // 零用金用的提示（排除 pettyCashHintHidden 的來源類別）
   String _paidBy = 'vendor';
   // 依付款方式隱藏的類別（只隱城套用）
+  /// 某類別在某付款方式下可自動帶入的預設廠商名稱（依合併後類別比對、排除該付款方式不適用的來源類別）
+  List<String> _autoSuppliers(List<Supplier> sups, String category, String paidBy) => sups
+      .where((s) => (_displayAs[s.defaultCategory] ?? s.defaultCategory) == category)
+      .where((s) => !_sourceHidden(s.defaultCategory, paidBy))
+      .map((s) => s.name)
+      .toList();
+
   /// 這個來源類別在某付款方式下要不要排除（合併提示、自動帶入廠商用）：
   /// 隱城依付款方式不提供的類別＋零用金不顯示提示的類別（Codex 審查）
   bool _sourceHidden(String? code, String paidBy) =>
@@ -536,7 +543,9 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
         if (c.displayAs != null) c.code: c.displayAs!
     };
     try {
-      final adjusted = adjustVendorHints(await repo.vendorHints(id));
+      // 月結廠商、零用金各自統計（合併成新類別後，同一個代碼兩種付款方式都會有，Codex 審查）
+      final raw = await repo.vendorHints(id);
+      final byPay = {'vendor': adjustVendorHints(raw.vendor), 'petty_cash': adjustVendorHints(raw.petty)};
       // 老闆指定加入的提示（vendorHintAdd）優先，不會被 6 個上限擠掉
       final reserved = {
         for (final e in AppConfig.vendorHintAdd.entries)
@@ -555,7 +564,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
         reserved.forEach((code, names) {
           if (!skip(code)) add(code, names);
         });
-        adjusted.forEach((code, names) {
+        byPay[petty ? 'petty_cash' : 'vendor']!.forEach((code, names) {
           if (!skip(code)) add(code, names);
         });
         out.removeWhere((_, v) => v.isEmpty);
@@ -761,6 +770,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                     ? null // 付款方式建立後只有老闆、店長能改（資料庫也會擋）
                     : (v) => setState(() {
                           final old = _category;
+                          final oldPaid = _paidBy;
                           _paidBy = v.first;
                           // 切換付款方式後，若原本選的類別在新付款方式下不提供，就清掉；
                           // 廠商若是依原類別自動帶入的（例：德哥），一併清掉，不留沒有類別的廠商
@@ -768,6 +778,14 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                             _category = null;
                             final auto = sups.where((s) => s.defaultCategory == old).map((s) => s.name).toList();
                             if (auto.length == 1 && _vendor.text.trim() == auto.first) _vendor.clear();
+                          } else if (old != null) {
+                            // 類別保留時，重新比對自動帶入的廠商：原付款方式自動帶入、新付款方式不適用的就清掉，
+                            // 再依新付款方式補帶（Codex 審查）
+                            final before = _autoSuppliers(sups, old, oldPaid);
+                            final after = _autoSuppliers(sups, old, _paidBy);
+                            final cur = _vendor.text.trim();
+                            if (before.length == 1 && cur == before.first && !after.contains(cur)) _vendor.clear();
+                            if (_vendor.text.trim().isEmpty && after.length == 1) _vendor.text = after.first;
                           }
                         }),
               ),
@@ -816,11 +834,8 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                   _category = v;
                   // 只有一家預設廠商、而且還沒填廠商時自動帶入（例：水果＝德哥）
                   // 依合併後類別比對；零用金時排除 pettyCashHintHidden 來源類別的廠商（與提示一致）
-                  final match = sups
-                      .where((s) => (_displayAs[s.defaultCategory] ?? s.defaultCategory) == v)
-                      .where((s) => !_sourceHidden(s.defaultCategory, _paidBy))
-                      .toList();
-                  if (_vendor.text.trim().isEmpty && match.length == 1) _vendor.text = match.first.name;
+                  final match = v == null ? const <String>[] : _autoSuppliers(sups, v, _paidBy);
+                  if (_vendor.text.trim().isEmpty && match.length == 1) _vendor.text = match.first;
                 }),
               ),
               const SizedBox(height: 12),
