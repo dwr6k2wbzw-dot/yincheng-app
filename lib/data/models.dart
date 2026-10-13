@@ -513,10 +513,12 @@ class VendorSlip {
 
 /// 從進貨紀錄統計各類別常用廠商：廠商資料的名稱 > 自行輸入的名稱 > 摘要「廠商(品項)」括號前的名稱 >
 /// 出現 2 次以上、像店名的摘要。每類取次數最多的 4 個
-Map<String, List<String>> vendorHintsFromRows(List<Map<String, dynamic>> rows) {
+/// paidBy 有給時只統計該付款方式的進貨（月結廠商／零用金分開提示，Codex 審查）
+Map<String, List<String>> vendorHintsFromRows(List<Map<String, dynamic>> rows, {String? paidBy}) {
   final strong = <String, Map<String, int>>{}; // 確定是廠商
   final weak = <String, Map<String, int>>{}; // 可能是品項，出現 2 次以上才採用
   for (final r in rows) {
+    if (paidBy != null && (r['paid_by'] as String? ?? 'vendor') != paidBy) continue;
     final cat = r['category_code'] as String;
     final sup = (r['suppliers'] as Map?)?['name'] as String?;
     final vn = r['vendor_name'] as String?;
@@ -554,6 +556,9 @@ Map<String, List<String>> vendorHintsFromRows(List<Map<String, dynamic>> rows) {
   }
   return out;
 }
+
+/// 常用廠商提示，月結廠商與零用金分開
+typedef VendorHints = ({Map<String, List<String>> vendor, Map<String, List<String>> petty});
 
 /// 班表上的人（正職 full／兼職 part）
 class ShiftPerson {

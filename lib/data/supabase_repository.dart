@@ -543,15 +543,15 @@ class SupabaseRepository implements Repository {
   Future<String> shiftPhotoUrl(String path) => _db.storage.from('receipts').createSignedUrl(path, 3600);
 
   @override
-  Future<Map<String, List<String>>> vendorHints(String storeId) async {
+  Future<VendorHints> vendorHints(String storeId) async {
     final now = DateTime.now();
     final rows = await _db
         .from('purchases')
-        .select('category_code, memo, vendor_name, suppliers!purchases_supplier_same_store(name)')
+        .select('category_code, paid_by, memo, vendor_name, suppliers!purchases_supplier_same_store(name)')
         .eq('store_id', storeId)
         .gte('period_month', _day.format(DateTime(now.year, now.month - 6, 1)))
         .limit(5000);
-    return vendorHintsFromRows(rows);
+    return (vendor: vendorHintsFromRows(rows, paidBy: 'vendor'), petty: vendorHintsFromRows(rows, paidBy: 'petty_cash'));
   }
 
   @override

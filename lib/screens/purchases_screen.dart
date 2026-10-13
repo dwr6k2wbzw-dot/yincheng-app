@@ -487,8 +487,24 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   String? _scanNote;
   List<Supplier> _sups = [];
   Map<String, List<String>> _hints = {}; // 類別 → 常用廠商（日報表統計）
+  Map<String, String> _displayAs = {}; // 舊類別 → 合併後的類別（0048）
+  Map<String, List<String>> _hintsPetty = {}; // 零用金用的提示（排除 pettyCashHintHidden 的來源類別）
   String _paidBy = 'vendor';
   // 依付款方式隱藏的類別（只隱城套用）
+  /// 某類別在某付款方式下可自動帶入的預設廠商名稱（依合併後類別比對、排除該付款方式不適用的來源類別）
+  List<String> _autoSuppliers(List<Supplier> sups, String category, String paidBy) => sups
+      .where((s) => (_displayAs[s.defaultCategory] ?? s.defaultCategory) == category)
+      .where((s) => !_sourceHidden(s.defaultCategory, paidBy))
+      .map((s) => s.name)
+      .toList();
+
+  /// 這個來源類別在某付款方式下要不要排除（合併提示、自動帶入廠商用）：
+  /// 隱城依付款方式不提供的類別＋零用金不顯示提示的類別（Codex 審查）
+  bool _sourceHidden(String? code, String paidBy) =>
+      code != null &&
+      ((widget.membership.storeName == '隱城' && (_hiddenCatsByPaidBy[paidBy]?.contains(code) ?? false)) ||
+          (paidBy == 'petty_cash' && AppConfig.pettyCashHintHidden.contains(code)));
+
   Set<String> get _hiddenCats => widget.membership.storeName == '隱城'
       ? (_hiddenCatsByPaidBy[_paidBy] ?? const <String>{})
       : const <String>{};
@@ -521,8 +537,41 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
       _memo.text = e.memo ?? '';
     }
     _date ??= r[2] as DateTime;
+    // 顯示合併（0047／0048）：舊類別的常用廠商提示併到新類別（例：月結酒商、德哥 → 酒水）
+    _displayAs = {
+      for (final c in r[0] as List<CostCategory>)
+        if (c.displayAs != null) c.code: c.displayAs!
+    };
     try {
-      _hints = adjustVendorHints(await repo.vendorHints(id));
+      // 月結廠商、零用金各自統計（合併成新類別後，同一個代碼兩種付款方式都會有，Codex 審查）
+      final raw = await repo.vendorHints(id);
+      final byPay = {'vendor': adjustVendorHints(raw.vendor), 'petty_cash': adjustVendorHints(raw.petty)};
+      // 老闆指定加入的提示（vendorHintAdd）優先，不會被 6 個上限擠掉
+      final reserved = {
+        for (final e in AppConfig.vendorHintAdd.entries)
+          e.key: [for (final n in e.value) AppConfig.vendorHintRename[n] ?? n]
+      };
+      // 零用金另外一份：來源類別在 pettyCashHintHidden 的提示不併入（例：布布拉麵-餐食的信功、立成）
+      Map<String, List<String>> merge({required bool petty}) {
+        final out = <String, List<String>>{};
+        void add(String code, Iterable<String> names) {
+          final list = out.putIfAbsent(_displayAs[code] ?? code, () => []);
+          for (final n in names) {
+            if (!list.contains(n) && list.length < 6) list.add(n);
+          }
+        }
+        bool skip(String code) => _sourceHidden(code, petty ? 'petty_cash' : 'vendor');
+        reserved.forEach((code, names) {
+          if (!skip(code)) add(code, names);
+        });
+        byPay[petty ? 'petty_cash' : 'vendor']!.forEach((code, names) {
+          if (!skip(code)) add(code, names);
+        });
+        out.removeWhere((_, v) => v.isEmpty);
+        return out;
+      }
+      _hints = merge(petty: false);
+      _hintsPetty = merge(petty: true);
     } catch (_) {} // 提示讀不到不影響新增
     _sups = r[1] as List<Supplier>;
     // 填表人預設帶入自己的名字（可以改成請款人）
@@ -721,6 +770,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                     ? null // 付款方式建立後只有老闆、店長能改（資料庫也會擋）
                     : (v) => setState(() {
                           final old = _category;
+                          final oldPaid = _paidBy;
                           _paidBy = v.first;
                           // 切換付款方式後，若原本選的類別在新付款方式下不提供，就清掉；
                           // 廠商若是依原類別自動帶入的（例：德哥），一併清掉，不留沒有類別的廠商
@@ -728,6 +778,14 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                             _category = null;
                             final auto = sups.where((s) => s.defaultCategory == old).map((s) => s.name).toList();
                             if (auto.length == 1 && _vendor.text.trim() == auto.first) _vendor.clear();
+                          } else if (old != null) {
+                            // 類別保留時，重新比對自動帶入的廠商：原付款方式自動帶入、新付款方式不適用的就清掉，
+                            // 再依新付款方式補帶（Codex 審查）
+                            final before = _autoSuppliers(sups, old, oldPaid);
+                            final after = _autoSuppliers(sups, old, _paidBy);
+                            final cur = _vendor.text.trim();
+                            if (before.length == 1 && cur == before.first && !after.contains(cur)) _vendor.clear();
+                            if (_vendor.text.trim().isEmpty && after.length == 1) _vendor.text = after.first;
                           }
                         }),
               ),
@@ -765,7 +823,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                           // 零用金付款時：部分類別改顯示名稱、不顯示廠商提示（月結廠商維持原樣）
                           final petty = _paidBy == 'petty_cash';
                           final label = (petty ? AppConfig.pettyCashCategoryLabel[c.code] : null) ?? c.name;
-                          final hint = petty && AppConfig.pettyCashHintHidden.contains(c.code) ? null : _hints[c.code];
+                          final hint = petty && AppConfig.pettyCashHintHidden.contains(c.code) ? null : (petty ? _hintsPetty : _hints)[c.code];
                           return hint == null ? label : '$label（${hint.join('、')}）';
                         }(),
                         overflow: TextOverflow.ellipsis,
@@ -775,8 +833,9 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                 onChanged: (v) => setState(() {
                   _category = v;
                   // 只有一家預設廠商、而且還沒填廠商時自動帶入（例：水果＝德哥）
-                  final match = sups.where((s) => s.defaultCategory == v).toList();
-                  if (_vendor.text.trim().isEmpty && match.length == 1) _vendor.text = match.first.name;
+                  // 依合併後類別比對；零用金時排除 pettyCashHintHidden 來源類別的廠商（與提示一致）
+                  final match = v == null ? const <String>[] : _autoSuppliers(sups, v, _paidBy);
+                  if (_vendor.text.trim().isEmpty && match.length == 1) _vendor.text = match.first;
                 }),
               ),
               const SizedBox(height: 12),
