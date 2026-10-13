@@ -366,9 +366,12 @@ class _CategoryPurchasesScreenState extends State<_CategoryPurchasesScreen> {
     for (final p in _items) {
       groups.putIfAbsent(p.supplierName ?? p.memo ?? '（無摘要）', () => []).add(p);
     }
+    // 最新的在最上面（老闆 2026-10-14）：每組內依日期新→舊；組與組之間依該組最新一筆的日期排
+    for (final g in groups.values) {
+      g.sort((a, b) => b.purchaseDate.compareTo(a.purchaseDate));
+    }
     final names = groups.keys.toList()
-      ..sort((a, b) => groups[b]!.fold<double>(0, (t, p) => t + p.amount)
-          .compareTo(groups[a]!.fold<double>(0, (t, p) => t + p.amount)));
+      ..sort((a, b) => groups[b]!.first.purchaseDate.compareTo(groups[a]!.first.purchaseDate));
     final total = _items.fold<double>(0, (t, p) => t + p.amount);
     return Scaffold(
       appBar: AppBar(title: Text(widget.title, style: const TextStyle(fontSize: 16))),
