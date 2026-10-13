@@ -13,13 +13,17 @@ class DemoRepository implements Repository {
   int _seq = 0;
 
   final _categories = [
-    CostCategory.full('liquor_monthly', '月結酒商', null, costGroup: 'drink', inMiscRate: false),
-    CostCategory.full('liquor_cash', '現結酒商', null, costGroup: 'drink', inMiscRate: false),
-    CostCategory.full('fruit', '酒水副材料-德哥', null, costGroup: 'drink', inMiscRate: false),
-    CostCategory.full('ice', '酒水副材料-冰塊', null, costGroup: 'drink', inMiscRate: false),
-    CostCategory.full('bar_misc', '酒水副材料-雜項', null, costGroup: 'drink', inMiscRate: true),
-    CostCategory.full('food', '餐食進貨', null, costGroup: 'food', inMiscRate: false),
-    CostCategory.full('petty_misc', '零用金-其他雜支', null, costGroup: 'other', inMiscRate: true),
+    // 0048：可選只有 酒水／餐食／雜項；舊類別停用、顯示併入（與正式資料庫相同）
+    CostCategory.full('yc_drink', '酒水', null, costGroup: 'drink', inMiscRate: false),
+    CostCategory.full('yc_food', '餐食', null, costGroup: 'food', inMiscRate: false),
+    CostCategory.full('yc_misc', '雜項', null, costGroup: 'other', inMiscRate: true),
+    CostCategory.full('liquor_monthly', '月結酒商', null, costGroup: 'drink', inMiscRate: false, selectable: false, displayAs: 'yc_drink'),
+    CostCategory.full('liquor_cash', '現結酒商', null, costGroup: 'drink', inMiscRate: false, selectable: false, displayAs: 'yc_drink'),
+    CostCategory.full('fruit', '酒水副材料-德哥', null, costGroup: 'drink', inMiscRate: false, selectable: false, displayAs: 'yc_drink'),
+    CostCategory.full('ice', '酒水副材料-冰塊', null, costGroup: 'drink', inMiscRate: false, selectable: false, displayAs: 'yc_drink'),
+    CostCategory.full('bar_misc', '酒水副材料-雜項', null, costGroup: 'drink', inMiscRate: true, selectable: false, displayAs: 'yc_misc'),
+    CostCategory.full('food', '餐食進貨', null, costGroup: 'food', inMiscRate: false, selectable: false, displayAs: 'yc_food'),
+    CostCategory.full('petty_misc', '零用金-其他雜支', null, costGroup: 'other', inMiscRate: true, selectable: false, displayAs: 'yc_misc'),
   ];
   final _suppliers = [
     Supplier('s1', '示範酒商A', 'liquor_monthly'),
