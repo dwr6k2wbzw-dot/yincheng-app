@@ -489,8 +489,6 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   List<String> _excelVendors = []; // 日報表的月結廠商名稱（月結廠商可從清單選）
   List<String> _members = []; // 成員名字（填表人／請款人可從清單選）
   String? _photo; // 送貨單照片（JPEG data URL）
-  bool _scanning = false;
-  String? _scanNote;
   List<Supplier> _sups = [];
   Map<String, String> _displayAs = {}; // 舊類別 → 合併後的類別（0048）
   String _paidBy = 'vendor';
@@ -572,8 +570,8 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
     if (picked != null && mounted) setState(() => target.text = picked);
   }
 
-  /// 拍照辨識送貨單：讀出廠商、日期、合計填進表單（使用者核對後再儲存）
-  Future<void> _scan(List<Supplier> sups) async {
+  /// 拍照／選照片：只存單據照片，不做任何辨識、不自動填任何欄位（老闆 2026-10-14：金額一律手動輸入）
+  Future<void> _pickPhoto() async {
     String? photo;
     try {
       photo = await pickSlipImage();
@@ -582,38 +580,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
       return;
     }
     if (photo == null || !mounted) return;
-    setState(() {
-      _photo = photo;
-      _scanning = true;
-      _scanNote = null;
-    });
-    try {
-      final text = await ocrSlip(photo);
-      final g = guessSlip(text, sups.map((s) => s.name).toList());
-      if (!mounted) return;
-      final got = <String>[];
-      setState(() {
-        if (g.vendor != null) {
-          _vendor.text = g.vendor!;
-          got.add('廠商');
-        }
-        if (g.date != null) {
-          _date = g.date;
-          got.add('日期');
-        }
-        if (g.total != null) {
-          _amount.text = g.total! == g.total!.roundToDouble() ? g.total!.toInt().toString() : g.total!.toString();
-          got.add('金額');
-        }
-        _scanNote = got.isEmpty
-            ? '沒有讀到可用的資料，請自己填寫（照片會一起存）'
-            : '已帶入${got.join('、')}，文字辨識可能讀錯，請對照照片核對';
-      });
-    } catch (e) {
-      if (mounted) setState(() => _scanNote = '辨識失敗（${e.toString().replaceAll('Error: ', '')}），請自己填寫；照片仍會一起存');
-    } finally {
-      if (mounted) setState(() => _scanning = false);
-    }
+    setState(() => _photo = photo);
   }
 
   Widget _scanCard(List<Supplier> sups) => SectionCard(
@@ -624,25 +591,16 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
             const Expanded(
               child: Text('送貨單／發票照片（必附）', style: TextStyle(fontWeight: FontWeight.w600)),
             ),
-            if (_scanning)
-              const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-            else
-              TextButton(
-                onPressed: _saving ? null : () => _scan(sups),
-                child: Text(_photo == null ? '拍照／選照片' : '重拍'),
-              ),
+            TextButton(
+              onPressed: _saving ? null : _pickPhoto,
+              child: Text(_photo == null ? '拍照／選照片' : '重拍'),
+            ),
           ]),
-          if (_scanning)
-            const Padding(
-              padding: EdgeInsets.only(top: 6),
-              child: Text('辨識中…第一次使用要下載辨識資料，可能需要 20～60 秒',
-                  style: TextStyle(color: AppColors.muted, fontSize: 12)),
-            ),
-          if (_scanNote != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text(_scanNote!, style: const TextStyle(color: AppColors.warn, fontSize: 12)),
-            ),
+          const Padding(
+            padding: EdgeInsets.only(top: 6),
+            child: Text('照片只用來存單據，金額、廠商、日期請自己填寫。',
+                style: TextStyle(color: AppColors.muted, fontSize: 12)),
+          ),
           if (_photo != null && AppConfig.vendorSlipStores.contains(widget.membership.storeName) && !_isReturn)
             const Padding(
               padding: EdgeInsets.only(top: 6),
@@ -656,14 +614,11 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
               child: Image.memory(dataUrlBytes(_photo!), height: 220, fit: BoxFit.contain),
             ),
             TextButton(
-              onPressed: _scanning ? null : () => setState(() {
-                _photo = null;
-                _scanNote = null;
-              }),
+              onPressed: () => setState(() => _photo = null),
               child: const Text('移除照片'),
             ),
           ],
-          if (_photo == null && !_scanning)
+          if (_photo == null)
             CheckboxListTile(
               contentPadding: EdgeInsets.zero,
               controlAffinity: ListTileControlAffinity.leading,
