@@ -59,6 +59,10 @@ abstract class Repository {
   Future<List<Supplier>> suppliers(String storeId);
   /// 各進貨類別常用的廠商（依日報表匯入的近半年進貨統計，最多 4 家）
   Future<VendorHints> vendorHints(String storeId);
+  /// 日報表的月結廠商名稱（近 6 個月，依次數排序）
+  Future<List<String>> excelVendorNames(String storeId);
+  /// 同店成員名字（填表人／請款人選單用；含兼職）
+  Future<List<String>> memberNames(String storeId);
   Future<List<Purchase>> recentPurchases(String storeId, {int limit = 30});
   Future<List<Purchase>> monthPurchases(String storeId, DateTime month);
   Future<void> addPurchase(NewPurchase p);

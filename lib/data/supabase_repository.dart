@@ -543,6 +543,27 @@ class SupabaseRepository implements Repository {
   Future<String> shiftPhotoUrl(String path) => _db.storage.from('receipts').createSignedUrl(path, 3600);
 
   @override
+  Future<List<String>> excelVendorNames(String storeId) async {
+    final now = DateTime.now();
+    final rows = await _db
+        .from('purchases')
+        .select('memo')
+        .eq('store_id', storeId)
+        .eq('source', 'import')
+        .eq('paid_by', 'vendor')
+        .gte('period_month', _day.format(DateTime(now.year, now.month - 5, 1)))
+        .limit(5000);
+    return excelVendorNamesFromRows(rows);
+  }
+
+  @override
+  Future<List<String>> memberNames(String storeId) async {
+    final rows = await _db.from('store_members').select('display_name').eq('store_id', storeId).eq('active', true);
+    final names = {for (final r in rows) ((r['display_name'] as String?) ?? '').trim()}..remove('');
+    return names.toList()..sort();
+  }
+
+  @override
   Future<VendorHints> vendorHints(String storeId) async {
     final now = DateTime.now();
     final rows = await _db
