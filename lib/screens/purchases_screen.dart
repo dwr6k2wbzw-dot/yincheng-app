@@ -808,7 +808,11 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                 onChanged: (v) => setState(() {
                   _category = v;
                   // 只有一家預設廠商、而且還沒填廠商時自動帶入（例：水果＝德哥）
-                  final match = sups.where((s) => (_displayAs[s.defaultCategory] ?? s.defaultCategory) == v).toList();
+                  // 依合併後類別比對；零用金時排除 pettyCashHintHidden 來源類別的廠商（與提示一致）
+                  final match = sups
+                      .where((s) => (_displayAs[s.defaultCategory] ?? s.defaultCategory) == v)
+                      .where((s) => !(_paidBy == 'petty_cash' && AppConfig.pettyCashHintHidden.contains(s.defaultCategory)))
+                      .toList();
                   if (_vendor.text.trim().isEmpty && match.length == 1) _vendor.text = match.first.name;
                 }),
               ),
