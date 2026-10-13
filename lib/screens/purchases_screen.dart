@@ -486,9 +486,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   bool _scanning = false;
   String? _scanNote;
   List<Supplier> _sups = [];
-  Map<String, List<String>> _hints = {}; // 類別 → 常用廠商（日報表統計）
   Map<String, String> _displayAs = {}; // 舊類別 → 合併後的類別（0048）
-  Map<String, List<String>> _hintsPetty = {}; // 零用金用的提示（排除 pettyCashHintHidden 的來源類別）
   String _paidBy = 'vendor';
   // 依付款方式隱藏的類別（只隱城套用）
   /// 某類別在某付款方式下可自動帶入的預設廠商名稱（依合併後類別比對、排除該付款方式不適用的來源類別）
@@ -537,42 +535,12 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
       _memo.text = e.memo ?? '';
     }
     _date ??= r[2] as DateTime;
-    // 顯示合併（0047／0048）：舊類別的常用廠商提示併到新類別（例：月結酒商、德哥 → 酒水）
+    // 顯示合併（0047／0048）：舊類別對應到新類別（例：月結酒商、德哥 → 酒水），自動帶入預設廠商用
     _displayAs = {
       for (final c in r[0] as List<CostCategory>)
         if (c.displayAs != null) c.code: c.displayAs!
     };
-    try {
-      // 月結廠商、零用金各自統計（合併成新類別後，同一個代碼兩種付款方式都會有，Codex 審查）
-      final raw = await repo.vendorHints(id);
-      final byPay = {'vendor': adjustVendorHints(raw.vendor), 'petty_cash': adjustVendorHints(raw.petty)};
-      // 老闆指定加入的提示（vendorHintAdd）優先，不會被 6 個上限擠掉
-      final reserved = {
-        for (final e in AppConfig.vendorHintAdd.entries)
-          e.key: [for (final n in e.value) AppConfig.vendorHintRename[n] ?? n]
-      };
-      // 零用金另外一份：來源類別在 pettyCashHintHidden 的提示不併入（例：布布拉麵-餐食的信功、立成）
-      Map<String, List<String>> merge({required bool petty}) {
-        final out = <String, List<String>>{};
-        void add(String code, Iterable<String> names) {
-          final list = out.putIfAbsent(_displayAs[code] ?? code, () => []);
-          for (final n in names) {
-            if (!list.contains(n) && list.length < 6) list.add(n);
-          }
-        }
-        bool skip(String code) => _sourceHidden(code, petty ? 'petty_cash' : 'vendor');
-        reserved.forEach((code, names) {
-          if (!skip(code)) add(code, names);
-        });
-        byPay[petty ? 'petty_cash' : 'vendor']!.forEach((code, names) {
-          if (!skip(code)) add(code, names);
-        });
-        out.removeWhere((_, v) => v.isEmpty);
-        return out;
-      }
-      _hints = merge(petty: false);
-      _hintsPetty = merge(petty: true);
-    } catch (_) {} // 提示讀不到不影響新增
+    // 常用廠商提示已移除（老闆 2026-10-13）；不再讀取進貨紀錄統計
     _sups = r[1] as List<Supplier>;
     // 填表人預設帶入自己的名字（可以改成請款人）
     if (_memo.text.isEmpty && e == null) _memo.text = widget.membership.displayName;
@@ -823,8 +791,9 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                           // 零用金付款時：部分類別改顯示名稱、不顯示廠商提示（月結廠商維持原樣）
                           final petty = _paidBy == 'petty_cash';
                           final label = (petty ? AppConfig.pettyCashCategoryLabel[c.code] : null) ?? c.name;
-                          final hint = petty && AppConfig.pettyCashHintHidden.contains(c.code) ? null : (petty ? _hintsPetty : _hints)[c.code];
-                          return hint == null ? label : '$label（${hint.join('、')}）';
+                          // 老闆 2026-10-13：不再顯示常用廠商提示，只有雜項顯示說明
+                          final note = AppConfig.categoryNote[c.code];
+                          return note == null ? label : '$label（$note）';
                         }(),
                         overflow: TextOverflow.ellipsis,
                       ),
