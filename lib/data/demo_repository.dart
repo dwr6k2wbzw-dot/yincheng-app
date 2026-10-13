@@ -91,6 +91,10 @@ class DemoRepository implements Repository {
   Future<void> deleteVendorSlip(String slipId) async {}
 
   @override
+  Future<List<String>> excelVendorNames(String storeId) async => ['示範酒商A', '示範酒商B', '示範水果行'];
+  @override
+  Future<List<String>> memberNames(String storeId) async => ['示範老闆', '示範店長', '示範正職'];
+  @override
   Future<VendorHints> vendorHints(String storeId) async => (
         vendor: {'yc_drink': ['示範酒商A', '示範酒商B']},
         petty: {'yc_misc': ['示範五金行']},

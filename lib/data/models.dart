@@ -557,6 +557,20 @@ Map<String, List<String>> vendorHintsFromRows(List<Map<String, dynamic>> rows, {
   return out;
 }
 
+/// 日報表月結廠商名稱（老闆 2026-10-13：新增進貨的月結廠商可以從清單選）：
+/// 取匯入進貨的摘要，去掉括號說明（「信功(五花肉)」→「信功」），依出現次數排序
+List<String> excelVendorNamesFromRows(List<Map<String, dynamic>> rows) {
+  final counts = <String, int>{};
+  for (final r in rows) {
+    final memo = (r['memo'] as String?)?.trim() ?? '';
+    final name = memo.replaceAll(RegExp(r'\s*[(（].*$'), '').trim();
+    if (name.length < 2 || name.length > 20 || RegExp(r'^[\d\s.,/~-]+$').hasMatch(name)) continue;
+    counts[name] = (counts[name] ?? 0) + 1;
+  }
+  final list = counts.entries.toList()..sort((a, b) => b.value != a.value ? b.value.compareTo(a.value) : a.key.compareTo(b.key));
+  return [for (final e in list) e.key];
+}
+
 /// 常用廠商提示，月結廠商與零用金分開
 typedef VendorHints = ({Map<String, List<String>> vendor, Map<String, List<String>> petty});
 

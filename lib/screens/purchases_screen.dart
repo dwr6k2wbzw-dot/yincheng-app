@@ -130,9 +130,10 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          // 進貨改由 App 輸入（老闆 2026-10-13，0045）；營收仍從日報表同步
-                          '10/13 起進貨一律按右下角「新增進貨」在 App 輸入，日報表不再匯入進貨（營收照常同步）。'
-                          '自己新增的可以點進去修改或刪除。10/12 以前的進貨來自日報表，不能在 App 修改。'
+                          // 進貨以日報表為準（老闆 2026-10-13 晚上，0049）；App 手動輸入的先計入，日報表有同一筆就以日報表為準
+                          '進貨每小時從日報表帶入，來自日報表的不能在 App 修改。'
+                          '按右下角「新增進貨」手動輸入的會先計入；之後日報表有同一筆，就改以日報表為準、不重複計算。'
+                          '自己新增的可以點進去修改或刪除。'
                           '${last == null ? '' : '\n日報表最後一次匯入進貨：${DateFormat('M/d HH:mm').format(last)}'}',
                           style: const TextStyle(color: AppColors.muted, fontSize: 12, height: 1.5),
                         ),
@@ -482,6 +483,8 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   DateTime? _date;
   String? _category;
   final _vendor = TextEditingController(); // 廠商名稱：自行輸入（和既有廠商同名就自動對應）
+  List<String> _excelVendors = []; // 日報表的月結廠商名稱（月結廠商可從清單選）
+  List<String> _members = []; // 成員名字（填表人／請款人可從清單選）
   String? _photo; // 送貨單照片（JPEG data URL）
   bool _scanning = false;
   String? _scanNote;
@@ -540,7 +543,12 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
       for (final c in r[0] as List<CostCategory>)
         if (c.displayAs != null) c.code: c.displayAs!
     };
-    // 常用廠商提示已移除（老闆 2026-10-13）；不再讀取進貨紀錄統計
+    // 常用廠商提示已移除（老闆 2026-10-13）；改成月結廠商可從日報表廠商名單選、填表人可從成員名單選
+    try {
+      final lists = await Future.wait([repo.excelVendorNames(id), repo.memberNames(id)]);
+      _excelVendors = lists[0];
+      _members = lists[1];
+    } catch (_) {} // 名單讀不到不影響新增
     _sups = r[1] as List<Supplier>;
     // 填表人預設帶入自己的名字（可以改成請款人）
     if (_memo.text.isEmpty && e == null) _memo.text = widget.membership.displayName;
@@ -548,6 +556,18 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   }
 
   final _vendorFocus = FocusNode();
+
+  /// 從清單選一個名字填進欄位（可搜尋）
+  Future<void> _pick(String title, String note, List<String> names, TextEditingController target) async {
+    FocusScope.of(context).unfocus();
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (ctx) => _NamePicker(title: title, note: note, names: names),
+    );
+    if (picked != null && mounted) setState(() => target.text = picked);
+  }
 
   /// 拍照辨識送貨單：讀出廠商、日期、合計填進表單（使用者核對後再儲存）
   Future<void> _scan(List<Supplier> sups) async {
@@ -820,7 +840,17 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                   controller: ctrl,
                   focusNode: focus,
                   maxLength: 60,
-                  decoration: const InputDecoration(labelText: '廠商名稱／品項（選填，自行輸入）', counterText: ''),
+                  decoration: InputDecoration(
+                    labelText: _paidBy == 'vendor' ? '廠商名稱（可從清單選或自行輸入）' : '廠商名稱／品項（選填，自行輸入）',
+                    counterText: '',
+                    suffixIcon: _paidBy == 'vendor' && _excelVendors.isNotEmpty
+                        ? IconButton(
+                            tooltip: '選擇廠商',
+                            icon: const Icon(Icons.storefront_outlined),
+                            onPressed: () => _pick('選擇月結廠商', '名單來自日報表的月結廠商', _excelVendors, _vendor),
+                          )
+                        : null,
+                  ),
                 ),
                 optionsViewBuilder: (context, onSelected, options) => Align(
                   alignment: Alignment.topLeft,
@@ -855,7 +885,16 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
               TextField(
                 controller: _memo,
                 maxLines: 2,
-                decoration: const InputDecoration(labelText: '填表人／請款人（選填）'),
+                decoration: InputDecoration(
+                  labelText: '填表人／請款人（選填）',
+                  suffixIcon: _members.isEmpty
+                      ? null
+                      : IconButton(
+                          tooltip: '選擇成員',
+                          icon: const Icon(Icons.person_search_outlined),
+                          onPressed: () => _pick('選擇填表人／請款人', '名單來自 App 成員', _members, _memo),
+                        ),
+                ),
               ),
               const SizedBox(height: 12),
               if (widget.editing == null) _scanCard(sups),
@@ -892,3 +931,51 @@ Map<String, List<String>> adjustVendorHints(Map<String, List<String>> hints) {
 }
 
 bool isSameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
+
+
+/// 名字選單（月結廠商、填表人／請款人）：上方搜尋、下方清單
+class _NamePicker extends StatefulWidget {
+  const _NamePicker({required this.title, required this.note, required this.names});
+  final String title;
+  final String note;
+  final List<String> names;
+  @override
+  State<_NamePicker> createState() => _NamePickerState();
+}
+
+class _NamePickerState extends State<_NamePicker> {
+  String _q = '';
+  @override
+  Widget build(BuildContext context) {
+    final list = widget.names.where((n) => _q.isEmpty || n.contains(_q)).toList();
+    return SizedBox(
+      height: MediaQuery.of(context).size.height * 0.7,
+      child: Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        child: Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(widget.title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 2),
+              Text(widget.note, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+              const SizedBox(height: 8),
+              TextField(
+                decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: '搜尋', isDense: true),
+                onChanged: (v) => setState(() => _q = v.trim()),
+              ),
+            ]),
+          ),
+          Expanded(
+            child: list.isEmpty
+                ? const Center(child: Text('沒有符合的名字', style: TextStyle(color: AppColors.muted)))
+                : ListView.builder(
+                    itemCount: list.length,
+                    itemBuilder: (_, i) => ListTile(title: Text(list[i]), onTap: () => Navigator.of(context).pop(list[i])),
+                  ),
+          ),
+        ]),
+      ),
+    );
+  }
+}
