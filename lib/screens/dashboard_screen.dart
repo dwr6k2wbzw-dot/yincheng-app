@@ -241,8 +241,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 6),
           Text(
               (multi
-                      ? '酒水、餐食只算酒吧；總進貨含咖啡吧與拉麵；雜項＝各區雜項 ÷ 營業收入，不計入總進貨'
-                      : '雜項＝零用金-其他雜支＋酒水副材料-雜項，÷ 營業收入；不計入總進貨') +
+                      ? '餐食含咖啡吧、拉麵食材（10 月起）；總進貨含咖啡吧與拉麵；雜項 ÷ 營業收入，不計入總進貨'
+                      : '雜項＝雜項類進貨（含以前的零用金-其他雜支、酒水副材料-雜項）÷ 營業收入；不計入總進貨') +
                   (_isOwner ? '；老闆另含手動支出、每月固定與刷卡手續費' : ''),
               style: const TextStyle(color: AppColors.muted, fontSize: 11)),
         ]),
@@ -354,7 +354,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       rent: rent,
       payroll: payroll,
       miscDetail: [
-        PlLine('進貨雜項', s.miscCost, '零用金-其他雜支＋酒水副材料-雜項'),
+        PlLine('進貨雜項', s.miscCost, '雜項類進貨'),
         if (cardFee != 0) PlLine('刷卡手續費', cardFee, '刷卡 ${ntd(s.card)} × ${_ratePct(d.cardFeeRate)}%'),
         ...detail('misc', null, ''),
       ],

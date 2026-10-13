@@ -68,7 +68,7 @@ class AppConfig {
   static const vendorHintHidden = {'xc_ramen_misc'}; // 布布拉麵-雜項：不顯示提示
   // 只在「零用金」付款時套用（老闆 2026-10-11；月結廠商維持原樣）：
   // 小城外 酒吧-酒水 顯示為「現結酒商」（只改顯示，類別代碼不變，匯入與成本率不受影響）
-  static const pettyCashCategoryLabel = {'xc_bar_liquor': '現結酒商'};
+  static const pettyCashCategoryLabel = <String, String>{}; // 0048 起兩種付款都叫「酒水」，不再改名
   // 零用金時不顯示廠商提示：酒吧-酒水（月結廠商不適用）、布布拉麵-食材（信功、立成）
   static const pettyCashHintHidden = {'xc_bar_liquor', 'xc_ramen_food'};
   static const vendorHintRemove = {

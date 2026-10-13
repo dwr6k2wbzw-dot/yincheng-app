@@ -487,6 +487,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   String? _scanNote;
   List<Supplier> _sups = [];
   Map<String, List<String>> _hints = {}; // 類別 → 常用廠商（日報表統計）
+  Map<String, String> _displayAs = {}; // 舊類別 → 合併後的類別（0048）
   String _paidBy = 'vendor';
   // 依付款方式隱藏的類別（只隱城套用）
   Set<String> get _hiddenCats => widget.membership.storeName == '隱城'
@@ -521,8 +522,20 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
       _memo.text = e.memo ?? '';
     }
     _date ??= r[2] as DateTime;
+    // 顯示合併（0047／0048）：舊類別的常用廠商提示併到新類別（例：月結酒商、德哥 → 酒水）
+    _displayAs = {
+      for (final c in r[0] as List<CostCategory>)
+        if (c.displayAs != null) c.code: c.displayAs!
+    };
     try {
-      _hints = adjustVendorHints(await repo.vendorHints(id));
+      final merged = <String, List<String>>{};
+      adjustVendorHints(await repo.vendorHints(id)).forEach((code, names) {
+        final list = merged.putIfAbsent(_displayAs[code] ?? code, () => []);
+        for (final n in names) {
+          if (!list.contains(n) && list.length < 6) list.add(n);
+        }
+      });
+      _hints = merged;
     } catch (_) {} // 提示讀不到不影響新增
     _sups = r[1] as List<Supplier>;
     // 填表人預設帶入自己的名字（可以改成請款人）
@@ -775,7 +788,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                 onChanged: (v) => setState(() {
                   _category = v;
                   // 只有一家預設廠商、而且還沒填廠商時自動帶入（例：水果＝德哥）
-                  final match = sups.where((s) => s.defaultCategory == v).toList();
+                  final match = sups.where((s) => (_displayAs[s.defaultCategory] ?? s.defaultCategory) == v).toList();
                   if (_vendor.text.trim().isEmpty && match.length == 1) _vendor.text = match.first.name;
                 }),
               ),
