@@ -488,6 +488,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   List<Supplier> _sups = [];
   Map<String, List<String>> _hints = {}; // 類別 → 常用廠商（日報表統計）
   Map<String, String> _displayAs = {}; // 舊類別 → 合併後的類別（0048）
+  Map<String, List<String>> _hintsPetty = {}; // 零用金用的提示（排除 pettyCashHintHidden 的來源類別）
   String _paidBy = 'vendor';
   // 依付款方式隱藏的類別（只隱城套用）
   Set<String> get _hiddenCats => widget.membership.storeName == '隱城'
@@ -528,14 +529,33 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
         if (c.displayAs != null) c.code: c.displayAs!
     };
     try {
-      final merged = <String, List<String>>{};
-      adjustVendorHints(await repo.vendorHints(id)).forEach((code, names) {
-        final list = merged.putIfAbsent(_displayAs[code] ?? code, () => []);
-        for (final n in names) {
-          if (!list.contains(n) && list.length < 6) list.add(n);
+      final adjusted = adjustVendorHints(await repo.vendorHints(id));
+      // 老闆指定加入的提示（vendorHintAdd）優先，不會被 6 個上限擠掉
+      final reserved = {
+        for (final e in AppConfig.vendorHintAdd.entries)
+          e.key: [for (final n in e.value) AppConfig.vendorHintRename[n] ?? n]
+      };
+      // 零用金另外一份：來源類別在 pettyCashHintHidden 的提示不併入（例：布布拉麵-餐食的信功、立成）
+      Map<String, List<String>> merge({required bool petty}) {
+        final out = <String, List<String>>{};
+        void add(String code, Iterable<String> names) {
+          final list = out.putIfAbsent(_displayAs[code] ?? code, () => []);
+          for (final n in names) {
+            if (!list.contains(n) && list.length < 6) list.add(n);
+          }
         }
-      });
-      _hints = merged;
+        bool skip(String code) => petty && AppConfig.pettyCashHintHidden.contains(code);
+        reserved.forEach((code, names) {
+          if (!skip(code)) add(code, names);
+        });
+        adjusted.forEach((code, names) {
+          if (!skip(code)) add(code, names);
+        });
+        out.removeWhere((_, v) => v.isEmpty);
+        return out;
+      }
+      _hints = merge(petty: false);
+      _hintsPetty = merge(petty: true);
     } catch (_) {} // 提示讀不到不影響新增
     _sups = r[1] as List<Supplier>;
     // 填表人預設帶入自己的名字（可以改成請款人）
@@ -778,7 +798,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                           // 零用金付款時：部分類別改顯示名稱、不顯示廠商提示（月結廠商維持原樣）
                           final petty = _paidBy == 'petty_cash';
                           final label = (petty ? AppConfig.pettyCashCategoryLabel[c.code] : null) ?? c.name;
-                          final hint = petty && AppConfig.pettyCashHintHidden.contains(c.code) ? null : _hints[c.code];
+                          final hint = petty && AppConfig.pettyCashHintHidden.contains(c.code) ? null : (petty ? _hintsPetty : _hints)[c.code];
                           return hint == null ? label : '$label（${hint.join('、')}）';
                         }(),
                         overflow: TextOverflow.ellipsis,
