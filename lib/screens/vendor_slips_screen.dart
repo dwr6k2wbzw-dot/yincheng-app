@@ -49,6 +49,14 @@ class _VendorSlipsScreenState extends State<VendorSlipsScreen> {
 
   bool get _canEdit => widget.membership.isManager;
 
+  static List<VendorSlip> _newestFirst(List<VendorSlip> list) {
+    final idx = {for (var i = 0; i < list.length; i++) list[i]: i};
+    return [...list]..sort((a, b) {
+        final c = b.date.compareTo(a.date);
+        return c != 0 ? c : idx[b]!.compareTo(idx[a]!);
+      });
+  }
+
   Future<void> _edit(VendorSlip? s) async {
     final changed = await Navigator.of(context).push<bool>(MaterialPageRoute(
       builder: (_) => VendorSlipEditScreen(membership: widget.membership, slip: s, month: _month),
@@ -76,7 +84,8 @@ class _VendorSlipsScreenState extends State<VendorSlipsScreen> {
           }
           final groups = [
             for (final g in slipGroups)
-              if (byGroup[g] != null) MapEntry(g, byGroup[g]!..sort((a, b) => a.date.compareTo(b.date)))
+              // 最新的在最上面（老闆 2026-10-14）；同一天依原本順序倒過來（後建立的在上）
+              if (byGroup[g] != null) MapEntry(g, _newestFirst(byGroup[g]!))
           ];
           // 例：「・月結銷貨單 $8,630・零用金發票／收據 $500」（各組加起來＝總額）
           final summary = [
