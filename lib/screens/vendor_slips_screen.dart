@@ -59,10 +59,7 @@ class _VendorSlipsScreenState extends State<VendorSlipsScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
         backgroundColor: Colors.transparent,
-        floatingActionButton: _canEdit
-            ? FloatingActionButton.extended(
-                onPressed: () => _edit(null), icon: const Icon(Icons.add), label: const Text('新增銷貨單'))
-            : null,
+        // 手動新增銷貨單已移除（老闆 2026-10-14）：銷貨單只從「新增進貨」拍的照片自動建立；既有的仍可點進去核對、修改
         body: _body(context),
       );
 
