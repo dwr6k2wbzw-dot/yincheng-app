@@ -551,7 +551,7 @@ class SupabaseRepository implements Repository {
         .eq('store_id', storeId)
         .eq('source', 'import')
         .eq('paid_by', 'vendor')
-        .gte('period_month', _day.format(DateTime(now.year, now.month - 6, 1)))
+        .gte('period_month', _day.format(DateTime(now.year, now.month - 5, 1)))
         .limit(5000);
     return excelVendorNamesFromRows(rows);
   }
