@@ -302,7 +302,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             else ...[
               _rateBar('酒水', s.drinkCostRate, s.drinkCost, AppColors.primary),
               _rateBar('餐食', s.foodCostRate, s.foodCost, AppColors.primary),
-              _rateBar('雜項', miscRate, miscAmt, AppColors.primary.withValues(alpha: 0.55)),
+              _rateBar('雜項', miscRate, miscAmt, coffeeColor),
             ],
             const SizedBox(height: 4),
             Text(costNote, style: TextStyle(color: AppColors.muted, fontSize: 11)),
