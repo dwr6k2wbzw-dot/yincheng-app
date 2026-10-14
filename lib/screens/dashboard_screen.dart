@@ -28,6 +28,33 @@ class _DashboardData {
   List<RecurringExpenseItem> recurring = const []; // 每月固定支出（0039）
   double cardFeeRate = 0.02; // 刷卡手續費率（0039）
   DateTime month = DateTime.now();
+  List<DailyRevenue> days = const []; // 本月與上個月每日營收（趨勢線、較上月同期）
+
+  /// 本月累計 vs 上月累計；較上月同期＝本月 1～N 日 ÷ 上月 1～N 日（N＝本月最後有資料的那天）
+  _Trend trend() {
+    final dim = DateTime(month.year, month.month + 1, 0).day;
+    final prevMonth = DateTime(month.year, month.month - 1);
+    final prevDim = DateTime(prevMonth.year, prevMonth.month + 1, 0).day;
+    final cur = List<double>.filled(dim, 0), prev = List<double>.filled(prevDim, 0);
+    var lastDay = 0;
+    for (final r in days) {
+      if (r.date.year == month.year && r.date.month == month.month) {
+        cur[r.date.day - 1] += r.revenue;
+        if (r.revenue != 0 && r.date.day > lastDay) lastDay = r.date.day;
+      } else if (r.date.year == prevMonth.year && r.date.month == prevMonth.month) {
+        prev[r.date.day - 1] += r.revenue;
+      }
+    }
+    if (lastDay == 0) return _Trend(const [], const [], dim, null);
+    List<double> cum(List<double> v, int n) {
+      var t = 0.0;
+      return [for (var i = 0; i < n; i++) t += v[i]];
+    }
+    final c = cum(cur, lastDay);
+    final p = cum(prev, prevDim);
+    final prevSame = p.isEmpty ? 0.0 : p[(lastDay < prevDim ? lastDay : prevDim) - 1];
+    return _Trend(c, p, dim, prevSame > 0 ? c.last / prevSame - 1 : null);
+  }
 
   double itemsOf(String category) => items.where((e) => e.category == category).fold(0.0, (a, e) => a + e.amount);
   double recurringOf(String category) =>
@@ -65,6 +92,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // 全部同時查（原本老闆要一個等一個查 5 次）
       final r = await Future.wait<dynamic>([
         repo.monthlySummary(id, _month),
+        // 趨勢線用；讀不到不影響總覽
+        repo
+            .dailyRevenueBetween(id, DateTime(_month.year, _month.month - 1, 1), DateTime(_month.year, _month.month + 1, 0))
+            .then<List<DailyRevenue>>((v) => v, onError: (_) => const <DailyRevenue>[]),
         if (_isOwner) ...[
           repo.fixedCosts(id, _month),
           repo.expenseItems(id, _month),
@@ -73,11 +104,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ],
       ]);
       d.summary = r[0] as MonthlySummary;
+      d.days = r[1] as List<DailyRevenue>;
       if (_isOwner) {
-        d.fixed = r[1] as FixedCosts;
-        d.items = r[2] as List<ExpenseItem>;
-        d.recurring = r[3] as List<RecurringExpenseItem>;
-        d.cardFeeRate = r[4] as double;
+        d.fixed = r[2] as FixedCosts;
+        d.items = r[3] as List<ExpenseItem>;
+        d.recurring = r[4] as List<RecurringExpenseItem>;
+        d.cardFeeRate = r[5] as double;
       }
     }
     markLoad('總覽資料');
@@ -137,7 +169,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onRefresh: () async => _reload(),
             child: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 24), children: [
               if (widget.membership.isPartTime)
-                const Text('兼職帳號：可以看班表、交接與提醒。點右上角小鈴鐺左邊的「交接・提醒」圖示寫交接、打勾提醒。',
+                Text('兼職帳號：可以看班表、交接與提醒。點右上角小鈴鐺左邊的「交接・提醒」圖示寫交接、打勾提醒。',
                     style: TextStyle(color: AppColors.muted, fontSize: 13, height: 1.5))
               else if (widget.membership.canSeeRevenue)
                 ..._managerView(d)
@@ -149,7 +181,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
 
   List<Widget> _staffView(_DashboardData d) => [
-        const SectionCard(
+        SectionCard(
           child: Text('這個身分看不到營收與成本分析。\n可以在下方分頁記錄進貨與盤點。',
               style: TextStyle(color: AppColors.muted, height: 1.5)),
         ),
@@ -159,7 +191,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   List<Widget> _managerView(_DashboardData d) {
     final s = d.summary!;
-    final monthLabel = DateFormat('yyyy 年 M 月', 'zh_TW').format(d.month);
     final multi = isMultiLineStore(widget.membership.storeName);
     final parts = revenueParts(widget.membership.storeName,
         drinks: s.drinksRevenue, food: s.foodRevenue, project: s.projectAmount,
@@ -167,104 +198,362 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // 小城外的客單＝調酒收入 ÷ 來客數（與小城外 Excel 相同）
     final cocktail = s.drinksRevenue + s.foodRevenue + s.projectAmount;
     final avgTicket = multi ? (s.guests > 0 ? cocktail / s.guests : null) : s.avgTicket;
-    return [
-      Row(children: [
-        IconButton(onPressed: () => _shiftMonth(-1), icon: const Icon(Icons.chevron_left)),
-        Expanded(child: Text(monthLabel, textAlign: TextAlign.center, style: const TextStyle(fontSize: 16))),
-        IconButton(onPressed: () => _shiftMonth(1), icon: const Icon(Icons.chevron_right)),
-      ]),
-      const SizedBox(height: 4),
-      // 訂位（0050）：老闆、店長、正職；放在月份下面（老闆 2026-10-14）。下拉重新整理時換 key 重新讀
-      ReservationSummaryCard(key: ValueKey('rs-${widget.membership.storeId}-$_gen'), membership: widget.membership),
-      const SizedBox(height: 12),
-      SectionCard(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('本月營收', style: TextStyle(color: AppColors.muted)),
-          const SizedBox(height: 6),
-          Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-            Expanded(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(ntd(s.revenue), style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w800)),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              _payRow('現金', s.cash),
-              _payRow('刷卡', s.card),
-              if (s.deposit != 0 && !multi) _payRow('訂金', s.deposit),
-            ]),
-          ]),
-          const SizedBox(height: 10),
-          Row(children: [for (final p in parts) _amount(p.label, p.amount, p.color)]),
-          const SizedBox(height: 10),
-          MixBar(parts: parts),
-          const SizedBox(height: 16),
-          if (s.targetAmount != null) ...[
-            ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: LinearProgressIndicator(
-                value: (s.targetRate ?? 0).clamp(0.0, 1.0),
-                minHeight: 8,
-                backgroundColor: AppColors.cardHigh,
-                color: AppColors.primary,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text('目標 ${ntd(s.targetAmount!)}　達成 ${pct(s.targetRate)}',
-                style: const TextStyle(color: AppColors.muted, fontSize: 12)),
-          ] else
-            const Text('尚未設定本月營收目標', style: TextStyle(color: AppColors.muted, fontSize: 12)),
-        ]),
-      ),
-      const SizedBox(height: 12),
-      Row(children: [
-        Expanded(child: StatTile(label: '來客數', value: money.format(s.guests))),
-        const SizedBox(width: 12),
-        Expanded(
-          child: StatTile(
-            label: '客單價',
-            value: avgTicket == null ? '—' : ntd(avgTicket.round()),
-            sub: multi
-                ? '調酒收入 ÷ 來客數'
-                : s.dailyAvgTicket != null && s.dailyAvgTicket != s.avgTicket ? '不含活動 ${ntd(s.dailyAvgTicket!)}' : null,
+    final gold = AppColors.p.style == DashboardStyle.gold;
+    // 雜項：老闆＝進貨雜項＋手動雜項支出＋每月固定雜項＋刷卡手續費（老闆 2026-10-11）；員工看進貨口徑
+    final miscAmt = s.miscCost + (_isOwner ? d.ownerMiscAdd(s) : 0);
+    final miscRate = s.revenue > 0 ? miscAmt / s.revenue : null;
+    final noCost = !s.hasCostRecords && s.revenue > 0 && !(_isOwner && d.ownerMiscAdd(s) != 0);
+    final costNote = (multi
+            ? '餐食含咖啡吧、拉麵食材（10 月起）；總進貨含咖啡吧與拉麵；雜項 ÷ 營業收入，不計入總進貨'
+            : '雜項＝雜項類進貨（含以前的零用金-其他雜支、酒水副材料-雜項）÷ 營業收入；不計入總進貨') +
+        (_isOwner ? '；老闆另含手動支出、每月固定與刷卡手續費' : '');
+    final reservation =
+        ReservationSummaryCard(key: ValueKey('rs-${widget.membership.storeId}-$_gen'), membership: widget.membership, compact: !gold);
+    final trend = d.trend();
+    final avgText = avgTicket == null ? '—' : money.format(avgTicket.round());
+    final avgSub = multi
+        ? '調酒收入 ÷ 來客數'
+        : s.dailyAvgTicket != null && s.dailyAvgTicket != s.avgTicket ? '不含活動 ${ntd(s.dailyAvgTicket!)}' : null;
+
+    if (gold) {
+      // ── A 沉穩黑金（小城外）──
+      return [
+        Row(children: [
+          IconButton(tooltip: '上個月', onPressed: () => _shiftMonth(-1), icon: Icon(Icons.chevron_left, color: AppColors.muted)),
+          Expanded(
+            child: Text('${d.month.year} · ${d.month.month} 月',
+                textAlign: TextAlign.center, style: TextStyle(fontSize: 15, letterSpacing: 3, color: AppColors.text)),
           ),
+          IconButton(tooltip: '下個月', onPressed: () => _shiftMonth(1), icon: Icon(Icons.chevron_right, color: AppColors.muted)),
+        ]),
+        const SizedBox(height: 6),
+        reservation,
+        const SizedBox(height: 14),
+        SectionCard(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Expanded(child: _label('本月營收')),
+              if (trend.delta != null) _delta(trend.delta!, suffix: ' 較上月同期'),
+            ]),
+            const SizedBox(height: 10),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
+                Text('NT\$ ', style: TextStyle(fontSize: 16, color: AppColors.primary)),
+                Text(money.format(s.revenue),
+                    style: const TextStyle(fontSize: 42, fontWeight: FontWeight.w500, letterSpacing: -1, fontFeatures: tabular)),
+              ]),
+            ),
+            if (trend.cumulative.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              SizedBox(
+                height: 56,
+                width: double.infinity,
+                child: CustomPaint(painter: _TrendPainter(trend, AppColors.primary, AppColors.muted.withValues(alpha: 0.45), AppColors.line)),
+              ),
+              const SizedBox(height: 4),
+              Row(children: [
+                Container(width: 10, height: 2, color: AppColors.primary),
+                const SizedBox(width: 4),
+                Text('本月累計', style: TextStyle(fontSize: 10, color: AppColors.muted)),
+                const SizedBox(width: 12),
+                Container(width: 10, height: 2, color: AppColors.muted.withValues(alpha: 0.45)),
+                const SizedBox(width: 4),
+                Text('上月', style: TextStyle(fontSize: 10, color: AppColors.muted)),
+              ]),
+            ],
+            const SizedBox(height: 14),
+            Divider(height: 1, color: AppColors.line),
+            const SizedBox(height: 14),
+            Row(children: [
+              _figure('現金', s.cash),
+              _figure('刷卡', s.card),
+              if (!multi) _figure('訂金', s.deposit),
+            ]),
+            const SizedBox(height: 14),
+            Row(children: [for (final p in parts) _amount(p.label, p.amount, p.color)]),
+            const SizedBox(height: 10),
+            MixBar(parts: parts, height: 4),
+            const SizedBox(height: 16),
+            _target(s),
+          ]),
         ),
-      ]),
-      if (widget.membership.canSeeRevenue) ...[
-      const SizedBox(height: 12),
-      SectionCard(
+        const SizedBox(height: 14),
+        Row(children: [
+          Expanded(child: StatTile(label: '來客數', value: money.format(s.guests))),
+          const SizedBox(width: 14),
+          Expanded(child: StatTile(label: '客單價', value: avgText, sub: avgSub)),
+        ]),
+        const SizedBox(height: 14),
+        SectionCard(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
+              Expanded(child: _label('進貨成本率')),
+              if (!noCost) Text(pct(s.totalCostRate), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w500, fontFeatures: tabular)),
+            ]),
+            if (!noCost) Text('總進貨 ${ntd(s.totalCost.round())}', textAlign: TextAlign.right,
+                style: TextStyle(fontSize: 11, color: AppColors.muted)),
+            const SizedBox(height: 12),
+            if (noCost)
+              Text('本月尚無進貨資料', style: TextStyle(color: AppColors.warn))
+            else ...[
+              _rateBar('酒水', s.drinkCostRate, s.drinkCost, AppColors.primary),
+              _rateBar('餐食', s.foodCostRate, s.foodCost, AppColors.primary),
+              _rateBar('雜項', miscRate, miscAmt, AppColors.primary.withValues(alpha: 0.55)),
+            ],
+            const SizedBox(height: 4),
+            Text(costNote, style: TextStyle(color: AppColors.muted, fontSize: 11)),
+          ]),
+        ),
+        const SizedBox(height: 14),
+        if (_isOwner) _profitCard(d, s),
+      ];
+    }
+
+    // ── C 品牌色系（隱城）──
+    final profit = _isOwner ? _profitOf(d, s) : null;
+    final pal = AppColors.p;
+    return [
+      const SizedBox(height: 4),
+      Container(
+        padding: const EdgeInsets.fromLTRB(20, 18, 16, 20),
+        decoration: BoxDecoration(color: pal.hero, borderRadius: BorderRadius.circular(20)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('進貨成本率', style: TextStyle(color: AppColors.muted)),
-          const SizedBox(height: 10),
-          if (!s.hasCostRecords && s.revenue > 0 && !(_isOwner && d.ownerMiscAdd(s) != 0))
-            const Text('本月尚無進貨資料', style: TextStyle(color: AppColors.warn))
-          else
-            () {
-              // 老闆：雜項＝進貨雜項＋手動雜項支出＋每月固定雜項＋刷卡手續費（老闆 2026-10-11）；員工看進貨口徑
-              final miscAmt = s.miscCost + (_isOwner ? d.ownerMiscAdd(s) : 0);
-              final miscRate = s.revenue > 0 ? miscAmt / s.revenue : null;
-              return Row(children: [
-                _rate('酒水', s.drinkCostRate, s.drinkCost),
-                _rate('餐食', s.foodCostRate, s.foodCost),
-                _rate('總進貨', s.totalCostRate, s.totalCost),
-                _rate('雜項', miscRate, miscAmt),
-              ]);
-            }(),
+          Row(children: [
+            Expanded(child: Text('${d.month.year} 年 ${d.month.month} 月營收', style: TextStyle(fontSize: 13, color: pal.heroMuted))),
+            _roundArrow(Icons.chevron_left, '上個月', () => _shiftMonth(-1)),
+            const SizedBox(width: 6),
+            _roundArrow(Icons.chevron_right, '下個月', () => _shiftMonth(1)),
+          ]),
           const SizedBox(height: 6),
-          Text(
-              (multi
-                      ? '餐食含咖啡吧、拉麵食材（10 月起）；總進貨含咖啡吧與拉麵；雜項 ÷ 營業收入，不計入總進貨'
-                      : '雜項＝雜項類進貨（含以前的零用金-其他雜支、酒水副材料-雜項）÷ 營業收入；不計入總進貨') +
-                  (_isOwner ? '；老闆另含手動支出、每月固定與刷卡手續費' : ''),
-              style: const TextStyle(color: AppColors.muted, fontSize: 11)),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(ntd(s.revenue),
+                style: TextStyle(fontSize: 42, fontWeight: FontWeight.w600, letterSpacing: -1, color: pal.text, fontFeatures: tabular)),
+          ),
+          if (trend.delta != null) _delta(trend.delta!, suffix: ' 較上月同期', muted: pal.heroMuted),
+          const SizedBox(height: 16),
+          _target(s, track: pal.heroTrack, muted: pal.heroMuted),
         ]),
       ),
-      ],
+      const SizedBox(height: 12),
+      GridView.count(
+        crossAxisCount: 2,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        childAspectRatio: 1.45,
+        children: [
+          reservation,
+          if (profit != null)
+            _tile('本月損益', _short(profit), color: profit >= 0 ? AppColors.good : AppColors.bad,
+                sub: s.revenue > 0 ? '占營收 ${pct(profit / s.revenue)}' : null)
+          else
+            _tile('目標達成', s.targetRate == null ? '—' : pct(s.targetRate), sub: s.targetAmount == null ? '尚未設定目標' : null),
+          _tile('來客數', money.format(s.guests)),
+          _tile('客單價', avgText, sub: avgSub),
+        ],
+      ),
+      const SizedBox(height: 12),
+      SectionCard(
+        padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
+            Expanded(child: _label('進貨成本率')),
+            if (!noCost) ...[
+              Text('總計 ', style: TextStyle(fontSize: 12, color: AppColors.muted)),
+              Text(pct(s.totalCostRate), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFeatures: tabular)),
+            ],
+          ]),
+          const SizedBox(height: 16),
+          if (noCost)
+            Text('本月尚無進貨資料', style: TextStyle(color: AppColors.warn))
+          else
+            Row(children: [
+              _ring('酒水', s.drinkCostRate, s.drinkCost, AppColors.primary),
+              _ring('餐食', s.foodCostRate, s.foodCost, AppColors.warn),
+              _ring('雜項', miscRate, miscAmt, AppColors.muted),
+            ]),
+          const SizedBox(height: 12),
+          Text(costNote, style: TextStyle(color: AppColors.muted, fontSize: 11)),
+        ]),
+      ),
+      const SizedBox(height: 12),
+      SectionCard(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          _label('營收組成'),
+          const SizedBox(height: 10),
+          for (final p in parts) _kv(p.label, p.amount, dot: p.color),
+          const SizedBox(height: 8),
+          MixBar(parts: parts, height: 6),
+          const SizedBox(height: 12),
+          Divider(height: 1, color: AppColors.line),
+          const SizedBox(height: 10),
+          _kv('刷卡', s.card),
+          _kv('現金', s.cash),
+          if (s.deposit != 0) _kv('訂金', s.deposit),
+        ]),
+      ),
       const SizedBox(height: 12),
       if (_isOwner) _profitCard(d, s),
     ];
+  }
+
+  // ── 共用小元件 ──
+  Widget _label(String t) => Text(t, style: TextStyle(fontSize: 12, color: AppColors.muted, letterSpacing: 2));
+
+  Widget _delta(double v, {String suffix = '', Color? muted}) {
+    final up = v >= 0;
+    final c = up ? AppColors.good : AppColors.bad;
+    return Text.rich(TextSpan(children: [
+      TextSpan(text: '${up ? '▲' : '▼'} ${(v.abs() * 100).toStringAsFixed(1)}%',
+          style: TextStyle(color: c, fontWeight: FontWeight.w600, fontFeatures: tabular)),
+      TextSpan(text: suffix, style: TextStyle(color: muted ?? AppColors.muted)),
+    ]), style: const TextStyle(fontSize: 12));
+  }
+
+  Widget _figure(String label, double v) => Expanded(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label, style: TextStyle(color: AppColors.muted, fontSize: 11)),
+          const SizedBox(height: 3),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(money.format(v), style: const TextStyle(fontSize: 15, fontFeatures: tabular)),
+          ),
+        ]),
+      );
+
+  Widget _target(MonthlySummary s, {Color? track, Color? muted}) {
+    if (s.targetAmount == null) {
+      return Text('尚未設定本月營收目標', style: TextStyle(color: muted ?? AppColors.muted, fontSize: 12));
+    }
+    return Column(children: [
+      Row(children: [
+        Expanded(child: Text('目標 ${money.format(s.targetAmount!)}', style: TextStyle(fontSize: 11, color: muted ?? AppColors.muted))),
+        Text('達成 ${pct(s.targetRate)}', style: TextStyle(fontSize: 11, color: AppColors.primary, fontFeatures: tabular)),
+      ]),
+      const SizedBox(height: 6),
+      ClipRRect(
+        borderRadius: BorderRadius.circular(3),
+        child: LinearProgressIndicator(
+          value: (s.targetRate ?? 0).clamp(0.0, 1.0),
+          minHeight: 5,
+          backgroundColor: track ?? AppColors.line,
+          color: AppColors.primary,
+        ),
+      ),
+    ]);
+  }
+
+  Widget _rateBar(String label, double? rate, double amount, Color color) => Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Column(children: [
+          Row(children: [
+            Text(label, style: const TextStyle(fontSize: 13)),
+            const SizedBox(width: 8),
+            Expanded(child: Text(ntd(amount.round()), style: TextStyle(fontSize: 11, color: AppColors.muted, fontFeatures: tabular))),
+            Text(pct(rate), style: const TextStyle(fontSize: 14, fontFeatures: tabular)),
+          ]),
+          const SizedBox(height: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(2),
+            child: LinearProgressIndicator(
+              // 50% 畫滿
+              value: ((rate ?? 0) / 0.5).clamp(0.0, 1.0),
+              minHeight: 3,
+              backgroundColor: AppColors.line,
+              color: color,
+            ),
+          ),
+        ]),
+      );
+
+  Widget _ring(String label, double? rate, double amount, Color color) => Expanded(
+        child: Column(children: [
+          SizedBox(
+            width: 76,
+            height: 76,
+            child: Stack(alignment: Alignment.center, children: [
+              SizedBox(
+                width: 76,
+                height: 76,
+                child: CircularProgressIndicator(
+                  value: (rate ?? 0).clamp(0.0, 1.0),
+                  strokeWidth: 7,
+                  strokeCap: StrokeCap.round,
+                  backgroundColor: AppColors.line,
+                  color: color,
+                ),
+              ),
+              Text(rate == null ? '—' : (rate * 100).toStringAsFixed(1),
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, fontFeatures: tabular)),
+            ]),
+          ),
+          const SizedBox(height: 8),
+          Text(label, style: const TextStyle(fontSize: 12)),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(ntd(amount.round()), style: TextStyle(fontSize: 11, color: AppColors.muted, fontFeatures: tabular)),
+          ),
+        ]),
+      );
+
+  Widget _tile(String label, String value, {Color? color, String? sub}) => SectionCard(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+          Text(label, style: TextStyle(fontSize: 12, color: AppColors.muted)),
+          const SizedBox(height: 6),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(value, style: TextStyle(fontSize: 26, fontWeight: FontWeight.w600, color: color, fontFeatures: tabular)),
+          ),
+          if (sub != null)
+            Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: AppColors.muted)),
+        ]),
+      );
+
+  Widget _kv(String k, double v, {Color? dot}) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(children: [
+          if (dot != null) ...[Icon(Icons.circle, size: 8, color: dot), const SizedBox(width: 8)],
+          Expanded(child: Text(k, style: const TextStyle(fontSize: 14))),
+          Text(money.format(v), style: const TextStyle(fontSize: 14, fontFeatures: tabular)),
+        ]),
+      );
+
+  Widget _roundArrow(IconData icon, String tip, VoidCallback onTap) => SizedBox(
+        width: 36,
+        height: 36,
+        child: IconButton.filled(
+          tooltip: tip,
+          padding: EdgeInsets.zero,
+          style: IconButton.styleFrom(backgroundColor: AppColors.p.heroTrack, foregroundColor: AppColors.p.heroMuted),
+          onPressed: onTap,
+          icon: Icon(icon, size: 18),
+        ),
+      );
+
+  /// 金額縮寫：+92,140 → +9.2萬
+  String _short(double v) {
+    final sign = v < 0 ? '−' : '+';
+    final a = v.abs();
+    if (a >= 10000) return '$sign${(a / 10000).toStringAsFixed(a >= 1000000 ? 0 : 1)}萬';
+    return '$sign${money.format(a.round())}';
+  }
+
+  /// 本月損益（與 _profitCard 同一算法）
+  double _profitOf(_DashboardData d, MonthlySummary s) {
+    final rent = (d.fixed.rent ?? 0) + d.itemsOf('rent') + d.recurringOf('rent');
+    final payroll = (d.fixed.payroll ?? 0) + d.itemsOf('payroll') + d.recurringOf('payroll');
+    final misc = s.miscCost + d.itemsOf('misc') + d.recurringOf('misc') + d.cardFee(s);
+    return s.revenue - s.purchaseCost - misc - rent - payroll;
   }
 
   /// 本月損益（只有老闆：含人事成本）
@@ -284,20 +573,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Widget line(String k, double v, {bool minus = true}) => Padding(
           padding: const EdgeInsets.symmetric(vertical: 2),
           child: Row(children: [
-            Expanded(child: Text(k, style: const TextStyle(color: AppColors.muted, fontSize: 13))),
+            Expanded(child: Text(k, style: TextStyle(color: AppColors.muted, fontSize: 13))),
             Text('${minus ? '−' : ''}${ntd(v)}', style: const TextStyle(fontSize: 13, fontFeatures: [FontFeature.tabularFigures()])),
             SizedBox(
               width: 58,
               child: Text(ofRevenue(v),
                   textAlign: TextAlign.right,
-                  style: const TextStyle(color: AppColors.muted, fontSize: 12, fontFeatures: [FontFeature.tabularFigures()])),
+                  style: TextStyle(color: AppColors.muted, fontSize: 12, fontFeatures: [FontFeature.tabularFigures()])),
             ),
           ]),
         );
     return SectionCard(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          const Expanded(child: Text('本月損益', style: TextStyle(color: AppColors.muted))),
+          Expanded(child: Text('本月損益', style: TextStyle(color: AppColors.muted))),
           TextButton.icon(
             onPressed: () => _exportPl(d, s),
             icon: const Icon(Icons.ios_share, size: 18),
@@ -315,7 +604,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Padding(
             padding: const EdgeInsets.only(top: 4),
             child: Text('尚未輸入${missing.join('、')}，損益還不完整',
-                style: const TextStyle(color: AppColors.warn, fontSize: 12)),
+                style: TextStyle(color: AppColors.warn, fontSize: 12)),
           ),
         const SizedBox(height: 10),
         line('營業收入', s.revenue, minus: false),
@@ -324,7 +613,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         line('租金${rentItems != 0 ? '（含明細 ${ntd(rentItems)}）' : ''}', rent),
         line('人事${payrollItems != 0 ? '（含明細 ${ntd(payrollItems)}）' : ''}', payroll),
         const SizedBox(height: 2),
-        const Text('百分比＝占本月營業收入', style: TextStyle(color: AppColors.muted, fontSize: 11)),
+        Text('百分比＝占本月營業收入', style: TextStyle(color: AppColors.muted, fontSize: 11)),
         const Divider(height: 20),
         Row(children: [
           _fixedItem(d, 'rent', '租金（基底）', d.fixed.rent, s.revenue),
@@ -332,7 +621,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _fixedItem(d, 'payroll', '人事（基底）', d.fixed.payroll, s.revenue),
         ]),
         const SizedBox(height: 4),
-        const Text('租金、人事的單一金額當基底；下面的支出明細會另外加上去。', style: TextStyle(color: AppColors.muted, fontSize: 11)),
+        Text('租金、人事的單一金額當基底；下面的支出明細會另外加上去。', style: TextStyle(color: AppColors.muted, fontSize: 11)),
         const SizedBox(height: 12),
         _expenseItemsSection(d, s),
       ]),
@@ -399,7 +688,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         TextButton.icon(onPressed: () => _editItem(d, null), icon: const Icon(Icons.add, size: 18), label: const Text('新增')),
       ]),
       if (noManual)
-        const Padding(
+        Padding(
           padding: EdgeInsets.symmetric(vertical: 4),
           child: Text('可新增勞保、健保、電費、營業稅…，選租金／人事／雜項、可設每月固定；金額會加進該大項。',
               style: TextStyle(color: AppColors.muted, fontSize: 12)),
@@ -445,11 +734,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(width: 8),
                 Expanded(child: Text(name, style: const TextStyle(fontSize: 13))),
                 if (tag != null) ...[
-                  Text(tag, style: const TextStyle(fontSize: 11, color: AppColors.muted)),
+                  Text(tag, style: TextStyle(fontSize: 11, color: AppColors.muted)),
                   const SizedBox(width: 8),
                 ],
                 Text(ntd(amount), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                const Icon(Icons.chevron_right, size: 16, color: AppColors.muted),
+                Icon(Icons.chevron_right, size: 16, color: AppColors.muted),
               ]),
             ),
           ),
@@ -485,7 +774,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               decoration: const InputDecoration(prefixText: '\$ ', labelText: '金額'),
             ),
             const SizedBox(height: 12),
-            const Text('算進哪個大項', style: TextStyle(color: AppColors.muted, fontSize: 12)),
+            Text('算進哪個大項', style: TextStyle(color: AppColors.muted, fontSize: 12)),
             const SizedBox(height: 6),
             SegmentedButton<String>(
               segments: const [
@@ -507,7 +796,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(height: 16),
             Row(children: [
               if (item != null)
-                TextButton(onPressed: () => Navigator.pop(c, 'delete'), child: const Text('刪除', style: TextStyle(color: AppColors.bad))),
+                TextButton(onPressed: () => Navigator.pop(c, 'delete'), child: Text('刪除', style: TextStyle(color: AppColors.bad))),
               const Spacer(),
               TextButton(onPressed: () => Navigator.pop(c), child: const Text('取消')),
               const SizedBox(width: 8),
@@ -566,7 +855,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               const Text('每月固定支出', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
               const SizedBox(height: 4),
-              const Text('改金額會套用到每個月；不要了就刪除。', style: TextStyle(color: AppColors.muted, fontSize: 12)),
+              Text('改金額會套用到每個月；不要了就刪除。', style: TextStyle(color: AppColors.muted, fontSize: 12)),
               const SizedBox(height: 12),
               TextField(controller: name, maxLength: 40, decoration: const InputDecoration(labelText: '項目')),
               const SizedBox(height: 12),
@@ -577,7 +866,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 decoration: const InputDecoration(prefixText: '\$ ', labelText: '金額'),
               ),
               const SizedBox(height: 12),
-              const Text('算進哪個大項', style: TextStyle(color: AppColors.muted, fontSize: 12)),
+              Text('算進哪個大項', style: TextStyle(color: AppColors.muted, fontSize: 12)),
               const SizedBox(height: 6),
               SegmentedButton<String>(
                 segments: const [
@@ -590,7 +879,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               const SizedBox(height: 16),
               Row(children: [
-                TextButton(onPressed: () => Navigator.pop(c, 'delete'), child: const Text('刪除', style: TextStyle(color: AppColors.bad))),
+                TextButton(onPressed: () => Navigator.pop(c, 'delete'), child: Text('刪除', style: TextStyle(color: AppColors.bad))),
                 const Spacer(),
                 TextButton(onPressed: () => Navigator.pop(c), child: const Text('取消')),
                 const SizedBox(width: 8),
@@ -632,7 +921,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       builder: (c) => AlertDialog(
         title: const Text('刷卡手續費率'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('刷卡手續費＝當月刷卡金額 × 此比率，自動算進雜項。', style: TextStyle(fontSize: 12, color: AppColors.muted)),
+          Text('刷卡手續費＝當月刷卡金額 × 此比率，自動算進雜項。', style: TextStyle(fontSize: 12, color: AppColors.muted)),
           const SizedBox(height: 12),
           TextField(
             controller: ctrl,
@@ -671,9 +960,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
             decoration: BoxDecoration(color: AppColors.cardHigh, borderRadius: BorderRadius.circular(12)),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
-                Text(label, style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+                Text(label, style: TextStyle(color: AppColors.muted, fontSize: 12)),
                 const Spacer(),
-                const Icon(Icons.edit_outlined, size: 14, color: AppColors.muted),
+                Icon(Icons.edit_outlined, size: 14, color: AppColors.muted),
               ]),
               const SizedBox(height: 4),
               Text(v == null ? '尚未輸入' : ntd(v),
@@ -681,19 +970,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       color: v == null ? AppColors.warn : null)),
               const SizedBox(height: 2),
               Text(v == null ? '' : '占營收 ${revenue > 0 ? pct(v / revenue) : '—'}',
-                  style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+                  style: TextStyle(color: AppColors.muted, fontSize: 12)),
             ]),
           ),
         ),
-      );
-
-  Widget _payRow(String label, double v) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 1),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Text(label, style: const TextStyle(color: AppColors.muted, fontSize: 12)),
-          const SizedBox(width: 8),
-          Text(ntd(v), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-        ]),
       );
 
   Widget _amount(String label, double v, Color dot) => Expanded(
@@ -701,7 +981,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Row(children: [
             Icon(Icons.circle, size: 8, color: dot),
             const SizedBox(width: 6),
-            Text(label, style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+            Text(label, style: TextStyle(color: AppColors.muted, fontSize: 12)),
           ]),
           const SizedBox(height: 2),
           FittedBox(
@@ -712,17 +992,51 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ]),
       );
 
-  Widget _rate(String label, double? v, double amount) => Expanded(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(label, style: const TextStyle(color: AppColors.muted, fontSize: 12)),
-          const SizedBox(height: 4),
-          Text(pct(v), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 2),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(ntd(amount.round()), style: const TextStyle(fontSize: 13, color: AppColors.muted)),
-          ),
-        ]),
-      );
+}
+
+class _Trend {
+  _Trend(this.cumulative, this.prevCumulative, this.daysInMonth, this.delta);
+  final List<double> cumulative; // 本月 1 日到最後有資料那天的累計
+  final List<double> prevCumulative; // 上個月整月累計
+  final int daysInMonth;
+  final double? delta; // 較上月同期
+}
+
+/// 本月累計營收線（金）＋上月累計（淡），x 軸＝當月日數
+class _TrendPainter extends CustomPainter {
+  _TrendPainter(this.t, this.color, this.prevColor, this.baseColor);
+  final _Trend t;
+  final Color color, prevColor, baseColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final maxV = [...t.cumulative, ...t.prevCumulative].fold<double>(0, (a, b) => b > a ? b : a);
+    canvas.drawLine(Offset(0, size.height - 0.5), Offset(size.width, size.height - 0.5), Paint()..color = baseColor);
+    if (maxV <= 0) return;
+    Path path(List<double> v, int days) {
+      final p = Path();
+      for (var i = 0; i < v.length; i++) {
+        final x = days <= 1 ? 0.0 : size.width * i / (days - 1);
+        final y = size.height - 3 - (size.height - 6) * v[i] / maxV;
+        i == 0 ? p.moveTo(x, y) : p.lineTo(x, y);
+      }
+      return p;
+    }
+
+    final stroke = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    if (t.prevCumulative.isNotEmpty) {
+      canvas.drawPath(path(t.prevCumulative, t.prevCumulative.length), stroke..color = prevColor..strokeWidth = 1.2);
+    }
+    canvas.drawPath(path(t.cumulative, t.daysInMonth), stroke..color = color..strokeWidth = 2);
+    final last = t.cumulative.length - 1;
+    final x = t.daysInMonth <= 1 ? 0.0 : size.width * last / (t.daysInMonth - 1);
+    final y = size.height - 3 - (size.height - 6) * t.cumulative[last] / maxV;
+    canvas.drawCircle(Offset(x, y), 3, Paint()..color = color);
+  }
+
+  @override
+  bool shouldRepaint(covariant _TrendPainter old) => old.t != t || old.color != color;
 }

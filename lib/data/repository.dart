@@ -32,6 +32,8 @@ abstract class Repository {
   // 營運總覽（老闆／店長）
   Future<MonthlySummary> monthlySummary(String storeId, DateTime month);
   Future<List<DailyRevenue>> recentDailyRevenue(String storeId, int days);
+  /// 指定期間的每日營收（kind=daily），總覽趨勢線用
+  Future<List<DailyRevenue>> dailyRevenueBetween(String storeId, DateTime from, DateTime to);
   Future<List<Issue>> consistencyIssues(String storeId);
   Future<double?> pettyCashBalance(String storeId);
 

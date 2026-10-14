@@ -377,6 +377,18 @@ class DemoRepository implements Repository {
   }
 
   @override
+  Future<List<DailyRevenue>> dailyRevenueBetween(String storeId, DateTime from, DateTime to) async {
+    if (_isStaff) return [];
+    // 示範資料：每天 1.2～2.8 萬
+    final out = <DailyRevenue>[];
+    final today = DateTime.now();
+    for (var d = from; !d.isAfter(to) && !d.isAfter(today); d = d.add(const Duration(days: 1))) {
+      out.add(DailyRevenue(d, 12000.0 + (d.day * 3700 % 16000), 20 + d.day % 15));
+    }
+    return out;
+  }
+
+  @override
   Future<List<Issue>> consistencyIssues(String storeId) async {
     if (_isStaff) throw Exception('message: 只有老闆或店長可以執行一致性檢查,');
     return [

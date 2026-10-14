@@ -30,7 +30,7 @@ Future<void> main() async {
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Text('畫面發生錯誤（請截圖給 Claude）\n\n${d.exceptionAsString()}',
-                style: const TextStyle(color: AppColors.bad, fontSize: 14)),
+                style: TextStyle(color: AppColors.bad, fontSize: 14)),
           ),
         ),
       );
@@ -56,7 +56,7 @@ Future<void> main() async {
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
-            child: Text('啟動失敗（請截圖給 Claude）\n\n$e', style: const TextStyle(color: AppColors.bad, fontSize: 14)),
+            child: Text('啟動失敗（請截圖給 Claude）\n\n$e', style: TextStyle(color: AppColors.bad, fontSize: 14)),
           ),
         ),
       ),
@@ -71,10 +71,14 @@ class YinchengApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppScope(
         state: state,
-        child: MaterialApp(
+        // 每家店一套配色（老闆 2026-10-14）：切換店家時換顏色
+        child: ListenableBuilder(listenable: state, builder: (context, _) {
+          final palette = StorePalette.forStore(state.current?.storeName);
+          AppColors.p = palette;
+          return MaterialApp(
           title: '小城外',
           debugShowCheckedModeBanner: false,
-          theme: buildTheme(),
+          theme: buildTheme(palette),
           locale: const Locale('zh', 'TW'),
           supportedLocales: const [Locale('zh', 'TW'), Locale('en')],
           localizationsDelegates: const [
@@ -83,7 +87,8 @@ class YinchengApp extends StatelessWidget {
             GlobalCupertinoLocalizations.delegate,
           ],
           home: const AuthGate(),
-        ),
+        );
+        }),
       );
 }
 

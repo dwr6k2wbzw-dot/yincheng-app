@@ -89,10 +89,14 @@ class _LoginScreenState extends State<LoginScreen> {
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 420),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  const Icon(Icons.local_bar_rounded, size: 56, color: AppColors.primary),
-                  const SizedBox(height: 12),
-                  const Text('小城外', textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700)),
+                  Row(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
+                    Image.asset('assets/logos/yincheng.png', height: 88, filterQuality: FilterQuality.medium),
+                    const SizedBox(width: 28),
+                    Image.asset('assets/logos/xcw.png', height: 72, filterQuality: FilterQuality.medium),
+                  ]),
+                  const SizedBox(height: 18),
+                  const Text('隱城 · 小城外', textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, letterSpacing: 4)),
                   const SizedBox(height: 4),
                   Text(
                       AppConfig.demo
@@ -100,7 +104,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           : _signUp
                               ? '第一次使用：用你的 Email 建立帳號，並輸入老闆給你的邀請碼'
                               : '以店家提供的帳號登入',
-                      textAlign: TextAlign.center, style: const TextStyle(color: AppColors.muted)),
+                      textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted)),
                   const SizedBox(height: 32),
                   TextField(
                     controller: _email,

@@ -106,17 +106,17 @@ class _VendorSlipsScreenState extends State<VendorSlipsScreen> {
               const SizedBox(height: 4),
               SectionCard(
                 child: Row(children: [
-                  const Icon(Icons.receipt_long, color: AppColors.primary),
+                  Icon(Icons.receipt_long, color: AppColors.primary),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Text('${slips.length} 張銷貨單$summary', style: const TextStyle(color: AppColors.muted)),
+                    child: Text('${slips.length} 張銷貨單$summary', style: TextStyle(color: AppColors.muted)),
                   ),
                   Text(ntd(_sum(slips)), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
                 ]),
               ),
               const SizedBox(height: 12),
               if (groups.isEmpty)
-                const Padding(
+                Padding(
                   padding: EdgeInsets.only(top: 48),
                   child: Text('這個月還沒有銷貨單', textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted)),
                 ),
@@ -130,7 +130,7 @@ class _VendorSlipsScreenState extends State<VendorSlipsScreen> {
                 const SizedBox(height: 10),
               ],
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 '資料來自「新增進貨」時拍的送貨單照片，存檔時自動建立；依新增進貨的付款方式分「月結銷貨單」與「零用金發票／收據」。'
                 '點照片可放大；照片上傳 2 個月後自動刪除。'
                 '這裡只是明細參考，成本率與進貨金額仍以日報表為準。',
@@ -164,7 +164,7 @@ class _VendorCard extends StatelessWidget {
           tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
           title: Text(vendor, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-          subtitle: Text('${slips.length} 張', style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+          subtitle: Text('${slips.length} 張', style: TextStyle(color: AppColors.muted, fontSize: 12)),
           trailing: Text(ntd(total), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
           children: [for (final s in slips) _slip(s)],
         ),
@@ -195,11 +195,11 @@ class _VendorCard extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(_itemText(s),
                         maxLines: 2, overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: AppColors.muted, fontSize: 13)),
+                        style: TextStyle(color: AppColors.muted, fontSize: 13)),
                     // 月結銷貨單顯示填表人、零用金發票／收據顯示請款人（新增進貨時填的那一欄）
                     Text('${s.paidBy == 'petty_cash' ? '請款人' : '填表人'}：${s.filer ?? '未填'}',
                         maxLines: 1, overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+                        style: TextStyle(color: AppColors.muted, fontSize: 12)),
                   ]),
                 ),
                 const SizedBox(width: 8),

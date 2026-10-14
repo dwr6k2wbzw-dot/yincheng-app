@@ -194,7 +194,7 @@ class _VendorSlipEditScreenState extends State<VendorSlipEditScreen> {
             child: Text(
               '這張是文字辨識產生的草稿，字和數字可能讀錯。請對照紙本或 Dropbox 裡的掃描檔'
               '${s.sourceFile == null ? '' : '（${s.sourceFile}）'}修改，確認後按「確認無誤」。',
-              style: const TextStyle(color: AppColors.warn, fontSize: 13, height: 1.5),
+              style: TextStyle(color: AppColors.warn, fontSize: 13, height: 1.5),
             ),
           ),
         const SizedBox(height: 8),
@@ -232,13 +232,13 @@ class _VendorSlipEditScreenState extends State<VendorSlipEditScreen> {
         TextField(controller: _note, maxLines: null, decoration: const InputDecoration(labelText: '備註')),
         const SizedBox(height: 16),
         Row(children: [
-          const Text('品項', style: TextStyle(color: AppColors.muted)),
+          Text('品項', style: TextStyle(color: AppColors.muted)),
           const Spacer(),
           Text('品項合計 ${ntd(_linesTotal)}',
               style: TextStyle(color: mismatch ? AppColors.bad : AppColors.muted, fontWeight: FontWeight.w600)),
         ]),
         if (mismatch)
-          const Padding(
+          Padding(
             padding: EdgeInsets.only(top: 4),
             child: Text('品項金額加起來和單據合計不一樣', style: TextStyle(color: AppColors.bad, fontSize: 12)),
           ),
@@ -292,7 +292,7 @@ class _VendorSlipEditScreenState extends State<VendorSlipEditScreen> {
           padding: const EdgeInsets.fromLTRB(12, 4, 4, 12),
           child: Column(children: [
             Row(children: [
-              Text('#${i + 1}', style: const TextStyle(color: AppColors.muted)),
+              Text('#${i + 1}', style: TextStyle(color: AppColors.muted)),
               const SizedBox(width: 8),
               Expanded(
                 child: TextField(

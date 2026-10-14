@@ -82,7 +82,7 @@ class _MembersScreenState extends State<MembersScreen> {
                 for (final m in inactive) _memberTile(m, isMe: false),
               ],
               const SizedBox(height: 16),
-              const Text(
+              Text(
                 '邀請方式：按「邀請成員」產生邀請碼，用 LINE 傳給對方。對方打開 App 網址 → 「第一次使用？用邀請碼建立帳號」→ 輸入 Email、密碼和邀請碼就能加入。邀請碼 14 天內有效、只能用一次。',
                 style: TextStyle(color: AppColors.muted, fontSize: 12, height: 1.6),
               ),
@@ -95,7 +95,7 @@ class _MembersScreenState extends State<MembersScreen> {
 
   Widget _header(String t) => Padding(
         padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
-        child: Text(t, style: const TextStyle(color: AppColors.muted, fontSize: 13)),
+        child: Text(t, style: TextStyle(color: AppColors.muted, fontSize: 13)),
       );
 
   Widget _memberTile(MemberInfo m, {required bool isMe}) {
@@ -113,10 +113,10 @@ class _MembersScreenState extends State<MembersScreen> {
           ),
           title: Text('${m.displayName}${isMe ? '（你）' : ''}',
               style: TextStyle(color: m.active ? null : AppColors.muted)),
-          subtitle: Text(m.email, style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+          subtitle: Text(m.email, style: TextStyle(color: AppColors.muted, fontSize: 12)),
           trailing: Row(mainAxisSize: MainAxisSize.min, children: [
             _roleChip(m.role, muted: !m.active),
-            if (editable) const Icon(Icons.chevron_right, color: AppColors.muted),
+            if (editable) Icon(Icons.chevron_right, color: AppColors.muted),
           ]),
         ),
       ),
@@ -135,7 +135,7 @@ class _MembersScreenState extends State<MembersScreen> {
         child: SectionCard(
           padding: EdgeInsets.zero,
           child: ListTile(
-            leading: const CircleAvatar(backgroundColor: AppColors.cardHigh, child: Icon(Icons.key_outlined, size: 20)),
+            leading: CircleAvatar(backgroundColor: AppColors.cardHigh, child: Icon(Icons.key_outlined, size: 20)),
             title: Text(i.displayName),
             subtitle: Text(
               i.expired ? '已過期' : '${DateFormat('M/d').format(i.expiresAt)} 前有效',
@@ -186,7 +186,7 @@ class _MembersScreenState extends State<MembersScreen> {
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
               child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 Text(m.displayName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-                Text(m.email, style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+                Text(m.email, style: TextStyle(color: AppColors.muted, fontSize: 12)),
                 const SizedBox(height: 12),
                 if (m.active) ...[
                   for (final r in _invitableRoles)
@@ -312,7 +312,7 @@ class _InviteScreenState extends State<_InviteScreen> {
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: 2)),
           const SizedBox(height: 12),
-          const Text('這組邀請碼只會顯示這一次。按下面的按鈕複製邀請訊息，貼到 LINE 傳給對方。',
+          Text('這組邀請碼只會顯示這一次。按下面的按鈕複製邀請訊息，貼到 LINE 傳給對方。',
               style: TextStyle(color: AppColors.muted, fontSize: 13)),
         ]),
         actions: [
@@ -340,7 +340,7 @@ class _InviteScreenState extends State<_InviteScreen> {
             decoration: const InputDecoration(labelText: '名字（App 裡顯示的名字）', prefixIcon: Icon(Icons.badge_outlined)),
           ),
           const SizedBox(height: 8),
-          const Text('身分', style: TextStyle(color: AppColors.muted)),
+          Text('身分', style: TextStyle(color: AppColors.muted)),
           for (final r in _invitableRoles)
             RadioListTile<Role>(
               value: r,
@@ -352,7 +352,7 @@ class _InviteScreenState extends State<_InviteScreen> {
             ),
           if (widget.ownerStores.length > 1) ...[
             const SizedBox(height: 8),
-            const Text('加入哪幾家店', style: TextStyle(color: AppColors.muted)),
+            Text('加入哪幾家店', style: TextStyle(color: AppColors.muted)),
             for (final s in widget.ownerStores)
               CheckboxListTile(
                 value: _stores.contains(s.storeId),
@@ -371,7 +371,7 @@ class _InviteScreenState extends State<_InviteScreen> {
                 : const Text('產生邀請碼', style: TextStyle(fontSize: 16)),
           ),
           const SizedBox(height: 12),
-          const Text('不能用邀請碼給「老闆」身分。', style: TextStyle(color: AppColors.muted, fontSize: 12)),
+          Text('不能用邀請碼給「老闆」身分。', style: TextStyle(color: AppColors.muted, fontSize: 12)),
         ]),
       );
 }

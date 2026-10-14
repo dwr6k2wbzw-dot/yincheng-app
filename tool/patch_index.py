@@ -102,7 +102,7 @@ padding:24px;text-align:center;white-space:pre-wrap;color:#9AA0AE;font:15px/1.6 
   }, 30000);
 })();
 </script>"""
-s = s.replace("<body>", "<body style=\"background:#0F1115\">\n" + boot, 1)
+s = s.replace("<body>", "<body style=\"background:#0D0D0C\">\n" + boot, 1)
 
 # 拍照辨識送貨單（免費文字辨識 Tesseract.js，在手機上執行；辨識程式與語言資料第一次使用時才下載）
 s = re.sub(r'<script id="yc-scan">.*?</script>', "", s, flags=re.S)

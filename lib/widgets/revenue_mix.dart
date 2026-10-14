@@ -66,7 +66,7 @@ class MixBar extends StatelessWidget {
       if (showLegend) ...[
         const SizedBox(height: 6),
         Text(shown.map((p) => '${p.label} ${pct(p.amount / total)}').join('・'),
-            style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+            style: TextStyle(color: AppColors.muted, fontSize: 12)),
       ],
     ]);
   }

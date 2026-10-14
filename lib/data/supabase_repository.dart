@@ -109,6 +109,19 @@ class SupabaseRepository implements Repository {
   }
 
   @override
+  Future<List<DailyRevenue>> dailyRevenueBetween(String storeId, DateTime from, DateTime to) async {
+    final rows = await _db
+        .from('daily_revenue')
+        .select('biz_date, revenue, guests')
+        .eq('store_id', storeId)
+        .eq('kind', 'daily')
+        .gte('biz_date', _day.format(from))
+        .lte('biz_date', _day.format(to))
+        .order('biz_date');
+    return rows.map(dailyFromRow).toList();
+  }
+
+  @override
   Future<List<Issue>> consistencyIssues(String storeId) async {
     final rows = await _db.rpc('consistency_report', params: {'p_store': storeId}) as List;
     return rows

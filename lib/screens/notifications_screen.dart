@@ -167,7 +167,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   SectionCard(
                     padding: EdgeInsets.zero,
                     child: ListTile(
-                      leading: const Icon(Icons.system_update, color: AppColors.primary),
+                      leading: Icon(Icons.system_update, color: AppColors.primary),
                       title: const Text('App 有新版本', style: TextStyle(fontWeight: FontWeight.w600)),
                       subtitle: const Text('點這裡更新到最新版'),
                       trailing: const Icon(Icons.chevron_right),
@@ -177,7 +177,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   const SizedBox(height: 12),
                 ],
                 if (f.items.isEmpty && !widget.update)
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.only(top: 64),
                     child: Text('最近 30 天沒有新通知', textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted)),
                   ),
@@ -202,14 +202,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                               ? Container(
                                   width: 8,
                                   height: 8,
-                                  decoration: const BoxDecoration(color: AppColors.bad, shape: BoxShape.circle))
+                                  decoration: BoxDecoration(color: AppColors.bad, shape: BoxShape.circle))
                               : null,
                           onTap: () => _tap(n),
                         ),
                     ]),
                   ),
                 const SizedBox(height: 12),
-                const Text('有人新增交接、新增提醒、修改班表，或 App 有新版本時會通知；自己做的不會通知自己。',
+                Text('有人新增交接、新增提醒、修改班表，或 App 有新版本時會通知；自己做的不會通知自己。',
                     style: TextStyle(color: AppColors.muted, fontSize: 11, height: 1.5)),
               ]),
             );

@@ -109,7 +109,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     if (!snap.hasData) return const Center(child: CircularProgressIndicator());
     final (settings, list) = snap.data!;
     if (settings == null) {
-      return const Center(child: Text('這家店還沒有訂位設定', style: TextStyle(color: AppColors.muted)));
+      return Center(child: Text('這家店還沒有訂位設定', style: TextStyle(color: AppColors.muted)));
     }
     final active = list.where((r) => r.active).toList();
     final guests = active.fold<int>(0, (t, r) => t + r.party);
@@ -130,21 +130,21 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
           IconButton(onPressed: () => _shift(1), icon: const Icon(Icons.chevron_right)),
         ]),
         if (!settings.enabled)
-          const Padding(
+          Padding(
             padding: EdgeInsets.only(bottom: 8),
             child: Text('線上訂位目前暫停中（老闆可在右上角設定開啟）', style: TextStyle(color: AppColors.warn, fontSize: 13)),
           ),
         SectionCard(
           child: Row(children: [
-            const Icon(Icons.event_seat_outlined, color: AppColors.primary),
+            Icon(Icons.event_seat_outlined, color: AppColors.primary),
             const SizedBox(width: 12),
             Expanded(child: Text('${active.length} 組・$guests 位', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700))),
-            Text('每時段上限 ${settings.maxGuestsPerSlot} 位', style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+            Text('每時段上限 ${settings.maxGuestsPerSlot} 位', style: TextStyle(color: AppColors.muted, fontSize: 12)),
           ]),
         ),
         const SizedBox(height: 12),
         if (list.isEmpty)
-          const Padding(
+          Padding(
             padding: EdgeInsets.only(top: 48),
             child: Text('這天還沒有訂位', textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted)),
           ),
@@ -156,7 +156,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
               const Spacer(),
               Text(
                   '${byTime[t]!.where((r) => r.active).fold<int>(0, (s, r) => s + r.party)} / ${settings.maxGuestsPerSlot} 位',
-                  style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+                  style: TextStyle(color: AppColors.muted, fontSize: 12)),
             ]),
           ),
           SectionCard(
@@ -216,8 +216,8 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
             ListTile(leading: const Icon(Icons.undo), title: const Text('改回已確認'), onTap: () => Navigator.pop(c, 'confirmed')),
           if (r.status != 'cancelled')
             ListTile(
-                leading: const Icon(Icons.cancel_outlined, color: AppColors.bad),
-                title: const Text('取消訂位', style: TextStyle(color: AppColors.bad)),
+                leading: Icon(Icons.cancel_outlined, color: AppColors.bad),
+                title: Text('取消訂位', style: TextStyle(color: AppColors.bad)),
                 onTap: () => Navigator.pop(c, 'cancelled')),
           ListTile(leading: const Icon(Icons.edit_note), title: const Text('修改備註'), onTap: () => Navigator.pop(c, 'note')),
         ]),
@@ -298,7 +298,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Text('把這個網址放在 IG、Google 商家、LINE 官方帳號，客人就能直接訂位：', style: TextStyle(fontSize: 13)),
           const SizedBox(height: 8),
-          SelectableText(url, style: const TextStyle(fontSize: 13, color: AppColors.primary)),
+          SelectableText(url, style: TextStyle(fontSize: 13, color: AppColors.primary)),
         ]),
         actions: [
           TextButton(onPressed: () => openExternal(url), child: const Text('打開看看')),
@@ -423,7 +423,7 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
             },
           ),
           const SizedBox(height: 8),
-          const Text('時段', style: TextStyle(color: AppColors.muted)),
+          Text('時段', style: TextStyle(color: AppColors.muted)),
           const SizedBox(height: 6),
           Wrap(spacing: 8, runSpacing: 8, children: [
             for (final t in widget.settings.slots)
@@ -431,7 +431,7 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
           ]),
           const SizedBox(height: 16),
           Row(children: [
-            const Text('人數', style: TextStyle(color: AppColors.muted)),
+            Text('人數', style: TextStyle(color: AppColors.muted)),
             const Spacer(),
             IconButton(onPressed: _party > 1 ? () => setState(() => _party--) : null, icon: const Icon(Icons.remove_circle_outline)),
             Text('$_party', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
@@ -594,8 +594,9 @@ class _ReservationSettingsScreenState extends State<ReservationSettingsScreen> {
 
 /// 總覽上的「今日訂位」卡片：點了進訂位管理
 class ReservationSummaryCard extends StatefulWidget {
-  const ReservationSummaryCard({super.key, required this.membership});
+  const ReservationSummaryCard({super.key, required this.membership, this.compact = false});
   final Membership membership;
+  final bool compact; // 隱城（C 版）：放在 2×2 小格裡
   @override
   State<ReservationSummaryCard> createState() => _ReservationSummaryCardState();
 }
@@ -627,19 +628,78 @@ class _ReservationSummaryCardState extends State<ReservationSummaryCard> {
                   : list.isEmpty
                       ? '今天還沒有訂位'
                       : '今天 ${list.length} 組・$guests 位';
+          // 下一組：還沒到店的最早時段
+          final waiting = list.where((r) => r.status == 'confirmed').map((r) => r.time).toList()..sort();
+          Future<void> open() async {
+            await Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => ReservationsScreen(membership: widget.membership),
+            ));
+            if (mounted) setState(() => _future = _load());
+          }
+
+          final ready = snap.hasData && !snap.hasError;
+          if (widget.compact) {
+            return Material(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(16),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: open,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Text('今日訂位', style: TextStyle(fontSize: 12, color: AppColors.muted)),
+                    const SizedBox(height: 6),
+                    if (ready && list.isNotEmpty)
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text.rich(TextSpan(children: [
+                          TextSpan(text: '${list.length}', style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w600, fontFeatures: tabular)),
+                          TextSpan(text: ' 組 · $guests 位', style: TextStyle(fontSize: 13, color: AppColors.muted)),
+                        ])),
+                      )
+                    else
+                      Text(ready ? '還沒有訂位' : sub, style: TextStyle(fontSize: 14, color: AppColors.muted)),
+                    if (waiting.isNotEmpty)
+                      Text('下一組 ${waiting.first}', style: TextStyle(fontSize: 11, color: AppColors.muted, fontFeatures: tabular)),
+                  ]),
+                ),
+              ),
+            );
+          }
           return SectionCard(
             padding: EdgeInsets.zero,
-            child: ListTile(
-              leading: const Icon(Icons.event_seat_outlined, color: AppColors.primary),
-              title: const Text('訂位', style: TextStyle(fontWeight: FontWeight.w600)),
-              subtitle: Text(sub, style: const TextStyle(fontSize: 12)),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () async {
-                await Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => ReservationsScreen(membership: widget.membership),
-                ));
-                if (mounted) setState(() => _future = _load());
-              },
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: open,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                child: Row(children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
+                    child: Icon(Icons.event_seat_outlined, size: 20, color: AppColors.primary),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('今日訂位', style: TextStyle(fontSize: 12, color: AppColors.muted)),
+                      const SizedBox(height: 2),
+                      Text(ready && list.isNotEmpty ? '${list.length} 組 · $guests 位' : sub,
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, fontFeatures: tabular)),
+                    ]),
+                  ),
+                  if (waiting.isNotEmpty)
+                    Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                      Text('下一組', style: TextStyle(fontSize: 11, color: AppColors.muted)),
+                      Text(waiting.first, style: const TextStyle(fontSize: 14, fontFeatures: tabular)),
+                    ])
+                  else
+                    Icon(Icons.chevron_right, color: AppColors.muted),
+                ]),
+              ),
             ),
           );
         },

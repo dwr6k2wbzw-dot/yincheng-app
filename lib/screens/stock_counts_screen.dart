@@ -66,7 +66,7 @@ class _StockCountsScreenState extends State<StockCountsScreen> {
             if (snap.hasError) return ErrorView(message: friendlyError(snap.error!), onRetry: _reload);
             if (!snap.hasData) return const Center(child: CircularProgressIndicator());
             final list = snap.data!;
-            if (list.isEmpty) return const Center(child: Text('還沒有盤點紀錄', style: TextStyle(color: AppColors.muted)));
+            if (list.isEmpty) return Center(child: Text('還沒有盤點紀錄', style: TextStyle(color: AppColors.muted)));
             return RefreshIndicator(
               onRefresh: () async => _reload(),
               child: ListView.separated(
@@ -86,11 +86,11 @@ class _StockCountsScreenState extends State<StockCountsScreen> {
                                 style: const TextStyle(fontWeight: FontWeight.w600)),
                             const SizedBox(height: 4),
                             Text('${c.lineCount} 項${c.note == null ? '' : '・${c.note}'}',
-                                style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+                                style: TextStyle(color: AppColors.muted, fontSize: 12)),
                           ]),
                         ),
                         Text(countStatusLabel(c.status), style: TextStyle(color: _statusColor(c.status))),
-                        const Icon(Icons.chevron_right, color: AppColors.muted),
+                        Icon(Icons.chevron_right, color: AppColors.muted),
                       ]),
                     ),
                   );
@@ -223,7 +223,7 @@ class _StockCountDetailScreenState extends State<StockCountDetailScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(c == null ? '盤點' : '${DateFormat('M/d').format(c.bizDate)} 盤點')),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(child: CircularProgressIndicator())
           : _error != null
               ? ErrorView(message: _error!, onRetry: _load)
               : Column(children: [
@@ -231,17 +231,17 @@ class _StockCountDetailScreenState extends State<StockCountDetailScreen> {
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
                     child: SectionCard(
                       child: Row(children: [
-                        const Text('狀態：', style: TextStyle(color: AppColors.muted)),
+                        Text('狀態：', style: TextStyle(color: AppColors.muted)),
                         Text(countStatusLabel(c!.status), style: TextStyle(color: _statusColor(c.status))),
                         const Spacer(),
                         Text('已填 ${_qty.length} / ${_products.length} 項',
-                            style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+                            style: TextStyle(color: AppColors.muted, fontSize: 12)),
                       ]),
                     ),
                   ),
                   Expanded(
                     child: _products.isEmpty
-                        ? const Center(child: Text('尚未建立品項，請先由老闆／店長新增品項', style: TextStyle(color: AppColors.muted)))
+                        ? Center(child: Text('尚未建立品項，請先由老闆／店長新增品項', style: TextStyle(color: AppColors.muted)))
                         : ListView.builder(
                             padding: const EdgeInsets.symmetric(horizontal: 8),
                             itemCount: _products.length,
