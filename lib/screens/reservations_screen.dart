@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../app_state.dart';
+import '../config.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
 import '../services/open_external.dart';
@@ -71,7 +72,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
             appBar: AppBar(
               title: Text('訂位・${widget.membership.storeName}'),
               actions: [
-                if (settings != null)
+                if (settings != null && !AppConfig.demo) // 示範模式沒有可用的訂位頁（Codex 審查）
                   IconButton(
                     tooltip: '訂位頁連結',
                     icon: const Icon(Icons.link),
@@ -315,9 +316,15 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
   bool _saving = false;
 
   Future<void> _save() async {
+    // 先把表單內容固定下來，檢查名額期間就算有人改欄位，也不會混用新舊值（Codex 審查）
+    final date = _date;
+    final time = _time;
+    final party = _party;
     final name = _name.text.trim();
     final phone = _phone.text.trim();
-    if (_time == null) {
+    final email = _email.text.trim();
+    final note = _note.text.trim();
+    if (time == null) {
       showMessage(context, '請選時段', error: true);
       return;
     }
@@ -333,14 +340,14 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
     final repo = AppScope.of(context).repo;
     try {
       // 超過時段上限先確認（電話訂位可以超收，由店家決定）
-      final same = await repo.reservations(widget.membership.storeId, _date, _date);
-      final booked = same.where((r) => r.active && r.time == _time).fold<int>(0, (t, r) => t + r.party);
-      if (booked + _party > widget.settings.maxGuestsPerSlot && mounted) {
+      final same = await repo.reservations(widget.membership.storeId, date, date);
+      final booked = same.where((r) => r.active && r.time == time).fold<int>(0, (t, r) => t + r.party);
+      if (booked + party > widget.settings.maxGuestsPerSlot && mounted) {
         final ok = await showDialog<bool>(
           context: context,
           builder: (c) => AlertDialog(
             title: const Text('超過時段上限'),
-            content: Text('$_time 已訂 $booked 位，再加 $_party 位會超過上限 ${widget.settings.maxGuestsPerSlot} 位。還是要新增嗎？'),
+            content: Text('$time 已訂 $booked 位，再加 $party 位會超過上限 ${widget.settings.maxGuestsPerSlot} 位。還是要新增嗎？'),
             actions: [
               TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('不要')),
               FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('還是新增')),
@@ -353,7 +360,7 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
         }
       }
       await repo.addReservation(widget.membership.storeId,
-          date: _date, time: _time!, party: _party, name: name, phone: phone, email: _email.text.trim(), note: _note.text.trim());
+          date: date, time: time, party: party, name: name, phone: phone, email: email, note: note);
       if (mounted) {
         showMessage(context, '已新增訂位');
         Navigator.pop(context, true);
