@@ -379,7 +379,7 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
               final d = await showDatePicker(
                 context: context,
                 initialDate: _date,
-                firstDate: DateTime.now().subtract(const Duration(days: 1)),
+                firstDate: DateTime(2025),
                 lastDate: DateTime.now().add(const Duration(days: 365)),
               );
               if (d != null) setState(() => _date = d);

@@ -498,7 +498,7 @@ class DemoRepository implements Repository {
   }
 
   // ---------------- 訂位（示範） ----------------
-  final List<Reservation> _demoRes = [];
+  final Map<String, List<Reservation>> _demoRes = {}; // 依店家分開
   @override
   Future<ReservationSettings?> reservationSettings(String storeId) async => ReservationSettings(
       storeId: storeId, slug: 'demo', enabled: true, displayName: '示範店', firstSlot: '19:00', lastSlot: '23:00',
@@ -507,14 +507,26 @@ class DemoRepository implements Repository {
   Future<void> saveReservationSettings(String storeId, Map<String, dynamic> values) async {}
   @override
   Future<List<Reservation>> reservations(String storeId, DateTime from, DateTime to) async =>
-      _demoRes.where((r) => !r.date.isBefore(from) && !r.date.isAfter(to)).toList();
+      (_demoRes[storeId] ?? []).where((r) => !r.date.isBefore(from) && !r.date.isAfter(to)).toList();
   @override
   Future<void> addReservation(String storeId,
       {required DateTime date, required String time, required int party, required String name, required String phone, String? email, String? note}) async {
-    _demoRes.add(Reservation(
-        id: '${_demoRes.length}', date: date, time: time, party: party, name: name, phone: phone, email: email, note: note,
+    final list = _demoRes.putIfAbsent(storeId, () => []);
+    list.add(Reservation(
+        id: '$storeId-${list.length}', date: date, time: time, party: party, name: name, phone: phone, email: email, note: note,
         status: 'confirmed', source: 'app', createdAt: DateTime.now()));
   }
   @override
-  Future<void> updateReservation(String id, Map<String, dynamic> values) async {}
+  Future<void> updateReservation(String id, Map<String, dynamic> values) async {
+    for (final list in _demoRes.values) {
+      final i = list.indexWhere((r) => r.id == id);
+      if (i < 0) continue;
+      final r = list[i];
+      list[i] = Reservation(
+          id: r.id, date: r.date, time: r.time, party: r.party, name: r.name, phone: r.phone, email: r.email,
+          note: values.containsKey('note') ? values['note'] as String? : r.note,
+          status: values['status'] as String? ?? r.status, source: r.source, createdAt: r.createdAt);
+      return;
+    }
+  }
 }
