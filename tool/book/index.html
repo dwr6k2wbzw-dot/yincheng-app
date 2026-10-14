@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>線上訂位</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <h1 id="store">線上訂位</h1>
+  <p class="sub" id="contact">載入中…</p>
+  <div id="app" hidden>
+    <div class="card"><p class="label">1. 日期</p><div class="chips" id="dates"></div></div>
+    <div class="card"><p class="label">2. 時間</p><div class="grid" id="slots"></div></div>
+    <div class="card"><p class="label">3. 人數</p>
+      <div class="stepper"><button type="button" id="minus" aria-label="減少">−</button><b id="party">2</b><button type="button" id="plus" aria-label="增加">＋</button></div>
+      <p class="note" id="partyNote"></p>
+    </div>
+    <form class="card" id="form" autocomplete="on">
+      <p class="label">4. 聯絡資料</p>
+      <label class="f" for="name">姓名</label><input id="name" name="name" maxlength="40" required autocomplete="name">
+      <label class="f" for="phone">手機</label><input id="phone" name="tel" type="tel" maxlength="20" required autocomplete="tel" inputmode="tel">
+      <label class="f" for="email">Email（確認信會寄到這裡）</label><input id="email" name="email" type="email" maxlength="120" required autocomplete="email">
+      <label class="f" for="note">備註（選填）</label><textarea id="note" maxlength="200" placeholder="例如：慶生、需要兒童椅"></textarea>
+      <div class="hp" aria-hidden="true"><label>請勿填寫<input id="website" tabindex="-1" autocomplete="off"></label></div>
+      <p class="err" id="err" hidden></p>
+      <p style="margin-top:14px"><button class="primary" id="submit" type="submit">確認訂位</button></p>
+      <p class="note">送出即表示同意店家使用您的姓名、電話與 Email 聯繫這次訂位，不會用於其他用途。</p>
+    </form>
+  </div>
+  <div class="card" id="done" hidden></div>
+</main>
+<script src="common.js"></script>
+<script>
+(async function () {
+  const slug = new URLSearchParams(location.search).get('s') || '';
+  const $ = (id) => document.getElementById(id);
+  let info = null, day = null, time = null, party = 2;
+
+  async function load() {
+    info = await YC.rpc('reservation_availability', { p_slug: slug });
+    $('store').textContent = info.display_name + '｜線上訂位';
+    document.title = info.display_name + ' 線上訂位';
+    $('contact').textContent = info.contact_note || '';
+    if (!info.enabled) { $('contact').textContent = (info.contact_note ? info.contact_note + '\n\n' : '') + '目前暫停線上訂位，請直接聯絡店家。'; return; }
+    $('app').hidden = false;
+    party = Math.min(party, info.max_party);
+    $('partyNote').textContent = '線上訂位一組最多 ' + info.max_party + ' 位；更多人數或包場請直接聯絡店家。';
+    if (!info.days.length) { $('contact').textContent += '\n目前沒有可以訂的日期。'; }
+    if (!day || !info.days.some(d => d.date === day)) day = info.days.length ? info.days[0].date : null;
+    render();
+  }
+  function render() {
+    $('party').textContent = party;
+    $('dates').innerHTML = info.days.map(d => {
+      const full = d.slots.every(s => s.left < 1);
+      return '<button type="button" class="chip' + (d.date === day ? ' on' : '') + '" data-d="' + d.date + '"' + (full ? ' disabled' : '') + '>' + YC.dateLabel(d.date) + (full ? '<small>已滿</small>' : '') + '</button>';
+    }).join('');
+    const cur = info.days.find(d => d.date === day);
+    const slots = cur ? cur.slots : [];
+    if (time && !slots.some(s => s.time === time && s.left >= party)) time = null;
+    $('slots').innerHTML = slots.map(s => {
+      const ok = s.left >= party;
+      return '<button type="button" class="chip' + (s.time === time ? ' on' : '') + '" data-t="' + s.time + '"' + (ok ? '' : ' disabled') + '>' + s.time + '<small>' + (s.left < 1 ? '已滿' : ok ? '剩 ' + s.left + ' 位' : '只剩 ' + s.left + ' 位') + '</small></button>';
+    }).join('') || '<p class="note">這天沒有開放的時段</p>';
+  }
+  $('dates').onclick = (e) => { const b = e.target.closest('button[data-d]'); if (b && !b.disabled) { day = b.dataset.d; time = null; render(); } };
+  $('slots').onclick = (e) => { const b = e.target.closest('button[data-t]'); if (b && !b.disabled) { time = b.dataset.t; render(); } };
+  $('minus').onclick = () => { if (party > 1) { party--; render(); } };
+  $('plus').onclick = () => { if (party < info.max_party) { party++; render(); } };
+  $('form').onsubmit = async (e) => {
+    e.preventDefault();
+    const err = $('err'); err.hidden = true;
+    if ($('website').value) return; // 機器人
+    if (!day || !time) { err.textContent = '請先選日期和時間'; err.hidden = false; return; }
+    $('submit').disabled = true; $('submit').textContent = '送出中…';
+    try {
+      const r = await YC.rpc('book_reservation', {
+        p_slug: slug, p_date: day, p_time: time, p_party: party,
+        p_name: $('name').value, p_phone: $('phone').value, p_email: $('email').value, p_note: $('note').value || null,
+      });
+      $('app').hidden = true;
+      const done = $('done'); done.hidden = false;
+      done.innerHTML = '<p class="big ok">訂位成功 ✓</p><p class="big">' + YC.esc(r.display_name) + '</p><p>' + YC.dateLabel(r.date) + ' ' + r.time + '　' + r.party + ' 位<br>' + YC.esc(r.name) + '</p><p class="note" id="mailNote">正在寄確認信…</p>' +
+        '<p class="note">要取消請點確認信裡的「取消訂位」，或<a href="cancel.html?t=' + r.token + '">點這裡取消</a>。</p>';
+      const sent = await YC.mail(r.token, 'confirm');
+      $('mailNote').textContent = sent ? '確認信已寄到 ' + $('email').value + '（沒收到請看垃圾郵件）' : '確認信寄送延遲，訂位已成功，請保留這個畫面。';
+    } catch (ex) {
+      err.textContent = ex.message; err.hidden = false;
+      $('submit').disabled = false; $('submit').textContent = '確認訂位';
+      try { await load(); } catch (_) {}
+    }
+  };
+  try { await load(); } catch (ex) { $('contact').textContent = ex.message; }
+})();
+</script>
+</body>
+</html>

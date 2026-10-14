@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>取消訂位</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <h1>取消訂位</h1>
+  <div class="card" id="box"><p>載入中…</p></div>
+</main>
+<script src="common.js"></script>
+<script>
+(async function () {
+  const t = new URLSearchParams(location.search).get('t') || '';
+  const box = document.getElementById('box');
+  const status = { confirmed: '已確認', cancelled: '已取消', arrived: '已到店', no_show: '未到' };
+  function show(r, msg) {
+    box.innerHTML = '<p class="big">' + YC.esc(r.display_name) + '</p><p>' + YC.dateLabel(r.date) + ' ' + r.time + '　' + r.party + ' 位<br>' +
+      YC.esc(r.name) + '<br>狀態：' + (status[r.status] || r.status) + '</p>' + (msg ? '<p class="ok">' + msg + '</p>' : '') +
+      (r.can_cancel ? '<p class="err" id="err" hidden></p><button class="primary" id="go">確定取消這筆訂位</button>' : '') +
+      (r.contact_note ? '<p class="note" style="white-space:pre-wrap">' + YC.esc(r.contact_note) + '</p>' : '');
+    const go = document.getElementById('go');
+    if (go) go.onclick = async () => {
+      go.disabled = true; go.textContent = '取消中…';
+      try {
+        const r2 = await YC.rpc('cancel_reservation', { p_token: t });
+        show(r2, '已取消，名額已釋出。');
+        YC.mail(t, 'cancel');
+      } catch (ex) {
+        const e = document.getElementById('err'); e.textContent = ex.message; e.hidden = false;
+        go.disabled = false; go.textContent = '確定取消這筆訂位';
+      }
+    };
+  }
+  try {
+    if (!/^[0-9a-f-]{36}$/i.test(t)) throw new Error('連結不完整，請從確認信重新點開');
+    const r = await YC.rpc('reservation_by_token', { p_token: t });
+    if (!r) throw new Error('找不到這筆訂位，請從確認信重新點開');
+    show(r);
+  } catch (ex) { box.innerHTML = '<p class="err">' + YC.esc(ex.message) + '</p>'; }
+})();
+</script>
+</body>
+</html>

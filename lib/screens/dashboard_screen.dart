@@ -11,6 +11,7 @@ import '../widgets/common.dart';
 import '../services/pl_export.dart';
 import '../widgets/revenue_mix.dart';
 import 'handover_screen.dart';
+import 'reservations_screen.dart';
 
 /// 營運總覽（PRD 畫面 01）。老闆／店長看營收與成本；員工版只顯示零用金與快速操作（營收由資料庫權限隱藏）。
 class DashboardScreen extends StatefulWidget {
@@ -84,7 +85,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return d;
   }
 
-  void _reload() => setState(() => _future = _load());
+  int _gen = 0; // 每次重新整理加 1，讓訂位卡片跟著重讀
+  void _reload() => setState(() {
+        _gen++;
+        _future = _load();
+      });
 
   bool get _isOwner => widget.membership.role == Role.owner;
 
@@ -133,6 +138,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onRefresh: () async => _reload(),
             child: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 24), children: [
               HandoverSummaryCard(key: ValueKey('hs-${widget.membership.storeId}'), membership: widget.membership),
+              // 訂位（0050）：老闆、店長、正職
+              if (widget.membership.canSeeRevenue) ...[
+                const SizedBox(height: 12),
+                // 下拉重新整理時換 key，卡片會重新讀（Codex 審查）
+                ReservationSummaryCard(key: ValueKey('rs-${widget.membership.storeId}-$_gen'), membership: widget.membership),
+              ],
               if (widget.membership.isPartTime)
                 const Text('兼職帳號：可以看班表、交接與提醒。點上面的卡片寫交接、打勾提醒。',
                     style: TextStyle(color: AppColors.muted, fontSize: 13, height: 1.5))

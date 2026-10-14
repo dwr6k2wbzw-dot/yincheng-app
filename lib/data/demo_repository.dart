@@ -496,4 +496,43 @@ class DemoRepository implements Repository {
     _counts[i] = StockCount(id: c.id, bizDate: c.bizDate, countedBy: c.countedBy, status: s, note: c.note,
         lineCount: _lines[c.id]?.length ?? 0);
   }
+
+  // ---------------- 訂位（示範） ----------------
+  final Map<String, List<Reservation>> _demoRes = {}; // 依店家分開
+  final Map<String, Map<String, dynamic>> _demoResSettings = {};
+  @override
+  Future<ReservationSettings?> reservationSettings(String storeId) async => ReservationSettings.fromRow({
+        'store_id': storeId, 'slug': 'demo', 'enabled': true, 'display_name': '示範店', 'first_slot': '19:00',
+        'last_slot': '23:00', 'slot_minutes': 30, 'max_guests_per_slot': 20, 'max_party': 6, 'days_ahead': 7,
+        'same_day_cutoff': '17:00',
+        ...?_demoResSettings[storeId],
+      });
+  @override
+  Future<void> saveReservationSettings(String storeId, Map<String, dynamic> values) async {
+    _demoResSettings.putIfAbsent(storeId, () => {}).addAll(values);
+  }
+  @override
+  Future<List<Reservation>> reservations(String storeId, DateTime from, DateTime to) async =>
+      (_demoRes[storeId] ?? []).where((r) => !r.date.isBefore(from) && !r.date.isAfter(to)).toList();
+  @override
+  Future<void> addReservation(String storeId,
+      {required DateTime date, required String time, required int party, required String name, required String phone, String? email, String? note}) async {
+    final list = _demoRes.putIfAbsent(storeId, () => []);
+    list.add(Reservation(
+        id: '$storeId-${list.length}', date: date, time: time, party: party, name: name, phone: phone, email: email, note: note,
+        status: 'confirmed', source: 'app', createdAt: DateTime.now()));
+  }
+  @override
+  Future<void> updateReservation(String id, Map<String, dynamic> values) async {
+    for (final list in _demoRes.values) {
+      final i = list.indexWhere((r) => r.id == id);
+      if (i < 0) continue;
+      final r = list[i];
+      list[i] = Reservation(
+          id: r.id, date: r.date, time: r.time, party: r.party, name: r.name, phone: r.phone, email: r.email,
+          note: values.containsKey('note') ? values['note'] as String? : r.note,
+          status: values['status'] as String? ?? r.status, source: r.source, createdAt: r.createdAt);
+      return;
+    }
+  }
 }
