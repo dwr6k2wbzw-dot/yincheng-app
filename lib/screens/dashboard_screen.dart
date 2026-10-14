@@ -301,7 +301,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Text('本月尚無進貨資料', style: TextStyle(color: AppColors.warn))
             else ...[
               _rateBar('酒水', s.drinkCostRate, s.drinkCost, AppColors.primary),
-              _rateBar('餐食', s.foodCostRate, s.foodCost, AppColors.primary),
+              _rateBar('餐食', s.foodCostRate, s.foodCost, ramenColor),
               _rateBar('雜項', miscRate, miscAmt, coffeeColor),
             ],
             const SizedBox(height: 4),
