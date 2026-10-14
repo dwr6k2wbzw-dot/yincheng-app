@@ -496,4 +496,25 @@ class DemoRepository implements Repository {
     _counts[i] = StockCount(id: c.id, bizDate: c.bizDate, countedBy: c.countedBy, status: s, note: c.note,
         lineCount: _lines[c.id]?.length ?? 0);
   }
+
+  // ---------------- 訂位（示範） ----------------
+  final List<Reservation> _demoRes = [];
+  @override
+  Future<ReservationSettings?> reservationSettings(String storeId) async => ReservationSettings(
+      storeId: storeId, slug: 'demo', enabled: true, displayName: '示範店', firstSlot: '19:00', lastSlot: '23:00',
+      slotMinutes: 30, maxGuestsPerSlot: 20, maxParty: 6, daysAhead: 7, sameDayCutoff: '17:00');
+  @override
+  Future<void> saveReservationSettings(String storeId, Map<String, dynamic> values) async {}
+  @override
+  Future<List<Reservation>> reservations(String storeId, DateTime from, DateTime to) async =>
+      _demoRes.where((r) => !r.date.isBefore(from) && !r.date.isAfter(to)).toList();
+  @override
+  Future<void> addReservation(String storeId,
+      {required DateTime date, required String time, required int party, required String name, required String phone, String? email, String? note}) async {
+    _demoRes.add(Reservation(
+        id: '${_demoRes.length}', date: date, time: time, party: party, name: name, phone: phone, email: email, note: note,
+        status: 'confirmed', source: 'app', createdAt: DateTime.now()));
+  }
+  @override
+  Future<void> updateReservation(String id, Map<String, dynamic> values) async {}
 }

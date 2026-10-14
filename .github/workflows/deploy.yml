@@ -52,6 +52,10 @@ jobs:
             echo "::error title=build::${msg}"
           fi
           exit $rc
+      - name: 客人訂位頁（純網頁，不用 Flutter；0050）
+        run: |
+          mkdir -p build/web/book && cp tool/book/* build/web/book/
+          ls build/web/book
       - name: 檔名加版本號（避免手機一直用舊版的暫存）
         run: |
           v=$(echo "${{ github.sha }}" | cut -c1-8)

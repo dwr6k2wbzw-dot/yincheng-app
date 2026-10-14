@@ -849,4 +849,53 @@ class SupabaseRepository implements Repository {
         .select('id');
     if (rows.isEmpty) throw Exception('message: 沒有權限變更這份盤點,');
   }
+
+  // ---------------- 訂位（0050） ----------------
+  @override
+  Future<ReservationSettings?> reservationSettings(String storeId) async {
+    final r = await _db.from('reservation_settings').select().eq('store_id', storeId).maybeSingle();
+    return r == null ? null : ReservationSettings.fromRow(r);
+  }
+
+  @override
+  Future<void> saveReservationSettings(String storeId, Map<String, dynamic> values) async {
+    final rows = await _db.from('reservation_settings').update(values).eq('store_id', storeId).select('store_id');
+    if (rows.isEmpty) throw Exception('message: 只有老闆可以修改訂位設定,');
+  }
+
+  @override
+  Future<List<Reservation>> reservations(String storeId, DateTime from, DateTime to) async {
+    final rows = await _db
+        .from('reservations')
+        .select('id, slot_date, slot_time, party_size, guest_name, phone, email, note, status, source, email_error, created_at')
+        .eq('store_id', storeId)
+        .gte('slot_date', _day.format(from))
+        .lte('slot_date', _day.format(to))
+        .order('slot_date')
+        .order('slot_time')
+        .order('created_at');
+    return rows.map(Reservation.fromRow).toList();
+  }
+
+  @override
+  Future<void> addReservation(String storeId,
+      {required DateTime date, required String time, required int party, required String name, required String phone, String? email, String? note}) async {
+    await _db.from('reservations').insert({
+      'store_id': storeId,
+      'slot_date': _day.format(date),
+      'slot_time': time,
+      'party_size': party,
+      'guest_name': name,
+      'phone': phone,
+      if (email != null && email.isNotEmpty) 'email': email,
+      if (note != null && note.isNotEmpty) 'note': note,
+      'source': 'app',
+    });
+  }
+
+  @override
+  Future<void> updateReservation(String id, Map<String, dynamic> values) async {
+    final rows = await _db.from('reservations').update(values).eq('id', id).select('id');
+    if (rows.isEmpty) throw Exception('message: 沒有權限修改這筆訂位,');
+  }
 }

@@ -1,6 +1,8 @@
 import 'dart:typed_data';
 
 import 'models.dart';
+import 'reservation_models.dart';
+export 'reservation_models.dart';
 
 /// App 與資料來源之間的介面。正式使用 SupabaseRepository；示範模式使用 DemoRepository。
 abstract class Repository {
@@ -111,6 +113,14 @@ abstract class Repository {
   Future<List<CountLine>> countLines(String countId);
   Future<void> upsertCountLine(String countId, String productId, double qty);
   Future<void> setCountStatus(String countId, CountStatus status, {String? voidReason});
+
+  // ---------------- 訂位（0050） ----------------
+  Future<ReservationSettings?> reservationSettings(String storeId);
+  Future<void> saveReservationSettings(String storeId, Map<String, dynamic> values);
+  Future<List<Reservation>> reservations(String storeId, DateTime from, DateTime to);
+  Future<void> addReservation(String storeId,
+      {required DateTime date, required String time, required int party, required String name, required String phone, String? email, String? note});
+  Future<void> updateReservation(String id, Map<String, dynamic> values);
 }
 
 /// 把資料庫的錯誤訊息轉成店員看得懂的話（資料庫守衛的訊息本來就是中文）
