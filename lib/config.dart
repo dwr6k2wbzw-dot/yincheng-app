@@ -2,6 +2,9 @@
 ///   flutter run --dart-define=SUPABASE_URL=... --dart-define=SUPABASE_KEY=... --dart-define=DEMO=false
 /// publishable／anon key 本來就會放在 App 裡，屬於公開金鑰；service_role key 絕對不要放進 App。
 class AppConfig {
+  /// inline 訂位後台（老闆 2026-10-14：先做隱城；只有正職以上看得到）。點了另開 inline 網頁，在 inline 自己登入
+  static const reservationUrls = {'隱城': 'https://myinline.com/login'};
+
   static const supabaseUrl = String.fromEnvironment(
     'SUPABASE_URL',
     defaultValue: 'https://yfulcyeoqavqarpfnznw.supabase.co', // Staging

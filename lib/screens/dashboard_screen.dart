@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../app_state.dart';
+import '../config.dart';
 import '../services/load_timing.dart';
+import '../services/open_external.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
 import '../theme.dart';
@@ -133,6 +135,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onRefresh: () async => _reload(),
             child: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 24), children: [
               HandoverSummaryCard(key: ValueKey('hs-${widget.membership.storeId}'), membership: widget.membership),
+              // inline 訂位：正職以上（老闆、店長、正職），兼職看不到
+              if (widget.membership.canSeeRevenue && AppConfig.reservationUrls[widget.membership.storeName] != null) ...[
+                const SizedBox(height: 12),
+                SectionCard(
+                  padding: EdgeInsets.zero,
+                  child: ListTile(
+                    leading: const Icon(Icons.event_seat_outlined, color: AppColors.primary),
+                    title: const Text('訂位（inline）', style: TextStyle(fontWeight: FontWeight.w600)),
+                    subtitle: const Text('打開 inline 後台看今天的訂位', style: TextStyle(fontSize: 12)),
+                    trailing: const Icon(Icons.open_in_new, size: 20),
+                    onTap: () => openExternal(AppConfig.reservationUrls[widget.membership.storeName]!),
+                  ),
+                ),
+              ],
               if (widget.membership.isPartTime)
                 const Text('兼職帳號：可以看班表、交接與提醒。點上面的卡片寫交接、打勾提醒。',
                     style: TextStyle(color: AppColors.muted, fontSize: 13, height: 1.5))
