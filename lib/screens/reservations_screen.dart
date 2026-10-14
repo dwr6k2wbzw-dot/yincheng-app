@@ -417,7 +417,7 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
                 context: context,
                 initialDate: _date,
                 firstDate: DateTime(2025),
-                lastDate: DateTime.now().add(const Duration(days: 365)),
+                lastDate: DateTime(2100),
               );
               if (d != null) setState(() => _date = d);
             },
