@@ -499,12 +499,18 @@ class DemoRepository implements Repository {
 
   // ---------------- 訂位（示範） ----------------
   final Map<String, List<Reservation>> _demoRes = {}; // 依店家分開
+  final Map<String, Map<String, dynamic>> _demoResSettings = {};
   @override
-  Future<ReservationSettings?> reservationSettings(String storeId) async => ReservationSettings(
-      storeId: storeId, slug: 'demo', enabled: true, displayName: '示範店', firstSlot: '19:00', lastSlot: '23:00',
-      slotMinutes: 30, maxGuestsPerSlot: 20, maxParty: 6, daysAhead: 7, sameDayCutoff: '17:00');
+  Future<ReservationSettings?> reservationSettings(String storeId) async => ReservationSettings.fromRow({
+        'store_id': storeId, 'slug': 'demo', 'enabled': true, 'display_name': '示範店', 'first_slot': '19:00',
+        'last_slot': '23:00', 'slot_minutes': 30, 'max_guests_per_slot': 20, 'max_party': 6, 'days_ahead': 7,
+        'same_day_cutoff': '17:00',
+        ...?_demoResSettings[storeId],
+      });
   @override
-  Future<void> saveReservationSettings(String storeId, Map<String, dynamic> values) async {}
+  Future<void> saveReservationSettings(String storeId, Map<String, dynamic> values) async {
+    _demoResSettings.putIfAbsent(storeId, () => {}).addAll(values);
+  }
   @override
   Future<List<Reservation>> reservations(String storeId, DateTime from, DateTime to) async =>
       (_demoRes[storeId] ?? []).where((r) => !r.date.isBefore(from) && !r.date.isAfter(to)).toList();

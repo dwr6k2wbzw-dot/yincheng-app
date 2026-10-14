@@ -85,7 +85,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return d;
   }
 
-  void _reload() => setState(() => _future = _load());
+  int _gen = 0; // 每次重新整理加 1，讓訂位卡片跟著重讀
+  void _reload() => setState(() {
+        _gen++;
+        _future = _load();
+      });
 
   bool get _isOwner => widget.membership.role == Role.owner;
 
@@ -137,7 +141,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               // 訂位（0050）：老闆、店長、正職
               if (widget.membership.canSeeRevenue) ...[
                 const SizedBox(height: 12),
-                ReservationSummaryCard(key: ValueKey('rs-${widget.membership.storeId}'), membership: widget.membership),
+                // 下拉重新整理時換 key，卡片會重新讀（Codex 審查）
+                ReservationSummaryCard(key: ValueKey('rs-${widget.membership.storeId}-$_gen'), membership: widget.membership),
               ],
               if (widget.membership.isPartTime)
                 const Text('兼職帳號：可以看班表、交接與提醒。點上面的卡片寫交接、打勾提醒。',
