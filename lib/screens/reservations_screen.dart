@@ -48,6 +48,15 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
 
   void _reload() => setState(() => _future = _load());
 
+  Future<void> _pickDay() async {
+    final d = await Navigator.of(context).push<DateTime>(MaterialPageRoute(
+      builder: (_) => ReservationCalendarScreen(membership: widget.membership, selected: _day, today: _today()),
+    ));
+    if (d == null || !mounted) return;
+    _day = d;
+    _reload();
+  }
+
   void _shift(int d) {
     _day = DateTime(_day.year, _day.month, _day.day + d);
     _reload();
@@ -123,9 +132,21 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
       child: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 96), children: [
         Row(children: [
           IconButton(onPressed: () => _shift(-1), icon: const Icon(Icons.chevron_left)),
+          // 點日期打開月曆選日期（老闆 2026-10-14）
           Expanded(
-            child: Text(DateFormat('M/d（E）', 'zh_TW').format(_day) + (_day == _today() ? '・今天' : ''),
-                textAlign: TextAlign.center, style: const TextStyle(fontSize: 16)),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: _pickDay,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  Icon(Icons.calendar_month_outlined, size: 18, color: AppColors.primary),
+                  const SizedBox(width: 8),
+                  Text(DateFormat('M/d（E）', 'zh_TW').format(_day) + (_day == _today() ? '・今天' : ''),
+                      style: const TextStyle(fontSize: 16)),
+                ]),
+              ),
+            ),
           ),
           IconButton(onPressed: () => _shift(1), icon: const Icon(Icons.chevron_right)),
         ]),
@@ -704,4 +725,144 @@ class _ReservationSummaryCardState extends State<ReservationSummaryCard> {
           );
         },
       );
+}
+
+/// 訂位月曆（老闆 2026-10-14：像 iPhone 行事曆那樣一次看好幾個月、點日期跳過去）
+/// 前 2 個月到後 4 個月；有訂位的日期底下畫一條線、數字＝組數；今天實心圓、選中的日期外框。
+class ReservationCalendarScreen extends StatefulWidget {
+  const ReservationCalendarScreen({super.key, required this.membership, required this.selected, required this.today});
+  final Membership membership;
+  final DateTime selected;
+  final DateTime today;
+  @override
+  State<ReservationCalendarScreen> createState() => _ReservationCalendarScreenState();
+}
+
+class _ReservationCalendarScreenState extends State<ReservationCalendarScreen> {
+  late final DateTime _from = DateTime(widget.today.year, widget.today.month - 2, 1);
+  late final DateTime _to = DateTime(widget.today.year, widget.today.month + 5, 0);
+  Map<DateTime, int> _groups = const {};
+  final _selectedKey = GlobalKey();
+  bool _started = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    _load();
+    // 打開時捲到選中的那個月
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final c = _selectedKey.currentContext;
+      if (c != null) Scrollable.ensureVisible(c, alignment: 0.05);
+    });
+  }
+
+  Future<void> _load() async {
+    try {
+      final list = await AppScope.of(context).repo.reservations(widget.membership.storeId, _from, _to);
+      final m = <DateTime, int>{};
+      for (final r in list.where((r) => r.active)) {
+        final d = DateTime(r.date.year, r.date.month, r.date.day);
+        m[d] = (m[d] ?? 0) + 1;
+      }
+      if (mounted) setState(() => _groups = m);
+    } catch (_) {
+      // 讀不到訂位數也能選日期
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final months = [for (var m = DateTime(_from.year, _from.month); !m.isAfter(_to); m = DateTime(m.year, m.month + 1)) m];
+    final sel = DateTime(widget.selected.year, widget.selected.month, widget.selected.day);
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('選擇日期'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, widget.today), child: const Text('今天')),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('底線＝當天有訂位（數字是組數）', style: TextStyle(fontSize: 12, color: AppColors.muted)),
+          const SizedBox(height: 8),
+          for (final m in months)
+            Container(
+              key: m.year == sel.year && m.month == sel.month ? _selectedKey : null,
+              padding: const EdgeInsets.only(top: 16, bottom: 8),
+              child: _month(m, sel),
+            ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _month(DateTime m, DateTime sel) {
+    final isThisMonth = m.year == widget.today.year && m.month == widget.today.month;
+    final days = DateTime(m.year, m.month + 1, 0).day;
+    final lead = DateTime(m.year, m.month, 1).weekday - 1; // 週一開頭
+    final cells = <Widget>[
+      for (var i = 0; i < lead; i++) const SizedBox.shrink(),
+      for (var d = 1; d <= days; d++) _dayCell(DateTime(m.year, m.month, d), sel),
+    ];
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text('${m.year == widget.today.year ? '' : '${m.year} 年 '}${m.month} 月',
+          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: isThisMonth ? AppColors.primary : AppColors.text)),
+      const SizedBox(height: 10),
+      Row(children: [
+        for (final w in const ['一', '二', '三', '四', '五', '六', '日'])
+          Expanded(child: Text(w, textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: AppColors.muted))),
+      ]),
+      const SizedBox(height: 6),
+      GridView.count(
+        crossAxisCount: 7,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        childAspectRatio: 0.95,
+        children: cells,
+      ),
+    ]);
+  }
+
+  Widget _dayCell(DateTime d, DateTime sel) {
+    final isToday = d == widget.today;
+    final isSel = d == sel;
+    final n = _groups[d] ?? 0;
+    return InkWell(
+      customBorder: const CircleBorder(),
+      onTap: () => Navigator.pop(context, d),
+      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Container(
+          width: 34,
+          height: 34,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: isToday ? AppColors.primary : null,
+            border: isSel && !isToday ? Border.all(color: AppColors.primary, width: 1.5) : null,
+          ),
+          child: Text('${d.day}',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: isToday || isSel ? FontWeight.w700 : FontWeight.w500,
+                color: isToday ? AppColors.onPrimary : AppColors.text,
+                fontFeatures: tabular,
+              )),
+        ),
+        const SizedBox(height: 2),
+        SizedBox(
+          height: 14,
+          child: n == 0
+              ? null
+              : Column(children: [
+                  Container(width: 18, height: 2, color: AppColors.primary),
+                  Text('$n', style: TextStyle(fontSize: 9, height: 1.2, color: AppColors.primary, fontFeatures: tabular)),
+                ]),
+        ),
+      ]),
+    );
+  }
 }
