@@ -369,8 +369,9 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
     try {
       // 超過時段上限先確認（電話訂位可以超收，由店家決定）
       final same = await repo.reservations(widget.membership.storeId, date, date);
+      if (!mounted) return; // 已離開表單：不要在沒確認的情況下新增（Codex 審查）
       final booked = same.where((r) => r.active && r.time == time).fold<int>(0, (t, r) => t + r.party);
-      if (booked + party > widget.settings.maxGuestsPerSlot && mounted) {
+      if (booked + party > widget.settings.maxGuestsPerSlot) {
         final ok = await showDialog<bool>(
           context: context,
           builder: (c) => AlertDialog(
@@ -383,9 +384,10 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
           ),
         );
         if (ok != true) {
-          setState(() => _saving = false);
+          if (mounted) setState(() => _saving = false);
           return;
         }
+        if (!mounted) return;
       }
       await repo.addReservation(widget.membership.storeId,
           date: date, time: time, party: party, name: name, phone: phone, email: email, note: note);
