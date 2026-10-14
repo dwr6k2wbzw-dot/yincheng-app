@@ -67,8 +67,8 @@ class StorePalette {
     heroMuted: Color(0xFFBDB9A4),
   );
 
-  /// 隱城用 C，其他（小城外、登入頁）用 A
-  static StorePalette forStore(String? storeName) => storeName == '隱城' ? brand : gold;
+    /// 老闆 2026-10-14 晚上：隱城也改成黑金（brand 配色保留備用）
+  static StorePalette forStore(String? storeName) => gold;
 }
 
 enum DashboardStyle { gold, brand }

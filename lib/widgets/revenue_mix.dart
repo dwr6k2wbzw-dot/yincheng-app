@@ -12,7 +12,9 @@ class RevenuePart {
   const RevenuePart(this.label, this.amount, this.color);
 }
 
-const coffeeColor = Color(0xFFC08552);
+// 小城外營收組成（老闆 2026-10-14）：咖啡綠色、拉麵紅色
+const coffeeColor = Color(0xFF6FBF8E);
+const ramenColor = Color(0xFFE0675A);
 
 bool isMultiLineStore(String storeName) => AppConfig.multiLineStores.contains(storeName);
 
@@ -32,7 +34,7 @@ List<RevenuePart> revenueParts(
     return [
       RevenuePart('咖啡', coffee, coffeeColor),
       RevenuePart('調酒', drinks + food + project, AppColors.primary),
-      RevenuePart('拉麵', ramen, AppColors.warn),
+      RevenuePart('拉麵', ramen, ramenColor),
       if (deposit != 0) RevenuePart('訂金', deposit, AppColors.muted),
     ];
   }
