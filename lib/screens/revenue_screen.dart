@@ -243,7 +243,7 @@ class _WeekdayStatsState extends State<_WeekdayStats> {
             ),
         ]),
         const SizedBox(height: 8),
-        Row(children: const [
+        Row(children: [
           SizedBox(width: 44, child: Text('星期', style: head)),
           Expanded(child: Text('平均營業額', textAlign: TextAlign.right, style: head)),
           SizedBox(width: 64, child: Text('來客', textAlign: TextAlign.right, style: head)),
