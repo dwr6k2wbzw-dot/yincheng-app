@@ -12,7 +12,7 @@ class RevenuePart {
   const RevenuePart(this.label, this.amount, this.color);
 }
 
-// 小城外營收組成（老闆 2026-10-14）：咖啡綠色、拉麵紅色
+// 營收組成（老闆 2026-10-14）：小城外咖啡綠色、拉麵紅色；隱城餐食紅色
 const coffeeColor = Color(0xFF6FBF8E);
 const ramenColor = Color(0xFFE0675A);
 
@@ -40,7 +40,7 @@ List<RevenuePart> revenueParts(
   }
   return [
     RevenuePart('酒水', drinks, AppColors.primary),
-    RevenuePart('餐食', food, AppColors.warn),
+    RevenuePart('餐食', food, ramenColor),
     if (project != 0) RevenuePart('專案', project, AppColors.muted),
   ];
 }
