@@ -56,7 +56,8 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
   Future<void> _run(Future<void> Function() f, String ok) async {
     try {
       await f();
-      if (mounted) showMessage(context, ok);
+      if (!mounted) return; // 已經離開這個畫面（Codex 審查）
+      showMessage(context, ok);
       _reload();
     } catch (e) {
       if (mounted) showMessage(context, friendlyError(e), error: true);
@@ -258,6 +259,33 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
       );
       if (ok != true) return;
     }
+    // 從「取消／未到」改回有效：先檢查那個時段還有沒有名額（Codex 審查）
+    if (!r.active && (v == 'confirmed' || v == 'arrived')) {
+      try {
+        final settings = await _repo.reservationSettings(_store);
+        final same = await _repo.reservations(_store, r.date, r.date);
+        final booked = same.where((x) => x.active && x.time == r.time && x.id != r.id).fold<int>(0, (t, x) => t + x.party);
+        final max = settings?.maxGuestsPerSlot ?? 0;
+        if (settings != null && booked + r.party > max && mounted) {
+          final ok = await showDialog<bool>(
+            context: context,
+            builder: (c) => AlertDialog(
+              title: const Text('超過時段上限'),
+              content: Text('${r.time} 已訂 $booked 位，改回這筆 ${r.party} 位會超過上限 $max 位。還是要改嗎？'),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('不要')),
+                FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('還是要改')),
+              ],
+            ),
+          );
+          if (ok != true) return;
+        }
+      } catch (e) {
+        if (mounted) showMessage(context, friendlyError(e), error: true);
+        return;
+      }
+    }
+    if (!mounted) return;
     await _run(() => _repo.updateReservation(r.id, {'status': v}), '已改成「${reservationStatusLabel[v]}」');
   }
 
