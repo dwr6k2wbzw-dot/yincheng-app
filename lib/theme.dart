@@ -73,6 +73,13 @@ class StorePalette {
 
 enum DashboardStyle { gold, brand }
 
+/// 店家 logo（老闆 2026-10-14 提供，去背成透明 PNG）
+String? storeLogo(String? storeName) => switch (storeName) {
+      '隱城' => 'assets/logos/yincheng.png',
+      '小城外' => 'assets/logos/xcw.png',
+      _ => null,
+    };
+
 /// 全 App 的顏色；切換店家時由 main.dart 換成該店的配色
 class AppColors {
   static StorePalette p = StorePalette.gold;

@@ -197,7 +197,12 @@ class _StoreSwitcher extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final m = state.current!;
+    final logo = storeLogo(m.storeName);
     final title = Row(mainAxisSize: MainAxisSize.min, children: [
+      if (logo != null) ...[
+        Image.asset(logo, height: 34, filterQuality: FilterQuality.medium),
+        const SizedBox(width: 10),
+      ],
       Text(m.storeName, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
       if (state.memberships.length > 1) const Icon(Icons.arrow_drop_down),
       const SizedBox(width: 8),
@@ -218,8 +223,10 @@ class _StoreSwitcher extends StatelessWidget {
             const Padding(padding: EdgeInsets.all(16), child: Text('切換店家', style: TextStyle(fontSize: 16))),
             for (final x in state.memberships)
               ListTile(
-                leading: Icon(x.storeId == m.storeId ? Icons.radio_button_checked : Icons.radio_button_off,
-                    color: AppColors.primary),
+                leading: storeLogo(x.storeName) != null
+                    ? Image.asset(storeLogo(x.storeName)!, width: 32, height: 32, filterQuality: FilterQuality.medium)
+                    : Icon(Icons.storefront_outlined, color: AppColors.primary),
+                trailing: x.storeId == m.storeId ? Icon(Icons.check, color: AppColors.primary) : null,
                 title: Text(x.storeName),
                 subtitle: Text(roleLabel(x.role)),
                 onTap: () {
