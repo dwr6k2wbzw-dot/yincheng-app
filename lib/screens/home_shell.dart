@@ -9,6 +9,7 @@ import '../widgets/common.dart';
 import '../data/repository.dart';
 import 'dashboard_screen.dart';
 import 'members_screen.dart';
+import 'handover_screen.dart';
 import 'notifications_screen.dart';
 import 'purchases_screen.dart';
 import 'revenue_screen.dart';
@@ -125,6 +126,7 @@ class _HomeShellState extends State<HomeShell> {
       appBar: AppBar(
         title: _StoreSwitcher(state: state),
         actions: [
+          HandoverButton(key: ValueKey('ho-${m.storeId}'), membership: m),
           NotificationBell(
             key: ValueKey('bell-${m.storeId}'),
             membership: m,

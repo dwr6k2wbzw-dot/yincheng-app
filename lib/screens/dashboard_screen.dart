@@ -10,7 +10,6 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import '../services/pl_export.dart';
 import '../widgets/revenue_mix.dart';
-import 'handover_screen.dart';
 import 'reservations_screen.dart';
 
 /// 營運總覽（PRD 畫面 01）。老闆／店長看營收與成本；員工版只顯示零用金與快速操作（營收由資料庫權限隱藏）。
@@ -137,15 +136,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           return RefreshIndicator(
             onRefresh: () async => _reload(),
             child: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 24), children: [
-              HandoverSummaryCard(key: ValueKey('hs-${widget.membership.storeId}'), membership: widget.membership),
-              // 訂位（0050）：老闆、店長、正職
-              if (widget.membership.canSeeRevenue) ...[
-                const SizedBox(height: 12),
-                // 下拉重新整理時換 key，卡片會重新讀（Codex 審查）
-                ReservationSummaryCard(key: ValueKey('rs-${widget.membership.storeId}-$_gen'), membership: widget.membership),
-              ],
               if (widget.membership.isPartTime)
-                const Text('兼職帳號：可以看班表、交接與提醒。點上面的卡片寫交接、打勾提醒。',
+                const Text('兼職帳號：可以看班表、交接與提醒。點右上角小鈴鐺左邊的「交接・提醒」圖示寫交接、打勾提醒。',
                     style: TextStyle(color: AppColors.muted, fontSize: 13, height: 1.5))
               else if (widget.membership.canSeeRevenue)
                 ..._managerView(d)
@@ -182,6 +174,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         IconButton(onPressed: () => _shiftMonth(1), icon: const Icon(Icons.chevron_right)),
       ]),
       const SizedBox(height: 4),
+      // 訂位（0050）：老闆、店長、正職；放在月份下面（老闆 2026-10-14）。下拉重新整理時換 key 重新讀
+      ReservationSummaryCard(key: ValueKey('rs-${widget.membership.storeId}-$_gen'), membership: widget.membership),
+      const SizedBox(height: 12),
       SectionCard(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Text('本月營收', style: TextStyle(color: AppColors.muted)),
