@@ -16,6 +16,36 @@ s = re.sub(r'<div id="boot".*?</div>', "", s, flags=re.S)
 s = s.replace('<body style="background:#0F1115">', "<body>")
 s = re.sub(r"<script id=\"boot-js\">.*?</script>", "", s, flags=re.S)
 
+# 載入速度記錄（⋯ → 載入速度）：各階段完成時間＋最慢的檔案
+timing = r"""<script id="yc-timing">
+window.ycMarks = [];
+window.ycMark = function (name) {
+  for (var i = 0; i < window.ycMarks.length; i++) if (window.ycMarks[i][0] === name) return;
+  window.ycMarks.push([name, performance.now()]);
+};
+window.addEventListener('flutter-first-frame', function () { window.ycMark('第一個畫面'); });
+window.ycLoadReport = function () {
+  var s = function (ms) { return (Math.round(ms / 100) / 10) + ' 秒'; };
+  var out = ['打開後經過的時間：'];
+  window.ycMarks.forEach(function (m) { out.push('・' + m[0] + '：' + s(m[1])); });
+  try {
+    var nav = performance.getEntriesByType('navigation')[0];
+    if (nav) out.splice(1, 0, '・網頁本身：' + s(nav.responseEnd));
+    var list = performance.getEntriesByType('resource').filter(function (r) { return r.duration > 150; })
+      .sort(function (a, b) { return b.duration - a.duration; }).slice(0, 8).map(function (r) {
+        var n = r.name.split('?')[0].split('/').slice(-2).join('/');
+        return '・' + n + '  ' + s(r.duration) + '  ' + (r.transferSize ? Math.round(r.transferSize / 1024) + 'KB' : '快取');
+      });
+    if (list.length) { out.push(''); out.push('最慢的檔案／查詢：'); out = out.concat(list); }
+  } catch (e) {}
+  out.push('');
+  out.push('網路：' + ((navigator.connection && navigator.connection.effectiveType) || '不明'));
+  return out.join('\n');
+};
+</script>"""
+s = re.sub(r'<script id="yc-timing">.*?</script>', "", s, flags=re.S)
+s = s.replace("</head>", timing + "\n</head>", 1)
+
 boot = r"""<div id="boot" style="position:fixed;inset:0;z-index:-1;display:flex;align-items:center;justify-content:center;
 padding:24px;text-align:center;white-space:pre-wrap;color:#9AA0AE;font:15px/1.6 -apple-system,sans-serif">載入中…</div>
 <script id="boot-js">

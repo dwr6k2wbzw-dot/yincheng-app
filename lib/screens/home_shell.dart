@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app_state.dart';
+import '../services/load_timing.dart';
 import '../config.dart';
 import '../data/models.dart';
 import '../theme.dart';
@@ -140,6 +141,19 @@ class _HomeShellState extends State<HomeShell> {
                 enterInviteCode(context);
                 return;
               }
+              if (v == 'speed') {
+                showDialog<void>(
+                  context: context,
+                  builder: (c) => AlertDialog(
+                    title: const Text('載入速度'),
+                    content: SingleChildScrollView(
+                      child: SelectableText(loadReport(), style: const TextStyle(fontSize: 13, height: 1.5)),
+                    ),
+                    actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('關閉'))],
+                  ),
+                );
+                return;
+              }
               final ok = await showDialog<bool>(
                 context: context,
                 builder: (c) => AlertDialog(
@@ -157,6 +171,7 @@ class _HomeShellState extends State<HomeShell> {
               if (m.role == Role.owner)
                 const PopupMenuItem(value: 'members', child: ListTile(leading: Icon(Icons.group_outlined), title: Text('成員管理'))),
               const PopupMenuItem(value: 'code', child: ListTile(leading: Icon(Icons.key_outlined), title: Text('輸入邀請碼'))),
+              const PopupMenuItem(value: 'speed', child: ListTile(leading: Icon(Icons.speed), title: Text('載入速度'))),
               const PopupMenuItem(value: 'logout', child: ListTile(leading: Icon(Icons.logout), title: Text('登出'))),
             ],
           ),

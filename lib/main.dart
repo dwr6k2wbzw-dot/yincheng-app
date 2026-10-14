@@ -12,6 +12,7 @@ import 'data/repository.dart';
 import 'data/supabase_repository.dart';
 import 'screens/home_shell.dart';
 import 'screens/login_screen.dart';
+import 'services/load_timing.dart';
 import 'theme.dart';
 
 /// 啟動進度（顯示在網頁的錯誤畫面上，方便診斷）
@@ -20,6 +21,7 @@ external set _ycStage(String v);
 
 Future<void> main() async {
   _ycStage = 'Dart 已啟動';
+  markLoad('程式下載完、開始執行');
   WidgetsFlutterBinding.ensureInitialized();
   // 畫面元件出錯時顯示錯誤文字（預設是一片灰），方便截圖回報
   ErrorWidget.builder = (d) => Material(
@@ -44,6 +46,7 @@ Future<void> main() async {
       repo = SupabaseRepository();
     }
     _ycStage = 'Supabase 完成，開始畫畫面';
+    markLoad('連上資料庫');
     runApp(YinchengApp(state: AppState(repo)));
   } catch (e) {
     runApp(MaterialApp(

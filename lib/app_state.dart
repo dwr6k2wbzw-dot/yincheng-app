@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'data/models.dart';
 import 'data/repository.dart';
+import 'services/load_timing.dart';
 
 /// 全 App 共用狀態：目前登入者的店家清單與目前選擇的店家
 class AppState extends ChangeNotifier {
@@ -25,6 +26,7 @@ class AppState extends ChangeNotifier {
     try {
       await _claimPendingCode();
       memberships = await repo.myMemberships();
+      markLoad('讀到帳號與店家');
       String? lastId;
       try {
         lastId = (await SharedPreferences.getInstance()).getString('last_store_id');

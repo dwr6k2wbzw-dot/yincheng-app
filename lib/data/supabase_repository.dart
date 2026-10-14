@@ -87,9 +87,12 @@ class SupabaseRepository implements Repository {
   @override
   Future<MonthlySummary> monthlySummary(String storeId, DateTime month) async {
     final m = _day.format(DateTime(month.year, month.month, 1));
-    final rev = await _db.from('v_monthly_revenue').select().eq('store_id', storeId).eq('period_month', m).maybeSingle();
-    final cost = await _db.from('v_monthly_cost').select().eq('store_id', storeId).eq('period_month', m).maybeSingle();
-    return summaryFromRows(rev, cost, month);
+    // 營收與成本同時查（原本一個等一個，載入變慢）
+    final r = await Future.wait([
+      _db.from('v_monthly_revenue').select().eq('store_id', storeId).eq('period_month', m).maybeSingle(),
+      _db.from('v_monthly_cost').select().eq('store_id', storeId).eq('period_month', m).maybeSingle(),
+    ]);
+    return summaryFromRows(r[0], r[1], month);
   }
 
   @override

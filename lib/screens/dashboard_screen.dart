@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../app_state.dart';
+import '../services/load_timing.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
 import '../theme.dart';
@@ -61,18 +62,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (widget.membership.isPartTime) return d; // 兼職只看交接、提醒
     if (!widget.membership.canSeeRevenue) d.petty = await repo.pettyCashBalance(id);
     if (widget.membership.canSeeRevenue) {
-      final r = await Future.wait([
+      // 全部同時查（原本老闆要一個等一個查 5 次）
+      final r = await Future.wait<dynamic>([
         repo.monthlySummary(id, _month),
-        if (_isOwner) repo.fixedCosts(id, _month),
+        if (_isOwner) ...[
+          repo.fixedCosts(id, _month),
+          repo.expenseItems(id, _month),
+          repo.recurringExpenseItems(id),
+          repo.cardFeeRate(id),
+        ],
       ]);
       d.summary = r[0] as MonthlySummary;
       if (_isOwner) {
         d.fixed = r[1] as FixedCosts;
-        d.items = await repo.expenseItems(id, _month);
-        d.recurring = await repo.recurringExpenseItems(id);
-        d.cardFeeRate = await repo.cardFeeRate(id);
+        d.items = r[2] as List<ExpenseItem>;
+        d.recurring = r[3] as List<RecurringExpenseItem>;
+        d.cardFeeRate = r[4] as double;
       }
     }
+    markLoad('總覽資料');
     return d;
   }
 
