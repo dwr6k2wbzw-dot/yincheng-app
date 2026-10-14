@@ -56,7 +56,7 @@ class _HomeShellState extends State<HomeShell> {
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              const Icon(Icons.storefront_outlined, color: AppColors.muted, size: 48),
+              Icon(Icons.storefront_outlined, color: AppColors.muted, size: 48),
               const SizedBox(height: 12),
               const Text('這個帳號還沒有加入任何店家。\n請跟老闆要邀請碼，輸入後就能加入。', textAlign: TextAlign.center),
               const SizedBox(height: 16),
@@ -204,7 +204,7 @@ class _StoreSwitcher extends StatelessWidget {
       Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         decoration: BoxDecoration(color: AppColors.cardHigh, borderRadius: BorderRadius.circular(8)),
-        child: Text(roleLabel(m.role), style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+        child: Text(roleLabel(m.role), style: TextStyle(fontSize: 12, color: AppColors.muted)),
       ),
     ]);
     if (state.memberships.length <= 1) return title;

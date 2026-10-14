@@ -191,7 +191,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
               ),
               if (photo != null) ...[
                 const SizedBox(width: 8),
-                const Icon(Icons.check_circle, color: AppColors.good, size: 18),
+                Icon(Icons.check_circle, color: AppColors.good, size: 18),
                 const Text(' 已附照片', style: TextStyle(fontSize: 13)),
                 IconButton(onPressed: () => set(() => photo = null), icon: const Icon(Icons.close, size: 18)),
               ],
@@ -274,11 +274,11 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
               ),
             Text(n.authorName.isEmpty ? '—' : n.authorName, style: const TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(width: 8),
-            Expanded(child: Text(_when(n.createdAt), style: const TextStyle(color: AppColors.muted, fontSize: 12))),
+            Expanded(child: Text(_when(n.createdAt), style: TextStyle(color: AppColors.muted, fontSize: 12))),
             // 任何成員都能修改、刪除（老闆 2026-10-12，0044）
             PopupMenuButton<String>(
               tooltip: '修改／刪除',
-              icon: const Icon(Icons.more_vert, size: 18, color: AppColors.muted),
+              icon: Icon(Icons.more_vert, size: 18, color: AppColors.muted),
               onSelected: (v) => v == 'edit' ? _editHandover(n) : _deleteHandover(n),
               itemBuilder: (_) => const [
                 PopupMenuItem(value: 'edit', child: ListTile(leading: Icon(Icons.edit_outlined), title: Text('修改內容'))),
@@ -292,7 +292,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
             Padding(
               padding: const EdgeInsets.only(top: 2),
               child: Text('已修改・${n.editedName ?? ''}・${_when(n.editedAt!)}',
-                  style: const TextStyle(color: AppColors.muted, fontSize: 11)),
+                  style: TextStyle(color: AppColors.muted, fontSize: 11)),
             ),
           if (n.photoPath != null)
             Padding(
@@ -333,7 +333,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
       onRefresh: () async => _reload(),
       child: ListView(padding: const EdgeInsets.fromLTRB(16, 12, 16, 96), children: [
         if (open.isEmpty)
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(vertical: 32),
             child: Text('目前沒有待處理的交接', textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted)),
           ),
@@ -343,12 +343,12 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
             data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
             child: ExpansionTile(
               tilePadding: EdgeInsets.zero,
-              title: Text('已處理（${done.length}）', style: const TextStyle(color: AppColors.muted)),
+              title: Text('已處理（${done.length}）', style: TextStyle(color: AppColors.muted)),
               children: [for (final n in done) _noteCard(n)],
             ),
           ),
         const SizedBox(height: 8),
-        const Text('大家都能寫交接、標已處理；打開這頁就會記錄你已讀。刪除只有老闆或店長可以。',
+        Text('大家都能寫交接、標已處理；打開這頁就會記錄你已讀。刪除只有老闆或店長可以。',
             style: TextStyle(color: AppColors.muted, fontSize: 11, height: 1.5)),
       ]),
     );
@@ -449,17 +449,17 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
         const SizedBox(height: 8),
         if (items.isEmpty)
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(vertical: 24),
             child: Text('今天沒有提醒', textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted)),
           ),
         for (final (r, occ, dn) in items) _todayTile(b, r, occ, dn, today),
         const SizedBox(height: 4),
-        const Text('點一下打勾；做完的會記錄是誰、幾點做的。凌晨 6 點前還算前一天。',
+        Text('點一下打勾；做完的會記錄是誰、幾點做的。凌晨 6 點前還算前一天。',
             style: TextStyle(color: AppColors.muted, fontSize: 11)),
         const SizedBox(height: 20),
         if (all.isNotEmpty) ...[
-          const Text('全部提醒', style: TextStyle(color: AppColors.muted)),
+          Text('全部提醒', style: TextStyle(color: AppColors.muted)),
           const SizedBox(height: 6),
           SectionCard(
             padding: EdgeInsets.zero,
@@ -484,7 +484,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
           ),
         ],
         if (!_canManage)
-          const Padding(
+          Padding(
             padding: EdgeInsets.only(top: 12),
             child: Text('每個人都能新增提醒；自己建的可以修改、刪除。', style: TextStyle(color: AppColors.muted, fontSize: 11)),
           ),
@@ -567,7 +567,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
                     onChanged: (v) => set(() => monthDay = v ?? 1),
                   ),
                   const SizedBox(width: 8),
-                  const Expanded(
+                  Expanded(
                     child: Text('（月份沒有這天就算月底）', style: TextStyle(color: AppColors.muted, fontSize: 12)),
                   ),
                 ]),
@@ -595,7 +595,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
                 if (r != null)
                   TextButton(
                     onPressed: () => Navigator.pop(c, 'delete'),
-                    child: const Text('刪除', style: TextStyle(color: AppColors.bad)),
+                    child: Text('刪除', style: TextStyle(color: AppColors.bad)),
                   ),
                 const Spacer(),
                 TextButton(onPressed: () => Navigator.pop(c), child: const Text('取消')),

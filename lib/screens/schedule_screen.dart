@@ -133,7 +133,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             ]),
             if (_codeHours != null) ...[
               const SizedBox(height: 16),
-              const Text('兼職時段', style: TextStyle(color: AppColors.muted)),
+              Text('兼職時段', style: TextStyle(color: AppColors.muted)),
               const SizedBox(height: 8),
               Wrap(spacing: 8, runSpacing: 8, children: [
                 for (final r in AppConfig.shiftQuickRanges)
@@ -351,7 +351,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               ),
               const SizedBox(height: 8),
               if (d.people.isEmpty)
-                const Padding(
+                Padding(
                   padding: EdgeInsets.all(24),
                   child: Text('這個月還沒有班表', textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted)),
                 )
@@ -367,7 +367,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   padding: const EdgeInsets.only(top: 6),
                   child: Text(
                       '時數：${_codeHours!.entries.map((e) => '${e.key} ${_num(e.value)}').join('、')}（小時）；兼職時段照實際時間算',
-                      style: const TextStyle(color: AppColors.muted, fontSize: 11)),
+                      style: TextStyle(color: AppColors.muted, fontSize: 11)),
                 ),
               const SizedBox(height: 16),
               if (_codeHours != null)
@@ -399,7 +399,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(_codeHours != null ? '點格子改班（兼職可選時段）、點日期加備註、點下方統計填未休／補休與特休。' : '點格子改班、點日期加備註、點下方統計填應休與特休。',
-                      style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+                      style: TextStyle(color: AppColors.muted, fontSize: 12)),
                 ),
             ]),
           );
@@ -419,7 +419,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           child: Text(m, style: const TextStyle(fontSize: 11)),
         ),
         const SizedBox(width: 4),
-        Text(label, style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+        Text(label, style: TextStyle(color: AppColors.muted, fontSize: 12)),
       ]);
 
   Widget _todayCard(ShiftMonth d) {
@@ -433,12 +433,12 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         Row(children: [
           Text('今天 ${DateFormat('M/d（E）', 'zh_TW').format(now)}', style: const TextStyle(fontWeight: FontWeight.w700)),
           const Spacer(),
-          Text('人力 ${on.length}', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700)),
+          Text('人力 ${on.length}', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700)),
         ]),
-        if (note != null) Text(note, style: const TextStyle(color: AppColors.warn, fontSize: 12)),
+        if (note != null) Text(note, style: TextStyle(color: AppColors.warn, fontSize: 12)),
         const SizedBox(height: 6),
         Text('上班：${on.isEmpty ? '—' : on.join('、')}', style: const TextStyle(fontSize: 13)),
-        if (off.isNotEmpty) Text('休：${off.join('、')}', style: const TextStyle(color: AppColors.muted, fontSize: 13)),
+        if (off.isNotEmpty) Text('休：${off.join('、')}', style: TextStyle(color: AppColors.muted, fontSize: 13)),
       ]),
     );
   }
@@ -519,7 +519,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             for (final (i, day) in cols.indexed)
               cell(
                 Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  Text(wd[i], style: const TextStyle(fontSize: 10, color: AppColors.muted)),
+                  Text(wd[i], style: TextStyle(fontSize: 10, color: AppColors.muted)),
                   Text(day == null ? '' : '$day',
                       style: TextStyle(
                           fontSize: 13,
@@ -566,7 +566,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             for (final day in cols)
               cell(
                 Text(day == null ? '' : '${d.staffing(day)}',
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.primary)),
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.primary)),
               ),
             sum(''),
           ]),
@@ -594,7 +594,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         ]);
     return SectionCard(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('${_month.month} 月休假統計（正職）', style: const TextStyle(color: AppColors.muted)),
+        Text('${_month.month} 月休假統計（正職）', style: TextStyle(color: AppColors.muted)),
         const SizedBox(height: 6),
         Table(
           columnWidths: const {0: FlexColumnWidth(1.3)},
@@ -618,7 +618,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           ],
         ),
         const SizedBox(height: 6),
-        const Text('已休＝休＋指休；剩餘未休特休＝原未休特休 −（已休 − 應休）',
+        Text('已休＝休＋指休；剩餘未休特休＝原未休特休 −（已休 − 應休）',
             style: TextStyle(color: AppColors.muted, fontSize: 11)),
       ]),
     );
@@ -645,7 +645,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         ]);
     return SectionCard(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('${_month.month} 月統計', style: const TextStyle(color: AppColors.muted)),
+        Text('${_month.month} 月統計', style: TextStyle(color: AppColors.muted)),
         const SizedBox(height: 6),
         Table(
           columnWidths: const {0: FlexColumnWidth(1.3)},
@@ -666,7 +666,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           ],
         ),
         const SizedBox(height: 6),
-        const Text('總時數＝整個月（含月底最後一天）；月休＝休＋指休；未休／補休、累計特休由老闆或店長填。',
+        Text('總時數＝整個月（含月底最後一天）；月休＝休＋指休；未休／補休、累計特休由老闆或店長填。',
             style: TextStyle(color: AppColors.muted, fontSize: 11)),
       ]),
     );
@@ -759,7 +759,7 @@ class _PeopleScreenState extends State<_PeopleScreen> {
               onTap: () => _edit(p),
             ),
           const SizedBox(height: 8),
-          const Text('人員不會被刪除（避免舊班表對不上）；不用了就關掉「顯示在班表」。',
+          Text('人員不會被刪除（避免舊班表對不上）；不用了就關掉「顯示在班表」。',
               style: TextStyle(color: AppColors.muted, fontSize: 12)),
         ]),
       );

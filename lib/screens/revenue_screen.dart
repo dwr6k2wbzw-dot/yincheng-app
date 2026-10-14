@@ -84,7 +84,7 @@ class _RevenueScreenState extends State<RevenueScreen> {
                         ? '還沒有同步到營收資料'
                         : '還沒有營收紀錄\n按右下角「登記營收」新增第一天',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: AppColors.muted)),
+                    style: TextStyle(color: AppColors.muted)),
               ]);
             }
             // 列表上方：同步說明（若有）＋星期平均
@@ -154,12 +154,12 @@ class _RevenueTile extends StatelessWidget {
             Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
               Text(ntd(e.received), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
               const SizedBox(height: 2),
-              Text('現金 ${ntd(e.cash)}', style: const TextStyle(color: AppColors.muted, fontSize: 12)),
-              Text('刷卡 ${ntd(e.creditCard + e.amex)}', style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+              Text('現金 ${ntd(e.cash)}', style: TextStyle(color: AppColors.muted, fontSize: 12)),
+              Text('刷卡 ${ntd(e.creditCard + e.amex)}', style: TextStyle(color: AppColors.muted, fontSize: 12)),
               if (e.deposit != 0 && !multi)
-                Text('訂金 ${ntd(e.deposit)}', style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+                Text('訂金 ${ntd(e.deposit)}', style: TextStyle(color: AppColors.muted, fontSize: 12)),
             ]),
-            if (onTap != null) const Icon(Icons.chevron_right, color: AppColors.muted),
+            if (onTap != null) Icon(Icons.chevron_right, color: AppColors.muted),
           ]),
           if (base > 0) ...[
             const SizedBox(height: 10),
@@ -225,7 +225,7 @@ class _WeekdayStatsState extends State<_WeekdayStats> {
       avg.add(r.isEmpty ? null : r.fold<double>(0, (a, e) => a + e.received) / r.length);
     }
     final best = avg.whereType<double>().fold<double>(0, (a, v) => v > a ? v : a);
-    const head = TextStyle(color: AppColors.muted, fontSize: 12);
+    final head = TextStyle(color: AppColors.muted, fontSize: 12);
     const cell = TextStyle(fontSize: 13, fontFeatures: [FontFeature.tabularFigures()]);
     return SectionCard(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -258,7 +258,7 @@ class _WeekdayStatsState extends State<_WeekdayStats> {
               if (r.isEmpty) {
                 return Row(children: [
                   SizedBox(width: 44, child: Text('週${_names[i]}', style: cell)),
-                  const Expanded(child: Text('—', textAlign: TextAlign.right, style: TextStyle(color: AppColors.muted))),
+                  Expanded(child: Text('—', textAlign: TextAlign.right, style: TextStyle(color: AppColors.muted))),
                 ]);
               }
               final guests = r.fold<int>(0, (a, e) => a + e.guests);
@@ -286,7 +286,7 @@ class _WeekdayStatsState extends State<_WeekdayStats> {
         const SizedBox(height: 6),
         Text(
           '平均營業額、來客＝該星期幾每天的平均；客單＝${widget.multi ? '調酒收入' : '營業額'}合計÷來客合計。綠色是平均最高的那天。',
-          style: const TextStyle(color: AppColors.muted, fontSize: 11, height: 1.4),
+          style: TextStyle(color: AppColors.muted, fontSize: 11, height: 1.4),
         ),
       ]),
     );
@@ -301,7 +301,7 @@ class _SyncBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SectionCard(
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Icon(Icons.sync, color: AppColors.primary),
+          Icon(Icons.sync, color: AppColors.primary),
           const SizedBox(width: 12),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -314,7 +314,7 @@ class _SyncBanner extends StatelessWidget {
                         '最後一次同步：${last == null ? '尚無紀錄' : DateFormat('M/d HH:mm').format(last!)}'
                     : '每小時檢查一次 Excel，有變動就更新。\n'
                         '最後一次同步：${last == null ? '尚無紀錄' : DateFormat('M/d HH:mm').format(last!)}',
-                style: const TextStyle(color: AppColors.muted, fontSize: 12, height: 1.5),
+                style: TextStyle(color: AppColors.muted, fontSize: 12, height: 1.5),
               ),
             ]),
           ),
@@ -554,7 +554,7 @@ class _RevenueFormScreenState extends State<RevenueFormScreen> {
       const SizedBox(height: 8),
       if (_readOnly)
         SectionCard(
-          child: Row(children: const [
+          child: Row(children: [
             Icon(Icons.lock_outline, color: AppColors.muted, size: 20),
             SizedBox(width: 10),
             Expanded(child: Text('這天是從日報表 Excel 匯入的，只有老闆／店長能修改。', style: TextStyle(fontSize: 12))),
@@ -562,7 +562,7 @@ class _RevenueFormScreenState extends State<RevenueFormScreen> {
         )
       else if (!editing)
         SectionCard(
-          child: Row(children: const [
+          child: Row(children: [
             Icon(Icons.info_outline, color: AppColors.primary, size: 20),
             SizedBox(width: 10),
             Expanded(
@@ -627,6 +627,6 @@ class _Label extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.only(bottom: 8),
-        child: Text(text, style: const TextStyle(color: AppColors.muted, fontSize: 13, letterSpacing: 0.5)),
+        child: Text(text, style: TextStyle(color: AppColors.muted, fontSize: 13, letterSpacing: 0.5)),
       );
 }
