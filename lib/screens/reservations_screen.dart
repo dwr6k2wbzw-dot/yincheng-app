@@ -359,6 +359,7 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
   String? _time;
   int _party = 2;
   final _name = TextEditingController();
+  String? _title; // 先生／小姐（老闆 2026-10-15），存檔時接在姓名後面
   final _phone = TextEditingController();
   final _email = TextEditingController();
   final _note = TextEditingController();
@@ -369,7 +370,9 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
     final date = _date;
     final time = _time;
     final party = _party;
-    final name = _name.text.trim();
+    final raw = _name.text.trim();
+    final title = _title;
+    final name = raw.isEmpty || title == null || raw.endsWith(title) ? raw : '$raw $title';
     final phone = _phone.text.trim();
     final email = _email.text.trim();
     final note = _note.text.trim();
@@ -458,7 +461,31 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
             Text('$_party', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
             IconButton(onPressed: _party < 50 ? () => setState(() => _party++) : null, icon: const Icon(Icons.add_circle_outline)),
           ]),
-          TextField(controller: _name, maxLength: 40, decoration: const InputDecoration(labelText: '姓名', counterText: '')),
+          TextField(
+            controller: _name,
+            maxLength: 36,
+            decoration: InputDecoration(
+              labelText: '姓名',
+              counterText: '',
+              // 點一下選先生／小姐，再點一次取消
+              suffixIcon: Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  for (final t in const ['先生', '小姐'])
+                    Padding(
+                      padding: const EdgeInsets.only(left: 6),
+                      child: ChoiceChip(
+                        label: Text(t),
+                        selected: _title == t,
+                        showCheckmark: false,
+                        visualDensity: VisualDensity.compact,
+                        onSelected: (v) => setState(() => _title = v ? t : null),
+                      ),
+                    ),
+                ]),
+              ),
+            ),
+          ),
           const SizedBox(height: 12),
           TextField(
               controller: _phone,
