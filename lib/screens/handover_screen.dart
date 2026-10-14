@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -9,79 +11,78 @@ import '../services/slip_scan.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 
-/// 總覽最上面的小卡：「今天有 N 件提醒、M 則交接未讀」，點了進入交接・提醒頁
-class HandoverSummaryCard extends StatefulWidget {
-  const HandoverSummaryCard({super.key, required this.membership});
+/// 標題列（小鈴鐺左邊）的「交接・提醒」按鈕（老闆 2026-10-14，原本是總覽最上面的卡片）。
+/// 數字＝今天還沒做的提醒＋未讀交接；打開 App、回到 App、之後每 2 分鐘更新，從交接頁回來也更新。
+class HandoverButton extends StatefulWidget {
+  const HandoverButton({super.key, required this.membership});
   final Membership membership;
   @override
-  State<HandoverSummaryCard> createState() => _HandoverSummaryCardState();
+  State<HandoverButton> createState() => _HandoverButtonState();
 }
 
-class _HandoverSummaryCardState extends State<HandoverSummaryCard> {
-  Future<HandoverBoard>? _future;
+class _HandoverButtonState extends State<HandoverButton> with WidgetsBindingObserver {
+  HandoverBoard? _board;
+  Timer? _timer;
+  bool _started = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _timer = Timer.periodic(const Duration(minutes: 2), (_) => _refresh());
+  }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _future ??= _load();
-  }
-
-  Future<HandoverBoard> _load() => AppScope.of(context).repo.handoverBoard(widget.membership.storeId);
-
-  Future<void> _open() async {
-    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => HandoverScreen(membership: widget.membership)));
-    if (mounted) setState(() => _future = _load());
+    if (!_started) {
+      _started = true;
+      _refresh();
+    }
   }
 
   @override
-  Widget build(BuildContext context) => FutureBuilder<HandoverBoard>(
-        future: _future,
-        builder: (context, snap) {
-          final me = AppScope.of(context).repo.currentUserId;
-          final b = snap.data;
-          final pending = b?.pendingCount(bizToday()) ?? 0;
-          final unread = b?.unreadCount(me) ?? 0;
-          final open = b?.notes.where((n) => !n.resolved).length ?? 0;
-          final urgent = pending > 0 || unread > 0;
-          final String text;
-          if (snap.hasError) {
-            text = '交接・提醒（讀取失敗，點一下重試）';
-          } else if (b == null) {
-            text = '交接・提醒';
-          } else if (!urgent) {
-            text = open > 0 ? '今天的提醒都做完了・$open 則交接處理中' : '今天的提醒都做完了，沒有新的交接';
-          } else {
-            text = [
-              if (pending > 0) '今天有 $pending 件提醒',
-              if (unread > 0) '$unread 則交接未讀',
-            ].join('、');
-          }
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Material(
-              color: urgent ? AppColors.warn.withValues(alpha: 0.18) : AppColors.card,
-              borderRadius: BorderRadius.circular(16),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(16),
-                onTap: _open,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                  child: Row(children: [
-                    Icon(urgent ? Icons.notifications_active : Icons.checklist,
-                        color: urgent ? AppColors.warn : AppColors.primary),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(text,
-                          style: TextStyle(fontWeight: urgent ? FontWeight.w700 : FontWeight.w500, fontSize: 15)),
-                    ),
-                    const Icon(Icons.chevron_right, color: AppColors.muted),
-                  ]),
-                ),
-              ),
-            ),
-          );
-        },
-      );
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refresh();
+  }
+
+  Future<void> _refresh() async {
+    try {
+      final b = await AppScope.of(context).repo.handoverBoard(widget.membership.storeId);
+      if (mounted) setState(() => _board = b);
+    } catch (_) {
+      // 沒網路時保留上一次的數字
+    }
+  }
+
+  Future<void> _open() async {
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => HandoverScreen(membership: widget.membership)));
+    if (mounted) _refresh();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final me = AppScope.of(context).repo.currentUserId;
+    final b = _board;
+    final n = b == null ? 0 : b.pendingCount(bizToday()) + b.unreadCount(me);
+    return IconButton(
+      tooltip: '交接・提醒',
+      onPressed: _open,
+      icon: Badge(
+        isLabelVisible: n > 0,
+        backgroundColor: AppColors.warn,
+        label: Text(n > 9 ? '9+' : '$n'),
+        child: Icon(Icons.checklist, color: n > 0 ? AppColors.warn : null),
+      ),
+    );
+  }
 }
 
 /// 交接・提醒頁：兩個分頁「交接」「提醒」
