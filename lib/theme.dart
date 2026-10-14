@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 /// 每家店一套配色（老闆 2026-10-14 選定）：
 ///   小城外＝A「沉穩黑金」：黑底、金色重點
-///   隱城＝C「品牌色系」：墨綠黑底、薄荷綠重點（之後可換成店家 logo 的顏色）
+///   隱城＝C「品牌色系」：墨綠底、香檳金重點（顏色取自兩店 logo，老闆 2026-10-14 提供）
 class StorePalette {
   const StorePalette({
     required this.style,
@@ -27,42 +27,44 @@ class StorePalette {
   // C 版營收大色塊
   final Color hero, heroTrack, heroMuted;
 
+  // 小城外 logo：純黑底、金色（取自 logo）
   static const gold = StorePalette(
     style: DashboardStyle.gold,
-    bg: Color(0xFF0D0D0C),
-    card: Color(0xFF171614),
-    cardHigh: Color(0xFF221F1B),
-    line: Color(0xFF2A2824),
-    primary: Color(0xFFD4B26A),
-    onPrimary: Color(0xFF0D0D0C),
+    bg: Color(0xFF0A0A09),
+    card: Color(0xFF161512),
+    cardHigh: Color(0xFF211E19),
+    line: Color(0xFF2B2822),
+    primary: Color(0xFFD3B16E),
+    onPrimary: Color(0xFF0A0A09),
     good: Color(0xFF7FC8A0),
     warn: Color(0xFFF0A35E),
     bad: Color(0xFFE58A7A),
     muted: Color(0xFF9C968A),
     text: Color(0xFFF2EEE6),
-    nav: Color(0xFF121110),
-    hero: Color(0xFF171614),
-    heroTrack: Color(0xFF2A2824),
+    nav: Color(0xFF100F0D),
+    hero: Color(0xFF161512),
+    heroTrack: Color(0xFF2B2822),
     heroMuted: Color(0xFF9C968A),
   );
 
+  // 隱城 logo：墨綠底、香檳金線條（取自 logo）
   static const brand = StorePalette(
     style: DashboardStyle.brand,
-    bg: Color(0xFF0E1412),
-    card: Color(0xFF161E1B),
-    cardHigh: Color(0xFF1F2A26),
-    line: Color(0xFF24302C),
-    primary: Color(0xFF8FD1B6),
-    onPrimary: Color(0xFF0E1412),
-    good: Color(0xFF7FD6A2),
-    warn: Color(0xFFF2B66D),
-    bad: Color(0xFFF08A7E),
-    muted: Color(0xFF93A39C),
-    text: Color(0xFFEEF3F0),
-    nav: Color(0xFF18221E),
-    hero: Color(0xFF1B3B33),
-    heroTrack: Color(0xFF12291F),
-    heroMuted: Color(0xFFB5D5C8),
+    bg: Color(0xFF111A16),
+    card: Color(0xFF19251F),
+    cardHigh: Color(0xFF21302A),
+    line: Color(0xFF2A3A33),
+    primary: Color(0xFFCDBF98),
+    onPrimary: Color(0xFF111A16),
+    good: Color(0xFF8CCBA6),
+    warn: Color(0xFFE9A866),
+    bad: Color(0xFFEE8D80),
+    muted: Color(0xFF98A69E),
+    text: Color(0xFFEEF0EA),
+    nav: Color(0xFF16211C),
+    hero: Color(0xFF1D2A23),
+    heroTrack: Color(0xFF131D18),
+    heroMuted: Color(0xFFBDB9A4),
   );
 
   /// 隱城用 C，其他（小城外、登入頁）用 A
