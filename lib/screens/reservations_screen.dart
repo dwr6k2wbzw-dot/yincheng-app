@@ -365,6 +365,23 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
   final _note = TextEditingController();
   bool _saving = false;
 
+  Future<void> _pickCustomTime() async {
+    TimeOfDay initial = const TimeOfDay(hour: 19, minute: 0);
+    final cur = _time;
+    if (cur != null && cur.length == 5) {
+      initial = TimeOfDay(hour: int.tryParse(cur.substring(0, 2)) ?? 19, minute: int.tryParse(cur.substring(3)) ?? 0);
+    }
+    final t = await showTimePicker(
+      context: context,
+      initialTime: initial,
+      helpText: '選擇訂位時間',
+      initialEntryMode: TimePickerEntryMode.input,
+      builder: (c, child) => MediaQuery(data: MediaQuery.of(c).copyWith(alwaysUse24HourFormat: true), child: child!),
+    );
+    if (t == null || !mounted) return;
+    setState(() => _time = '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}');
+  }
+
   Future<void> _save() async {
     // 先把表單內容固定下來，檢查名額期間就算有人改欄位，也不會混用新舊值（Codex 審查）
     final date = _date;
@@ -452,6 +469,15 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
           Wrap(spacing: 8, runSpacing: 8, children: [
             for (final t in widget.settings.slots)
               ChoiceChip(label: Text(t), selected: _time == t, onSelected: (_) => setState(() => _time = t)),
+            // 自己選的時間（不在固定時段裡）
+            if (_time != null && !widget.settings.slots.contains(_time))
+              ChoiceChip(label: Text(_time!), selected: true, onSelected: (_) => _pickCustomTime()),
+            // 電話訂位可訂任何時間（老闆 2026-10-15）
+            ActionChip(
+              avatar: Icon(Icons.add, size: 18, color: AppColors.primary),
+              label: const Text('其他時間'),
+              onPressed: _pickCustomTime,
+            ),
           ]),
           const SizedBox(height: 16),
           Row(children: [
