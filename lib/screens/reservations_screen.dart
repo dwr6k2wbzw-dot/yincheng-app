@@ -240,15 +240,26 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                 leading: Icon(Icons.cancel_outlined, color: AppColors.bad),
                 title: Text('取消訂位', style: TextStyle(color: AppColors.bad)),
                 onTap: () => Navigator.pop(c, 'cancelled')),
-          ListTile(leading: const Icon(Icons.edit_note), title: const Text('修改備註'), onTap: () => Navigator.pop(c, 'note')),
-          ListTile(leading: const Icon(Icons.person_outline), title: const Text('改成「先生」'), onTap: () => Navigator.pop(c, 't:先生')),
-          ListTile(leading: const Icon(Icons.person_outline), title: const Text('改成「小姐」'), onTap: () => Navigator.pop(c, 't:小姐')),
+          ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: const Text('修改訂位內容'),
+              subtitle: const Text('日期、時間、人數、姓名、電話、Email、備註'),
+              onTap: () => Navigator.pop(c, 'edit')),
         ]),
       ),
     );
     if (v == null || !mounted) return;
     if (v == 'call') {
       openExternal('tel:${r.phone.replaceAll(RegExp(r'[^0-9+]'), '')}');
+      return;
+    }
+    if (v == 'edit') {
+      final s = (await _future).$1;
+      if (s == null || !mounted) return;
+      final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(
+        builder: (_) => _AddReservationScreen(membership: widget.membership, settings: s, day: r.date, existing: r),
+      ));
+      if (saved == true) _reload();
       return;
     }
     if (v.startsWith('t:')) {
@@ -353,23 +364,26 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
 
 /// 電話訂位（員工代客人輸入；不受線上訂位的天數、截止時間、每組人數限制，但會提醒超過時段上限）
 class _AddReservationScreen extends StatefulWidget {
-  const _AddReservationScreen({required this.membership, required this.settings, required this.day});
+  const _AddReservationScreen({required this.membership, required this.settings, required this.day, this.existing});
   final Membership membership;
   final ReservationSettings settings;
   final DateTime day;
+  final Reservation? existing; // 有值＝修改這筆訂位（老闆 2026-10-15）
   @override
   State<_AddReservationScreen> createState() => _AddReservationScreenState();
 }
 
 class _AddReservationScreenState extends State<_AddReservationScreen> {
-  late DateTime _date = widget.day;
-  String? _time;
-  int _party = 2;
-  final _name = TextEditingController();
-  String? _title; // 先生／小姐（老闆 2026-10-15），存檔時接在姓名後面
-  final _phone = TextEditingController();
-  final _email = TextEditingController();
-  final _note = TextEditingController();
+  late DateTime _date = widget.existing?.date ?? widget.day;
+  late String? _time = widget.existing?.time;
+  late int _party = widget.existing?.party ?? 2;
+  late final _name = TextEditingController(text: widget.existing == null ? '' : stripTitle(widget.existing!.name));
+  // 先生／小姐（老闆 2026-10-15），存檔時接在姓名後面
+  late String? _title = reservationTitles.where((t) => (widget.existing?.name ?? '').trim().endsWith(t)).firstOrNull;
+  late final _phone = TextEditingController(text: widget.existing?.phone ?? '');
+  late final _email = TextEditingController(text: widget.existing?.email ?? '');
+  late final _note = TextEditingController(text: widget.existing?.note ?? '');
+  bool get _editing => widget.existing != null;
   bool _saving = false;
 
   Future<void> _pickCustomTime() async {
@@ -422,7 +436,10 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
       // 超過時段上限先確認（電話訂位可以超收，由店家決定）
       final same = await repo.reservations(widget.membership.storeId, date, date);
       if (!mounted) return; // 已離開表單：不要在沒確認的情況下新增（Codex 審查）
-      final booked = same.where((r) => r.active && r.time == time).fold<int>(0, (t, r) => t + r.party);
+      // 修改時不算自己原本那筆
+      final booked = same
+          .where((r) => r.active && r.time == time && r.id != widget.existing?.id)
+          .fold<int>(0, (t, r) => t + r.party);
       if (booked + party > widget.settings.maxGuestsPerSlot) {
         final ok = await showDialog<bool>(
           context: context,
@@ -431,7 +448,7 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
             content: Text('$time 已訂 $booked 位，再加 $party 位會超過上限 ${widget.settings.maxGuestsPerSlot} 位。還是要新增嗎？'),
             actions: [
               TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('不要')),
-              FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('還是新增')),
+              FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(_editing ? '還是儲存' : '還是新增')),
             ],
           ),
         );
@@ -441,10 +458,23 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
         }
         if (!mounted) return;
       }
-      await repo.addReservation(widget.membership.storeId,
-          date: date, time: time, party: party, name: name, phone: phone, email: email, note: note);
+      final ex = widget.existing;
+      if (ex != null) {
+        await repo.updateReservation(ex.id, {
+          'slot_date': DateFormat('yyyy-MM-dd').format(date),
+          'slot_time': time,
+          'party_size': party,
+          'guest_name': name,
+          'phone': phone,
+          'email': email.isEmpty ? null : email,
+          'note': note.isEmpty ? null : note,
+        });
+      } else {
+        await repo.addReservation(widget.membership.storeId,
+            date: date, time: time, party: party, name: name, phone: phone, email: email, note: note);
+      }
       if (mounted) {
-        showMessage(context, '已新增訂位');
+        showMessage(context, _editing ? '已儲存修改' : '已新增訂位');
         Navigator.pop(context, true);
       }
     } catch (e) {
@@ -457,7 +487,7 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('電話訂位')),
+        appBar: AppBar(title: Text(_editing ? '修改訂位' : '電話訂位')),
         body: ListView(padding: const EdgeInsets.all(16), children: [
           ListTile(
             contentPadding: EdgeInsets.zero,
@@ -534,14 +564,15 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
               controller: _email,
               maxLength: 120,
               keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(labelText: 'Email（選填，電話訂位不會寄確認信）', counterText: '')),
+              decoration: InputDecoration(
+                  labelText: _editing ? 'Email（選填；修改不會另外寄信）' : 'Email（選填，電話訂位不會寄確認信）', counterText: '')),
           const SizedBox(height: 12),
           TextField(controller: _note, maxLength: 200, maxLines: 2, decoration: const InputDecoration(labelText: '備註（選填）')),
           const SizedBox(height: 24),
           FilledButton(
             onPressed: _saving ? null : _save,
             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
-            child: _saving ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('新增訂位'),
+            child: _saving ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)) : Text(_editing ? '儲存修改' : '新增訂位'),
           ),
         ]),
       );
