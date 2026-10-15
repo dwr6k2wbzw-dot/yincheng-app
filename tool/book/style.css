@@ -38,3 +38,7 @@ textarea { resize:vertical; min-height:72px; }
 .note { color:var(--muted); font-size:12px; margin-top:12px; }
 .big { font-size:20px; font-weight:700; }
 a { color:var(--gold); }
+.brand.hero { position:relative; margin:-28px -16px 26px; padding:44px 16px 36px; background-size:cover; background-position:center 45%; overflow:hidden; }
+.brand.hero::before { content:""; position:absolute; inset:0; background:linear-gradient(to bottom, rgba(10,10,9,.50) 0%, rgba(10,10,9,.68) 55%, rgba(10,10,9,.92) 85%, var(--bg) 100%); }
+.brand.hero > * { position:relative; }
+.brand.hero .sub { color:#CFC8BA; }
