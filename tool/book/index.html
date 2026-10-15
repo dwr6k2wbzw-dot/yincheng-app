@@ -49,7 +49,7 @@
   const logos = { yincheng: 'logo-yincheng.png', xcw: 'logo-xcw.png' };
   if (logos[slug]) { $('logo').src = logos[slug]; $('logo').alt = ''; $('logo').hidden = false; }
   // 標題區背景照片（老闆 2026-10-15：隱城）
-  const heros = { yincheng: 'hero-yincheng.jpg' };
+  const heros = { yincheng: 'hero-yincheng.jpg', xcw: 'hero-xcw.jpg' };
   if (heros[slug]) { const b = document.querySelector('.brand'); b.classList.add('hero'); b.style.backgroundImage = "url('" + heros[slug] + "')"; }
 
   async function load() {
