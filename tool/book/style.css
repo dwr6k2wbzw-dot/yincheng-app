@@ -1,29 +1,40 @@
-:root { --bg:#f6f5f2; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; --line:#e3e1dc; --accent:#5b4bdb; --accent-ink:#fff; --bad:#c62f3d; --ok:#1f8a57; }
-@media (prefers-color-scheme: dark) { :root { --bg:#0f1115; --card:#1b1e25; --ink:#eceef2; --muted:#9aa0ae; --line:#2b2f39; --accent:#7c6cf2; --bad:#ff6b78; --ok:#46c288; } }
+/* 黑金風格（老闆 2026-10-15：與 App 一致） */
+:root { color-scheme: dark; --bg:#0A0A09; --card:#141311; --card2:#1B1916; --ink:#F2EEE6; --muted:#A39D90; --line:#2B2822; --gold:#D3B16E; --gold-soft:rgba(211,177,110,.14); --accent:#D3B16E; --accent-ink:#0A0A09; --bad:#E58A7A; --ok:#8CCBA6; }
 * { box-sizing: border-box; }
-body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 -apple-system, "PingFang TC", "Noto Sans TC", sans-serif; }
-main { max-width:520px; margin:0 auto; padding:20px 16px 48px; }
-h1 { font-size:24px; margin:8px 0 2px; }
-.sub { color:var(--muted); font-size:14px; margin:0 0 18px; white-space:pre-wrap; }
-.card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px; margin-bottom:14px; }
-.label { font-weight:600; margin:0 0 10px; }
-.chips { display:flex; gap:8px; overflow-x:auto; padding-bottom:4px; }
-.grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(92px, 1fr)); gap:8px; }
-button.chip { border:1px solid var(--line); background:transparent; color:var(--ink); border-radius:12px; padding:10px 12px; font:inherit; font-size:15px; white-space:nowrap; cursor:pointer; }
-button.chip small { display:block; font-size:11px; color:var(--muted); }
-button.chip.on { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
-button.chip.on small { color:var(--accent-ink); opacity:.85; }
-button.chip:disabled { opacity:.35; cursor:not-allowed; text-decoration:line-through; }
-.stepper { display:flex; align-items:center; gap:16px; }
-.stepper button { width:44px; height:44px; border-radius:50%; border:1px solid var(--line); background:transparent; color:var(--ink); font-size:22px; }
-.stepper b { font-size:22px; min-width:2ch; text-align:center; }
-label.f { display:block; font-size:14px; color:var(--muted); margin:12px 0 4px; }
-input, textarea { width:100%; font:inherit; color:var(--ink); background:transparent; border:1px solid var(--line); border-radius:10px; padding:11px 12px; }
-textarea { resize:vertical; min-height:64px; }
+html { background:var(--bg); }
+body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.6 -apple-system, "PingFang TC", "Noto Sans TC", sans-serif; -webkit-font-smoothing:antialiased; }
+main { max-width:520px; margin:0 auto; padding:28px 16px 56px; }
+.brand { text-align:center; margin:4px 0 26px; }
+.brand img { height:104px; width:auto; display:block; margin:0 auto 18px; }
+.brand img[hidden] { display:none; }
+h1 { font-family:"Noto Serif TC", "Songti TC", serif; font-weight:600; font-size:26px; letter-spacing:.18em; margin:0; }
+.kicker { display:flex; align-items:center; justify-content:center; gap:12px; color:var(--gold); font-size:12px; letter-spacing:.42em; margin:10px 0 0; text-indent:.42em; }
+.kicker::before, .kicker::after { content:""; width:28px; height:1px; background:var(--gold); opacity:.6; }
+.sub { color:var(--muted); font-size:14px; margin:14px 0 0; white-space:pre-wrap; text-align:center; }
+.card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:18px 16px; margin-bottom:14px; }
+.label { font-size:13px; color:var(--gold); letter-spacing:.2em; margin:0 0 12px; }
+.chips { display:flex; gap:8px; overflow-x:auto; padding-bottom:4px; scrollbar-width:none; }
+.chips::-webkit-scrollbar { display:none; }
+.grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:8px; }
+button.chip { border:1px solid var(--line); background:var(--card2); color:var(--ink); border-radius:12px; padding:11px 12px; font:inherit; font-size:15px; white-space:nowrap; cursor:pointer; font-variant-numeric:tabular-nums; transition:border-color .15s, background .15s; }
+button.chip small { display:block; font-size:11px; color:var(--muted); letter-spacing:.05em; }
+button.chip:not(:disabled):hover { border-color:var(--gold); }
+button.chip.on { background:var(--gold); border-color:var(--gold); color:var(--accent-ink); font-weight:600; }
+button.chip.on small { color:var(--accent-ink); opacity:.8; }
+button.chip:disabled { opacity:.3; cursor:not-allowed; text-decoration:line-through; }
+.stepper { display:flex; align-items:center; gap:18px; }
+.stepper button { width:46px; height:46px; border-radius:50%; border:1px solid var(--gold); background:transparent; color:var(--gold); font-size:22px; cursor:pointer; }
+.stepper b { font-size:26px; font-weight:500; min-width:2ch; text-align:center; font-variant-numeric:tabular-nums; }
+label.f { display:block; font-size:13px; color:var(--muted); margin:14px 0 6px; }
+input, textarea { width:100%; font:inherit; color:var(--ink); background:#0F0E0C; border:1px solid var(--line); border-radius:10px; padding:12px 12px; }
+input::placeholder, textarea::placeholder { color:#6E695F; }
+input:focus, textarea:focus { outline:none; border-color:var(--gold); box-shadow:0 0 0 3px var(--gold-soft); }
+textarea { resize:vertical; min-height:72px; }
 .hp { position:absolute; left:-9999px; width:1px; height:1px; overflow:hidden; }
-.primary { width:100%; border:0; border-radius:14px; padding:15px; font:inherit; font-weight:700; background:var(--accent); color:var(--accent-ink); cursor:pointer; }
+.primary { width:100%; border:0; border-radius:14px; padding:16px; font:inherit; font-weight:700; letter-spacing:.2em; background:var(--gold); color:var(--accent-ink); cursor:pointer; }
 .primary:disabled { opacity:.5; }
 .err { color:var(--bad); font-size:14px; margin:10px 0 0; white-space:pre-wrap; }
-.ok { color:var(--ok); }
+.ok { color:var(--gold); }
 .note { color:var(--muted); font-size:12px; margin-top:12px; }
 .big { font-size:20px; font-weight:700; }
+a { color:var(--gold); }

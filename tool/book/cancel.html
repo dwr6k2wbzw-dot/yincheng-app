@@ -5,11 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>取消訂位</title>
+<meta name="theme-color" content="#0A0A09">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600&amp;display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <main>
-  <h1>取消訂位</h1>
+  <header class="brand">
+    <img id="logo" alt="" hidden>
+    <h1>取消訂位</h1>
+  </header>
   <div class="card" id="box"><p>載入中…</p></div>
 </main>
 <script src="common.js"></script>
@@ -19,6 +25,10 @@
   const box = document.getElementById('box');
   const status = { confirmed: '已確認', cancelled: '已取消', arrived: '已到店', no_show: '未到' };
   function show(r, msg) {
+    const lg = document.getElementById('logo');
+    const ln = String(r.display_name || '');
+    const lf = ln.includes('隱城') ? 'logo-yincheng.png' : ln.includes('小城外') ? 'logo-xcw.png' : '';
+    if (lf) { lg.src = lf; lg.hidden = false; }
     box.innerHTML = '<p class="big">' + YC.esc(r.display_name) + '</p><p>' + YC.dateLabel(r.date) + ' ' + r.time + '　' + r.party + ' 位<br>' +
       YC.esc(r.name) + '<br>狀態：' + (status[r.status] || r.status) + '</p>' + (msg ? '<p class="ok">' + msg + '</p>' : '') +
       (r.can_cancel ? '<p class="err" id="err" hidden></p><button class="primary" id="go">確定取消這筆訂位</button>' : '') +

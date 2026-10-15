@@ -4,12 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>線上訂位</title>
+<meta name="theme-color" content="#0A0A09">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600&amp;display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <main>
-  <h1 id="store">線上訂位</h1>
-  <p class="sub" id="contact">載入中…</p>
+  <header class="brand">
+    <img id="logo" alt="" hidden>
+    <h1 id="store">線上訂位</h1>
+    <p class="kicker">線上訂位</p>
+    <p class="sub" id="contact">載入中…</p>
+  </header>
   <div id="app" hidden>
     <div class="card"><p class="label">1. 日期</p><div class="chips" id="dates"></div></div>
     <div class="card"><p class="label">2. 時間</p><div class="grid" id="slots"></div></div>
@@ -38,10 +45,13 @@
   const slug = new URLSearchParams(location.search).get('s') || '';
   const $ = (id) => document.getElementById(id);
   let info = null, day = null, time = null, party = 2;
+  // 店家 logo（依網址 ?s=）
+  const logos = { yincheng: 'logo-yincheng.png', xcw: 'logo-xcw.png' };
+  if (logos[slug]) { $('logo').src = logos[slug]; $('logo').alt = ''; $('logo').hidden = false; }
 
   async function load() {
     info = await YC.rpc('reservation_availability', { p_slug: slug });
-    $('store').textContent = info.display_name + '｜線上訂位';
+    $('store').textContent = info.display_name;
     document.title = info.display_name + ' 線上訂位';
     $('contact').textContent = info.contact_note || '';
     if (!info.enabled) { $('contact').textContent = (info.contact_note ? info.contact_note + '\n\n' : '') + '目前暫停線上訂位，請直接聯絡店家。'; return; }
