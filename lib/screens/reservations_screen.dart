@@ -241,12 +241,19 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                 title: Text('取消訂位', style: TextStyle(color: AppColors.bad)),
                 onTap: () => Navigator.pop(c, 'cancelled')),
           ListTile(leading: const Icon(Icons.edit_note), title: const Text('修改備註'), onTap: () => Navigator.pop(c, 'note')),
+          ListTile(leading: const Icon(Icons.person_outline), title: const Text('改成「先生」'), onTap: () => Navigator.pop(c, 't:先生')),
+          ListTile(leading: const Icon(Icons.person_outline), title: const Text('改成「小姐」'), onTap: () => Navigator.pop(c, 't:小姐')),
         ]),
       ),
     );
     if (v == null || !mounted) return;
     if (v == 'call') {
       openExternal('tel:${r.phone.replaceAll(RegExp(r'[^0-9+]'), '')}');
+      return;
+    }
+    if (v.startsWith('t:')) {
+      final name = withTitle(stripTitle(r.name), v.substring(2));
+      await _run(() => _repo.updateReservation(r.id, {'guest_name': name}), '已改成 $name');
       return;
     }
     if (v == 'note') {
@@ -389,12 +396,16 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
     final party = _party;
     final raw = _name.text.trim();
     final title = _title;
-    final name = raw.isEmpty || title == null || raw.endsWith(title) ? raw : '$raw $title';
+    final name = withTitle(raw, title);
     final phone = _phone.text.trim();
     final email = _email.text.trim();
     final note = _note.text.trim();
     if (time == null) {
       showMessage(context, '請選時段', error: true);
+      return;
+    }
+    if (raw.isNotEmpty && title == null && !hasTitle(raw)) {
+      showMessage(context, '請選先生或小姐', error: true);
       return;
     }
     if (name.isEmpty) {
@@ -918,4 +929,23 @@ class _ReservationCalendarScreenState extends State<ReservationCalendarScreen> {
       ]),
     );
   }
+}
+
+/// 稱謂（老闆 2026-10-15）：訂位姓名後面接「先生」或「小姐」
+const reservationTitles = ['先生', '小姐'];
+bool hasTitle(String name) => reservationTitles.any((t) => name.trim().endsWith(t));
+String stripTitle(String name) {
+  var n = name.trim();
+  for (final t in reservationTitles) {
+    if (n.endsWith(t)) n = n.substring(0, n.length - t.length).trim();
+  }
+  return n.isEmpty ? name.trim() : n;
+}
+
+String withTitle(String raw, String? title) {
+  final n = raw.trim();
+  if (n.isEmpty || title == null || n.endsWith(title)) return n;
+  final base = stripTitle(n);
+  final out = '$base $title';
+  return out.length > 40 ? out.substring(0, 40) : out;
 }

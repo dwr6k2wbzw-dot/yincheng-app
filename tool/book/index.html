@@ -19,7 +19,8 @@
     </div>
     <form class="card" id="form" autocomplete="on">
       <p class="label">4. 聯絡資料</p>
-      <label class="f" for="name">姓名</label><input id="name" name="name" maxlength="40" required autocomplete="name">
+      <label class="f" for="name">姓名</label><input id="name" name="name" maxlength="36" required autocomplete="family-name" placeholder="例如：王">
+      <div class="chips" id="titles" role="radiogroup" aria-label="稱謂" style="margin-top:8px"><button type="button" class="chip" data-t="先生" role="radio" aria-checked="false">先生</button><button type="button" class="chip" data-t="小姐" role="radio" aria-checked="false">小姐</button></div>
       <label class="f" for="phone">手機</label><input id="phone" name="tel" type="tel" maxlength="20" required autocomplete="tel" inputmode="tel">
       <label class="f" for="email">Email（確認信會寄到這裡）</label><input id="email" name="email" type="email" maxlength="120" required autocomplete="email">
       <label class="f" for="note">備註（選填）</label><textarea id="note" maxlength="200" placeholder="例如：慶生、需要兒童椅"></textarea>
@@ -69,16 +70,30 @@
   $('slots').onclick = (e) => { const b = e.target.closest('button[data-t]'); if (b && !b.disabled) { time = b.dataset.t; render(); } };
   $('minus').onclick = () => { if (party > 1) { party--; render(); } };
   $('plus').onclick = () => { if (party < info.max_party) { party++; render(); } };
+  // 稱謂：先生／小姐（老闆 2026-10-15），送出時接在姓名後面
+  let title = null;
+  document.querySelectorAll('#titles .chip').forEach((b) => {
+    b.onclick = () => {
+      title = b.dataset.t;
+      document.querySelectorAll('#titles .chip').forEach((x) => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-checked', on ? 'true' : 'false'); });
+    };
+  });
+  const fullName = () => {
+    const n = $('name').value.trim();
+    if (!title || n.endsWith(title)) return n;
+    return (n.replace(/\s*(先生|小姐)$/, '') + ' ' + title).slice(0, 40);
+  };
   $('form').onsubmit = async (e) => {
     e.preventDefault();
     const err = $('err'); err.hidden = true;
     if ($('website').value) return; // 機器人
     if (!day || !time) { err.textContent = '請先選日期和時間'; err.hidden = false; return; }
+    if (!title && !/(先生|小姐)$/.test($('name').value.trim())) { err.textContent = '請選先生或小姐'; err.hidden = false; return; }
     $('submit').disabled = true; $('submit').textContent = '送出中…';
     try {
       const r = await YC.rpc('book_reservation', {
         p_slug: slug, p_date: day, p_time: time, p_party: party,
-        p_name: $('name').value, p_phone: $('phone').value, p_email: $('email').value, p_note: $('note').value || null,
+        p_name: fullName(), p_phone: $('phone').value, p_email: $('email').value, p_note: $('note').value || null,
       });
       $('app').hidden = true;
       const done = $('done'); done.hidden = false;
