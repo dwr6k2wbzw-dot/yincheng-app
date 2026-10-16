@@ -12,14 +12,16 @@ import '../widgets/common.dart';
 
 /// 訂位管理（0050，老闆 2026-10-14）：老闆、店長、正職。客人在公開訂位頁訂位，這裡看清單、標到店／未到／取消、新增電話訂位。
 class ReservationsScreen extends StatefulWidget {
-  const ReservationsScreen({super.key, required this.membership});
+  const ReservationsScreen({super.key, required this.membership, this.initialDay});
   final Membership membership;
+  final DateTime? initialDay; // 從小鈴鐺通知點進來：直接看那一天
   @override
   State<ReservationsScreen> createState() => _ReservationsScreenState();
 }
 
 class _ReservationsScreenState extends State<ReservationsScreen> {
-  late DateTime _day = _today();
+  late DateTime _day = widget.initialDay ?? _today();
+  bool _calOpen = false;
   late Future<(ReservationSettings?, List<Reservation>)> _future;
   bool _started = false;
 
@@ -70,20 +72,6 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
   }
 
   void _reload() => setState(() => _future = _load());
-
-  Future<void> _pickDay() async {
-    final d = await Navigator.of(context).push<DateTime>(MaterialPageRoute(
-      builder: (_) => ReservationCalendarScreen(membership: widget.membership, selected: _day, today: _today()),
-    ));
-    if (d == null || !mounted) return;
-    _day = d;
-    _reload();
-  }
-
-  void _shift(int d) {
-    _day = DateTime(_day.year, _day.month, _day.day + d);
-    _reload();
-  }
 
   Future<void> _run(Future<void> Function() f, String ok) async {
     try {
@@ -153,26 +141,39 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     return RefreshIndicator(
       onRefresh: () async => _reload(),
       child: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 96), children: [
-        Row(children: [
-          IconButton(onPressed: () => _shift(-1), icon: const Icon(Icons.chevron_left)),
-          // 點日期打開月曆選日期（老闆 2026-10-14）
-          Expanded(
-            child: InkWell(
-              borderRadius: BorderRadius.circular(10),
-              onTap: _pickDay,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  Icon(Icons.calendar_month_outlined, size: 18, color: AppColors.primary),
-                  const SizedBox(width: 8),
-                  Text(DateFormat('M/d（E）', 'zh_TW').format(_day) + (_day == _today() ? '・今天' : ''),
-                      style: const TextStyle(fontSize: 16)),
-                ]),
-              ),
+        // 日期：點了在下面展開月曆（老闆 2026-10-17：跟客人訂位頁同一種樣式）
+        InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => setState(() => _calOpen = !_calOpen),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _calOpen ? AppColors.primary : AppColors.line, width: 1.2),
             ),
+            child: Row(children: [
+              Expanded(
+                child: Text(
+                    '${_day.month}月${_day.day}日 ${DateFormat('E', 'zh_TW').format(_day)}${_day == _today() ? '（今日）' : ''}',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, fontFeatures: tabular)),
+              ),
+              Icon(_calOpen ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, color: AppColors.muted),
+            ]),
           ),
-          IconButton(onPressed: () => _shift(1), icon: const Icon(Icons.chevron_right)),
-        ]),
+        ),
+        if (_calOpen)
+          ReservationMonthCalendar(
+            membership: widget.membership,
+            selected: _day,
+            today: _today(),
+            onPick: (d) {
+              _calOpen = false;
+              _day = d;
+              _reload();
+            },
+          ),
+        const SizedBox(height: 12),
         if (!settings.enabled)
           Padding(
             padding: EdgeInsets.only(bottom: 8),
@@ -1130,6 +1131,128 @@ class _ReservationSummaryCardState extends State<ReservationSummaryCard> {
 
 /// 訂位月曆（老闆 2026-10-14：像 iPhone 行事曆那樣一次看好幾個月、點日期跳過去）
 /// 前 2 個月到後 4 個月；有訂位的日期底下畫一條線、數字＝組數；今天實心圓、選中的日期外框。
+/// 訂位管理頁內嵌月曆（老闆 2026-10-17）：一次一個月、‹ › 換月；選中＝金底、今天上方一條短線、有訂位的日子下方顯示組數
+class ReservationMonthCalendar extends StatefulWidget {
+  const ReservationMonthCalendar(
+      {super.key, required this.membership, required this.selected, required this.today, required this.onPick});
+  final Membership membership;
+  final DateTime selected;
+  final DateTime today;
+  final ValueChanged<DateTime> onPick;
+  @override
+  State<ReservationMonthCalendar> createState() => _ReservationMonthCalendarState();
+}
+
+class _ReservationMonthCalendarState extends State<ReservationMonthCalendar> {
+  late DateTime _month = DateTime(widget.selected.year, widget.selected.month);
+  Map<DateTime, int> _groups = const {};
+  int _loadGen = 0;
+  bool _started = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    _load();
+  }
+
+  Future<void> _load() async {
+    final gen = ++_loadGen;
+    final from = _month, to = DateTime(_month.year, _month.month + 1, 0);
+    try {
+      final list = await AppScope.of(context).repo.reservations(widget.membership.storeId, from, to);
+      final m = <DateTime, int>{};
+      for (final r in list.where((r) => r.active)) {
+        final d = DateTime(r.date.year, r.date.month, r.date.day);
+        m[d] = (m[d] ?? 0) + 1;
+      }
+      if (mounted && gen == _loadGen) setState(() => _groups = m);
+    } catch (_) {
+      // 讀不到組數也能選日期
+    }
+  }
+
+  void _go(int delta) {
+    setState(() {
+      _month = DateTime(_month.year, _month.month + delta);
+      _groups = const {};
+    });
+    _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final days = DateTime(_month.year, _month.month + 1, 0).day;
+    final lead = DateTime(_month.year, _month.month, 1).weekday % 7; // 週日開頭
+    final sel = DateTime(widget.selected.year, widget.selected.month, widget.selected.day);
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Column(children: [
+        Row(children: [
+          IconButton(onPressed: () => _go(-1), icon: Icon(Icons.chevron_left, color: AppColors.primary)),
+          Expanded(
+            child: Text('${_month.year}年${_month.month}月',
+                textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+          ),
+          IconButton(onPressed: () => _go(1), icon: Icon(Icons.chevron_right, color: AppColors.primary)),
+        ]),
+        const SizedBox(height: 4),
+        Row(children: [
+          for (final w in const ['日', '一', '二', '三', '四', '五', '六'])
+            Expanded(child: Text(w, textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: AppColors.muted))),
+        ]),
+        const SizedBox(height: 6),
+        GridView.count(
+          crossAxisCount: 7,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 6,
+          crossAxisSpacing: 6,
+          children: [
+            for (var i = 0; i < lead; i++) const SizedBox.shrink(),
+            for (var d = 1; d <= days; d++) _cell(DateTime(_month.year, _month.month, d), sel),
+          ],
+        ),
+        TextButton(onPressed: () => widget.onPick(widget.today), child: const Text('回到今天')),
+      ]),
+    );
+  }
+
+  Widget _cell(DateTime d, DateTime sel) {
+    final isSel = d == sel;
+    final isToday = d == widget.today;
+    final past = d.isBefore(widget.today);
+    final n = _groups[d] ?? 0;
+    final fg = isSel ? AppColors.onPrimary : (past ? AppColors.muted : AppColors.text);
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: () => widget.onPick(d),
+      child: Container(
+        decoration: BoxDecoration(
+          color: isSel ? AppColors.primary : AppColors.cardHigh,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: isSel ? AppColors.primary : AppColors.line),
+        ),
+        child: Stack(alignment: Alignment.center, children: [
+          if (isToday)
+            Positioned(
+              top: 5,
+              child: Container(width: 10, height: 2, color: isSel ? AppColors.onPrimary : AppColors.primary),
+            ),
+          Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Text('${d.day}',
+                style: TextStyle(fontSize: 16, fontWeight: isSel ? FontWeight.w700 : FontWeight.w500, color: fg, fontFeatures: tabular)),
+            if (n > 0)
+              Text('$n 組',
+                  style: TextStyle(fontSize: 9, height: 1.1, color: isSel ? AppColors.onPrimary : AppColors.primary, fontFeatures: tabular)),
+          ]),
+        ]),
+      ),
+    );
+  }
+}
+
 class ReservationCalendarScreen extends StatefulWidget {
   const ReservationCalendarScreen({super.key, required this.membership, required this.selected, required this.today});
   final Membership membership;
