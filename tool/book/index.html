@@ -84,7 +84,8 @@
     }).join('');
     const cur = info.days.find(d => d.date === day);
     const ok = partyOk(cur, party);
-    if (!ok) time = null;
+    // 重新讀名額後，原本選的時段若已不在清單（例如過了當天截止時間）也要清掉（Codex 審查）
+    if (!ok || !(cur && !cur.closed && cur.slots.some(s => s.time === time))) time = null;
     $('slots').innerHTML = (cur && !cur.closed ? cur.slots : []).map(s =>
       '<button type="button" class="chip' + (s.time === time ? ' on' : '') + '" data-t="' + s.time + '"' + (ok ? '' : ' disabled') + '>' + s.time + '</button>'
     ).join('') || '<p class="note">這天沒有開放的時段</p>';
