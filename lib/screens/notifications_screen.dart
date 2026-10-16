@@ -10,6 +10,7 @@ import '../services/app_update.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'handover_screen.dart';
+import 'reservations_screen.dart';
 
 /// 標題列的小鈴鐺（老闆 2026-10-12）：新交接、新提醒、班表修改、App 有新版本時顯示紅色數字。
 /// 打開 App、回到 App、之後每 2 分鐘檢查一次。自己做的事不提醒自己。
@@ -131,6 +132,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         ));
       case 'schedule':
         Navigator.of(context).pop('schedule');
+      case 'reservation':
+        // 改人數申請（0056）：直接打開那一天的訂位
+        Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => ReservationsScreen(membership: widget.membership, initialDay: n.refMonth),
+        ));
     }
   }
 
@@ -138,6 +144,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         'handover' => Icons.edit_note,
         'reminder' => Icons.alarm,
         'schedule' => Icons.calendar_month_outlined,
+        'reservation' => Icons.event_seat_outlined,
         _ => Icons.notifications_outlined,
       };
 
