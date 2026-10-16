@@ -17,8 +17,9 @@
     <p class="kicker">線上訂位</p>
     <p class="sub" id="contact">載入中…</p>
   </header>
+  <div class="card info" id="info" hidden></div>
   <div id="app" hidden>
-    <div class="card"><p class="label">1. 日期</p><div class="chips" id="dates"></div></div>
+    <div class="card"><p class="label">1. 日期</p><p class="dsel" id="dsel"></p><div class="cal" id="cal"></div></div>
     <div class="card"><p class="label">2. 時間</p><div class="grid" id="slots"></div><p class="note" id="dayInfo" style="white-space:pre-line"></p></div>
     <div class="card"><p class="label">3. 人數</p>
       <div class="stepper"><button type="button" id="minus" aria-label="減少">−</button><b id="party">2</b><button type="button" id="plus" aria-label="增加">＋</button></div>
@@ -57,6 +58,7 @@
     $('store').textContent = info.display_name;
     document.title = info.display_name + ' 線上訂位';
     $('contact').textContent = info.contact_note || '';
+    renderInfo();
     if (!info.enabled) { $('contact').textContent = (info.contact_note ? info.contact_note + '\n\n' : '') + '目前暫停線上訂位，請直接聯絡店家。'; return; }
     $('app').hidden = false;
     party = Math.min(party, info.max_party);
@@ -65,6 +67,57 @@
     const open = info.days.filter(d => partyOk(d, party));  // 預設選「現在人數訂得到」的第一天（Codex 審查）
     if (!day || !info.days.some(d => d.date === day)) day = open.length ? open[0].date : (info.days.length ? info.days[0].date : null);
     render();
+  }
+  // 地址、電話（0054）：電話可直接撥打、地址可開地圖
+  function renderInfo() {
+    const rows = [];
+    if (info.address) {
+      const q = encodeURIComponent(info.address.replace(/[（(].*?[）)]/g, '').trim());
+      const m = info.address.match(/^(.*?)\s*([（(].*[）)])\s*$/);
+      rows.push('<div class="irow"><span class="ik">地址</span><span><a href="https://www.google.com/maps/search/?api=1&amp;query=' + q + '" target="_blank" rel="noopener">' +
+        YC.esc(m ? m[1] : info.address) + '</a>' + (m ? '<small>' + YC.esc(m[2]) + '</small>' : '') + '</span></div>');
+    }
+    if (info.phone) {
+      rows.push('<div class="irow"><span class="ik">電話</span><span><a href="tel:' + YC.esc(info.phone.replace(/[^0-9+]/g, '')) + '">' + YC.esc(info.phone) + '</a></span></div>');
+    }
+    $('info').innerHTML = rows.join('');
+    $('info').hidden = !rows.length;
+  }
+  // 月曆（0054，老闆 2026-10-16：改成月曆格）
+  let calMonth = null; // 'YYYY-MM'
+  const ym = (iso) => iso.slice(0, 7);
+  function renderCal() {
+    const byDate = Object.fromEntries(info.days.map(d => [d.date, d]));
+    if (!info.days.length) { $('cal').innerHTML = ''; $('dsel').textContent = ''; return; }
+    const firstM = ym(info.days[0].date), lastM = ym(info.days[info.days.length - 1].date);
+    if (!calMonth || calMonth < firstM || calMonth > lastM) calMonth = day ? ym(day) : firstM;
+    const [y, mo] = calMonth.split('-').map(Number);
+    const startDow = new Date(y, mo - 1, 1).getDay();
+    const nDays = new Date(y, mo, 0).getDate();
+    const realToday = (() => { const n = new Date(Date.now() + 8 * 3600e3); return n.toISOString().slice(0, 10); })();
+    let h = '<div class="calhead"><button type="button" class="nav" id="prevM" aria-label="上個月"' + (calMonth <= firstM ? ' disabled' : '') + '>‹</button>' +
+      '<b>' + y + '年' + mo + '月</b><button type="button" class="nav" id="nextM" aria-label="下個月"' + (calMonth >= lastM ? ' disabled' : '') + '>›</button></div>';
+    h += '<div class="calgrid">' + YC.week.map(w => '<span class="wk">' + w + '</span>').join('');
+    for (let i = 0; i < startDow; i++) h += '<span></span>';
+    for (let dd = 1; dd <= nDays; dd++) {
+      const iso = calMonth + '-' + String(dd).padStart(2, '0');
+      const d = byDate[iso];
+      const isToday = iso === realToday ? ' today' : '';
+      if (!d) { h += '<span class="cd off' + isToday + '">' + dd + '</span>'; continue; }
+      const full = !d.closed && (d.groups_left === 0 || d.guests_left === 0);
+      const offDay = d.closed || full;
+      const tag = d.closed ? (d.note || '公休') : full ? '已滿' : '';
+      h += '<button type="button" class="cd' + isToday + (iso === day ? ' on' : '') + '" data-d="' + iso + '"' + (offDay ? ' disabled' : '') + '>' + dd +
+        (tag ? '<small>' + YC.esc(tag.slice(0, 4)) + '</small>' : '') + '</button>';
+    }
+    $('cal').innerHTML = h + '</div>';
+    if (day) {
+      const dt = new Date(day + 'T00:00:00');
+      $('dsel').textContent = (dt.getMonth() + 1) + '月' + dt.getDate() + '日 週' + YC.week[dt.getDay()] + (day === realToday ? '（今日）' : '');
+    } else $('dsel').textContent = '請選日期';
+    const pv = $('prevM'), nx = $('nextM');
+    if (pv) pv.onclick = () => { const t = new Date(y, mo - 2, 1); calMonth = t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0'); renderCal(); };
+    if (nx) nx.onclick = () => { const t = new Date(y, mo, 1); calMonth = t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0'); renderCal(); };
   }
   // 名額以「整天」計算（0052）：每天幾組、幾位、大桌（4 位以上）幾組；公休／包場的日子不開放
   const large = () => info.large_party_size || 4;
@@ -76,12 +129,7 @@
   }
   function render() {
     $('party').textContent = party;
-    $('dates').innerHTML = info.days.map(d => {
-      const full = !d.closed && (d.groups_left === 0 || d.guests_left === 0);
-      const off = d.closed || full;
-      const tag = d.closed ? (d.note || '公休') : full ? '已滿' : (d.note || '');
-      return '<button type="button" class="chip' + (d.date === day ? ' on' : '') + '" data-d="' + d.date + '"' + (off ? ' disabled' : '') + '>' + YC.dateLabel(d.date) + (tag ? '<small>' + YC.esc(tag) + '</small>' : '') + '</button>';
-    }).join('');
+    renderCal();
     const cur = info.days.find(d => d.date === day);
     const ok = partyOk(cur, party);
     // 重新讀名額後，原本選的時段若已不在清單（例如過了當天截止時間）也要清掉（Codex 審查）
@@ -100,7 +148,7 @@
     if (cur && !cur.closed && cur.note) msg = cur.note + (msg ? '\n' + msg : '');
     $('dayInfo').textContent = msg;
   }
-  $('dates').onclick = (e) => { const b = e.target.closest('button[data-d]'); if (b && !b.disabled) { day = b.dataset.d; time = null; render(); } };
+  $('cal').onclick = (e) => { const b = e.target.closest('button[data-d]'); if (b && !b.disabled) { day = b.dataset.d; time = null; render(); } };
   $('slots').onclick = (e) => { const b = e.target.closest('button[data-t]'); if (b && !b.disabled) { time = b.dataset.t; render(); } };
   $('minus').onclick = () => { if (party > 1) { party--; render(); } };
   $('plus').onclick = () => { if (party < info.max_party) { party++; render(); } };
