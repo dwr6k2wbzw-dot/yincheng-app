@@ -44,7 +44,10 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
   ReservationSpecialDay? _special; // 這天的特殊日期（0052）
   Map<String, GuestStats> _guests = {}; // 熟客紀錄（以電話數字對回）
 
+  int _loadGen = 0; // 換日期很快時，舊的讀取晚回來不能蓋掉現在這天的資料（Codex 審查）
+
   Future<(ReservationSettings?, List<Reservation>)> _load() async {
+    final gen = ++_loadGen;
     final day = _day;
     final r = await Future.wait<dynamic>([
       _repo.reservationSettings(_store),
@@ -52,11 +55,16 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
       _repo.specialDays(_store, day, day).then<List<ReservationSpecialDay>>((v) => v, onError: (_) => <ReservationSpecialDay>[]),
     ]);
     final list = r[1] as List<Reservation>;
-    _special = (r[2] as List<ReservationSpecialDay>).firstOrNull;
+    final special = (r[2] as List<ReservationSpecialDay>).firstOrNull;
+    Map<String, GuestStats> guests;
     try {
-      _guests = await _repo.guestStats(_store, {for (final x in list) phoneDigitsOf(x.phone)});
+      guests = await _repo.guestStats(_store, {for (final x in list) phoneDigitsOf(x.phone)});
     } catch (_) {
-      _guests = {}; // 讀不到熟客資料不影響訂位清單
+      guests = {}; // 讀不到熟客資料不影響訂位清單
+    }
+    if (gen == _loadGen) {
+      _special = special;
+      _guests = guests;
     }
     return (r[0] as ReservationSettings?, list);
   }
@@ -1251,6 +1259,17 @@ class _SpecialDaysScreenState extends State<SpecialDaysScreen> {
     );
     if (ok != true || !mounted) return;
     int? opt(TextEditingController c) => c.text.trim().isEmpty ? null : int.tryParse(c.text.trim());
+    // 有填就一定要是 0～999 的整數；打錯不能默默當成「照平常」（Codex 審查）
+    if (!closed) {
+      for (final (c, label) in [(groups, '最多幾組'), (guests, '最多幾位'), (large, '大桌最多幾組')]) {
+        final t = c.text.trim();
+        final v = int.tryParse(t);
+        if (t.isNotEmpty && (v == null || v < 0 || v > 999)) {
+          showMessage(context, '「$label」請填 0～999 的整數，或留空白', error: true);
+          return;
+        }
+      }
+    }
     try {
       await _repo.saveSpecialDay(
           widget.membership.storeId,

@@ -598,18 +598,30 @@ class DemoRepository implements Repository {
   @override
   Future<Map<String, GuestStats>> guestStats(String storeId, Set<String> phoneDigits) async {
     final all = _demoRes[storeId] ?? const <Reservation>[];
-    return {
-      for (final p in phoneDigits)
-        p: GuestStats(
-          all.where((r) => phoneDigitsOf(r.phone) == p && r.status == 'arrived').length,
-          all.where((r) => phoneDigitsOf(r.phone) == p && r.status == 'no_show').length,
-          _demoGuests[storeId]?[p],
-        ),
-    };
+    final out = <String, GuestStats>{};
+    for (final p in phoneDigits) {
+      final prof = _demoGuests[storeId]?[p];
+      final reset = prof?.noshowResetAt;
+      final resetDay = reset == null ? null : DateTime(reset.year, reset.month, reset.day);
+      out[p] = GuestStats(
+        all.where((r) => phoneDigitsOf(r.phone) == p && r.status == 'arrived').length,
+        all.where((r) => phoneDigitsOf(r.phone) == p && r.status == 'no_show' && (resetDay == null || r.date.isAfter(resetDay))).length,
+        prof,
+      );
+    }
+    return out;
   }
   @override
-  Future<void> saveGuestProfile(String storeId, GuestProfile g, {bool resetNoshow = false}) async =>
-      (_demoGuests[storeId] ??= {})[g.phoneDigits] = g;
+  Future<void> saveGuestProfile(String storeId, GuestProfile g, {bool resetNoshow = false}) async {
+    final m = _demoGuests[storeId] ??= {};
+    // 和正式資料庫一樣：解除時記下現在時間，之後只算那天以後的未到；沒解除就保留原本的解除時間（Codex 審查）
+    m[g.phoneDigits] = GuestProfile(
+      phoneDigits: g.phoneDigits,
+      tags: g.tags,
+      note: g.note,
+      noshowResetAt: resetNoshow ? DateTime.now() : m[g.phoneDigits]?.noshowResetAt,
+    );
+  }
 
   @override
   Future<void> updateReservation(String id, Map<String, dynamic> values) async {
