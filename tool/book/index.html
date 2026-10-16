@@ -180,7 +180,7 @@
       $('app').hidden = true;
       const done = $('done'); done.hidden = false;
       done.innerHTML = '<p class="big ok">訂位成功 ✓</p><p class="big">' + YC.esc(r.display_name) + '</p><p>' + YC.dateLabel(r.date) + ' ' + r.time + '　' + r.party + ' 位<br>' + YC.esc(r.name) + '</p><p class="note" id="mailNote">正在寄確認信…</p>' +
-        '<p class="note">要取消請點確認信裡的「取消訂位」，或<a href="cancel.html?t=' + r.token + '">點這裡取消</a>。</p>';
+        '<p class="note">要更改人數或取消，請點確認信裡的連結，或<a href="cancel.html?t=' + r.token + '">點這裡</a>（更改人數需經店家確認）。</p>';
       const sent = await YC.mail(r.token, 'confirm');
       $('mailNote').textContent = sent ? '確認信已寄到 ' + $('email').value + '（沒收到請看垃圾郵件）' : '確認信寄送延遲，訂位已成功，請保留這個畫面。';
     } catch (ex) {

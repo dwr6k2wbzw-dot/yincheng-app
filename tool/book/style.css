@@ -68,3 +68,8 @@ button.cd:disabled { opacity:.35; cursor:not-allowed; }
 button.cd.on small { color:var(--accent-ink); }
 .cd.today::before { content:""; position:absolute; top:5px; left:50%; width:10px; height:2px; margin-left:-5px; border-radius:1px; background:var(--gold); }
 button.cd.on.today::before { background:var(--accent-ink); }
+
+/* 我的訂位（0055） */
+.sep { height:1px; background:var(--line); margin:18px 0; }
+.primary.ghost { background:transparent; color:var(--gold); border:1px solid var(--gold); }
+.primary.danger { background:transparent; color:var(--bad); border:1px solid rgba(229,138,122,.5); }

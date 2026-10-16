@@ -624,6 +624,20 @@ class DemoRepository implements Repository {
   }
 
   @override
+  Future<void> decidePartyRequest(String id, bool approve) async {
+    for (final list in _demoRes.values) {
+      final i = list.indexWhere((r) => r.id == id);
+      if (i < 0) continue;
+      final r = list[i];
+      list[i] = Reservation(
+          id: r.id, date: r.date, time: r.time, party: approve ? (r.requestedParty ?? r.party) : r.party, name: r.name,
+          phone: r.phone, email: r.email, note: r.note, status: r.status, source: r.source, createdAt: r.createdAt,
+          requestedParty: r.requestedParty, partyRequestStatus: approve ? 'approved' : 'rejected');
+      return;
+    }
+  }
+
+  @override
   Future<void> updateReservation(String id, Map<String, dynamic> values) async {
     for (final list in _demoRes.values) {
       final i = list.indexWhere((r) => r.id == id);
@@ -632,7 +646,8 @@ class DemoRepository implements Repository {
       list[i] = Reservation(
           id: r.id, date: r.date, time: r.time, party: r.party, name: r.name, phone: r.phone, email: r.email,
           note: values.containsKey('note') ? values['note'] as String? : r.note,
-          status: values['status'] as String? ?? r.status, source: r.source, createdAt: r.createdAt);
+          status: values['status'] as String? ?? r.status, source: r.source, createdAt: r.createdAt,
+          requestedParty: r.requestedParty, partyRequestStatus: r.partyRequestStatus);
       return;
     }
   }
