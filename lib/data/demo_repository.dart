@@ -33,11 +33,11 @@ class DemoRepository implements Repository {
     Supplier('s5', '示範食材行', 'food'),
   ];
   final _products = [
-    Product('p1', "Hendrick's Gin", '酒水', '瓶'),
+    Product('p1', "Hendrick's Gin", '酒水', '瓶', parLevel: 2),
     Product('p2', 'Bombay Sapphire', '酒水', '瓶'),
     Product('p3', 'Campari', '酒水', '瓶'),
     Product('p4', 'Chartreuse', '酒水', '瓶'),
-    Product('p5', '檸檬', '水果', '顆'),
+    Product('p5', '檸檬', '餐食', '顆', parLevel: 20),
   ];
   late final List<Purchase> _purchases = [
     Purchase(id: 'x1', purchaseDate: DateTime(2026, 9, 25), categoryCode: 'liquor_monthly', supplierName: '示範酒商', amount: 2000, paidBy: 'vendor', reconciled: true, source: 'import'),
@@ -481,10 +481,39 @@ class DemoRepository implements Repository {
   }
 
   @override
-  Future<List<Product>> products(String storeId) async => _products;
+  Future<List<Product>> products(String storeId) async => _products.where((p) => !_inactive.contains(p.id)).toList();
+  final _inactive = <String>{}; // 停用的品項（歷史盤點照常顯示名稱）
 
   @override
   Future<List<StockCount>> stockCounts(String storeId) async => List.of(_counts.reversed);
+
+  @override
+  Future<Map<String, StockLevel>> latestStock(String storeId) async {
+    final out = <String, StockLevel>{};
+    for (final c in _counts.reversed) {
+      if (c.status != CountStatus.submitted && c.status != CountStatus.approved) continue;
+      for (final e in (_lines[c.id] ?? {}).entries) {
+        out.putIfAbsent(e.key, () => StockLevel(e.value, c.bizDate));
+      }
+    }
+    return out;
+  }
+
+  @override
+  Future<void> saveProduct(String storeId, Product p) async {
+    final i = _products.indexWhere((x) => x.id == p.id);
+    final np = Product(p.id.isEmpty ? 'p${_seq++}' : p.id, p.name, p.category, p.unit, parLevel: p.parLevel);
+    if (i < 0) {
+      _products.add(np);
+    } else {
+      _products[i] = np;
+    }
+  }
+
+  @override
+  Future<void> deactivateProduct(String productId) async {
+    _inactive.add(productId);
+  }
 
   @override
   Future<String> createStockCount(String storeId, String? note) async {

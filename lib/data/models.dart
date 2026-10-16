@@ -147,6 +147,8 @@ class Purchase {
   final bool excelCovered; // App 暫記：日報表已涵蓋那天，以日報表為準（不再計入，0035）
   final String? createdBy;
   final bool noReceipt; // 新增時沒附照片、選了「缺憑」（0043）
+  /// 送貨單／發票照片（老闆 2026-10-16：銷貨單照片併進進貨）。日報表那筆會帶上被它取代的 App 暫記的照片
+  String? photoPath;
   bool get superseded => supersededBy != null;
   /// 有沒有計入成本、零用金（被 Excel 取代或以日報表為準的 App 暫記不計入）
   bool get counted => supersededBy == null && !excelCovered;
@@ -165,6 +167,7 @@ class Purchase {
     this.excelCovered = false,
     this.createdBy,
     this.noReceipt = false,
+    this.photoPath,
   });
 
   factory Purchase.fromRow(Map<String, dynamic> r) => Purchase(
@@ -181,6 +184,7 @@ class Purchase {
         excelCovered: r['excel_covered_at'] != null,
         createdBy: r['created_by'] as String?,
         noReceipt: r['no_receipt'] as bool? ?? false,
+        photoPath: r['photo_path'] as String?,
       );
 }
 
@@ -218,9 +222,17 @@ class NewPurchase {
 class Product {
   final String id;
   final String name;
-  final String category;
+  final String category; // 酒水／餐食／雜項（舊資料可能是其他字）
   final String unit;
-  Product(this.id, this.name, this.category, this.unit);
+  final double? parLevel; // 安全量：低於就提醒（老闆 2026-10-16）
+  Product(this.id, this.name, this.category, this.unit, {this.parLevel});
+}
+
+/// 某品項最近一次盤點到的數量（老闆 2026-10-16：盤點只看庫存、缺貨提醒）
+class StockLevel {
+  final double qty;
+  final DateTime date;
+  const StockLevel(this.qty, this.date);
 }
 
 enum CountStatus { draft, submitted, approved, rejected, voided }
