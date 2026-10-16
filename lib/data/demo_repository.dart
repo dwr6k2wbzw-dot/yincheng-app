@@ -500,7 +500,6 @@ class DemoRepository implements Repository {
 
   @override
   Future<void> saveProduct(String storeId, Product p) async {
-    if (_isStaff) throw Exception('message: 只有老闆或店長可以修改品項,');
     final i = _products.indexWhere((x) => x.id == p.id);
     final np = Product(p.id.isEmpty ? 'p${_seq++}' : p.id, p.name, p.category, p.unit, parLevel: p.parLevel);
     if (i < 0) {
@@ -512,7 +511,6 @@ class DemoRepository implements Repository {
 
   @override
   Future<void> deactivateProduct(String productId) async {
-    if (_isStaff) throw Exception('message: 只有老闆或店長可以停用品項,');
     _products.removeWhere((p) => p.id == productId);
   }
 

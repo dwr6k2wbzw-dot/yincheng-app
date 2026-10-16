@@ -277,9 +277,10 @@ class _StockCountScreenState extends State<StockCountScreen> {
       groups.putIfAbsent(p.category, () => []).add(p);
     }
     return PopScope(
-      canPop: _done.isEmpty || _saving,
+      // 儲存中不能離開（Codex 審查：避免伺服器已存但畫面沒更新、重複盤點）
+      canPop: _done.isEmpty && !_saving,
       onPopInvokedWithResult: (didPop, _) async {
-        if (didPop) return;
+        if (didPop || _saving) return;
         final leave = await showDialog<bool>(
           context: context,
           builder: (c) => AlertDialog(

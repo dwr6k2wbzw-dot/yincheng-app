@@ -896,19 +896,28 @@ class SupabaseRepository implements Repository {
 
   @override
   Future<Map<String, StockLevel>> latestStock(String storeId) async {
-    final rows = await _db
-        .from('stock_counts')
-        .select('biz_date, counted_at, status, stock_count_lines(product_id, qty)')
-        .eq('store_id', storeId)
-        .inFilter('status', ['submitted', 'approved'])
-        .order('counted_at', ascending: false)
-        .limit(60);
+    // 可以只盤一部分，所以要一路往前找，直到每個使用中的品項都找到最近一次（Codex 審查）
+    final active = (await _db.from('products').select('id').eq('store_id', storeId).eq('active', true))
+        .map((r) => r['id'] as String)
+        .toSet();
     final out = <String, StockLevel>{};
-    for (final c in rows) {
-      final d = DateTime.parse(c['biz_date'] as String);
-      for (final l in (c['stock_count_lines'] as List? ?? const [])) {
-        out.putIfAbsent(l['product_id'] as String, () => StockLevel(toDouble(l['qty']), d));
+    const page = 60;
+    for (var from = 0; from < page * 50; from += page) {
+      final rows = await _db
+          .from('stock_counts')
+          .select('biz_date, counted_at, status, stock_count_lines(product_id, qty)')
+          .eq('store_id', storeId)
+          .inFilter('status', ['submitted', 'approved'])
+          .order('counted_at', ascending: false)
+          .order('id')
+          .range(from, from + page - 1);
+      for (final c in rows) {
+        final d = DateTime.parse(c['biz_date'] as String);
+        for (final l in (c['stock_count_lines'] as List? ?? const [])) {
+          out.putIfAbsent(l['product_id'] as String, () => StockLevel(toDouble(l['qty']), d));
+        }
       }
+      if (rows.length < page || active.every(out.containsKey)) break;
     }
     return out;
   }
