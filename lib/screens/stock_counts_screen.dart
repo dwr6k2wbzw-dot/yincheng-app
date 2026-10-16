@@ -471,7 +471,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   late final _name = TextEditingController(text: widget.product?.name ?? '');
   late final _unit = TextEditingController(text: widget.product?.unit ?? '瓶');
   late final _par = TextEditingController(text: widget.product?.parLevel == null ? '' : fmtQty(widget.product!.parLevel!));
-  late String _cat = stockCategories.contains(widget.product?.category) ? widget.product!.category : '酒水';
+  // 舊類別（例如「水果」）保留原本的，除非使用者自己改（Codex 審查）
+  late String _cat = widget.product?.category ?? '酒水';
   bool _saving = false;
 
   Future<void> _save() async {
@@ -527,7 +528,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           Text('類別', style: TextStyle(color: AppColors.muted)),
           const SizedBox(height: 6),
           Wrap(spacing: 8, children: [
-            for (final c in stockCategories)
+            for (final c in [...stockCategories, if (!stockCategories.contains(widget.product?.category ?? '酒水')) widget.product!.category])
               ChoiceChip(label: Text(c), selected: _cat == c, onSelected: (_) => setState(() => _cat = c)),
           ]),
           const SizedBox(height: 14),

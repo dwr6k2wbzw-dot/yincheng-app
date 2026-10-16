@@ -481,7 +481,8 @@ class DemoRepository implements Repository {
   }
 
   @override
-  Future<List<Product>> products(String storeId) async => _products;
+  Future<List<Product>> products(String storeId) async => _products.where((p) => !_inactive.contains(p.id)).toList();
+  final _inactive = <String>{}; // 停用的品項（歷史盤點照常顯示名稱）
 
   @override
   Future<List<StockCount>> stockCounts(String storeId) async => List.of(_counts.reversed);
@@ -511,7 +512,7 @@ class DemoRepository implements Repository {
 
   @override
   Future<void> deactivateProduct(String productId) async {
-    _products.removeWhere((p) => p.id == productId);
+    _inactive.add(productId);
   }
 
   @override
