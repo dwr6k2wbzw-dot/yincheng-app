@@ -214,9 +214,10 @@ class _StockCountScreenState extends State<StockCountScreen> {
   void initState() {
     super.initState();
     for (final p in widget.products) {
-      final q = widget.last[p.id]?.qty ?? 0;
-      _whole[p.id] = q.floor();
-      _tenth[p.id] = ((q - q.floor()) * 10).round().clamp(0, 9);
+      // 先四捨五入到 0.1 再拆整數與幾成（0.96 → 1.0，不會變成 0.9；Codex 審查）
+      final tenths = ((widget.last[p.id]?.qty ?? 0) * 10).round();
+      _whole[p.id] = tenths ~/ 10;
+      _tenth[p.id] = tenths % 10;
     }
   }
 
@@ -511,16 +512,21 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       ),
     );
     if (ok != true || !mounted) return;
+    setState(() => _saving = true);
     try {
       await AppScope.of(context).repo.deactivateProduct(widget.product!.id);
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
-      if (mounted) showMessage(context, friendlyError(e), error: true);
+      if (mounted) {
+        showMessage(context, friendlyError(e), error: true);
+        setState(() => _saving = false);
+      }
     }
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  // 儲存／停用進行中不能離開（Codex 審查：避免清單沒更新、重複新增）
+  Widget build(BuildContext context) => PopScope(canPop: !_saving, child: Scaffold(
         appBar: AppBar(title: Text(widget.product == null ? '新增品項' : '修改品項')),
         body: ListView(padding: const EdgeInsets.all(16), children: [
           TextField(controller: _name, maxLength: 60, decoration: const InputDecoration(labelText: '品項名稱', counterText: '')),
@@ -559,7 +565,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
             ),
           ],
         ]),
-      );
+      ));
 }
 
 /// 盤點紀錄：最近 30 次，點進去看那次盤了哪些、各多少
