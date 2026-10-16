@@ -140,6 +140,13 @@ abstract class Repository {
   Future<void> addReservation(String storeId,
       {required DateTime date, required String time, required int party, required String name, required String phone, String? email, String? note});
   Future<void> updateReservation(String id, Map<String, dynamic> values);
+  // 0052 特殊日期、熟客
+  Future<List<ReservationSpecialDay>> specialDays(String storeId, DateTime from, DateTime to);
+  Future<void> saveSpecialDay(String storeId, ReservationSpecialDay d);
+  Future<void> deleteSpecialDay(String storeId, DateTime day);
+  /// 這些電話（只取數字）在這家店的紀錄：來過幾次、未到幾次（解除那天以後）、標籤備註
+  Future<Map<String, GuestStats>> guestStats(String storeId, Set<String> phoneDigits);
+  Future<void> saveGuestProfile(String storeId, GuestProfile g, {bool resetNoshow = false});
 }
 
 /// 把資料庫的錯誤訊息轉成店員看得懂的話（資料庫守衛的訊息本來就是中文）

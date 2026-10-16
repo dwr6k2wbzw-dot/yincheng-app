@@ -12,6 +12,13 @@ class ReservationSettings {
   final int daysAhead;
   final String sameDayCutoff; // HH:mm
   final String? contactNote;
+  // 0052 每天名額（null＝不限）、大桌、每週公休、未到幾次擋線上訂位
+  final int? maxGroupsPerDay;
+  final int? maxGuestsPerDay;
+  final int largePartySize;
+  final int? maxLargePerDay;
+  final List<int> closedWeekdays; // 1＝週一 … 7＝週日
+  final int noshowBlockCount; // 0＝不擋
   const ReservationSettings({
     required this.storeId,
     required this.slug,
@@ -25,6 +32,12 @@ class ReservationSettings {
     required this.daysAhead,
     required this.sameDayCutoff,
     this.contactNote,
+    this.maxGroupsPerDay,
+    this.maxGuestsPerDay,
+    this.largePartySize = 4,
+    this.maxLargePerDay,
+    this.closedWeekdays = const [],
+    this.noshowBlockCount = 2,
   });
   factory ReservationSettings.fromRow(Map<String, dynamic> r) => ReservationSettings(
         storeId: r['store_id'] as String,
@@ -39,6 +52,22 @@ class ReservationSettings {
         daysAhead: (r['days_ahead'] as num?)?.toInt() ?? 7,
         sameDayCutoff: hm(r['same_day_cutoff']),
         contactNote: r['contact_note'] as String?,
+        maxGroupsPerDay: (r['max_groups_per_day'] as num?)?.toInt(),
+        maxGuestsPerDay: (r['max_guests_per_day'] as num?)?.toInt(),
+        largePartySize: (r['large_party_size'] as num?)?.toInt() ?? 4,
+        maxLargePerDay: (r['max_large_groups_per_day'] as num?)?.toInt(),
+        closedWeekdays: [for (final x in (r['closed_weekdays'] as List? ?? const [])) (x as num).toInt()],
+        noshowBlockCount: (r['noshow_block_count'] as num?)?.toInt() ?? 2,
+      );
+
+  /// 這一天的上限（特殊日期優先；每週公休＝不開放線上訂位）
+  DayLimits limitsFor(DateTime day, ReservationSpecialDay? sp) => DayLimits(
+        closed: sp != null ? sp.closed : closedWeekdays.contains(day.weekday),
+        note: sp?.note,
+        maxGroups: sp?.maxGroups ?? maxGroupsPerDay,
+        maxGuests: sp?.maxGuests ?? maxGuestsPerDay,
+        maxLarge: sp?.maxLarge ?? maxLargePerDay,
+        largeSize: largePartySize,
       );
 
   /// 所有時段（例：19:00、19:30 … 23:00）
@@ -112,3 +141,71 @@ int minutesOf(String hhmm) {
 
 /// 公開訂位頁網址
 String reservationPageUrl(String slug) => 'https://dwr6k2wbzw-dot.github.io/yincheng-app/book/?s=$slug';
+
+
+/// 某一天的線上訂位上限（0052）
+class DayLimits {
+  final bool closed;
+  final String? note;
+  final int? maxGroups, maxGuests, maxLarge;
+  final int largeSize;
+  const DayLimits({required this.closed, this.note, this.maxGroups, this.maxGuests, this.maxLarge, required this.largeSize});
+
+  /// 加上這一組後會超過哪些上限（空的＝沒超過）
+  List<String> overBy(List<Reservation> others, int party) {
+    final act = others.where((r) => r.active).toList();
+    final groups = act.length + 1;
+    final guests = act.fold<int>(0, (t, r) => t + r.party) + party;
+    final large = act.where((r) => r.party >= largeSize).length + (party >= largeSize ? 1 : 0);
+    return [
+      if (closed) '這天不開放線上訂位${note == null ? '' : '（$note）'}',
+      if (maxGroups != null && groups > maxGroups!) '一天最多 $maxGroups 組（加上這組是 $groups 組）',
+      if (maxGuests != null && guests > maxGuests!) '一天最多 $maxGuests 位（加上這組是 $guests 位）',
+      if (party >= largeSize && maxLarge != null && large > maxLarge!) '$largeSize 位以上一天最多 $maxLarge 組（加上這組是 $large 組）',
+    ];
+  }
+}
+
+/// 特殊日期（0052）：整天不開放，或改名額；欄位 null＝照平常
+class ReservationSpecialDay {
+  final DateTime day;
+  final bool closed;
+  final int? maxGroups, maxGuests, maxLarge;
+  final String? note;
+  const ReservationSpecialDay({required this.day, this.closed = false, this.maxGroups, this.maxGuests, this.maxLarge, this.note});
+  factory ReservationSpecialDay.fromRow(Map<String, dynamic> r) => ReservationSpecialDay(
+        day: DateTime.parse(r['day'] as String),
+        closed: r['closed'] as bool? ?? false,
+        maxGroups: (r['max_groups'] as num?)?.toInt(),
+        maxGuests: (r['max_guests'] as num?)?.toInt(),
+        maxLarge: (r['max_large'] as num?)?.toInt(),
+        note: r['note'] as String?,
+      );
+}
+
+/// 熟客資料（0052）：以電話數字對回
+class GuestProfile {
+  final String phoneDigits;
+  final List<String> tags;
+  final String? note;
+  final DateTime? noshowResetAt;
+  const GuestProfile({required this.phoneDigits, this.tags = const [], this.note, this.noshowResetAt});
+  factory GuestProfile.fromRow(Map<String, dynamic> r) => GuestProfile(
+        phoneDigits: r['phone_digits'] as String,
+        tags: [for (final t in (r['tags'] as List? ?? const [])) t as String],
+        note: r['note'] as String?,
+        noshowResetAt: r['noshow_reset_at'] == null ? null : DateTime.parse(r['noshow_reset_at'] as String).toLocal(),
+      );
+}
+
+/// 一位客人在這家店的紀錄（App 端算）：來過幾次、未到幾次（解除那天以後）
+class GuestStats {
+  final int visits;
+  final int noShows;
+  final GuestProfile? profile;
+  const GuestStats(this.visits, this.noShows, this.profile);
+}
+
+String phoneDigitsOf(String phone) => phone.replaceAll(RegExp(r'[^0-9]'), '');
+
+const guestTagPresets = ['VIP', '熟客', '吧台', '生日', '過敏', '素食', '不吃辣'];
