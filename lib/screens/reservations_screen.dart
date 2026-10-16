@@ -449,7 +449,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
         }
       }
       if (!mounted) return;
-      await _run(() => _repo.decidePartyRequest(r.id, yes), yes ? '已同意，改為 ${r.requestedParty} 位' : '已回覆不同意');
+      await _run(() => _repo.decidePartyRequest(r.id, yes, r.requestedParty!), yes ? '已同意，改為 ${r.requestedParty} 位' : '已回覆不同意');
       return;
     }
     if (v == 'guest') {

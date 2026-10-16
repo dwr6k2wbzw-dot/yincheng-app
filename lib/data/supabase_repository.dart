@@ -1097,8 +1097,8 @@ class SupabaseRepository implements Repository {
   }
 
   @override
-  Future<void> decidePartyRequest(String id, bool approve) async {
-    await _db.rpc('decide_party_request', params: {'p_id': id, 'p_approve': approve});
+  Future<void> decidePartyRequest(String id, bool approve, int expectedParty) async {
+    await _db.rpc('decide_party_request', params: {'p_id': id, 'p_approve': approve, 'p_expected': expectedParty});
   }
 
   @override

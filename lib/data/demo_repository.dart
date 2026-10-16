@@ -624,7 +624,7 @@ class DemoRepository implements Repository {
   }
 
   @override
-  Future<void> decidePartyRequest(String id, bool approve) async {
+  Future<void> decidePartyRequest(String id, bool approve, int expectedParty) async {
     for (final list in _demoRes.values) {
       final i = list.indexWhere((r) => r.id == id);
       if (i < 0) continue;
