@@ -585,6 +585,29 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
   late DateTime _date = widget.existing?.date ?? widget.day;
   late String? _time = widget.existing?.time;
   late int _party = widget.existing?.party ?? 2;
+  // 網路訂位那筆最多 50 位（資料庫限制）；電話訂位不設上限（防打錯 9999）
+  int get _maxParty => widget.existing?.source == 'web' ? 50 : 9999;
+
+  Future<void> _typeParty() async {
+    final c = TextEditingController(text: '$_party');
+    final v = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('人數'),
+        content: TextField(controller: c, autofocus: true, keyboardType: TextInputType.number, decoration: const InputDecoration(suffixText: '位')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, int.tryParse(c.text.trim())), child: const Text('確定')),
+        ],
+      ),
+    );
+    if (v == null || !mounted) return;
+    if (v < 1 || v > _maxParty) {
+      showMessage(context, '人數請填 1～$_maxParty', error: true);
+      return;
+    }
+    setState(() => _party = v);
+  }
   late final _name = TextEditingController(text: widget.existing == null ? '' : stripTitle(widget.existing!.name));
   // 先生／小姐（老闆 2026-10-15），存檔時接在姓名後面
   late String? _title = reservationTitles.where((t) => (widget.existing?.name ?? '').trim().endsWith(t)).firstOrNull;
@@ -735,8 +758,16 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
             Text('人數', style: TextStyle(color: AppColors.muted)),
             const Spacer(),
             IconButton(onPressed: _party > 1 ? () => setState(() => _party--) : null, icon: const Icon(Icons.remove_circle_outline)),
-            Text('$_party', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-            IconButton(onPressed: _party < 50 ? () => setState(() => _party++) : null, icon: const Icon(Icons.add_circle_outline)),
+            // 點數字可以直接輸入（電話訂位人數不設上限，老闆 2026-10-17）
+            InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: _typeParty,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                child: Text('$_party', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, decoration: TextDecoration.underline)),
+              ),
+            ),
+            IconButton(onPressed: _party < _maxParty ? () => setState(() => _party++) : null, icon: const Icon(Icons.add_circle_outline)),
           ]),
           TextField(
             controller: _name,
