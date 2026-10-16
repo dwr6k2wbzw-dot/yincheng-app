@@ -132,7 +132,7 @@ class Reservation {
         time: hm(r['slot_time']),
         party: (r['party_size'] as num).toInt(),
         name: r['guest_name'] as String,
-        phone: r['phone'] as String,
+        phone: r['phone'] as String? ?? '', // 0057 電話訂位可以不留電話（空字串）
         email: r['email'] as String?,
         note: r['note'] as String?,
         status: r['status'] as String,

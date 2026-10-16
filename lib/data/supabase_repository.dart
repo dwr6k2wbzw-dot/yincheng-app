@@ -1025,7 +1025,7 @@ class SupabaseRepository implements Repository {
       'slot_time': time,
       'party_size': party,
       'guest_name': name,
-      'phone': phone,
+      'phone': phone.isEmpty ? null : phone, // 0057 可以不留電話
       if (email != null && email.isNotEmpty) 'email': email,
       if (note != null && note.isNotEmpty) 'note': note,
       'source': 'app',
