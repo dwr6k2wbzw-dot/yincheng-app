@@ -19,6 +19,10 @@ class ReservationSettings {
   final int? maxLargePerDay;
   final List<int> closedWeekdays; // 1＝週一 … 7＝週日
   final int noshowBlockCount; // 0＝不擋
+  // 0054 自訂時段清單（空的＝照第一～最後每 N 分鐘）、地址、電話
+  final List<String> slotTimes;
+  final String? address;
+  final String? phone;
   const ReservationSettings({
     required this.storeId,
     required this.slug,
@@ -38,6 +42,9 @@ class ReservationSettings {
     this.maxLargePerDay,
     this.closedWeekdays = const [],
     this.noshowBlockCount = 2,
+    this.slotTimes = const [],
+    this.address,
+    this.phone,
   });
   factory ReservationSettings.fromRow(Map<String, dynamic> r) => ReservationSettings(
         storeId: r['store_id'] as String,
@@ -58,6 +65,9 @@ class ReservationSettings {
         maxLargePerDay: (r['max_large_groups_per_day'] as num?)?.toInt(),
         closedWeekdays: [for (final x in (r['closed_weekdays'] as List? ?? const [])) (x as num).toInt()],
         noshowBlockCount: (r['noshow_block_count'] as num?)?.toInt() ?? 2,
+        slotTimes: [for (final x in (r['slot_times'] as List? ?? const [])) hm(x)],
+        address: r['address'] as String?,
+        phone: r['phone'] as String?,
       );
 
   /// 這一天的上限（特殊日期優先；每週公休＝不開放線上訂位）
@@ -72,6 +82,7 @@ class ReservationSettings {
 
   /// 所有時段（例：19:00、19:30 … 23:00）
   List<String> get slots {
+    if (slotTimes.isNotEmpty) return ([...slotTimes]..sort());
     final out = <String>[];
     var m = minutesOf(firstSlot);
     final end = minutesOf(lastSlot);

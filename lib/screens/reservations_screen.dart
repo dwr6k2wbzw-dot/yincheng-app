@@ -738,8 +738,10 @@ class ReservationSettingsScreen extends StatefulWidget {
 
 class _ReservationSettingsScreenState extends State<ReservationSettingsScreen> {
   late bool _enabled = widget.settings.enabled;
-  late String _first = widget.settings.firstSlot;
-  late String _last = widget.settings.lastSlot;
+  // 0054 時段自由增刪（老闆 2026-10-16）
+  late final List<String> _slots = [...widget.settings.slots];
+  late final _address = TextEditingController(text: widget.settings.address ?? '');
+  late final _phone = TextEditingController(text: widget.settings.phone ?? '');
   late String _cutoff = widget.settings.sameDayCutoff;
   late final _name = TextEditingController(text: widget.settings.displayName);
   // 0052 每天名額（空白＝不限）、大桌、每週公休、未到擋線上訂位
@@ -753,6 +755,28 @@ class _ReservationSettingsScreenState extends State<ReservationSettingsScreen> {
   late final _days = TextEditingController(text: '${widget.settings.daysAhead}');
   late final _contact = TextEditingController(text: widget.settings.contactNote ?? '');
   bool _saving = false;
+
+  Future<void> _addSlot() async {
+    final last = _slots.isEmpty ? '19:00' : _slots.last;
+    final t = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: minutesOf(last) ~/ 60, minute: minutesOf(last) % 60),
+      helpText: '新增訂位時段',
+    );
+    if (t == null || !mounted) return;
+    final v = '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+    if (_slots.contains(v)) {
+      showMessage(context, '已經有 $v 這個時段');
+      return;
+    }
+    if (_slots.length >= 48) {
+      showMessage(context, '時段最多 48 個', error: true);
+      return;
+    }
+    setState(() => _slots
+      ..add(v)
+      ..sort());
+  }
 
   Future<void> _pick(String current, void Function(String) set) async {
     final t = await showTimePicker(
@@ -797,8 +821,8 @@ class _ReservationSettingsScreenState extends State<ReservationSettingsScreen> {
       showMessage(context, '可訂天數請填 1～60', error: true);
       return;
     }
-    if (minutesOf(_first) > minutesOf(_last)) {
-      showMessage(context, '第一個時段要早於最後一個時段', error: true);
+    if (_slots.isEmpty) {
+      showMessage(context, '至少要有一個訂位時段', error: true);
       return;
     }
     setState(() => _saving = true);
@@ -806,8 +830,9 @@ class _ReservationSettingsScreenState extends State<ReservationSettingsScreen> {
       await AppScope.of(context).repo.saveReservationSettings(widget.membership.storeId, {
         'enabled': _enabled,
         'display_name': _name.text.trim(),
-        'first_slot': _first,
-        'last_slot': _last,
+        'slot_times': _slots,
+        'address': _address.text.trim().isEmpty ? null : _address.text.trim(),
+        'phone': _phone.text.trim().isEmpty ? null : _phone.text.trim(),
         'same_day_cutoff': _cutoff,
         'max_groups_per_day': opt(_groups),
         'max_guests_per_day': opt(_guestsDay),
@@ -844,17 +869,30 @@ class _ReservationSettingsScreenState extends State<ReservationSettingsScreen> {
           ),
           TextField(controller: _name, maxLength: 40, decoration: const InputDecoration(labelText: '訂位頁顯示的店名', counterText: '')),
           const SizedBox(height: 8),
-          ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('第一個時段'),
-              trailing: Text(_first, style: const TextStyle(fontSize: 16)),
-              onTap: () => _pick(_first, (v) => _first = v)),
-          ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('最後一個時段'),
-              subtitle: Text('每 ${widget.settings.slotMinutes} 分鐘一個時段', style: const TextStyle(fontSize: 12)),
-              trailing: Text(_last, style: const TextStyle(fontSize: 16)),
-              onTap: () => _pick(_last, (v) => _last = v)),
+          TextField(controller: _address, maxLength: 200, maxLines: 2, minLines: 1,
+              decoration: const InputDecoration(labelText: '地址（訂位頁、確認信顯示，可點開地圖）', counterText: '')),
+          const SizedBox(height: 8),
+          TextField(controller: _phone, maxLength: 30, keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(labelText: '電話（訂位頁可直接撥打）', counterText: '')),
+          const SizedBox(height: 16),
+          Row(children: [
+            Expanded(child: Text('訂位時段（點 ✕ 刪除）', style: TextStyle(color: AppColors.muted, fontSize: 13))),
+            TextButton.icon(onPressed: _addSlot, icon: const Icon(Icons.add, size: 18), label: const Text('新增時段')),
+          ]),
+          Wrap(spacing: 6, runSpacing: 6, children: [
+            for (final t in _slots)
+              InputChip(
+                label: Text(t),
+                onDeleted: () => setState(() => _slots.remove(t)),
+                deleteButtonTooltipMessage: '刪除 $t',
+              ),
+          ]),
+          if (_slots.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text('至少要有一個時段', style: TextStyle(color: AppColors.bad, fontSize: 12)),
+            ),
+          const SizedBox(height: 8),
           ListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('當天訂位截止'),
@@ -906,7 +944,7 @@ class _ReservationSettingsScreenState extends State<ReservationSettingsScreen> {
               controller: _contact,
               maxLength: 300,
               maxLines: 3,
-              decoration: const InputDecoration(labelText: '店家資訊（地址、電話等，會顯示在訂位頁和確認信）')),
+              decoration: const InputDecoration(labelText: '其他店家資訊（例如注意事項，會顯示在訂位頁和確認信）')),
           const SizedBox(height: 24),
           FilledButton(
             onPressed: _saving ? null : _save,

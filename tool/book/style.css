@@ -42,3 +42,29 @@ a { color:var(--gold); }
 .brand.hero::before { content:""; position:absolute; inset:0; background:linear-gradient(to bottom, rgba(10,10,9,.50) 0%, rgba(10,10,9,.68) 55%, rgba(10,10,9,.92) 85%, var(--bg) 100%); }
 .brand.hero > * { position:relative; }
 .brand.hero .sub { color:#CFC8BA; }
+
+/* 店家地址電話（0054） */
+.info { padding:14px 16px; }
+.irow { display:flex; gap:12px; align-items:flex-start; font-size:14px; line-height:1.5; }
+.irow + .irow { margin-top:8px; }
+.ik { color:var(--gold); letter-spacing:.2em; font-size:12px; padding-top:2px; flex:none; }
+.irow a { color:var(--ink); text-decoration:underline; text-decoration-color:var(--gold); text-underline-offset:3px; }
+.irow small { display:block; color:var(--muted); font-size:12px; }
+/* 月曆（0054） */
+.dsel { margin:0 0 10px; padding:12px 14px; border:1px solid var(--line); border-radius:12px; background:var(--card2); font-size:16px; font-variant-numeric:tabular-nums; }
+.calhead { display:flex; align-items:center; justify-content:space-between; margin:4px 0 8px; }
+.calhead b { font-size:17px; font-weight:600; letter-spacing:.05em; }
+.calhead .nav { width:40px; height:40px; border:0; background:transparent; color:var(--gold); font-size:26px; line-height:1; cursor:pointer; border-radius:10px; }
+.calhead .nav:disabled { opacity:.2; cursor:default; }
+.calgrid { display:grid; grid-template-columns:repeat(7, minmax(0, 1fr)); gap:6px; text-align:center; }
+.wk { color:var(--muted); font-size:13px; padding:4px 0 6px; }
+.cd { position:relative; aspect-ratio:1/1; display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:16px; border-radius:10px; font-variant-numeric:tabular-nums; }
+span.cd.off { color:#4A463F; }
+button.cd { border:1px solid var(--line); background:var(--card2); color:var(--ink); font:inherit; font-size:16px; cursor:pointer; padding:0; }
+button.cd:not(:disabled):hover { border-color:var(--gold); }
+button.cd.on { background:var(--gold); border-color:var(--gold); color:var(--accent-ink); font-weight:700; }
+button.cd:disabled { opacity:.35; cursor:not-allowed; }
+.cd small { font-size:9px; line-height:1.1; color:var(--muted); max-width:100%; overflow:hidden; white-space:nowrap; }
+button.cd.on small { color:var(--accent-ink); }
+.cd.today::before { content:""; position:absolute; top:5px; left:50%; width:10px; height:2px; margin-left:-5px; border-radius:1px; background:var(--gold); }
+button.cd.on.today::before { background:var(--accent-ink); }
