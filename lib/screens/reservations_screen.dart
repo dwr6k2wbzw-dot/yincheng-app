@@ -551,28 +551,6 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
     setState(() => _time = '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}');
   }
 
-  Future<void> _addSlot() async {
-    final last = _slots.isEmpty ? '19:00' : _slots.last;
-    final t = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay(hour: minutesOf(last) ~/ 60, minute: minutesOf(last) % 60),
-      helpText: '新增訂位時段',
-    );
-    if (t == null || !mounted) return;
-    final v = '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
-    if (_slots.contains(v)) {
-      showMessage(context, '已經有 $v 這個時段');
-      return;
-    }
-    if (_slots.length >= 48) {
-      showMessage(context, '時段最多 48 個', error: true);
-      return;
-    }
-    setState(() => _slots
-      ..add(v)
-      ..sort());
-  }
-
   Future<void> _save() async {
     // 先把表單內容固定下來，檢查名額期間就算有人改欄位，也不會混用新舊值（Codex 審查）
     final date = _date;
@@ -777,6 +755,28 @@ class _ReservationSettingsScreenState extends State<ReservationSettingsScreen> {
   late final _days = TextEditingController(text: '${widget.settings.daysAhead}');
   late final _contact = TextEditingController(text: widget.settings.contactNote ?? '');
   bool _saving = false;
+
+  Future<void> _addSlot() async {
+    final last = _slots.isEmpty ? '19:00' : _slots.last;
+    final t = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: minutesOf(last) ~/ 60, minute: minutesOf(last) % 60),
+      helpText: '新增訂位時段',
+    );
+    if (t == null || !mounted) return;
+    final v = '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+    if (_slots.contains(v)) {
+      showMessage(context, '已經有 $v 這個時段');
+      return;
+    }
+    if (_slots.length >= 48) {
+      showMessage(context, '時段最多 48 個', error: true);
+      return;
+    }
+    setState(() => _slots
+      ..add(v)
+      ..sort());
+  }
 
   Future<void> _pick(String current, void Function(String) set) async {
     final t = await showTimePicker(
