@@ -19,7 +19,7 @@
   </header>
   <div id="app" hidden>
     <div class="card"><p class="label">1. 日期</p><div class="chips" id="dates"></div></div>
-    <div class="card"><p class="label">2. 時間</p><div class="grid" id="slots"></div><p class="note" id="dayInfo"></p></div>
+    <div class="card"><p class="label">2. 時間</p><div class="grid" id="slots"></div><p class="note" id="dayInfo" style="white-space:pre-line"></p></div>
     <div class="card"><p class="label">3. 人數</p>
       <div class="stepper"><button type="button" id="minus" aria-label="減少">−</button><b id="party">2</b><button type="button" id="plus" aria-label="增加">＋</button></div>
       <p class="note" id="partyNote"></p>
@@ -62,7 +62,7 @@
     party = Math.min(party, info.max_party);
     $('partyNote').textContent = '線上訂位一組最多 ' + info.max_party + ' 位；更多人數或包場請直接聯絡店家。';
     if (!info.days.length) { $('contact').textContent += '\n目前沒有可以訂的日期。'; }
-    const open = info.days.filter(d => !d.closed && d.groups_left !== 0 && d.guests_left !== 0);
+    const open = info.days.filter(d => partyOk(d, party));  // 預設選「現在人數訂得到」的第一天（Codex 審查）
     if (!day || !info.days.some(d => d.date === day)) day = open.length ? open[0].date : (info.days.length ? info.days[0].date : null);
     render();
   }
@@ -79,7 +79,7 @@
     $('dates').innerHTML = info.days.map(d => {
       const full = !d.closed && (d.groups_left === 0 || d.guests_left === 0);
       const off = d.closed || full;
-      const tag = d.closed ? (d.note || '公休') : full ? '已滿' : '';
+      const tag = d.closed ? (d.note || '公休') : full ? '已滿' : (d.note || '');
       return '<button type="button" class="chip' + (d.date === day ? ' on' : '') + '" data-d="' + d.date + '"' + (off ? ' disabled' : '') + '>' + YC.dateLabel(d.date) + (tag ? '<small>' + YC.esc(tag) + '</small>' : '') + '</button>';
     }).join('');
     const cur = info.days.find(d => d.date === day);
@@ -95,6 +95,8 @@
       else if (cur.large_left != null && party >= large() && cur.large_left < 1) msg = '這天 ' + large() + ' 位以上的訂位已滿，請選別天或直接來電。';
       else if (cur.guests_left != null && cur.guests_left <= 6) msg = '這天還剩 ' + cur.guests_left + ' 位。';
     }
+    // 特殊日期有寫說明（沒公休、只改名額的日子）也顯示給客人看（Codex 審查）
+    if (cur && !cur.closed && cur.note) msg = cur.note + (msg ? '\n' + msg : '');
     $('dayInfo').textContent = msg;
   }
   $('dates').onclick = (e) => { const b = e.target.closest('button[data-d]'); if (b && !b.disabled) { day = b.dataset.d; time = null; render(); } };
