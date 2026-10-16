@@ -1006,7 +1006,7 @@ class SupabaseRepository implements Repository {
     final rows = await _db
         .from('reservations')
         .select('id, slot_date, slot_time, party_size, guest_name, phone, email, note, status, source, email_error, created_at, '
-            'requested_party, party_request_status')
+            'requested_party, party_request_status, lang')
         .eq('store_id', storeId)
         .gte('slot_date', _day.format(from))
         .lte('slot_date', _day.format(to))
