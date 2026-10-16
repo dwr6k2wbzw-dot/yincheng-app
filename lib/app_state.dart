@@ -20,6 +20,31 @@ class AppState extends ChangeNotifier {
   String? inviteResult; // 自動使用邀請碼的結果（顯示一次）
 
   Future<void> loadMemberships() async {
+    // 先用手機裡存的上次店家清單直接進主畫面，背景再向資料庫確認（老闆 2026-10-16：打開太慢）
+    final cached = repo.peekMemberships();
+    if (cached != null && cached.isNotEmpty && memberships.isEmpty) {
+      memberships = cached;
+      String? lastId;
+      try {
+        lastId = (await SharedPreferences.getInstance()).getString('last_store_id');
+      } catch (_) {}
+      current = cached.where((m) => m.storeId == lastId).firstOrNull ?? cached.first;
+      markLoad('用上次的店家清單');
+      notifyListeners();
+      try {
+        await _claimPendingCode();
+        final fresh = await repo.myMemberships();
+        memberships = fresh;
+        final keep = fresh.where((m) => m.storeId == current?.storeId).firstOrNull;
+        // 身分或店家有變才換掉目前店家（避免畫面重來）
+        if (keep == null || keep.role != current?.role) current = keep ?? (fresh.isNotEmpty ? fresh.first : null);
+        markLoad('讀到帳號與店家');
+        notifyListeners();
+      } catch (_) {
+        // 沒網路：先用上次的
+      }
+      return;
+    }
     loading = true;
     error = null;
     notifyListeners();

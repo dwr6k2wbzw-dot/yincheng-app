@@ -233,6 +233,24 @@ class DemoRepository implements Repository {
     _auth.add(false);
   }
 
+  // 示範模式不存上次資料
+  @override
+  List<Membership>? peekMemberships() => null;
+  @override
+  MonthlySummary? peekMonthlySummary(String storeId, DateTime month) => null;
+  @override
+  List<DailyRevenue>? peekDailyRevenueBetween(String storeId, DateTime from, DateTime to) => null;
+  @override
+  FixedCosts? peekFixedCosts(String storeId, DateTime month) => null;
+  @override
+  List<ExpenseItem>? peekExpenseItems(String storeId, DateTime month) => null;
+  @override
+  List<RecurringExpenseItem>? peekRecurringExpenseItems(String storeId) => null;
+  @override
+  double? peekCardFeeRate(String storeId) => null;
+  @override
+  (double?,)? peekPettyCashBalance(String storeId) => null;
+
   @override
   Future<List<Membership>> myMemberships() async => [
         Membership(storeId: 'yc', storeName: '隱城', role: _isStaff ? Role.staff : Role.owner, displayName: '示範'),

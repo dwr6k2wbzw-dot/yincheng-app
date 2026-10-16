@@ -9,6 +9,7 @@ import 'app_state.dart';
 import 'config.dart';
 import 'data/demo_repository.dart';
 import 'data/repository.dart';
+import 'data/row_cache.dart';
 import 'data/supabase_repository.dart';
 import 'screens/home_shell.dart';
 import 'screens/login_screen.dart';
@@ -45,6 +46,7 @@ Future<void> main() async {
           .timeout(const Duration(seconds: 20));
       repo = SupabaseRepository();
     }
+    await RowCache.load(); // 上次讀到的資料（先顯示、背景更新）
     _ycStage = 'Supabase 完成，開始畫畫面';
     markLoad('連上資料庫');
     runApp(YinchengApp(state: AppState(repo)));

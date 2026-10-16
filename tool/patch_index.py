@@ -46,8 +46,10 @@ window.ycLoadReport = function () {
 s = re.sub(r'<script id="yc-timing">.*?</script>', "", s, flags=re.S)
 s = s.replace("</head>", timing + "\n</head>", 1)
 
-boot = r"""<div id="boot" style="position:fixed;inset:0;z-index:-1;display:flex;align-items:center;justify-content:center;
-padding:24px;text-align:center;white-space:pre-wrap;color:#9AA0AE;font:15px/1.6 -apple-system,sans-serif">載入中…</div>
+boot = r"""<div id="boot" style="position:fixed;inset:0;z-index:-1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;
+padding:24px;text-align:center;white-space:pre-wrap;color:#D3B16E;background:#0A0A09;font:13px/1.6 -apple-system,sans-serif;letter-spacing:.3em">
+<div style="display:flex;align-items:flex-end;gap:26px"><img src="assets/assets/logos/yincheng.png" alt="" style="height:84px">
+<img src="assets/assets/logos/xcw.png" alt="" style="height:68px"></div><div>載入中</div></div>
 <script id="boot-js">
 (function () {
   var t0 = Date.now(), rendered = false, failed = [];
@@ -85,7 +87,7 @@ padding:24px;text-align:center;white-space:pre-wrap;color:#9AA0AE;font:15px/1.6 
     var full = msg + (failed.length ? '\n\n下載失敗：\n' + failed.slice(-3).join('\n') : '') + res();
     if (rendered) { note(full); return; }
     var b = document.getElementById('boot'); if (!b) return;
-    b.style.zIndex = '9999'; b.style.background = '#0F1115'; b.style.color = '#FF5C6C'; b.style.fontSize = '12px'; b.style.textAlign = 'left';
+    b.style.zIndex = '9999'; b.style.background = '#0A0A09'; b.style.color = '#FF5C6C'; b.style.letterSpacing = '0'; b.style.fontSize = '12px'; b.style.textAlign = 'left';
     b.textContent = '啟動失敗（請截圖給 Claude）\n\n' + full + '\n\n已等待 ' + Math.round((Date.now() - t0) / 1000) + ' 秒';
   }
   window.addEventListener('flutter-first-frame', function () {
@@ -102,7 +104,18 @@ padding:24px;text-align:center;white-space:pre-wrap;color:#9AA0AE;font:15px/1.6 
   }, 30000);
 })();
 </script>"""
-s = s.replace("<body>", "<body style=\"background:#0D0D0C\">\n" + boot, 1)
+s = s.replace("<body>", "<body style=\"background:#0A0A09\">\n" + boot, 1)
+
+# 把 App 存在手機裡（tool/sw.js，部署時複製並換上版本號；老闆 2026-10-16）
+s = re.sub(r'<script id="yc-sw">.*?</script>', "", s, flags=re.S)
+sw = r"""<script id="yc-sw">
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).catch(function () {});
+  });
+}
+</script>"""
+s = s.replace("</head>", sw + "\n</head>", 1)
 
 # 拍照辨識送貨單（免費文字辨識 Tesseract.js，在手機上執行；辨識程式與語言資料第一次使用時才下載）
 s = re.sub(r'<script id="yc-scan">.*?</script>', "", s, flags=re.S)
