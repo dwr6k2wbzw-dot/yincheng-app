@@ -73,3 +73,6 @@ button.cd.on.today::before { background:var(--accent-ink); }
 .sep { height:1px; background:var(--line); margin:18px 0; }
 .primary.ghost { background:transparent; color:var(--gold); border:1px solid var(--gold); }
 .primary.danger { background:transparent; color:var(--bad); border:1px solid rgba(229,138,122,.5); }
+
+/* 保留 15 分鐘提醒（老闆 2026-10-17） */
+.hold { margin:14px 0 0; padding:10px 12px; border-left:3px solid var(--gold); background:var(--gold-soft); border-radius:6px; font-size:14px; line-height:1.6; }
