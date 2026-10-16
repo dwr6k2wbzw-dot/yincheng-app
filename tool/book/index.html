@@ -81,7 +81,7 @@
       rows.push('<div class="irow"><span class="ik">電話</span><span><a href="tel:' + YC.esc(info.phone.replace(/[^0-9+]/g, '')) + '">' + YC.esc(info.phone) + '</a></span></div>');
     }
     // 低消（老闆 2026-10-17）
-    const minSpend = { yincheng: '平日一杯飲品，國定假日前夕 800 元', xcw: '平日一杯飲品，國定假日前夕 600 元' }[slug];
+    const minSpend = { yincheng: '平日每人一杯飲品，國定假日前夕每人 800 元', xcw: '平日每人一杯飲品，國定假日前夕每人 600 元' }[slug];
     if (minSpend) rows.push('<div class="irow"><span class="ik">低消</span><span>' + minSpend + '</span></div>');
     $('info').innerHTML = rows.join('');
     $('info').hidden = !rows.length;
