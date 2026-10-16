@@ -10,7 +10,7 @@ import '../widgets/common.dart';
 
 /// 盤點（老闆 2026-10-16 重新設計）：
 /// - 目的：只看庫存、低於安全量就提醒（不算成本）
-/// - 品項由老闆／店長在 App 新增（名稱、類別、單位、安全量）
+/// - 品項由老闆／店長／正職在 App 新增（名稱、類別、單位、安全量）
 /// - 酒類開過的：整瓶＋剩幾成（0.1 為單位）
 /// - 誰盤都直接算數：盤完直接更新庫存，不用核准
 const stockCategories = ['酒水', '餐食', '雜項'];
@@ -87,7 +87,8 @@ class _StockCountsScreenState extends State<StockCountsScreen> {
       );
 
   Widget _body(List<Product> products, Map<String, StockLevel> last) {
-    final isMgr = widget.membership.isManager;
+    // 品項管理：老闆、店長、正職（0051，老闆 2026-10-16）
+    final isMgr = widget.membership.isManager || widget.membership.role == Role.staff;
     final low = products.where((p) => _isLow(p, last[p.id])).toList();
     final cats = ['全部', ...stockCategories, ...{for (final p in products) p.category}.where((c) => !stockCategories.contains(c))];
     final shown = products.where((p) => _cat == '全部' || p.category == _cat).toList();
@@ -114,7 +115,7 @@ class _StockCountsScreenState extends State<StockCountsScreen> {
             Text(
                 isMgr
                     ? '先到「品項管理」新增要盤點的東西（名稱、類別、單位、安全量），就可以開始盤點。'
-                    : '請老闆或店長先到「品項管理」新增要盤點的品項。',
+                    : '請老闆、店長或正職先到「品項管理」新增要盤點的品項。',
                 style: TextStyle(color: AppColors.muted, height: 1.5)),
           ]),
         )
@@ -379,7 +380,7 @@ class _StockCountScreenState extends State<StockCountScreen> {
   }
 }
 
-/// 品項管理（老闆／店長）：新增、修改、停用
+/// 品項管理（老闆／店長／正職，0051）：新增、修改、停用
 class ProductsScreen extends StatefulWidget {
   const ProductsScreen({super.key, required this.membership});
   final Membership membership;

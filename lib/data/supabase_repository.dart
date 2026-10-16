@@ -920,14 +920,14 @@ class SupabaseRepository implements Repository {
       await _db.from('products').insert({...row, 'store_id': storeId});
     } else {
       final r = await _db.from('products').update(row).eq('id', p.id).select('id');
-      if (r.isEmpty) throw Exception('message: 只有老闆或店長可以修改品項,');
+      if (r.isEmpty) throw Exception('message: 只有老闆、店長或正職可以修改品項,');
     }
   }
 
   @override
   Future<void> deactivateProduct(String productId) async {
     final r = await _db.from('products').update({'active': false}).eq('id', productId).select('id');
-    if (r.isEmpty) throw Exception('message: 只有老闆或店長可以停用品項,');
+    if (r.isEmpty) throw Exception('message: 只有老闆、店長或正職可以停用品項,');
   }
 
   @override
