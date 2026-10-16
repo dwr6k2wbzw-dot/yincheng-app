@@ -48,6 +48,8 @@
   const $ = (id) => document.getElementById(id);
   const T = (k, ...a) => YCI.t(k, ...a);
   YCI.apply(); YCI.mountSwitcher();
+  // 英文／日文訂位可以不填電話（中文仍必填）
+  if (YCI.lang !== 'zh') $('phone').required = false;
   let info = null, day = null, time = null, party = 2;
   // 店家 logo（依網址 ?s=）
   const logos = { yincheng: 'logo-yincheng.png', xcw: 'logo-xcw.png' };
@@ -181,7 +183,7 @@
     try {
       const r = await YC.rpc('book_reservation', {
         p_slug: slug, p_date: day, p_time: time, p_party: party,
-        p_name: fullName(), p_phone: $('phone').value, p_email: $('email').value, p_note: $('note').value || null, p_lang: YCI.lang,
+        p_name: fullName(), p_phone: $('phone').value.trim() || null, p_email: $('email').value, p_note: $('note').value || null, p_lang: YCI.lang,
       });
       $('app').hidden = true;
       const done = $('done'); done.hidden = false;
