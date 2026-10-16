@@ -405,9 +405,11 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
   Future<List<Product>> _load() async => _sorted(await AppScope.of(context).repo.products(widget.membership.storeId));
 
-  Future<void> _edit(Product? p) async {
-    final saved = await Navigator.of(context)
-        .push<bool>(MaterialPageRoute(builder: (_) => ProductFormScreen(membership: widget.membership, product: p)));
+  List<String> _cats = stockCategories;
+
+  Future<void> _edit(Product? p, {String? category}) async {
+    final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(
+        builder: (_) => ProductFormScreen(membership: widget.membership, product: p, category: category, categories: _cats)));
     if (saved == true && mounted) {
       _changed = true;
       setState(() => _future = _load());
@@ -433,11 +435,32 @@ class _ProductsScreenState extends State<ProductsScreen> {
               if (snap.hasError) return ErrorView(message: friendlyError(snap.error!));
               if (!snap.hasData) return const Center(child: CircularProgressIndicator());
               final list = snap.data!;
-              if (list.isEmpty) {
-                return Center(child: Text('還沒有品項，按右下角新增', style: TextStyle(color: AppColors.muted)));
+              // 依類別分組（老闆 2026-10-16）：酒水、餐食、雜項一定出現，加上店裡已有的其他類別（例如副材料、水果）
+              final groups = <String, List<Product>>{for (final c in stockCategories) c: []};
+              for (final p in list) {
+                groups.putIfAbsent(p.category, () => []).add(p);
               }
+              _cats = groups.keys.toList();
               return ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 96), children: [
-                for (final p in list)
+                for (final cat in groups.keys) ...[
+                  const SizedBox(height: 8),
+                  Row(children: [
+                    Expanded(
+                      child: Text('$cat・${groups[cat]!.length} 項',
+                          style: TextStyle(color: AppColors.primary, fontSize: 13, letterSpacing: 2)),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => _edit(null, category: cat),
+                      icon: const Icon(Icons.add, size: 18),
+                      label: Text('新增$cat'),
+                    ),
+                  ]),
+                  if (groups[cat]!.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text('還沒有品項', style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                    ),
+                  for (final p in groups[cat]!)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: Material(
@@ -453,6 +476,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                       ),
                     ),
                   ),
+                ],
               ]);
             },
           ),
@@ -461,9 +485,12 @@ class _ProductsScreenState extends State<ProductsScreen> {
 }
 
 class ProductFormScreen extends StatefulWidget {
-  const ProductFormScreen({super.key, required this.membership, this.product});
+  const ProductFormScreen(
+      {super.key, required this.membership, this.product, this.category, this.categories = stockCategories});
   final Membership membership;
   final Product? product;
+  final String? category; // 從某個類別按「新增」：預先選好
+  final List<String> categories; // 店裡現有的類別
   @override
   State<ProductFormScreen> createState() => _ProductFormScreenState();
 }
@@ -473,7 +500,31 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   late final _unit = TextEditingController(text: widget.product?.unit ?? '瓶');
   late final _par = TextEditingController(text: widget.product?.parLevel == null ? '' : fmtQty(widget.product!.parLevel!));
   // 舊類別（例如「水果」）保留原本的，除非使用者自己改（Codex 審查）
-  late String _cat = widget.product?.category ?? '酒水';
+  late String _cat = widget.product?.category ?? widget.category ?? '酒水';
+  late final List<String> _cats = [
+    ...{...widget.categories, ...stockCategories, _cat}
+  ];
+
+  // 新增類別（老闆 2026-10-16）：輸入名稱，存了這個品項後就會出現在清單裡
+  Future<void> _newCategory() async {
+    final ctrl = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('新增類別'),
+        content: TextField(controller: ctrl, autofocus: true, maxLength: 12, decoration: const InputDecoration(hintText: '例如：副材料')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(c, ctrl.text.trim()), child: const Text('確定')),
+        ],
+      ),
+    );
+    if (name == null || name.isEmpty || !mounted) return;
+    setState(() {
+      if (!_cats.contains(name)) _cats.add(name);
+      _cat = name;
+    });
+  }
   bool _saving = false;
 
   Future<void> _save() async {
@@ -533,9 +584,10 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           const SizedBox(height: 14),
           Text('類別', style: TextStyle(color: AppColors.muted)),
           const SizedBox(height: 6),
-          Wrap(spacing: 8, children: [
-            for (final c in [...stockCategories, if (!stockCategories.contains(widget.product?.category ?? '酒水')) widget.product!.category])
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            for (final c in _cats)
               ChoiceChip(label: Text(c), selected: _cat == c, onSelected: (_) => setState(() => _cat = c)),
+            ActionChip(avatar: Icon(Icons.add, size: 18, color: AppColors.primary), label: const Text('新增類別'), onPressed: _newCategory),
           ]),
           const SizedBox(height: 14),
           TextField(controller: _unit, maxLength: 10, decoration: const InputDecoration(labelText: '單位', counterText: '')),
