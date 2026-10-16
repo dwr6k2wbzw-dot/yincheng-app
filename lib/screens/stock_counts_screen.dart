@@ -407,6 +407,55 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
   List<String> _cats = stockCategories;
 
+  /// 刪除類別：類別是跟著品項存的，所以刪除＝把裡面的品項移到別的類別，或一起停用
+  Future<void> _deleteCategory(String cat, List<Product> items) async {
+    final others = _cats.where((c) => c != cat).toList();
+    String target = others.first;
+    final action = await showDialog<String>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setD) => AlertDialog(
+          title: Text('刪除「$cat」類別？'),
+          content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('這個類別有 ${items.length} 個品項。要把它們移到：'),
+            const SizedBox(height: 8),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              for (final o in others)
+                ChoiceChip(label: Text(o), selected: target == o, onSelected: (_) => setD(() => target = o)),
+            ]),
+            const SizedBox(height: 12),
+            Text('或是把這些品項一起停用（以前的盤點紀錄會保留）。', style: TextStyle(color: AppColors.muted, fontSize: 12)),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c), child: const Text('取消')),
+            TextButton(
+                onPressed: () => Navigator.pop(c, 'deactivate'),
+                child: Text('一起停用', style: TextStyle(color: AppColors.bad))),
+            FilledButton(onPressed: () => Navigator.pop(c, 'move'), child: Text('移到「$target」')),
+          ],
+        ),
+      ),
+    );
+    if (action == null || !mounted) return;
+    final repo = AppScope.of(context).repo;
+    try {
+      for (final p in items) {
+        if (action == 'move') {
+          await repo.saveProduct(widget.membership.storeId, Product(p.id, p.name, target, p.unit, parLevel: p.parLevel));
+        } else {
+          await repo.deactivateProduct(p.id);
+        }
+      }
+      if (!mounted) return;
+      showMessage(context, action == 'move' ? '已把 ${items.length} 個品項移到「$target」，「$cat」已刪除' : '已停用 ${items.length} 個品項，「$cat」已刪除');
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+    }
+    if (!mounted) return;
+    _changed = true;
+    setState(() => _future = _load());
+  }
+
   Future<void> _edit(Product? p, {String? category}) async {
     final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(
         builder: (_) => ProductFormScreen(membership: widget.membership, product: p, category: category, categories: _cats)));
@@ -454,6 +503,13 @@ class _ProductsScreenState extends State<ProductsScreen> {
                       icon: const Icon(Icons.add, size: 18),
                       label: Text('新增$cat'),
                     ),
+                    // 刪除類別（老闆 2026-10-16）：酒水／餐食／雜項是固定的，其他可以刪
+                    if (!stockCategories.contains(cat))
+                      IconButton(
+                        tooltip: '刪除類別',
+                        onPressed: () => _deleteCategory(cat, groups[cat]!),
+                        icon: Icon(Icons.delete_outline, size: 20, color: AppColors.muted),
+                      ),
                   ]),
                   if (groups[cat]!.isEmpty)
                     Padding(
@@ -586,7 +642,19 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           const SizedBox(height: 6),
           Wrap(spacing: 8, runSpacing: 8, children: [
             for (final c in _cats)
-              ChoiceChip(label: Text(c), selected: _cat == c, onSelected: (_) => setState(() => _cat = c)),
+              // 剛新增、還沒有品項的類別可以直接按 × 刪掉
+              if (!stockCategories.contains(c) && !widget.categories.contains(c) && c != widget.product?.category)
+                InputChip(
+                  label: Text(c),
+                  selected: _cat == c,
+                  onSelected: (_) => setState(() => _cat = c),
+                  onDeleted: () => setState(() {
+                    _cats.remove(c);
+                    if (_cat == c) _cat = widget.category ?? '酒水';
+                  }),
+                )
+              else
+                ChoiceChip(label: Text(c), selected: _cat == c, onSelected: (_) => setState(() => _cat = c)),
             ActionChip(avatar: Icon(Icons.add, size: 18, color: AppColors.primary), label: const Text('新增類別'), onPressed: _newCategory),
           ]),
           const SizedBox(height: 14),
