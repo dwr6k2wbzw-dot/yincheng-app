@@ -60,7 +60,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     final special = (r[2] as List<ReservationSpecialDay>).firstOrNull;
     Map<String, GuestStats> guests;
     try {
-      guests = await _repo.guestStats(_store, {for (final x in list) phoneDigitsOf(x.phone)});
+      guests = await _repo.guestStats(_store, {for (final x in list) if (phoneDigitsOf(x.phone).length >= 8) phoneDigitsOf(x.phone)});
     } catch (_) {
       guests = {}; // 讀不到熟客資料不影響訂位清單
     }
@@ -247,7 +247,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
       subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(
           [
-            r.phone,
+            r.phone.isEmpty ? '沒留電話' : r.phone,
             r.source == 'web' ? '網路訂位' : '電話訂位',
             if ((r.note ?? '').isNotEmpty) '備註：${r.note}',
             if (r.emailError != null) '確認信寄送失敗',
@@ -389,7 +389,8 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                 onTap: () => Navigator.pop(c, 'party_no')),
             const Divider(height: 1),
           ],
-          ListTile(leading: const Icon(Icons.call), title: Text('打電話 ${r.phone}'), onTap: () => Navigator.pop(c, 'call')),
+          if (r.phone.isNotEmpty)
+            ListTile(leading: const Icon(Icons.call), title: Text('打電話 ${r.phone}'), onTap: () => Navigator.pop(c, 'call')),
           if (r.status != 'arrived')
             ListTile(leading: const Icon(Icons.check_circle_outline), title: const Text('已到店'), onTap: () => Navigator.pop(c, 'arrived')),
           if (r.status != 'no_show')
@@ -633,8 +634,9 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
       showMessage(context, '請填姓名', error: true);
       return;
     }
-    if (phone.replaceAll(RegExp(r'[^0-9]'), '').length < 8) {
-      showMessage(context, '請填正確的電話', error: true);
+    // 電話可以不填（老闆 2026-10-17）；有填就要像電話
+    if (phone.isNotEmpty && phone.replaceAll(RegExp(r'[^0-9]'), '').length < 8) {
+      showMessage(context, '電話看起來不完整（可以留空白）', error: true);
       return;
     }
     setState(() => _saving = true);
@@ -673,7 +675,7 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
           'slot_time': time,
           'party_size': party,
           'guest_name': name,
-          'phone': phone,
+          'phone': phone.isEmpty ? null : phone,
           'email': email.isEmpty ? null : email,
           'note': note.isEmpty ? null : note,
         });
@@ -766,7 +768,7 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
               controller: _phone,
               maxLength: 20,
               keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(labelText: '電話', counterText: '')),
+              decoration: const InputDecoration(labelText: '電話（選填）', counterText: '')),
           const SizedBox(height: 12),
           TextField(
               controller: _email,
