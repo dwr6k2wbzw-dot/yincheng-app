@@ -253,6 +253,17 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
           ].join('・'),
           style: const TextStyle(fontSize: 12),
         ),
+        // 0055 客人申請改人數（待店家確認）
+        if (r.partyPending)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(color: AppColors.warn.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(6)),
+              child: Text('客人申請改為 ${r.requestedParty} 位・點一下處理',
+                  style: TextStyle(fontSize: 12, color: AppColors.warn, fontWeight: FontWeight.w600)),
+            ),
+          ),
         // 熟客辨識（0052）：來過幾次、未到幾次、標籤、備註
         if (_guestBadges(r).isNotEmpty)
           Padding(
@@ -364,6 +375,19 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
       builder: (c) => SafeArea(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           ListTile(title: Text('${r.name}・${r.party} 位・${r.time}', style: const TextStyle(fontWeight: FontWeight.w700))),
+          if (r.partyPending) ...[
+            ListTile(
+                leading: Icon(Icons.check, color: AppColors.good),
+                title: Text('同意改為 ${r.requestedParty} 位'),
+                subtitle: const Text('會寄信通知客人'),
+                onTap: () => Navigator.pop(c, 'party_yes')),
+            ListTile(
+                leading: Icon(Icons.close, color: AppColors.bad),
+                title: Text('不同意（維持 ${r.party} 位）'),
+                subtitle: const Text('會寄信通知客人'),
+                onTap: () => Navigator.pop(c, 'party_no')),
+            const Divider(height: 1),
+          ],
           ListTile(leading: const Icon(Icons.call), title: Text('打電話 ${r.phone}'), onTap: () => Navigator.pop(c, 'call')),
           if (r.status != 'arrived')
             ListTile(leading: const Icon(Icons.check_circle_outline), title: const Text('已到店'), onTap: () => Navigator.pop(c, 'arrived')),
@@ -392,6 +416,40 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     if (v == null || !mounted) return;
     if (v == 'call') {
       openExternal('tel:${r.phone.replaceAll(RegExp(r'[^0-9+]'), '')}');
+      return;
+    }
+    if (v == 'party_yes' || v == 'party_no') {
+      final yes = v == 'party_yes';
+      if (yes) {
+        // 加人：先看這天名額夠不夠（只提醒，店家可以決定照收）
+        try {
+          final settings = await _repo.reservationSettings(_store);
+          final same = await _repo.reservations(_store, r.date, r.date);
+          final sp = (await _repo.specialDays(_store, r.date, r.date)).firstOrNull;
+          final over = settings == null
+              ? const <String>[]
+              : settings.limitsFor(r.date, sp).overBy(same.where((x) => x.id != r.id).toList(), r.requestedParty ?? r.party);
+          if (over.isNotEmpty && mounted) {
+            final ok = await showDialog<bool>(
+              context: context,
+              builder: (c) => AlertDialog(
+                title: const Text('超過這天的名額'),
+                content: Text('${over.join('\n')}\n還是要同意嗎？'),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('不要')),
+                  FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('還是同意')),
+                ],
+              ),
+            );
+            if (ok != true) return;
+          }
+        } catch (e) {
+          if (mounted) showMessage(context, friendlyError(e), error: true);
+          return;
+        }
+      }
+      if (!mounted) return;
+      await _run(() => _repo.decidePartyRequest(r.id, yes, r.requestedParty!), yes ? '已同意，改為 ${r.requestedParty} 位' : '已回覆不同意');
       return;
     }
     if (v == 'guest') {

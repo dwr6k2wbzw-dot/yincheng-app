@@ -107,6 +107,9 @@ class Reservation {
   final String source; // web / app
   final String? emailError;
   final DateTime createdAt;
+  // 0055 客人申請改人數（pending 待確認／approved／rejected）
+  final int? requestedParty;
+  final String? partyRequestStatus;
   const Reservation({
     required this.id,
     required this.date,
@@ -120,6 +123,8 @@ class Reservation {
     required this.source,
     this.emailError,
     required this.createdAt,
+    this.requestedParty,
+    this.partyRequestStatus,
   });
   factory Reservation.fromRow(Map<String, dynamic> r) => Reservation(
         id: r['id'] as String,
@@ -134,7 +139,10 @@ class Reservation {
         source: r['source'] as String,
         emailError: r['email_error'] as String?,
         createdAt: DateTime.parse(r['created_at'] as String).toLocal(),
+        requestedParty: (r['requested_party'] as num?)?.toInt(),
+        partyRequestStatus: r['party_request_status'] as String?,
       );
+  bool get partyPending => partyRequestStatus == 'pending' && requestedParty != null && status == 'confirmed';
   bool get active => status == 'confirmed' || status == 'arrived';
 }
 

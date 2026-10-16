@@ -1005,7 +1005,8 @@ class SupabaseRepository implements Repository {
   Future<List<Reservation>> reservations(String storeId, DateTime from, DateTime to) async {
     final rows = await _db
         .from('reservations')
-        .select('id, slot_date, slot_time, party_size, guest_name, phone, email, note, status, source, email_error, created_at')
+        .select('id, slot_date, slot_time, party_size, guest_name, phone, email, note, status, source, email_error, created_at, '
+            'requested_party, party_request_status')
         .eq('store_id', storeId)
         .gte('slot_date', _day.format(from))
         .lte('slot_date', _day.format(to))
@@ -1093,6 +1094,11 @@ class SupabaseRepository implements Repository {
       out[p] = GuestStats(visits, noShows, profiles[p]);
     }
     return out;
+  }
+
+  @override
+  Future<void> decidePartyRequest(String id, bool approve, int expectedParty) async {
+    await _db.rpc('decide_party_request', params: {'p_id': id, 'p_approve': approve, 'p_expected': expectedParty});
   }
 
   @override
