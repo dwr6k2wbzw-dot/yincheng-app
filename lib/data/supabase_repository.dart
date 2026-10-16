@@ -1036,4 +1036,73 @@ class SupabaseRepository implements Repository {
     final rows = await _db.from('reservations').update(values).eq('id', id).select('id');
     if (rows.isEmpty) throw Exception('message: 沒有權限修改這筆訂位,');
   }
+
+  // ---------------- 0052 特殊日期、熟客 ----------------
+  @override
+  Future<List<ReservationSpecialDay>> specialDays(String storeId, DateTime from, DateTime to) async {
+    final rows = await _db
+        .from('reservation_special_days')
+        .select()
+        .eq('store_id', storeId)
+        .gte('day', _day.format(from))
+        .lte('day', _day.format(to))
+        .order('day');
+    return rows.map(ReservationSpecialDay.fromRow).toList();
+  }
+
+  @override
+  Future<void> saveSpecialDay(String storeId, ReservationSpecialDay d) async {
+    await _db.from('reservation_special_days').upsert({
+      'store_id': storeId,
+      'day': _day.format(d.day),
+      'closed': d.closed,
+      'max_groups': d.maxGroups,
+      'max_guests': d.maxGuests,
+      'max_large': d.maxLarge,
+      'note': d.note,
+    }, onConflict: 'store_id,day');
+  }
+
+  @override
+  Future<void> deleteSpecialDay(String storeId, DateTime day) async {
+    final r = await _db.from('reservation_special_days').delete().eq('store_id', storeId).eq('day', _day.format(day)).select('day');
+    if (r.isEmpty) throw Exception('message: 只有老闆可以刪除特殊日期,');
+  }
+
+  @override
+  Future<Map<String, GuestStats>> guestStats(String storeId, Set<String> phoneDigits) async {
+    final list = phoneDigits.where((p) => p.length >= 8).toList();
+    if (list.isEmpty) return {};
+    final r = await Future.wait<dynamic>([
+      _db.from('reservations').select('phone_digits, status, slot_date').eq('store_id', storeId).inFilter('phone_digits', list),
+      _db.from('reservation_guests').select().eq('store_id', storeId).inFilter('phone_digits', list),
+    ]);
+    final profiles = {for (final g in (r[1] as List)) (g['phone_digits'] as String): GuestProfile.fromRow(g as Map<String, dynamic>)};
+    final out = <String, GuestStats>{};
+    for (final p in list) {
+      final reset = profiles[p]?.noshowResetAt;
+      final resetDay = reset == null ? null : DateTime(reset.year, reset.month, reset.day);
+      var visits = 0, noShows = 0;
+      for (final x in (r[0] as List).where((x) => x['phone_digits'] == p)) {
+        if (x['status'] == 'arrived') visits++;
+        if (x['status'] == 'no_show') {
+          final d = DateTime.parse(x['slot_date'] as String);
+          if (resetDay == null || d.isAfter(resetDay)) noShows++;
+        }
+      }
+      out[p] = GuestStats(visits, noShows, profiles[p]);
+    }
+    return out;
+  }
+
+  @override
+  Future<void> saveGuestProfile(String storeId, GuestProfile g, {bool resetNoshow = false}) async {
+    await _db.from('reservation_guests').upsert({
+      'store_id': storeId,
+      'phone_digits': g.phoneDigits,
+      'tags': g.tags,
+      'note': (g.note ?? '').trim().isEmpty ? null : g.note!.trim(),
+      if (resetNoshow) 'noshow_reset_at': DateTime.now().toUtc().toIso8601String(),
+    }, onConflict: 'store_id,phone_digits');
+  }
 }

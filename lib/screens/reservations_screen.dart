@@ -41,9 +41,32 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     }
   }
 
+  ReservationSpecialDay? _special; // 這天的特殊日期（0052）
+  Map<String, GuestStats> _guests = {}; // 熟客紀錄（以電話數字對回）
+
+  int _loadGen = 0; // 換日期很快時，舊的讀取晚回來不能蓋掉現在這天的資料（Codex 審查）
+
   Future<(ReservationSettings?, List<Reservation>)> _load() async {
-    final r = await Future.wait<dynamic>([_repo.reservationSettings(_store), _repo.reservations(_store, _day, _day)]);
-    return (r[0] as ReservationSettings?, r[1] as List<Reservation>);
+    final gen = ++_loadGen;
+    final day = _day;
+    final r = await Future.wait<dynamic>([
+      _repo.reservationSettings(_store),
+      _repo.reservations(_store, day, day),
+      _repo.specialDays(_store, day, day).then<List<ReservationSpecialDay>>((v) => v, onError: (_) => <ReservationSpecialDay>[]),
+    ]);
+    final list = r[1] as List<Reservation>;
+    final special = (r[2] as List<ReservationSpecialDay>).firstOrNull;
+    Map<String, GuestStats> guests;
+    try {
+      guests = await _repo.guestStats(_store, {for (final x in list) phoneDigitsOf(x.phone)});
+    } catch (_) {
+      guests = {}; // 讀不到熟客資料不影響訂位清單
+    }
+    if (gen == _loadGen) {
+      _special = special;
+      _guests = guests;
+    }
+    return (r[0] as ReservationSettings?, list);
   }
 
   void _reload() => setState(() => _future = _load());
@@ -155,14 +178,31 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
             padding: EdgeInsets.only(bottom: 8),
             child: Text('線上訂位目前暫停中（老闆可在右上角設定開啟）', style: TextStyle(color: AppColors.warn, fontSize: 13)),
           ),
-        SectionCard(
-          child: Row(children: [
-            Icon(Icons.event_seat_outlined, color: AppColors.primary),
-            const SizedBox(width: 12),
-            Expanded(child: Text('${active.length} 組・$guests 位', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700))),
-            Text('每時段上限 ${settings.maxGuestsPerSlot} 位', style: TextStyle(color: AppColors.muted, fontSize: 12)),
-          ]),
-        ),
+        () {
+          // 每天名額（0052）：組數、人數、大桌
+          final lim = settings.limitsFor(_day, _special);
+          final large = active.where((r) => r.party >= lim.largeSize).length;
+          String cap(int used, int? max) => max == null ? '$used' : '$used/$max';
+          return SectionCard(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Icon(Icons.event_seat_outlined, color: AppColors.primary),
+                const SizedBox(width: 12),
+                Expanded(child: Text('${active.length} 組・$guests 位', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700))),
+                if (!lim.closed)
+                  Text('上限 ${lim.maxGroups ?? '不限'} 組／${lim.maxGuests ?? '不限'} 位',
+                      style: TextStyle(color: AppColors.muted, fontSize: 12)),
+              ]),
+              const SizedBox(height: 6),
+              if (lim.closed)
+                Text('這天不開放線上訂位${lim.note == null ? '' : '（${lim.note}）'}',
+                    style: TextStyle(color: AppColors.warn, fontSize: 13))
+              else
+                Text('${lim.largeSize} 位以上：${cap(large, lim.maxLarge)} 組${_special != null ? '・今天是特殊日期' : ''}',
+                    style: TextStyle(color: AppColors.muted, fontSize: 12)),
+            ]),
+          );
+        }(),
         const SizedBox(height: 12),
         if (list.isEmpty)
           Padding(
@@ -175,8 +215,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
             child: Row(children: [
               Text(t, style: const TextStyle(fontWeight: FontWeight.w700)),
               const Spacer(),
-              Text(
-                  '${byTime[t]!.where((r) => r.active).fold<int>(0, (s, r) => s + r.party)} / ${settings.maxGuestsPerSlot} 位',
+              Text('${byTime[t]!.where((r) => r.active).fold<int>(0, (s, r) => s + r.party)} 位',
                   style: TextStyle(color: AppColors.muted, fontSize: 12)),
             ]),
           ),
@@ -204,21 +243,118 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
               fontWeight: FontWeight.w600,
               decoration: dim ? TextDecoration.lineThrough : null,
               color: dim ? AppColors.muted : null)),
-      subtitle: Text(
-        [
-          r.phone,
-          r.source == 'web' ? '網路訂位' : '電話訂位',
-          if ((r.note ?? '').isNotEmpty) '備註：${r.note}',
-          if (r.emailError != null) '確認信寄送失敗',
-        ].join('・'),
-        style: const TextStyle(fontSize: 12),
-      ),
+      subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(
+          [
+            r.phone,
+            r.source == 'web' ? '網路訂位' : '電話訂位',
+            if ((r.note ?? '').isNotEmpty) '備註：${r.note}',
+            if (r.emailError != null) '確認信寄送失敗',
+          ].join('・'),
+          style: const TextStyle(fontSize: 12),
+        ),
+        // 熟客辨識（0052）：來過幾次、未到幾次、標籤、備註
+        if (_guestBadges(r).isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Wrap(spacing: 6, runSpacing: 4, children: _guestBadges(r)),
+          ),
+      ]),
       trailing: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
         child: Text(reservationStatusLabel[r.status] ?? r.status, style: TextStyle(color: color, fontSize: 12)),
       ),
     );
+  }
+
+  List<Widget> _guestBadges(Reservation r) {
+    final g = _guests[phoneDigitsOf(r.phone)];
+    if (g == null) return const [];
+    Widget badge(String t, Color c) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+          decoration: BoxDecoration(color: c.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(6)),
+          child: Text(t, style: TextStyle(fontSize: 11, color: c)),
+        );
+    return [
+      if (g.visits > 0) badge('來過 ${g.visits} 次', AppColors.good),
+      if (g.noShows > 0) badge('未到 ${g.noShows} 次', AppColors.bad),
+      for (final t in g.profile?.tags ?? const <String>[]) badge(t, AppColors.primary),
+      if ((g.profile?.note ?? '').isNotEmpty) badge(g.profile!.note!, AppColors.muted),
+    ];
+  }
+
+  /// 熟客資料：標籤、備註；未到達到門檻時可以「解除」（之後可以再線上訂位）
+  Future<void> _editGuest(Reservation r, ReservationSettings s) async {
+    final digits = phoneDigitsOf(r.phone);
+    final g = _guests[digits];
+    final tags = {...?g?.profile?.tags};
+    final note = TextEditingController(text: g?.profile?.note ?? '');
+    final custom = TextEditingController();
+    var reset = false;
+    final blocked = s.noshowBlockCount > 0 && (g?.noShows ?? 0) >= s.noshowBlockCount;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setD) => AlertDialog(
+          title: Text('熟客資料・${r.name}'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('電話 ${r.phone}・來過 ${g?.visits ?? 0} 次・未到 ${g?.noShows ?? 0} 次',
+                  style: TextStyle(color: AppColors.muted, fontSize: 12)),
+              const SizedBox(height: 10),
+              Wrap(spacing: 6, runSpacing: 6, children: [
+                for (final t in {...guestTagPresets, ...tags})
+                  FilterChip(
+                    label: Text(t),
+                    selected: tags.contains(t),
+                    onSelected: (v) => setD(() => v ? tags.add(t) : tags.remove(t)),
+                  ),
+              ]),
+              Row(children: [
+                Expanded(child: TextField(controller: custom, maxLength: 10, decoration: const InputDecoration(hintText: '自訂標籤', counterText: ''))),
+                IconButton(
+                  tooltip: '加入標籤',
+                  icon: const Icon(Icons.add),
+                  onPressed: () {
+                    final t = custom.text.trim();
+                    if (t.isEmpty || tags.length >= 10) return;
+                    setD(() {
+                      tags.add(t);
+                      custom.clear();
+                    });
+                  },
+                ),
+              ]),
+              const SizedBox(height: 8),
+              TextField(controller: note, maxLength: 200, maxLines: 2, decoration: const InputDecoration(labelText: '熟客備註（例如：不吃香菜）')),
+              if (blocked)
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: reset,
+                  onChanged: (v) => setD(() => reset = v ?? false),
+                  title: const Text('解除未到紀錄'),
+                  subtitle: Text('未到 ${s.noshowBlockCount} 次以上目前不能線上訂位；解除後可以再線上訂',
+                      style: const TextStyle(fontSize: 12)),
+                ),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
+            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('儲存')),
+          ],
+        ),
+      ),
+    );
+    if (ok != true || !mounted) return;
+    if (digits.length < 8) {
+      showMessage(context, '電話不完整，不能存熟客資料', error: true);
+      return;
+    }
+    await _run(
+        () => _repo.saveGuestProfile(_store, GuestProfile(phoneDigits: digits, tags: tags.toList(), note: note.text),
+            resetNoshow: reset),
+        reset ? '已儲存並解除未到紀錄' : '已儲存熟客資料');
   }
 
   Future<void> _actions(Reservation r) async {
@@ -245,12 +381,22 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
               title: const Text('修改訂位內容'),
               subtitle: const Text('日期、時間、人數、姓名、電話、Email、備註'),
               onTap: () => Navigator.pop(c, 'edit')),
+          ListTile(
+              leading: const Icon(Icons.loyalty_outlined),
+              title: const Text('熟客資料'),
+              subtitle: const Text('標籤、備註、解除未到紀錄'),
+              onTap: () => Navigator.pop(c, 'guest')),
         ]),
       ),
     );
     if (v == null || !mounted) return;
     if (v == 'call') {
       openExternal('tel:${r.phone.replaceAll(RegExp(r'[^0-9+]'), '')}');
+      return;
+    }
+    if (v == 'guest') {
+      final s = (await _future).$1;
+      if (s != null && mounted) await _editGuest(r, s);
       return;
     }
     if (v == 'edit') {
@@ -303,14 +449,16 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
       try {
         final settings = await _repo.reservationSettings(_store);
         final same = await _repo.reservations(_store, r.date, r.date);
-        final booked = same.where((x) => x.active && x.time == r.time && x.id != r.id).fold<int>(0, (t, x) => t + x.party);
-        final max = settings?.maxGuestsPerSlot ?? 0;
-        if (settings != null && booked + r.party > max && mounted) {
+        final sp = (await _repo.specialDays(_store, r.date, r.date)).firstOrNull;
+        final over = settings == null
+            ? const <String>[]
+            : settings.limitsFor(r.date, sp).overBy(same.where((x) => x.id != r.id).toList(), r.party);
+        if (over.isNotEmpty && mounted) {
           final ok = await showDialog<bool>(
             context: context,
             builder: (c) => AlertDialog(
-              title: const Text('超過時段上限'),
-              content: Text('${r.time} 已訂 $booked 位，改回這筆 ${r.party} 位會超過上限 $max 位。還是要改嗎？'),
+              title: const Text('超過這天的名額'),
+              content: Text('${over.join('\n')}\n還是要改嗎？'),
               actions: [
                 TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('不要')),
                 FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('還是要改')),
@@ -362,7 +510,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
   }
 }
 
-/// 電話訂位（員工代客人輸入；不受線上訂位的天數、截止時間、每組人數限制，但會提醒超過時段上限）
+/// 電話訂位（員工代客人輸入；不受線上訂位的天數、截止時間、每組人數限制，但會提醒超過這天的名額）
 class _AddReservationScreen extends StatefulWidget {
   const _AddReservationScreen({required this.membership, required this.settings, required this.day, this.existing});
   final Membership membership;
@@ -433,19 +581,20 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
     setState(() => _saving = true);
     final repo = AppScope.of(context).repo;
     try {
-      // 超過時段上限先確認（電話訂位可以超收，由店家決定）
+      // 超過這天的名額先確認（電話訂位可以超收，由店家決定；0052 改成每天計算）
       final same = await repo.reservations(widget.membership.storeId, date, date);
+      final sp = (await repo.specialDays(widget.membership.storeId, date, date)).firstOrNull;
       if (!mounted) return; // 已離開表單：不要在沒確認的情況下新增（Codex 審查）
       // 修改時不算自己原本那筆
-      final booked = same
-          .where((r) => r.active && r.time == time && r.id != widget.existing?.id)
-          .fold<int>(0, (t, r) => t + r.party);
-      if (booked + party > widget.settings.maxGuestsPerSlot) {
+      final over = widget.settings
+          .limitsFor(date, sp)
+          .overBy(same.where((r) => r.id != widget.existing?.id).toList(), party);
+      if (over.isNotEmpty) {
         final ok = await showDialog<bool>(
           context: context,
           builder: (c) => AlertDialog(
-            title: const Text('超過時段上限'),
-            content: Text('$time 已訂 $booked 位，再加 $party 位會超過上限 ${widget.settings.maxGuestsPerSlot} 位。還是要新增嗎？'),
+            title: const Text('超過這天的名額'),
+            content: Text('${over.join('\n')}\n電話訂位可以超收，還是要${_editing ? '儲存' : '新增'}嗎？'),
             actions: [
               TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('不要')),
               FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(_editing ? '還是儲存' : '還是新增')),
@@ -565,7 +714,7 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
               maxLength: 120,
               keyboardType: TextInputType.emailAddress,
               decoration: InputDecoration(
-                  labelText: _editing ? 'Email（選填；修改不會另外寄信）' : 'Email（選填，電話訂位不會寄確認信）', counterText: '')),
+                  labelText: _editing ? 'Email（選填；修改不會另外寄信）' : 'Email（選填；不寄確認信，會寄當天下午的提醒信）', counterText: '')),
           const SizedBox(height: 12),
           TextField(controller: _note, maxLength: 200, maxLines: 2, decoration: const InputDecoration(labelText: '備註（選填）')),
           const SizedBox(height: 24),
@@ -593,7 +742,13 @@ class _ReservationSettingsScreenState extends State<ReservationSettingsScreen> {
   late String _last = widget.settings.lastSlot;
   late String _cutoff = widget.settings.sameDayCutoff;
   late final _name = TextEditingController(text: widget.settings.displayName);
-  late final _max = TextEditingController(text: '${widget.settings.maxGuestsPerSlot}');
+  // 0052 每天名額（空白＝不限）、大桌、每週公休、未到擋線上訂位
+  late final _groups = TextEditingController(text: widget.settings.maxGroupsPerDay?.toString() ?? '');
+  late final _guestsDay = TextEditingController(text: widget.settings.maxGuestsPerDay?.toString() ?? '');
+  late final _largeSize = TextEditingController(text: '${widget.settings.largePartySize}');
+  late final _largeMax = TextEditingController(text: widget.settings.maxLargePerDay?.toString() ?? '');
+  late final _noshow = TextEditingController(text: '${widget.settings.noshowBlockCount}');
+  late final Set<int> _closedDays = {...widget.settings.closedWeekdays};
   late final _party = TextEditingController(text: '${widget.settings.maxParty}');
   late final _days = TextEditingController(text: '${widget.settings.daysAhead}');
   late final _contact = TextEditingController(text: widget.settings.contactNote ?? '');
@@ -608,15 +763,30 @@ class _ReservationSettingsScreenState extends State<ReservationSettingsScreen> {
   }
 
   Future<void> _save() async {
-    final max = int.tryParse(_max.text.trim());
+    int? opt(TextEditingController c) => c.text.trim().isEmpty ? null : int.tryParse(c.text.trim());
+    bool bad(TextEditingController c, int lo, int hi) {
+      if (c.text.trim().isEmpty) return false;
+      final v = int.tryParse(c.text.trim());
+      return v == null || v < lo || v > hi;
+    }
     final party = int.tryParse(_party.text.trim());
     final days = int.tryParse(_days.text.trim());
     if (_name.text.trim().isEmpty) {
       showMessage(context, '請填店名', error: true);
       return;
     }
-    if (max == null || max < 1 || max > 500) {
-      showMessage(context, '每時段上限請填 1～500', error: true);
+    if (bad(_groups, 1, 500) || bad(_guestsDay, 1, 2000) || bad(_largeMax, 0, 500)) {
+      showMessage(context, '每天名額請填數字（空白＝不限）', error: true);
+      return;
+    }
+    final largeSize = int.tryParse(_largeSize.text.trim());
+    final noshow = int.tryParse(_noshow.text.trim());
+    if (largeSize == null || largeSize < 2 || largeSize > 50) {
+      showMessage(context, '大桌人數請填 2～50', error: true);
+      return;
+    }
+    if (noshow == null || noshow < 0 || noshow > 20) {
+      showMessage(context, '未到次數請填 0～20（0＝不擋）', error: true);
       return;
     }
     if (party == null || party < 1 || party > 50) {
@@ -639,7 +809,12 @@ class _ReservationSettingsScreenState extends State<ReservationSettingsScreen> {
         'first_slot': _first,
         'last_slot': _last,
         'same_day_cutoff': _cutoff,
-        'max_guests_per_slot': max,
+        'max_groups_per_day': opt(_groups),
+        'max_guests_per_day': opt(_guestsDay),
+        'large_party_size': largeSize,
+        'max_large_groups_per_day': opt(_largeMax),
+        'closed_weekdays': (_closedDays.toList()..sort()),
+        'noshow_block_count': noshow,
         'max_party': party,
         'days_ahead': days,
         'contact_note': _contact.text.trim().isEmpty ? null : _contact.text.trim(),
@@ -686,7 +861,42 @@ class _ReservationSettingsScreenState extends State<ReservationSettingsScreen> {
               subtitle: const Text('這個時間以後不接受當天的線上訂位', style: TextStyle(fontSize: 12)),
               trailing: Text(_cutoff, style: const TextStyle(fontSize: 16)),
               onTap: () => _pick(_cutoff, (v) => _cutoff = v)),
-          TextField(controller: _max, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '每個時段最多幾位')),
+          const SizedBox(height: 8),
+          Text('每天名額（不限用餐時間；空白＝不限；電話訂位可超收）', style: TextStyle(color: AppColors.muted, fontSize: 13)),
+          const SizedBox(height: 8),
+          Row(children: [
+            Expanded(child: TextField(controller: _groups, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '每天最多幾組'))),
+            const SizedBox(width: 12),
+            Expanded(child: TextField(controller: _guestsDay, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '每天最多幾位'))),
+          ]),
+          const SizedBox(height: 12),
+          Row(children: [
+            Expanded(child: TextField(controller: _largeSize, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '幾位以上算大桌'))),
+            const SizedBox(width: 12),
+            Expanded(child: TextField(controller: _largeMax, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '大桌每天最多幾組'))),
+          ]),
+          const SizedBox(height: 16),
+          Text('每週固定公休（不開放線上訂位）', style: TextStyle(color: AppColors.muted, fontSize: 13)),
+          const SizedBox(height: 6),
+          Wrap(spacing: 6, runSpacing: 6, children: [
+            for (var i = 1; i <= 7; i++)
+              FilterChip(
+                label: Text('週${const ['一', '二', '三', '四', '五', '六', '日'][i - 1]}'),
+                selected: _closedDays.contains(i),
+                onSelected: (v) => setState(() => v ? _closedDays.add(i) : _closedDays.remove(i)),
+              ),
+          ]),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => SpecialDaysScreen(membership: widget.membership))),
+            icon: const Icon(Icons.event_busy_outlined),
+            label: const Text('特殊日期（公休、包場、改名額）'),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+              controller: _noshow,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: '同一支電話未到幾次就不能線上訂位（0＝不擋）')),
           const SizedBox(height: 12),
           TextField(controller: _party, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '線上訂位一組最多幾位')),
           const SizedBox(height: 12),
@@ -979,4 +1189,168 @@ String withTitle(String raw, String? title) {
   final base = stripTitle(n);
   final out = '$base $title';
   return out.length > 40 ? out.substring(0, 40) : out;
+}
+
+/// 特殊日期（0052，只有老闆）：整天不開放（公休／包場，可寫說明給客人看），或這天改名額
+class SpecialDaysScreen extends StatefulWidget {
+  const SpecialDaysScreen({super.key, required this.membership});
+  final Membership membership;
+  @override
+  State<SpecialDaysScreen> createState() => _SpecialDaysScreenState();
+}
+
+class _SpecialDaysScreenState extends State<SpecialDaysScreen> {
+  Future<List<ReservationSpecialDay>>? _future;
+  final _from = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+
+  Repository get _repo => AppScope.of(context).repo;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _future ??= _load();
+  }
+
+  Future<List<ReservationSpecialDay>> _load() =>
+      _repo.specialDays(widget.membership.storeId, _from, _from.add(const Duration(days: 365)));
+
+  Future<void> _edit(ReservationSpecialDay? d) async {
+    var day = d?.day;
+    if (day == null) {
+      day = await showDatePicker(context: context, initialDate: _from, firstDate: _from, lastDate: _from.add(const Duration(days: 365)));
+      if (day == null || !mounted) return;
+    }
+    var closed = d?.closed ?? true;
+    final note = TextEditingController(text: d?.note ?? '');
+    final groups = TextEditingController(text: d?.maxGroups?.toString() ?? '');
+    final guests = TextEditingController(text: d?.maxGuests?.toString() ?? '');
+    final large = TextEditingController(text: d?.maxLarge?.toString() ?? '');
+    final pickedDay = day;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setD) => AlertDialog(
+          title: Text(DateFormat('M/d（E）', 'zh_TW').format(pickedDay)),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('整天不開放線上訂位'),
+                subtitle: const Text('公休、包場', style: TextStyle(fontSize: 12)),
+                value: closed,
+                onChanged: (v) => setD(() => closed = v),
+              ),
+              TextField(controller: note, maxLength: 100, decoration: const InputDecoration(labelText: '說明（會顯示在訂位頁，例如：包場）')),
+              if (!closed) ...[
+                const SizedBox(height: 8),
+                Text('這天改名額（空白＝照平常）', style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                TextField(controller: groups, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '最多幾組')),
+                TextField(controller: guests, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '最多幾位')),
+                TextField(controller: large, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '大桌最多幾組')),
+              ],
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
+            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('儲存')),
+          ],
+        ),
+      ),
+    );
+    if (ok != true || !mounted) return;
+    int? opt(TextEditingController c) => c.text.trim().isEmpty ? null : int.tryParse(c.text.trim());
+    // 有填就一定要是 0～999 的整數；打錯不能默默當成「照平常」（Codex 審查）
+    if (!closed) {
+      for (final (c, label) in [(groups, '最多幾組'), (guests, '最多幾位'), (large, '大桌最多幾組')]) {
+        final t = c.text.trim();
+        final v = int.tryParse(t);
+        if (t.isNotEmpty && (v == null || v < 0 || v > 999)) {
+          showMessage(context, '「$label」請填 0～999 的整數，或留空白', error: true);
+          return;
+        }
+      }
+    }
+    try {
+      await _repo.saveSpecialDay(
+          widget.membership.storeId,
+          ReservationSpecialDay(
+            day: pickedDay,
+            closed: closed,
+            note: note.text.trim().isEmpty ? null : note.text.trim(),
+            maxGroups: closed ? null : opt(groups),
+            maxGuests: closed ? null : opt(guests),
+            maxLarge: closed ? null : opt(large),
+          ));
+      if (!mounted) return;
+      showMessage(context, '已儲存');
+      setState(() => _future = _load());
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+    }
+  }
+
+  Future<void> _delete(ReservationSpecialDay d) async {
+    try {
+      await _repo.deleteSpecialDay(widget.membership.storeId, d.day);
+      if (!mounted) return;
+      showMessage(context, '已刪除，這天照平常開放');
+      setState(() => _future = _load());
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: const Text('特殊日期')),
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: () => _edit(null),
+          icon: const Icon(Icons.add),
+          label: const Text('新增日期'),
+        ),
+        body: FutureBuilder<List<ReservationSpecialDay>>(
+          future: _future,
+          builder: (context, snap) {
+            if (snap.hasError) return ErrorView(message: friendlyError(snap.error!));
+            if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+            final list = snap.data!;
+            if (list.isEmpty) {
+              return Center(
+                  child: Text('還沒有特殊日期\n按右下角新增公休、包場或改名額的日子',
+                      textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted, height: 1.6)));
+            }
+            return ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 96), children: [
+              for (final d in list)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Material(
+                    color: AppColors.card,
+                    borderRadius: BorderRadius.circular(14),
+                    child: ListTile(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      title: Text(DateFormat('M/d（E）', 'zh_TW').format(d.day)),
+                      subtitle: Text(
+                        d.closed
+                            ? '不開放線上訂位${d.note == null ? '' : '・${d.note}'}'
+                            : [
+                                if (d.maxGroups != null) '最多 ${d.maxGroups} 組',
+                                if (d.maxGuests != null) '最多 ${d.maxGuests} 位',
+                                if (d.maxLarge != null) '大桌 ${d.maxLarge} 組',
+                                if (d.note != null) d.note!,
+                              ].join('・'),
+                        style: TextStyle(color: d.closed ? AppColors.warn : AppColors.muted, fontSize: 12),
+                      ),
+                      onTap: () => _edit(d),
+                      trailing: IconButton(
+                        tooltip: '刪除',
+                        icon: Icon(Icons.delete_outline, color: AppColors.muted),
+                        onPressed: () => _delete(d),
+                      ),
+                    ),
+                  ),
+                ),
+            ]);
+          },
+        ),
+      );
 }

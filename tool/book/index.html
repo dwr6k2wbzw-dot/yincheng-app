@@ -19,7 +19,7 @@
   </header>
   <div id="app" hidden>
     <div class="card"><p class="label">1. 日期</p><div class="chips" id="dates"></div></div>
-    <div class="card"><p class="label">2. 時間</p><div class="grid" id="slots"></div></div>
+    <div class="card"><p class="label">2. 時間</p><div class="grid" id="slots"></div><p class="note" id="dayInfo" style="white-space:pre-line"></p></div>
     <div class="card"><p class="label">3. 人數</p>
       <div class="stepper"><button type="button" id="minus" aria-label="減少">−</button><b id="party">2</b><button type="button" id="plus" aria-label="增加">＋</button></div>
       <p class="note" id="partyNote"></p>
@@ -62,22 +62,43 @@
     party = Math.min(party, info.max_party);
     $('partyNote').textContent = '線上訂位一組最多 ' + info.max_party + ' 位；更多人數或包場請直接聯絡店家。';
     if (!info.days.length) { $('contact').textContent += '\n目前沒有可以訂的日期。'; }
-    if (!day || !info.days.some(d => d.date === day)) day = info.days.length ? info.days[0].date : null;
+    const open = info.days.filter(d => partyOk(d, party));  // 預設選「現在人數訂得到」的第一天（Codex 審查）
+    if (!day || !info.days.some(d => d.date === day)) day = open.length ? open[0].date : (info.days.length ? info.days[0].date : null);
     render();
+  }
+  // 名額以「整天」計算（0052）：每天幾組、幾位、大桌（4 位以上）幾組；公休／包場的日子不開放
+  const large = () => info.large_party_size || 4;
+  function partyOk(d, p) {
+    if (!d || d.closed || d.groups_left === 0) return false;
+    if (d.guests_left != null && p > d.guests_left) return false;
+    if (d.large_left != null && p >= large() && d.large_left < 1) return false;
+    return true;
   }
   function render() {
     $('party').textContent = party;
     $('dates').innerHTML = info.days.map(d => {
-      const full = d.slots.every(s => s.left < 1);
-      return '<button type="button" class="chip' + (d.date === day ? ' on' : '') + '" data-d="' + d.date + '"' + (full ? ' disabled' : '') + '>' + YC.dateLabel(d.date) + (full ? '<small>已滿</small>' : '') + '</button>';
+      const full = !d.closed && (d.groups_left === 0 || d.guests_left === 0);
+      const off = d.closed || full;
+      const tag = d.closed ? (d.note || '公休') : full ? '已滿' : (d.note || '');
+      return '<button type="button" class="chip' + (d.date === day ? ' on' : '') + '" data-d="' + d.date + '"' + (off ? ' disabled' : '') + '>' + YC.dateLabel(d.date) + (tag ? '<small>' + YC.esc(tag) + '</small>' : '') + '</button>';
     }).join('');
     const cur = info.days.find(d => d.date === day);
-    const slots = cur ? cur.slots : [];
-    if (time && !slots.some(s => s.time === time && s.left >= party)) time = null;
-    $('slots').innerHTML = slots.map(s => {
-      const ok = s.left >= party;
-      return '<button type="button" class="chip' + (s.time === time ? ' on' : '') + '" data-t="' + s.time + '"' + (ok ? '' : ' disabled') + '>' + s.time + '<small>' + (s.left < 1 ? '已滿' : ok ? '剩 ' + s.left + ' 位' : '只剩 ' + s.left + ' 位') + '</small></button>';
-    }).join('') || '<p class="note">這天沒有開放的時段</p>';
+    const ok = partyOk(cur, party);
+    // 重新讀名額後，原本選的時段若已不在清單（例如過了當天截止時間）也要清掉（Codex 審查）
+    if (!ok || !(cur && !cur.closed && cur.slots.some(s => s.time === time))) time = null;
+    $('slots').innerHTML = (cur && !cur.closed ? cur.slots : []).map(s =>
+      '<button type="button" class="chip' + (s.time === time ? ' on' : '') + '" data-t="' + s.time + '"' + (ok ? '' : ' disabled') + '>' + s.time + '</button>'
+    ).join('') || '<p class="note">這天沒有開放的時段</p>';
+    let msg = '';
+    if (cur && !cur.closed) {
+      if (cur.groups_left === 0 || cur.guests_left === 0) msg = '這天的訂位已滿，請選別天或直接來電。';
+      else if (cur.guests_left != null && party > cur.guests_left) msg = '這天只剩 ' + cur.guests_left + ' 位，請調整人數或選別天。';
+      else if (cur.large_left != null && party >= large() && cur.large_left < 1) msg = '這天 ' + large() + ' 位以上的訂位已滿，請選別天或直接來電。';
+      else if (cur.guests_left != null && cur.guests_left <= 6) msg = '這天還剩 ' + cur.guests_left + ' 位。';
+    }
+    // 特殊日期有寫說明（沒公休、只改名額的日子）也顯示給客人看（Codex 審查）
+    if (cur && !cur.closed && cur.note) msg = cur.note + (msg ? '\n' + msg : '');
+    $('dayInfo').textContent = msg;
   }
   $('dates').onclick = (e) => { const b = e.target.closest('button[data-d]'); if (b && !b.disabled) { day = b.dataset.d; time = null; render(); } };
   $('slots').onclick = (e) => { const b = e.target.closest('button[data-t]'); if (b && !b.disabled) { time = b.dataset.t; render(); } };

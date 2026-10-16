@@ -581,6 +581,48 @@ class DemoRepository implements Repository {
         id: '$storeId-${list.length}', date: date, time: time, party: party, name: name, phone: phone, email: email, note: note,
         status: 'confirmed', source: 'app', createdAt: DateTime.now()));
   }
+  final _demoSpecial = <String, Map<String, ReservationSpecialDay>>{};
+  final _demoGuests = <String, Map<String, GuestProfile>>{};
+  @override
+  Future<List<ReservationSpecialDay>> specialDays(String storeId, DateTime from, DateTime to) async =>
+      (_demoSpecial[storeId]?.values ?? const <ReservationSpecialDay>[])
+          .where((d) => !d.day.isBefore(from) && !d.day.isAfter(to))
+          .toList()
+        ..sort((a, b) => a.day.compareTo(b.day));
+  @override
+  Future<void> saveSpecialDay(String storeId, ReservationSpecialDay d) async =>
+      (_demoSpecial[storeId] ??= {})[d.day.toIso8601String().substring(0, 10)] = d;
+  @override
+  Future<void> deleteSpecialDay(String storeId, DateTime day) async =>
+      _demoSpecial[storeId]?.remove(day.toIso8601String().substring(0, 10));
+  @override
+  Future<Map<String, GuestStats>> guestStats(String storeId, Set<String> phoneDigits) async {
+    final all = _demoRes[storeId] ?? const <Reservation>[];
+    final out = <String, GuestStats>{};
+    for (final p in phoneDigits) {
+      final prof = _demoGuests[storeId]?[p];
+      final reset = prof?.noshowResetAt;
+      final resetDay = reset == null ? null : DateTime(reset.year, reset.month, reset.day);
+      out[p] = GuestStats(
+        all.where((r) => phoneDigitsOf(r.phone) == p && r.status == 'arrived').length,
+        all.where((r) => phoneDigitsOf(r.phone) == p && r.status == 'no_show' && (resetDay == null || r.date.isAfter(resetDay))).length,
+        prof,
+      );
+    }
+    return out;
+  }
+  @override
+  Future<void> saveGuestProfile(String storeId, GuestProfile g, {bool resetNoshow = false}) async {
+    final m = _demoGuests[storeId] ??= {};
+    // 和正式資料庫一樣：解除時記下現在時間，之後只算那天以後的未到；沒解除就保留原本的解除時間（Codex 審查）
+    m[g.phoneDigits] = GuestProfile(
+      phoneDigits: g.phoneDigits,
+      tags: g.tags,
+      note: g.note,
+      noshowResetAt: resetNoshow ? DateTime.now() : m[g.phoneDigits]?.noshowResetAt,
+    );
+  }
+
   @override
   Future<void> updateReservation(String id, Map<String, dynamic> values) async {
     for (final list in _demoRes.values) {
