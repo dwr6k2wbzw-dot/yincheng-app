@@ -110,6 +110,7 @@ class Reservation {
   // 0055 客人申請改人數（pending 待確認／approved／rejected）
   final int? requestedParty;
   final String? partyRequestStatus;
+  final String lang; // 0058 客人訂位時選的語言 zh／en／ja
   const Reservation({
     required this.id,
     required this.date,
@@ -125,6 +126,7 @@ class Reservation {
     required this.createdAt,
     this.requestedParty,
     this.partyRequestStatus,
+    this.lang = 'zh',
   });
   factory Reservation.fromRow(Map<String, dynamic> r) => Reservation(
         id: r['id'] as String,
@@ -141,6 +143,7 @@ class Reservation {
         createdAt: DateTime.parse(r['created_at'] as String).toLocal(),
         requestedParty: (r['requested_party'] as num?)?.toInt(),
         partyRequestStatus: r['party_request_status'] as String?,
+        lang: r['lang'] as String? ?? 'zh',
       );
   bool get partyPending => partyRequestStatus == 'pending' && requestedParty != null && status == 'confirmed';
   bool get active => status == 'confirmed' || status == 'arrived';

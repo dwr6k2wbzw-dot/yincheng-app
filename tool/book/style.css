@@ -76,3 +76,12 @@ button.cd.on.today::before { background:var(--accent-ink); }
 
 /* 保留 15 分鐘提醒（老闆 2026-10-17） */
 .hold { margin:14px 0 0; padding:10px 12px; border-left:3px solid var(--gold); background:var(--gold-soft); border-radius:6px; font-size:14px; line-height:1.6; }
+
+/* 語言切換（老闆 2026-10-17） */
+.langs { position:absolute; top:10px; right:12px; z-index:5; display:flex; gap:2px; padding:3px; border:1px solid var(--line); border-radius:999px; background:rgba(10,10,9,.72); backdrop-filter:blur(6px); }
+.langs button { border:0; background:transparent; color:var(--muted); font:inherit; font-size:12px; padding:5px 10px; border-radius:999px; cursor:pointer; }
+.langs button.on { background:var(--gold); color:var(--accent-ink); font-weight:600; }
+body { position:relative; }
+/* 英文、日文字距收小 */
+html:not([lang^="zh"]) .ik, html:not([lang^="zh"]) .label { letter-spacing:.06em; }
+html:not([lang^="zh"]) .kicker { letter-spacing:.2em; text-indent:.2em; }

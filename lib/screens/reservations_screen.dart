@@ -249,6 +249,8 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
           [
             r.phone.isEmpty ? '沒留電話' : r.phone,
             r.source == 'web' ? '網路訂位' : '電話訂位',
+            if (r.lang == 'en') '英文客人',
+            if (r.lang == 'ja') '日文客人',
             if ((r.note ?? '').isNotEmpty) '備註：${r.note}',
             if (r.emailError != null) '確認信寄送失敗',
           ].join('・'),
