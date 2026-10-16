@@ -8,7 +8,8 @@ import '../data/models.dart';
 import '../data/repository.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
-import '../services/pl_export.dart';
+// 匯出損益表用的 Excel 工具很大：按「匯出」時才下載（老闆 2026-10-16：加快打開速度）
+import '../services/pl_export.dart' deferred as pl;
 import '../widgets/revenue_mix.dart';
 import 'reservations_screen.dart';
 
@@ -79,7 +80,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.didChangeDependencies();
     if (_started) return;
     _started = true;
+    _initial = _peek();
     _future = _load();
+  }
+
+  /// 手機裡存的上次資料（打開先顯示，背景再更新；老闆 2026-10-16）。缺任何一塊就不用（避免損益算錯）。
+  _DashboardData? _initial;
+  _DashboardData? _peek() {
+    final repo = AppScope.of(context).repo;
+    final id = widget.membership.storeId;
+    final d = _DashboardData()..month = _month;
+    if (widget.membership.isPartTime) return d;
+    if (!widget.membership.canSeeRevenue) {
+      final p = repo.peekPettyCashBalance(id);
+      if (p == null) return null;
+      d.petty = p.$1;
+      return d;
+    }
+    final s = repo.peekMonthlySummary(id, _month);
+    if (s == null) return null;
+    d.summary = s;
+    d.days = repo.peekDailyRevenueBetween(id, DateTime(_month.year, _month.month - 1, 1), DateTime(_month.year, _month.month + 1, 0)) ??
+        const <DailyRevenue>[];
+    if (_isOwner) {
+      final fixed = repo.peekFixedCosts(id, _month);
+      final items = repo.peekExpenseItems(id, _month);
+      final recurring = repo.peekRecurringExpenseItems(id);
+      final rate = repo.peekCardFeeRate(id);
+      if (fixed == null || items == null || recurring == null || rate == null) return null;
+      d.fixed = fixed;
+      d.items = items;
+      d.recurring = recurring;
+      d.cardFeeRate = rate;
+    }
+    return d;
   }
 
   Future<_DashboardData> _load() async {
@@ -119,6 +153,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int _gen = 0; // 每次重新整理加 1，讓訂位卡片跟著重讀
   void _reload() => setState(() {
         _gen++;
+        _initial = _peek();
         _future = _load();
       });
 
@@ -160,14 +195,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) => FutureBuilder<_DashboardData>(
+        key: ValueKey(_gen), // 換月份／重新整理：重新從上次資料開始
         future: _future,
+        initialData: _initial,
         builder: (context, snap) {
-          if (snap.hasError) return ErrorView(message: friendlyError(snap.error!), onRetry: _reload);
-          if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-          final d = snap.data!;
+          // 讀不到最新資料但有上次的：照樣顯示上次的，最上面提示
+          final offline = snap.hasError && _initial != null;
+          if (snap.hasError && !offline) return ErrorView(message: friendlyError(snap.error!), onRetry: _reload);
+          if (!snap.hasData && !offline) return const Center(child: CircularProgressIndicator());
+          final d = offline ? _initial! : snap.data!;
+          final updating = !offline && snap.connectionState != ConnectionState.done;
           return RefreshIndicator(
             onRefresh: () async => _reload(),
             child: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 24), children: [
+              // 先顯示上次的資料時，最上面一條細線表示正在更新
+              if (offline)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text('連不上資料庫，先顯示上次的資料（下拉可重試）', style: TextStyle(color: AppColors.warn, fontSize: 12)),
+                ),
+              if (updating)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(2),
+                    child: LinearProgressIndicator(minHeight: 2, color: AppColors.primary, backgroundColor: AppColors.line),
+                  ),
+                ),
               if (widget.membership.isPartTime)
                 Text('兼職帳號：可以看班表、交接與提醒。點右上角小鈴鐺左邊的「交接・提醒」圖示寫交接、打勾提醒。',
                     style: TextStyle(color: AppColors.muted, fontSize: 13, height: 1.5))
@@ -630,10 +684,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   /// 一鍵匯出當月損益表（Excel），數字與上面卡片同一算法（老闆 2026-10-12）
   Future<void> _exportPl(_DashboardData d, MonthlySummary s) async {
-    List<PlLine> detail(String cat, double? base, String baseLabel) => [
-          if (base != null) PlLine(baseLabel, base),
-          for (final it in d.recurring.where((e) => e.category == cat)) PlLine(it.name, it.amount, '每月固定'),
-          for (final it in d.items.where((e) => e.category == cat)) PlLine(it.name, it.amount),
+    try {
+      await pl.loadLibrary();
+    } catch (e) {
+      if (mounted) showMessage(context, '匯出工具下載失敗，請檢查網路後再試', error: true);
+      return;
+    }
+    detail(String cat, double? base, String baseLabel) => [
+          if (base != null) pl.PlLine(baseLabel, base),
+          for (final it in d.recurring.where((e) => e.category == cat)) pl.PlLine(it.name, it.amount, '每月固定'),
+          for (final it in d.items.where((e) => e.category == cat)) pl.PlLine(it.name, it.amount),
         ];
     final cardFee = d.cardFee(s);
     final rent = (d.fixed.rent ?? 0) + d.itemsOf('rent') + d.recurringOf('rent');
@@ -642,11 +702,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final parts = revenueParts(widget.membership.storeName,
         drinks: s.drinksRevenue, food: s.foodRevenue, project: s.projectAmount,
         coffee: s.coffeeRevenue, ramen: s.ramenRevenue, deposit: s.deposit);
-    final p = ProfitStatement(
+    final p = pl.ProfitStatement(
       storeName: widget.membership.storeName,
       month: d.month,
       revenue: s.revenue,
-      revenueParts: [for (final x in parts) PlLine(x.label, x.amount)],
+      revenueParts: [for (final x in parts) pl.PlLine(x.label, x.amount)],
       guests: s.guests,
       cash: s.cash,
       card: s.card,
@@ -657,8 +717,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       rent: rent,
       payroll: payroll,
       miscDetail: [
-        PlLine('進貨雜項', s.miscCost, '雜項類進貨'),
-        if (cardFee != 0) PlLine('刷卡手續費', cardFee, '刷卡 ${ntd(s.card)} × ${_ratePct(d.cardFeeRate)}%'),
+        pl.PlLine('進貨雜項', s.miscCost, '雜項類進貨'),
+        if (cardFee != 0) pl.PlLine('刷卡手續費', cardFee, '刷卡 ${ntd(s.card)} × ${_ratePct(d.cardFeeRate)}%'),
         ...detail('misc', null, ''),
       ],
       rentDetail: detail('rent', d.fixed.rent, '租金（基底）'),
@@ -669,7 +729,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ],
     );
     try {
-      final r = await saveFile(buildProfitXlsx(p), p.fileName, xlsxMime);
+      final r = await pl.saveFile(pl.buildProfitXlsx(p), p.fileName, pl.xlsxMime);
       if (!mounted) return;
       if (r == 'downloaded') showMessage(context, '已下載 ${p.fileName}');
     } catch (e) {

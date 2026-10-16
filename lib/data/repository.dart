@@ -20,6 +20,17 @@ abstract class Repository {
   // 店家
   Future<List<Membership>> myMemberships();
 
+  // 上次讀到的資料（打開 App 先顯示、背景再更新；老闆 2026-10-16）。沒有存過就是 null。
+  List<Membership>? peekMemberships();
+  MonthlySummary? peekMonthlySummary(String storeId, DateTime month);
+  List<DailyRevenue>? peekDailyRevenueBetween(String storeId, DateTime from, DateTime to);
+  FixedCosts? peekFixedCosts(String storeId, DateTime month);
+  List<ExpenseItem>? peekExpenseItems(String storeId, DateTime month);
+  List<RecurringExpenseItem>? peekRecurringExpenseItems(String storeId);
+  double? peekCardFeeRate(String storeId);
+  /// 零用金結餘：外層 null＝沒存過；存過但沒有資料＝(null)
+  (double?,)? peekPettyCashBalance(String storeId);
+
   // 成員管理（產生邀請碼、成員清單只有老闆；資料庫函式也會檢查）
   /// 用邀請碼加入店家。回傳加入的店家數；-1＝邀請碼無效、已用過或已過期
   Future<int> claimInvite(String code);

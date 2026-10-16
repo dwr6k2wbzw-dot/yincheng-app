@@ -28,7 +28,7 @@ jobs:
           # App 圖示（小城外 logo）
           mkdir -p web/icons && cp tool/icons/Icon-*.png tool/icons/apple-touch-icon.png web/icons/ && cp tool/icons/favicon.png web/favicon.png
           cp tool/icons/apple-touch-icon.png web/icons/xcw-touch-180-v2.png && cp tool/icons/favicon.png web/icons/xcw-favicon-v2.png
-          sed -i 's/"name": ".*"/"name": "小城外"/; s/"short_name": ".*"/"short_name": "小城外"/; s/"background_color": ".*"/"background_color": "#0F1115"/; s/"theme_color": ".*"/"theme_color": "#0F1115"/' web/manifest.json
+          sed -i 's/"name": ".*"/"name": "小城外"/; s/"short_name": ".*"/"short_name": "小城外"/; s/"background_color": ".*"/"background_color": "#0A0A09"/; s/"theme_color": ".*"/"theme_color": "#0A0A09"/' web/manifest.json
       - run: flutter pub get
       - name: 靜態檢查（只擋錯誤，不擋建議）
         run: |
@@ -69,6 +69,9 @@ jobs:
           grep -o 'main.dart.js?v=[0-9a-f]*' build/web/flutter_bootstrap.js
           # 小鈴鐺的「App 有新版本」：目前版本寫進網頁，最新版本寫進 version.txt（App 定期比對）
           echo "$v" > build/web/version.txt
+          # 把 App 存在手機裡（service worker），版本號換成這次的
+          sed "s/__V__/$v/" tool/sw.js > build/web/sw.js
+          grep -q "const V = '$v'" build/web/sw.js
           sed -i "s#</head>#<script>window.ycBuild='$v';</script>\n</head>#" build/web/index.html
           grep -q "window.ycBuild='$v'" build/web/index.html
       - name: 另存一份編譯結果到 web-build 分支（供除錯檢查）

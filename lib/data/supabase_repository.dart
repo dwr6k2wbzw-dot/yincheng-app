@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' hide toDouble;
 
 import '../config.dart';
 import 'models.dart';
+import 'row_cache.dart';
 import 'repository.dart';
 
 /// 透過 Supabase（PostgREST）讀寫。所有權限由資料庫的 RLS 與觸發器把關，App 端不做權限判斷以外的假設。
@@ -25,7 +26,72 @@ class SupabaseRepository implements Repository {
   Future<void> signIn(String email, String password) =>
       _db.auth.signInWithPassword(email: email.trim(), password: password);
   @override
-  Future<void> signOut() => _db.auth.signOut();
+  Future<void> signOut() async {
+    await RowCache.clear(); // 登出就清掉手機裡存的上次資料
+    await _db.auth.signOut();
+  }
+
+  // ---------------- 上次讀到的資料（打開先顯示，老闆 2026-10-16） ----------------
+  String _ck(String what, List<Object?> args) => '${currentUserId ?? '-'}|$what|${args.join('|')}';
+  T _remember<T>(String key, dynamic raw, T Function(dynamic) parse) {
+    RowCache.put(key, raw);
+    return parse(raw);
+  }
+
+  T? _peek<T>(String key, T Function(dynamic) parse) {
+    final raw = RowCache.get(key);
+    if (raw == null) return null;
+    try {
+      return parse(raw);
+    } catch (_) {
+      return null; // 舊格式讀不懂就當沒有
+    }
+  }
+
+  static List<Map<String, dynamic>> _rows(dynamic raw) =>
+      [for (final r in raw as List) Map<String, dynamic>.from(r as Map)];
+  static Map<String, dynamic>? _row(dynamic raw) => raw == null ? null : Map<String, dynamic>.from(raw as Map);
+
+  static List<Membership> _parseMemberships(dynamic raw) {
+    final list = _rows(raw).map(Membership.fromRow).toList();
+    list.sort((a, b) => a.storeName.compareTo(b.storeName));
+    return list;
+  }
+
+  static FixedCosts _parseFixed(dynamic raw) {
+    final rows = _rows(raw);
+    double? pick(String c) {
+      final r = rows.where((x) => x['category'] == c).toList();
+      return r.isEmpty ? null : toDouble(r.first['amount']);
+    }
+
+    return FixedCosts(rent: pick('rent'), payroll: pick('payroll'));
+  }
+
+  String _mk(DateTime month) => _day.format(DateTime(month.year, month.month, 1));
+
+  @override
+  List<Membership>? peekMemberships() => _peek(_ck('members', []), _parseMemberships);
+  @override
+  MonthlySummary? peekMonthlySummary(String storeId, DateTime month) => _peek(_ck('summary', [storeId, _mk(month)]),
+      (raw) => summaryFromRows(_row((raw as List)[0]), _row(raw[1]), month));
+  @override
+  List<DailyRevenue>? peekDailyRevenueBetween(String storeId, DateTime from, DateTime to) =>
+      _peek(_ck('daily', [storeId, _day.format(from), _day.format(to)]), (raw) => _rows(raw).map(dailyFromRow).toList());
+  @override
+  FixedCosts? peekFixedCosts(String storeId, DateTime month) => _peek(_ck('fixed', [storeId, _mk(month)]), _parseFixed);
+  @override
+  List<ExpenseItem>? peekExpenseItems(String storeId, DateTime month) =>
+      _peek(_ck('items', [storeId, _mk(month)]), (raw) => _rows(raw).map(ExpenseItem.fromRow).toList());
+  @override
+  List<RecurringExpenseItem>? peekRecurringExpenseItems(String storeId) =>
+      _peek(_ck('recurring', [storeId]), (raw) => _rows(raw).map(RecurringExpenseItem.fromRow).toList());
+  @override
+  double? peekCardFeeRate(String storeId) =>
+      _peek(_ck('cardfee', [storeId]), (raw) => raw is Map && raw['v'] == null ? 0.02 : toDouble((raw as Map)['v']));
+  @override
+  (double?,)? peekPettyCashBalance(String storeId) =>
+      _peek(_ck('petty', [storeId]), (raw) => ((raw as Map)['v'] == null ? null : toDouble(raw['v']),));
   @override
   Future<bool> signUp(String email, String password) async {
     // 確認信的連結回到目前這個網址（GitHub Pages）
@@ -78,9 +144,7 @@ class SupabaseRepository implements Repository {
         .select('store_id, role, display_name, stores(name)')
         .eq('user_id', currentUserId!)
         .eq('active', true);
-    final list = rows.map(Membership.fromRow).toList();
-    list.sort((a, b) => a.storeName.compareTo(b.storeName));
-    return list;
+    return _remember(_ck('members', []), rows, _parseMemberships);
   }
 
   // ---------------- 營運總覽 ----------------
@@ -92,7 +156,8 @@ class SupabaseRepository implements Repository {
       _db.from('v_monthly_revenue').select().eq('store_id', storeId).eq('period_month', m).maybeSingle(),
       _db.from('v_monthly_cost').select().eq('store_id', storeId).eq('period_month', m).maybeSingle(),
     ]);
-    return summaryFromRows(r[0], r[1], month);
+    return _remember(_ck('summary', [storeId, _mk(month)]), [r[0], r[1]],
+        (raw) => summaryFromRows(_row((raw as List)[0]), _row(raw[1]), month));
   }
 
   @override
@@ -118,7 +183,8 @@ class SupabaseRepository implements Repository {
         .gte('biz_date', _day.format(from))
         .lte('biz_date', _day.format(to))
         .order('biz_date');
-    return rows.map(dailyFromRow).toList();
+    return _remember(_ck('daily', [storeId, _day.format(from), _day.format(to)]), rows,
+        (raw) => _rows(raw).map(dailyFromRow).toList());
   }
 
   @override
@@ -138,7 +204,9 @@ class SupabaseRepository implements Repository {
         .order('period_month', ascending: false)
         .limit(1)
         .maybeSingle();
-    return r == null ? null : toDouble(r['closing_balance']);
+    final v = r == null ? null : toDouble(r['closing_balance']);
+    RowCache.put(_ck('petty', [storeId]), {'v': v});
+    return v;
   }
 
   // ---------------- 每日營收 ----------------
@@ -206,12 +274,7 @@ class SupabaseRepository implements Repository {
         .eq('store_id', storeId)
         .eq('period_month', _day.format(DateTime(month.year, month.month, 1)))
         .inFilter('category', ['rent', 'payroll']);
-    double? pick(String c) {
-      final r = rows.where((x) => x['category'] == c).toList();
-      return r.isEmpty ? null : toDouble(r.first['amount']);
-    }
-
-    return FixedCosts(rent: pick('rent'), payroll: pick('payroll'));
+    return _remember(_ck('fixed', [storeId, _mk(month)]), rows, _parseFixed);
   }
 
   @override
@@ -239,7 +302,7 @@ class SupabaseRepository implements Repository {
         .eq('store_id', storeId)
         .eq('period_month', _day.format(DateTime(month.year, month.month, 1)))
         .order('created_at');
-    return rows.map(ExpenseItem.fromRow).toList();
+    return _remember(_ck('items', [storeId, _mk(month)]), rows, (raw) => _rows(raw).map(ExpenseItem.fromRow).toList());
   }
 
   @override
@@ -267,7 +330,9 @@ class SupabaseRepository implements Repository {
   @override
   Future<double> cardFeeRate(String storeId) async {
     final r = await _db.from('store_settings').select('card_fee_rate').eq('store_id', storeId).maybeSingle();
-    return r == null ? 0.02 : toDouble(r['card_fee_rate']);
+    final rate = r == null ? 0.02 : toDouble(r['card_fee_rate']);
+    RowCache.put(_ck('cardfee', [storeId]), {'v': rate});
+    return rate;
   }
 
   @override
@@ -284,7 +349,7 @@ class SupabaseRepository implements Repository {
         .eq('store_id', storeId)
         .eq('active', true)
         .order('created_at');
-    return rows.map(RecurringExpenseItem.fromRow).toList();
+    return _remember(_ck('recurring', [storeId]), rows, (raw) => _rows(raw).map(RecurringExpenseItem.fromRow).toList());
   }
 
   @override
