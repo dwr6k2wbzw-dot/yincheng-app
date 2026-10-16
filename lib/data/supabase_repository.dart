@@ -945,6 +945,8 @@ class SupabaseRepository implements Repository {
         .from('stock_counts')
         .select('id, biz_date, counted_by, status, note, stock_count_lines(count)')
         .eq('store_id', storeId)
+        // 盤點紀錄只列算數的（草稿、退回、作廢不佔 30 筆的名額；Codex 審查）
+        .inFilter('status', ['submitted', 'approved'])
         .order('counted_at', ascending: false)
         .limit(30);
     return rows.map(StockCount.fromRow).toList();

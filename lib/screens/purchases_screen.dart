@@ -283,6 +283,7 @@ class _CategoryPurchasesScreenState extends State<_CategoryPurchasesScreen> {
           id: p.id, purchaseDate: p.purchaseDate, categoryCode: p.categoryCode, supplierName: p.supplierName,
           memo: p.memo, amount: p.amount, paidBy: p.paidBy, reconciled: !p.reconciled, source: p.source,
           supersededBy: p.supersededBy, excelCovered: p.excelCovered, createdBy: p.createdBy,
+          noReceipt: p.noReceipt, photoPath: p.photoPath, // 核銷後照片縮圖要留著（Codex 審查）
         );
       });
     } catch (e) {
