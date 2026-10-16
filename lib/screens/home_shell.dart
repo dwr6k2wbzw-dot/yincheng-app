@@ -15,7 +15,6 @@ import 'purchases_screen.dart';
 import 'revenue_screen.dart';
 import 'stock_counts_screen.dart';
 import 'schedule_screen.dart';
-import 'vendor_slips_screen.dart';
 
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
@@ -97,19 +96,12 @@ class _HomeShellState extends State<HomeShell> {
         const NavigationDestination(
             icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: '進貨'),
       ),
-      // 隱城、小城外：「盤點」分頁改成「銷貨單」（Dropbox 廠商進貨單的掃描單據明細）
-      if (AppConfig.vendorSlipStores.contains(m.storeName))
-        (
-          VendorSlipsScreen(key: ValueKey('v-${m.storeId}'), membership: m),
-          const NavigationDestination(
-              icon: Icon(Icons.description_outlined), selectedIcon: Icon(Icons.description), label: '銷貨單'),
-        )
-      else
-        (
-          StockCountsScreen(key: ValueKey('s-${m.storeId}'), membership: m),
-          const NavigationDestination(
-              icon: Icon(Icons.inventory_2_outlined), selectedIcon: Icon(Icons.inventory_2), label: '盤點'),
-        ),
+      // 盤點（老闆 2026-10-16：銷貨單分頁改回盤點；銷貨單照片已併到進貨）
+      (
+        StockCountsScreen(key: ValueKey('s-${m.storeId}'), membership: m),
+        const NavigationDestination(
+            icon: Icon(Icons.inventory_2_outlined), selectedIcon: Icon(Icons.inventory_2), label: '盤點'),
+      ),
       ],
     ];
     int? scheduleTab;

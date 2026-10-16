@@ -126,6 +126,12 @@ abstract class Repository {
   Future<List<CountLine>> countLines(String countId);
   Future<void> upsertCountLine(String countId, String productId, double qty);
   Future<void> setCountStatus(String countId, CountStatus status, {String? voidReason});
+  /// 每個品項最近一次盤點到的數量（草稿以外、作廢與退回不算）
+  Future<Map<String, StockLevel>> latestStock(String storeId);
+  /// 新增或修改品項（老闆／店長）；id 為空字串＝新增
+  Future<void> saveProduct(String storeId, Product p);
+  /// 停用品項（不刪除，歷史盤點照常顯示）
+  Future<void> deactivateProduct(String productId);
 
   // ---------------- 訂位（0050） ----------------
   Future<ReservationSettings?> reservationSettings(String storeId);

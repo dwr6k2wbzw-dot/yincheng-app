@@ -10,6 +10,7 @@ import '../data/repository.dart';
 import '../theme.dart';
 import '../services/slip_scan.dart';
 import '../widgets/common.dart';
+import '../widgets/photo_thumb.dart';
 
 /// 進貨管理：本月進貨分成「月結廠商」與「零用金支出」兩大類，
 /// 點大類展開各進貨類別的小計，點類別看該類別依廠商分組的明細（老闆／店長可在明細核銷）
@@ -432,6 +433,11 @@ class _PurchaseTile extends StatelessWidget {
         child: SectionCard(
         padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
         child: Row(children: [
+          // 送貨單／發票照片（老闆 2026-10-16：銷貨單照片併到進貨），點了看大圖
+          if (p.photoPath != null) ...[
+            PhotoThumb(key: ValueKey(p.photoPath), path: p.photoPath!, size: 44),
+            const SizedBox(width: 12),
+          ],
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(p.supplierName ?? p.memo ?? categoryName,
@@ -604,7 +610,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
           if (_photo != null && AppConfig.vendorSlipStores.contains(widget.membership.storeName) && !_isReturn)
             Padding(
               padding: EdgeInsets.only(top: 6),
-              child: Text('儲存後，這張照片會自動出現在「銷貨單」分頁。',
+              child: Text('儲存後，照片會顯示在這筆進貨上，點縮圖可以看大圖。',
                   style: TextStyle(color: AppColors.muted, fontSize: 12, height: 1.4)),
             ),
           if (_photo != null) ...[

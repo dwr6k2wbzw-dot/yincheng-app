@@ -671,27 +671,27 @@ class SupabaseRepository implements Repository {
   Future<List<Purchase>> recentPurchases(String storeId, {int limit = 30}) async {
     final rows = await _db
         .from('purchases')
-        .select('id, purchase_date, category_code, memo, amount, paid_by, reconciled, source, superseded_by, excel_covered_at, created_by, vendor_name, no_receipt, '
+        .select('id, purchase_date, category_code, memo, amount, paid_by, reconciled, source, superseded_by, excel_covered_at, created_by, vendor_name, no_receipt, photo_path, '
             'suppliers!purchases_supplier_same_store(name)')
         .eq('store_id', storeId)
         .order('purchase_date', ascending: false)
         .order('created_at', ascending: false)
         .limit(limit);
-    return rows.map(Purchase.fromRow).toList();
+    return _withPhotos(rows.map(Purchase.fromRow).toList());
   }
 
   @override
   Future<List<Purchase>> monthPurchases(String storeId, DateTime month) async {
     final rows = await _db
         .from('purchases')
-        .select('id, purchase_date, category_code, memo, amount, paid_by, reconciled, source, superseded_by, excel_covered_at, created_by, vendor_name, no_receipt, '
+        .select('id, purchase_date, category_code, memo, amount, paid_by, reconciled, source, superseded_by, excel_covered_at, created_by, vendor_name, no_receipt, photo_path, '
             'suppliers!purchases_supplier_same_store(name)')
         .eq('store_id', storeId)
         .eq('period_month', _day.format(DateTime(month.year, month.month, 1)))
         .order('purchase_date', ascending: false)
         .order('created_at', ascending: false)
         .limit(2000);
-    return rows.map(Purchase.fromRow).toList();
+    return _withPhotos(rows.map(Purchase.fromRow).toList());
   }
 
   @override
@@ -865,20 +865,69 @@ class SupabaseRepository implements Repository {
     if (rows.isEmpty) throw Exception('message: 沒有權限修改這筆進貨（可能已核銷或已鎖帳）,');
   }
 
+  /// 日報表匯入的那筆沒有照片時，帶上被它取代的 App 暫記的照片（同一筆進貨）
+  static List<Purchase> _withPhotos(List<Purchase> list) {
+    final byImport = <String, String>{};
+    for (final p in list) {
+      if (p.supersededBy != null && p.photoPath != null) byImport.putIfAbsent(p.supersededBy!, () => p.photoPath!);
+    }
+    for (final p in list) {
+      if (p.photoPath == null && byImport.containsKey(p.id)) p.photoPath = byImport[p.id];
+    }
+    return list;
+  }
+
   // ---------------- 盤點 ----------------
   @override
   Future<List<Product>> products(String storeId) async {
     // 只列出員工有權限的欄位（cost_price 員工不可讀，不能用 select *）
     final rows = await _db
         .from('products')
-        .select('id, name, category, unit')
+        .select('id, name, category, unit, par_level')
         .eq('store_id', storeId)
         .eq('active', true)
         .order('category')
         .order('name');
     return rows
-        .map((r) => Product(r['id'] as String, r['name'] as String, r['category'] as String, r['unit'] as String))
+        .map((r) => Product(r['id'] as String, r['name'] as String, r['category'] as String, r['unit'] as String,
+            parLevel: r['par_level'] == null ? null : toDouble(r['par_level'])))
         .toList();
+  }
+
+  @override
+  Future<Map<String, StockLevel>> latestStock(String storeId) async {
+    final rows = await _db
+        .from('stock_counts')
+        .select('biz_date, counted_at, status, stock_count_lines(product_id, qty)')
+        .eq('store_id', storeId)
+        .inFilter('status', ['submitted', 'approved'])
+        .order('counted_at', ascending: false)
+        .limit(60);
+    final out = <String, StockLevel>{};
+    for (final c in rows) {
+      final d = DateTime.parse(c['biz_date'] as String);
+      for (final l in (c['stock_count_lines'] as List? ?? const [])) {
+        out.putIfAbsent(l['product_id'] as String, () => StockLevel(toDouble(l['qty']), d));
+      }
+    }
+    return out;
+  }
+
+  @override
+  Future<void> saveProduct(String storeId, Product p) async {
+    final row = {'name': p.name.trim(), 'category': p.category, 'unit': p.unit.trim(), 'par_level': p.parLevel};
+    if (p.id.isEmpty) {
+      await _db.from('products').insert({...row, 'store_id': storeId});
+    } else {
+      final r = await _db.from('products').update(row).eq('id', p.id).select('id');
+      if (r.isEmpty) throw Exception('message: 只有老闆或店長可以修改品項,');
+    }
+  }
+
+  @override
+  Future<void> deactivateProduct(String productId) async {
+    final r = await _db.from('products').update({'active': false}).eq('id', productId).select('id');
+    if (r.isEmpty) throw Exception('message: 只有老闆或店長可以停用品項,');
   }
 
   @override
