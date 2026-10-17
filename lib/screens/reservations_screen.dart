@@ -25,6 +25,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
   bool _calOpen = false;
   static bool _timelineView = true; // 0061：列表／時間軸（記住上次選的）
   List<ReservationTable> _tables = const [];
+  bool get _useTimeline => _timelineView && _tables.isNotEmpty; // 沒設定桌位的店只有列表
   late Future<(ReservationSettings?, List<Reservation>)> _future;
   bool _started = false;
 
@@ -130,7 +131,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
             ),
             floatingActionButton: settings == null
                 ? null
-                : _timelineView
+                : _useTimeline
                     ? FloatingActionButton.extended(
                         heroTag: 'walkin',
                         onPressed: () => _walkIn(null, null),
@@ -228,7 +229,8 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
           );
         }(),
         const SizedBox(height: 12),
-        // 0061：列表／時間軸
+        // 0061：列表／時間軸（這家店有設定桌位才有時間軸）
+        if (_tables.isNotEmpty)
         Row(children: [
           SegmentedButton<bool>(
             segments: const [
@@ -240,15 +242,15 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
             onSelectionChanged: (v) => setState(() => _timelineView = v.first),
           ),
           const Spacer(),
-          if (_timelineView)
+          if (_useTimeline)
             TextButton.icon(
               onPressed: () => _add(settings),
               icon: const Icon(Icons.add_call, size: 18),
               label: const Text('電話訂位'),
             ),
         ]),
-        const SizedBox(height: 12),
-        if (_timelineView)
+        if (_tables.isNotEmpty) const SizedBox(height: 12),
+        if (_useTimeline)
           ReservationTimeline(
             key: ValueKey(_day),
             day: _day,
@@ -259,12 +261,12 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
             onTapReservation: _actions,
             onTapEmpty: (t, m) => _walkIn(t, m),
           ),
-        if (!_timelineView && list.isEmpty)
+        if (!_useTimeline && list.isEmpty)
           Padding(
             padding: EdgeInsets.only(top: 48),
             child: Text('這天還沒有訂位', textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted)),
           ),
-        if (!_timelineView)
+        if (!_useTimeline)
         for (final t in times) ...[
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 8, 4, 6),
