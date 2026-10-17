@@ -26,20 +26,50 @@
   // ---------- 1. 開場倒數 ----------
   let seen = false;
   try { seen = sessionStorage.getItem('yc_intro') === '1'; sessionStorage.setItem('yc_intro', '1'); } catch (_) { seen = true; }
+  // 小城外開場（老闆可選）：clock 老時鐘／door 推開老木門／rain 雨夜霓虹／sky 仰望天井／letter 拆一封信
+  const WKW_INTRO = 'clock';
+  const pick = ['clock', 'door', 'rain', 'sky', 'letter'].includes(q.get('intro')) ? q.get('intro') : WKW_INTRO;
+  if (q.get('intro') && q.get('intro') !== '0') seen = false; // 預覽用：網址指定就每次都放
   if (!seen && q.get('intro') !== '0' && wkw) {
-    // 小城外：老時鐘滴答＋一句話，抽格淡出
     const o = document.createElement('div');
-    o.className = 'intro wk';
+    o.className = 'intro wk wk-' + pick;
     o.setAttribute('aria-hidden', 'true');
-    let ticks = '';
-    for (let i = 0; i < 12; i++) ticks += '<line x1="100" y1="14" x2="100" y2="' + (i % 3 ? 22 : 28) + '" transform="rotate(' + i * 30 + ' 100 100)"/>';
-    o.innerHTML = '<div class="clock"><svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="92" class="face"/>' + ticks +
-      '<line x1="100" y1="100" x2="100" y2="52" class="hh"/><line x1="100" y1="100" x2="100" y2="30" class="mh"/>' +
-      '<g class="sh"><line x1="100" y1="116" x2="100" y2="22"/></g><circle cx="100" cy="100" r="4" class="pin"/></svg></div>' +
-      '<p class="line">' + (W.line || '') + '</p><span class="skip">' + (W.skip || '') + '</span>';
+    const line = '<p class="line">' + (W.line || '') + '</p>';
+    const skip = '<span class="skip">' + (W.skip || '') + '</span>';
+    let dur = 2600;
+    if (pick === 'door') {
+      // 推開老木門：門縫透光、兩扇門往內打開
+      o.innerHTML = '<div class="glow"></div>' + line +
+        '<div class="door l"><i class="pn"></i><i class="pn"></i><b class="knob"></b></div>' +
+        '<div class="door r"><i class="pn"></i><i class="pn"></i><b class="knob"></b></div>' + skip;
+      dur = 3000;
+    } else if (pick === 'rain') {
+      // 雨夜霓虹：雨絲落下、「小城外」霓虹招牌閃幾下亮起、地上倒影
+      let drops = '';
+      for (let i = 0; i < 46; i++) drops += '<i style="left:' + (Math.random() * 100).toFixed(1) + '%;animation-delay:' + (-Math.random()).toFixed(2) + 's;animation-duration:' + (0.45 + Math.random() * 0.35).toFixed(2) + 's;opacity:' + (0.25 + Math.random() * 0.5).toFixed(2) + '"></i>';
+      o.innerHTML = '<div class="rain">' + drops + '</div><div class="sign"><b>小城外</b><b class="refl">小城外</b></div>' + line + skip;
+      dur = 3000;
+    } else if (pick === 'sky') {
+      // 仰望天井：黑暗中一方天光慢慢打開、灰塵在光裡飄，最後光鋪滿畫面
+      let dust = '';
+      for (let i = 0; i < 26; i++) dust += '<i style="left:' + (20 + Math.random() * 60).toFixed(1) + '%;top:' + (20 + Math.random() * 60).toFixed(1) + '%;animation-delay:' + (-Math.random() * 4).toFixed(2) + 's"></i>';
+      o.innerHTML = '<div class="well"><div class="light">' + dust + '</div></div>' + line + skip;
+      dur = 3000;
+    } else if (pick === 'letter') {
+      // 拆一封信：牛皮信封、紅色火漆，封口打開、信紙抽出來寫著一句話
+      o.innerHTML = '<div class="env"><div class="paper"><p>' + (W.line || '') + '</p></div><div class="body"></div><div class="flap"></div><b class="seal">外</b></div>' + skip;
+      dur = 3200;
+    } else {
+      // 老時鐘滴答＋一句話，抽格淡出
+      let ticks = '';
+      for (let i = 0; i < 12; i++) ticks += '<line x1="100" y1="14" x2="100" y2="' + (i % 3 ? 22 : 28) + '" transform="rotate(' + i * 30 + ' 100 100)"/>';
+      o.innerHTML = '<div class="clock"><svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="92" class="face"/>' + ticks +
+        '<line x1="100" y1="100" x2="100" y2="52" class="hh"/><line x1="100" y1="100" x2="100" y2="30" class="mh"/>' +
+        '<g class="sh"><line x1="100" y1="116" x2="100" y2="22"/></g><circle cx="100" cy="100" r="4" class="pin"/></svg></div>' + line + skip;
+    }
     document.body.appendChild(o);
-    const done = () => { o.classList.add('out'); setTimeout(() => o.remove(), 800); clearTimeout(t); };
-    const t = setTimeout(done, 2600);
+    const done = () => { o.classList.add('out'); setTimeout(() => o.remove(), 900); clearTimeout(t); };
+    const t = setTimeout(done, dur);
     o.addEventListener('click', done);
   } else if (!seen && q.get('intro') !== '0') {
     const o = document.createElement('div');
