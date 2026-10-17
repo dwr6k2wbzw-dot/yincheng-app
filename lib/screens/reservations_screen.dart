@@ -226,7 +226,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                 Text('這天不開放線上訂位${lim.note == null ? '' : '（${lim.note}）'}',
                     style: TextStyle(color: AppColors.warn, fontSize: 13))
               else
-                Text('${lim.largeSize} 位以上：${cap(large, lim.maxLarge)} 組${_special != null ? '・今天是特殊日期' : ''}',
+                Text('${lim.largeSize} 位以上：${cap(large, lim.maxLarge)} 組${_special?.holidayEve == true ? '・國定假日前夕（提醒低消）' : _special != null ? '・今天是特殊日期' : ''}',
                     style: TextStyle(color: AppColors.muted, fontSize: 12)),
             ]),
           );
@@ -1635,6 +1635,7 @@ class _SpecialDaysScreenState extends State<SpecialDaysScreen> {
       if (day == null || !mounted) return;
     }
     var closed = d?.closed ?? true;
+    var eve = d?.holidayEve ?? false;
     final note = TextEditingController(text: d?.note ?? '');
     final groups = TextEditingController(text: d?.maxGroups?.toString() ?? '');
     final guests = TextEditingController(text: d?.maxGuests?.toString() ?? '');
@@ -1655,6 +1656,15 @@ class _SpecialDaysScreenState extends State<SpecialDaysScreen> {
                 onChanged: (v) => setD(() => closed = v),
               ),
               TextField(controller: note, maxLength: 100, decoration: const InputDecoration(labelText: '說明（會顯示在訂位頁，例如：包場）')),
+              if (!closed)
+                // 0062 國定假日前夕：訂位頁、確認信、提醒信會特別提醒低消
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('國定假日前夕'),
+                  subtitle: const Text('訂位頁、確認信會提醒「這天低消每人 800／600 元」', style: TextStyle(fontSize: 12)),
+                  value: eve,
+                  onChanged: (v) => setD(() => eve = v),
+                ),
               if (!closed) ...[
                 const SizedBox(height: 8),
                 Text('這天改名額（空白＝照平常）', style: TextStyle(color: AppColors.muted, fontSize: 12)),
@@ -1694,6 +1704,7 @@ class _SpecialDaysScreenState extends State<SpecialDaysScreen> {
             maxGroups: closed ? null : opt(groups),
             maxGuests: closed ? null : opt(guests),
             maxLarge: closed ? null : opt(large),
+            holidayEve: !closed && eve,
           ));
       if (!mounted) return;
       showMessage(context, '已儲存');
@@ -1730,7 +1741,7 @@ class _SpecialDaysScreenState extends State<SpecialDaysScreen> {
             final list = snap.data!;
             if (list.isEmpty) {
               return Center(
-                  child: Text('還沒有特殊日期\n按右下角新增公休、包場或改名額的日子',
+                  child: Text('還沒有特殊日期\n按右下角新增公休、包場、國定假日前夕或改名額的日子',
                       textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted, height: 1.6)));
             }
             return ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 96), children: [
@@ -1747,6 +1758,7 @@ class _SpecialDaysScreenState extends State<SpecialDaysScreen> {
                         d.closed
                             ? '不開放線上訂位${d.note == null ? '' : '・${d.note}'}'
                             : [
+                                if (d.holidayEve) '國定假日前夕（提醒低消）',
                                 if (d.maxGroups != null) '最多 ${d.maxGroups} 組',
                                 if (d.maxGuests != null) '最多 ${d.maxGuests} 位',
                                 if (d.maxLarge != null) '大桌 ${d.maxLarge} 組',

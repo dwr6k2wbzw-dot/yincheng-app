@@ -1106,6 +1106,7 @@ class SupabaseRepository implements Repository {
       'max_guests': d.maxGuests,
       'max_large': d.maxLarge,
       'note': d.note,
+      'holiday_eve': d.holidayEve,
     }, onConflict: 'store_id,day');
   }
 

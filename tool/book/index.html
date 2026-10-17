@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600&amp;display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
+<!--OG-->
 </head>
 <body>
 <main>
@@ -20,7 +21,7 @@
   <div class="card info" id="info" hidden></div>
   <div id="app" hidden>
     <div class="card"><p class="label" data-i18n="date">1. 日期</p><p class="dsel" id="dsel"></p><div class="cal" id="cal"></div></div>
-    <div class="card"><p class="label" data-i18n="time">2. 時間</p><div class="grid" id="slots"></div><p class="note" id="dayInfo" style="white-space:pre-line"></p></div>
+    <div class="card"><p class="label" data-i18n="time">2. 時間</p><div class="grid" id="slots"></div><p class="eveinfo" id="eveInfo" hidden></p><p class="note" id="dayInfo" style="white-space:pre-line"></p></div>
     <div class="card"><p class="label" data-i18n="party">3. 人數</p>
       <div class="stepper"><button type="button" id="minus" aria-label="減少" data-i18n-aria="less">−</button><b id="party">2</b><button type="button" id="plus" aria-label="增加" data-i18n-aria="more">＋</button></div>
       <p class="note" id="partyNote"></p>
@@ -44,7 +45,8 @@
 <script src="i18n.js"></script>
 <script>
 (async function () {
-  const slug = new URLSearchParams(location.search).get('s') || '';
+  // 店家：網址 ?s=xxx，或各店專屬網址 book/xxx/（部署時產生，html 上有 data-slug）
+  const slug = new URLSearchParams(location.search).get('s') || document.documentElement.dataset.slug || '';
   const $ = (id) => document.getElementById(id);
   const T = (k, ...a) => YCI.t(k, ...a);
   YCI.apply(); YCI.mountSwitcher();
@@ -114,8 +116,8 @@
       if (!d) { h += '<span class="cd off' + isToday + '">' + dd + '</span>'; continue; }
       const full = !d.closed && (d.groups_left === 0 || d.guests_left === 0);
       const offDay = d.closed || full;
-      const tag = d.closed ? (YCI.lang === 'zh' && d.note ? d.note : T('closed')) : full ? T('full') : '';
-      h += '<button type="button" class="cd' + isToday + (iso === day ? ' on' : '') + '" data-d="' + iso + '"' + (offDay ? ' disabled' : '') + '>' + dd +
+      const tag = d.closed ? (YCI.lang === 'zh' && d.note ? d.note : T('closed')) : full ? T('full') : d.holiday_eve ? T('eveTag') : '';
+      h += '<button type="button" class="cd' + isToday + (d.holiday_eve && !offDay ? ' eve' : '') + (iso === day ? ' on' : '') + '" data-d="' + iso + '"' + (offDay ? ' disabled' : '') + '>' + dd +
         (tag ? '<small>' + YC.esc(tag.slice(0, 4)) + '</small>' : '') + '</button>';
     }
     $('cal').innerHTML = h + '</div>';
@@ -155,6 +157,11 @@
     // 特殊日期有寫說明（沒公休、只改名額的日子）也顯示給客人看（Codex 審查）
     if (cur && !cur.closed && cur.note && YCI.lang === 'zh') msg = cur.note + (msg ? '\n' + msg : '');
     $('dayInfo').textContent = msg;
+    // 國定假日前夕（0062，老闆在 App 特殊日期勾選）：醒目提醒低消
+    const minAmt = { yincheng: 800, xcw: 600 }[slug];
+    const eve = !!(cur && !cur.closed && cur.holiday_eve && minAmt);
+    $('eveInfo').hidden = !eve;
+    $('eveInfo').textContent = eve ? T('eveMsg', minAmt) : '';
   }
   $('cal').onclick = (e) => { const b = e.target.closest('button[data-d]'); if (b && !b.disabled) { day = b.dataset.d; time = null; render(); } };
   $('slots').onclick = (e) => { const b = e.target.closest('button[data-t]'); if (b && !b.disabled) { time = b.dataset.t; render(); } };
@@ -187,7 +194,8 @@
       });
       $('app').hidden = true;
       const done = $('done'); done.hidden = false;
-      done.innerHTML = '<p class="big ok">' + T('booked') + '</p><p class="big">' + YC.esc(r.display_name) + '</p><p>' + YC.dateLabel(r.date) + ' ' + r.time + '　' + T('guests', r.party) + '<br>' + YC.esc(YCI.name(r.name)) + '</p><p class="hold">' + T('hold') + '</p><p class="note" id="mailNote">' + T('mailing') + '</p>' +
+      const evePick = !!((info.days.find(d => d.date === r.date) || {}).holiday_eve) && !!{ yincheng: 1, xcw: 1 }[slug];
+      done.innerHTML = '<p class="big ok">' + T('booked') + '</p><p class="big">' + YC.esc(r.display_name) + '</p><p>' + YC.dateLabel(r.date) + ' ' + r.time + '　' + T('guests', r.party) + '<br>' + YC.esc(YCI.name(r.name)) + '</p>' + (evePick ? '<p class="hold eveh">' + T('eveMsg', { yincheng: 800, xcw: 600 }[slug]) + '</p>' : '') + '<p class="hold">' + T('hold') + '</p><p class="note" id="mailNote">' + T('mailing') + '</p>' +
         '<p class="note">' + T('manageHint', 'cancel.html?t=' + r.token + '&lang=' + YCI.lang) + '</p>';
       const sent = await YC.mail(r.token, 'confirm');
       $('mailNote').textContent = sent ? T('mailSent', $('email').value) : T('mailLate');

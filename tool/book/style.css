@@ -385,3 +385,11 @@ body { position:relative; }
 .anim #done.m-grand .postmark { border-color:rgba(232,120,100,.7); color:rgba(240,140,120,.85); }
 
 .anim #done.m-rail .mm-top, .anim #done.m-type .mm-top, .anim #done.m-postcard .mm-top { display:block; }
+
+/* 國定假日前夕（0062） */
+.eveinfo { margin:10px 0 0; padding:8px 12px; border-left:3px solid #C9503F; background:rgba(201,80,63,.12); color:#F0A898; font-size:14px; border-radius:0 8px 8px 0; }
+button.cd.eve small { color:#E07A66; }
+button.cd.eve.on small { color:var(--accent-ink); }
+.hold.eveh { border-left-color:#C9503F; background:rgba(201,80,63,.12); color:#F0A898; }
+.anim #done.memo .hold.eveh { background:rgba(162,50,31,.1); color:#7A2A20; border-left-color:#A2321F; }
+.anim #done.m-grand .hold.eveh { background:rgba(201,80,63,.15); color:#F0B0A0; }
