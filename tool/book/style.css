@@ -318,3 +318,23 @@ body { position:relative; }
 @keyframes sealOff { to { transform:translateY(40px) rotate(30deg); opacity:0; } }
 @keyframes flapOpen { to { transform:rotateX(180deg); z-index:0; filter:brightness(.7); } }
 @keyframes paperUp { to { transform:translateY(-62%); z-index:5; } }
+/* 老爺鐘＋蒂芬妮桌燈（店內實景，老闆 2026-10-18） */
+.intro.wk-grand { background:radial-gradient(ellipse at 40% 60%, #2C3220 0%, #161A10 55%, #0A0B07 100%); justify-content:flex-start; padding-top:6vh; }
+.intro.wk-grand .room { width:min(86vw, 360px); height:auto; flex:none; filter:brightness(.25); animation:roomLit 1.2s .5s ease-out forwards; }
+.intro.wk-grand .lampglow { position:absolute; left:50%; top:50%; width:150vmax; height:150vmax; margin:-75vmax 0 0 -75vmax; pointer-events:none; opacity:0;
+  background:radial-gradient(circle at 36% 47%, rgba(255,200,110,.45), rgba(255,170,80,.12) 22%, transparent 45%); animation:lampOn 1.4s .5s steps(1) forwards, lampFlicker 5s 2s infinite; }
+.intro.wk-grand .shade path[class^="g"] { opacity:.35; animation:glassOn .9s .55s steps(3) forwards; }
+.intro.wk-grand .g1 { fill:#E8B23A; } .intro.wk-grand .g2 { fill:#F2C64E; } .intro.wk-grand .g3 { fill:#D9622E; } .intro.wk-grand .g4 { fill:#6E9A3A; } .intro.wk-grand .g5 { fill:#F7DE8A; }
+.intro.wk-grand .shade { filter:drop-shadow(0 0 0 rgba(255,190,90,0)); animation:shadeGlow 1s .6s forwards; }
+.intro.wk-grand text { font:600 8px/1 "Noto Serif TC", serif; fill:#3A2A12; text-anchor:middle; }
+.intro.wk-grand .gh, .intro.wk-grand .gm { stroke:#2A1C0A; stroke-linecap:round; transform-origin:200px 128px; }
+.intro.wk-grand .gh { stroke-width:3; transform:rotate(240deg); }
+.intro.wk-grand .gm { stroke-width:2; animation:grandMin 3.4s steps(17) forwards; }
+.intro.wk-grand .pend { transform-origin:200px 228px; animation:pendulum 1.2s ease-in-out infinite alternate; }
+.intro.wk-grand .line { margin-top:2vh; color:#F0DDB0; animation:stepPrint 1.4s 1.5s steps(8) both; }
+@keyframes roomLit { to { filter:brightness(1); } }
+@keyframes lampOn { 0% { opacity:0; } 10% { opacity:.6; } 20% { opacity:.1; } 35%, 100% { opacity:1; } }
+@keyframes glassOn { to { opacity:1; } }
+@keyframes shadeGlow { to { filter:drop-shadow(0 0 14px rgba(255,190,90,.8)); } }
+@keyframes grandMin { from { transform:rotate(330deg); } to { transform:rotate(360deg); } }
+@keyframes pendulum { from { transform:rotate(-9deg); } to { transform:rotate(9deg); } }
