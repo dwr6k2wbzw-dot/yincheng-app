@@ -120,3 +120,78 @@ body { position:relative; }
 @keyframes flicker { 0%, 100% { opacity:1; } 45% { opacity:.85; } 50% { opacity:.4; } 55% { opacity:.95; } }
 @keyframes fog { from { transform:translateX(-4%); opacity:.8; } to { transform:translateX(4%); opacity:1; } }
 @media (prefers-reduced-motion: reduce) { .fx .bat, .fx .bat svg, .fx .ghost, .fx .fog, .t-halloween .pk-face { animation:none; } .fx .bat { display:none; } }
+
+/* ---------------- 電影院動畫（anim.js，老闆 2026-10-18） ---------------- */
+/* 1. 開場倒數 */
+.intro { position:fixed; inset:0; z-index:50; background:#0A0A09; display:flex; align-items:center; justify-content:center; cursor:pointer; animation:projector .12s steps(2) infinite; }
+.intro.out { animation:introOut .55s ease forwards; }
+.intro .leader { position:relative; width:min(62vw, 260px); aspect-ratio:1; }
+.intro svg { width:100%; height:100%; display:block; }
+.intro .ring { fill:none; stroke:#D3B16E; stroke-width:2.5; opacity:.8; }
+.intro .ring.thin { stroke-width:1; opacity:.45; }
+.intro .cross { stroke:#D3B16E; stroke-width:1; opacity:.35; }
+.intro .sweep { fill:none; stroke:rgba(211,177,110,.28); stroke-width:88; stroke-dasharray:277; stroke-dashoffset:277; transform:rotate(-90deg); transform-origin:50% 50%; animation:sweep .56s linear infinite; }
+.intro b { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font:600 min(30vw, 120px)/1 "Noto Serif TC", serif; color:#F2EEE6; text-shadow:0 0 24px rgba(211,177,110,.5); }
+.intro b.pop { animation:numPop .56s ease-out; }
+.intro .skip { position:absolute; bottom:calc(28px + env(safe-area-inset-bottom)); left:0; right:0; text-align:center; color:#6E695F; font-size:12px; letter-spacing:.2em; }
+.intro .scratch { position:absolute; top:0; bottom:0; width:1px; background:rgba(242,238,230,.18); animation:scratch .9s steps(5) infinite; }
+.intro .s1 { left:22%; } .intro .s2 { left:71%; animation-duration:1.3s; }
+@keyframes sweep { to { stroke-dashoffset:0; } }
+@keyframes numPop { from { transform:scale(1.35); opacity:.2; } to { transform:scale(1); opacity:1; } }
+@keyframes projector { 0% { background:#0A0A09; } 100% { background:#0E0D0B; } }
+@keyframes scratch { 0% { transform:translateX(0); opacity:.6; } 50% { transform:translateX(14px); opacity:.1; } 100% { transform:translateX(-8px); opacity:.5; } }
+@keyframes introOut { 0% { opacity:1; clip-path:circle(150% at 50% 50%); } 100% { opacity:0; clip-path:circle(0% at 50% 50%); } }
+
+/* 2. 封面：照片慢慢推近、放映機光束、底片顆粒、店名對焦 */
+.brand.hero.cine { background:none; }
+.brand.hero.cine .hbg { position:absolute; inset:-4%; background-size:cover; background-position:center 45%; animation:kenburns 22s ease-in-out infinite alternate; }
+.brand.hero.cine::before { z-index:0; }
+.brand.hero.cine > .hbg { z-index:-1; }
+.brand.hero.cine { isolation:isolate; }
+.brand.hero.cine .beam { position:absolute; top:-30%; left:-20%; width:70%; height:160%; z-index:0; pointer-events:none;
+  background:linear-gradient(100deg, transparent 30%, rgba(255,232,180,.10) 48%, rgba(255,232,180,.16) 52%, transparent 70%);
+  filter:blur(6px); transform-origin:0 0; -webkit-mask-image:linear-gradient(to bottom, #000 45%, transparent 75%); mask-image:linear-gradient(to bottom, #000 45%, transparent 75%); animation:beam 9s ease-in-out infinite; mix-blend-mode:screen; }
+.brand.hero.cine .grain { position:absolute; inset:-50% -50% 0 -50%; -webkit-mask-image:linear-gradient(to bottom, #000 70%, transparent 90%); mask-image:linear-gradient(to bottom, #000 70%, transparent 90%); z-index:0; pointer-events:none; opacity:.07;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  animation:grain .5s steps(4) infinite; }
+.brand.hero.cine > :not(.hbg):not(.beam):not(.grain) { z-index:1; }
+.anim .brand img#logo:not([hidden]) { animation:logoIn 1.4s cubic-bezier(.2,.7,.2,1) both; }
+.anim h1.focus { animation:focusPull 1.6s cubic-bezier(.2,.7,.2,1) both; }
+.anim .kicker { animation:fadeUp 1s .5s both; }
+.anim .sub.rise { animation:fadeUp 1.2s .7s both; }
+@keyframes kenburns { from { transform:scale(1) translate(0, 0); } to { transform:scale(1.12) translate(-2%, 1.5%); } }
+@keyframes beam { 0%, 100% { transform:rotate(-6deg); opacity:.55; } 50% { transform:rotate(7deg); opacity:1; } }
+@keyframes grain { 0% { transform:translate(0, 0); } 25% { transform:translate(-5%, 3%); } 50% { transform:translate(4%, -4%); } 75% { transform:translate(-3%, -2%); } 100% { transform:translate(2%, 5%); } }
+@keyframes logoIn { from { opacity:0; transform:translateY(-10px) scale(.94); filter:drop-shadow(0 0 0 rgba(211,177,110,0)); } 60% { filter:drop-shadow(0 0 14px rgba(211,177,110,.55)); } to { opacity:1; transform:none; filter:drop-shadow(0 0 0 rgba(211,177,110,0)); } }
+@keyframes focusPull { from { opacity:0; filter:blur(10px); letter-spacing:.5em; } to { opacity:1; filter:blur(0); } }
+@keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:none; } }
+
+/* 3. 卡片浮上來、選取時彈一下 */
+.anim .card.rv { opacity:0; transform:translateY(22px); transition:opacity .6s ease, transform .6s cubic-bezier(.2,.7,.2,1); }
+.anim .card.rv.in { opacity:1; transform:none; }
+.anim button.chip.on, .anim button.cd.on { animation:pick .32s cubic-bezier(.3,1.6,.5,1); }
+.anim .stepper b { display:inline-block; transition:transform .15s; }
+.anim .stepper button:active { transform:scale(.9); }
+.anim .primary { position:relative; overflow:hidden; }
+.anim .primary::after { content:""; position:absolute; top:0; bottom:0; width:40%; left:-60%; background:linear-gradient(100deg, transparent, rgba(255,255,255,.35), transparent); animation:shine 3.2s ease-in-out 1.5s infinite; }
+@keyframes pick { 0% { transform:scale(.88); } 100% { transform:scale(1); } }
+@keyframes shine { 0%, 60% { left:-60%; } 100% { left:130%; } }
+
+/* 4. 訂位成功：電影票 */
+.anim #done.ticket { position:relative; overflow:visible; padding-top:0; background:
+    radial-gradient(circle at 0 47px, var(--bg) 0 12px, transparent 13px) left / 51% 100% no-repeat,
+    radial-gradient(circle at 100% 47px, var(--bg) 0 12px, transparent 13px) right / 51% 100% no-repeat,
+    linear-gradient(160deg, #1D1A15, #141311 60%);
+  border-color:#4A3E28; animation:ticketIn .9s cubic-bezier(.2,.8,.2,1) both; }
+.anim #done .tk-top { display:flex; justify-content:space-between; margin:0 -16px 16px; padding:14px 18px 18px; border-bottom:2px dashed #4A3E28;
+  color:var(--gold); font:600 13px/1 "Noto Serif TC", serif; letter-spacing:.35em; }
+.anim #done .tk-no { letter-spacing:.12em; color:var(--muted); font-family:inherit; }
+.anim #done .stamp { position:absolute; right:16px; top:112px; padding:6px 12px; border:3px double #C9503F; color:#E06A55; border-radius:8px;
+  font:700 18px/1 "Noto Serif TC", serif; letter-spacing:.2em; transform:rotate(-14deg); opacity:.9; pointer-events:none; animation:stamp .5s .65s cubic-bezier(.3,1.5,.5,1) both; }
+.anim #done .popcorn { position:absolute; left:50%; top:60px; width:0; height:0; pointer-events:none; }
+.anim #done .popcorn i { position:absolute; border-radius:46% 54% 42% 58%; background:radial-gradient(circle at 35% 30%, #FFF8E6, #F3DFAE 60%, #D9B56A); opacity:0;
+  animation:popcorn 1.6s cubic-bezier(.15,.7,.4,1) both; }
+@keyframes ticketIn { from { opacity:0; transform:translateY(60px) rotate(-3deg) scale(.96); } to { opacity:1; transform:none; } }
+@keyframes stamp { from { opacity:0; transform:rotate(-14deg) scale(2.4); } to { opacity:.9; transform:rotate(-14deg) scale(1); } }
+@keyframes popcorn { 0% { opacity:0; transform:translate(0, 0) rotate(0); } 10% { opacity:1; } 60% { opacity:1; transform:translate(var(--x), var(--y)) rotate(var(--r)); }
+  100% { opacity:0; transform:translate(calc(var(--x) * 1.1), calc(var(--y) * -0.2 + 220px)) rotate(var(--r)); } }
