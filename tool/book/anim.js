@@ -3,7 +3,7 @@
 //   2. 封面：背景照片慢慢推近、放映機光束掃過、底片顆粒；店名像對焦一樣清楚起來
 //   3. 卡片：往下滑時一張張浮上來；選日期、時段會輕輕彈一下
 //   4. 訂位成功：變成一張電影票，蓋上「已訂位」章，爆米花噴出來
-//   小城外（老闆 2026-10-18：老宅、王家衛）另一套：開場老時鐘＋一句話、封面壁燈閃爍＋窗花光影＋煙、
+//   小城外（老闆 2026-10-18：老宅、王家衛）另一套：開場老時鐘＋一句話、封面壁燈閃爍＋煙、
 //   店名霓虹抽格（step-printing），訂位成功變一張手寫便條：時鐘指到訂位時間、蓋郵戳。
 // 手機設定「減少動態效果」時全部不動；網址加 ?anim=0 也可以關掉。
 (function () {
@@ -74,13 +74,12 @@
     head.style.backgroundImage = 'none';
     const grain = document.createElement('div'); grain.className = 'grain';
     if (wkw) {
-      // 小城外：壁燈閃爍、窗花光影慢慢移過牆面、煙、偏綠的色調
+      // 小城外：壁燈閃爍、煙、偏綠的色調（窗花格子老闆 2026-10-18 拿掉）
       const lamp = document.createElement('div'); lamp.className = 'lamp';
-      const lattice = document.createElement('div'); lattice.className = 'lattice';
       const smoke = document.createElement('div'); smoke.className = 'smoke';
       smoke.innerHTML = '<i></i><i></i><i></i>';
       const grade = document.createElement('div'); grade.className = 'grade';
-      head.prepend(bg, lattice, lamp, smoke, grade, grain);
+      head.prepend(bg, lamp, smoke, grade, grain);
     } else {
       const beam = document.createElement('div'); beam.className = 'beam';
       head.prepend(bg, beam, grain);
