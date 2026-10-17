@@ -50,6 +50,16 @@ const _headH = 44.0;
 /// 營業日的分鐘數：凌晨 6 點前算前一天（加 24 小時）
 int bizMinute(int m) => m < 360 ? m + 1440 : m;
 
+/// 這個時間是不是在這個營業日（凌晨 6 點前算前一天）
+bool onBizDay(DateTime t, DateTime day) {
+  final s = t.toLocal().subtract(const Duration(hours: 6));
+  return s.year == day.year && s.month == day.month && s.day == day.day;
+}
+
+/// 入座／清桌時間只在同一個營業日才拿來畫（補登別天的到店，時間是補登當下，不能拿來畫；Codex 審查）
+DateTime? seatedOn(Reservation r) => r.seatedAt != null && onBizDay(r.seatedAt!, r.date) ? r.seatedAt : null;
+DateTime? clearedOn(Reservation r) => r.clearedAt != null && onBizDay(r.clearedAt!, r.date) ? r.clearedAt : null;
+
 String minuteLabel(int m) {
   final x = m % 1440;
   return '${(x ~/ 60).toString().padLeft(2, '0')}:${(x % 60).toString().padLeft(2, '0')}';
@@ -87,7 +97,7 @@ class _ReservationTimelineState extends State<ReservationTimeline> {
     return bizMinute(m);
   }
 
-  int _startOf(Reservation r) => r.seatedAt != null ? _minuteOf(r.seatedAt!) : bizMinute(minutesOf(r.time));
+  int _startOf(Reservation r) => seatedOn(r) != null ? _minuteOf(seatedOn(r)!) : bizMinute(minutesOf(r.time));
 
   @override
   Widget build(BuildContext context) {
@@ -98,7 +108,7 @@ class _ReservationTimelineState extends State<ReservationTimeline> {
     for (final r in shown) {
       final s = _startOf(r);
       if (s < from) from = s;
-      if (r.clearedAt != null && _minuteOf(r.clearedAt!) > to) to = _minuteOf(r.clearedAt!);
+      if (clearedOn(r) != null && _minuteOf(clearedOn(r)!) > to) to = _minuteOf(clearedOn(r)!);
       if (s + 120 > to) to = s + 120;
     }
     if (widget.isToday && _now + 60 > to) to = _now + 60;
@@ -119,7 +129,7 @@ class _ReservationTimelineState extends State<ReservationTimeline> {
     final unassigned = <_Block>[];
     _Block mk(Reservation r) {
       final s = _startOf(r);
-      final e = r.clearedAt != null ? _minuteOf(r.clearedAt!) : t1;
+      final e = clearedOn(r) != null ? _minuteOf(clearedOn(r)!) : (r.clearedAt != null ? s + 120 : t1);
       return _Block(r, s, e < s + 10 ? s + 10 : e);
     }
 
@@ -308,7 +318,7 @@ class _ReservationTimelineState extends State<ReservationTimeline> {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
               Text(
-                '$tag ${r.time}${r.seatedAt != null ? '・${minuteLabel(_minuteOf(r.seatedAt!))}入座' : ''}${cleared ? '・已清桌' : ''}',
+                '$tag ${r.time}${seatedOn(r) != null ? '・${minuteLabel(_minuteOf(seatedOn(r)!))}入座' : ''}${cleared ? '・已清桌' : ''}',
                 maxLines: 1,
                 overflow: TextOverflow.clip,
                 style: TextStyle(fontSize: 10, color: base, fontWeight: FontWeight.w600),
@@ -426,7 +436,8 @@ Set<String> busyTables(List<Reservation> all, Reservation? me, int minute) {
   for (final r in all) {
     if (me != null && r.id == me.id) continue;
     if (!r.active || r.clearedAt != null) continue;
-    final s = r.seatedAt != null ? bizMinute(r.seatedAt!.hour * 60 + r.seatedAt!.minute) : bizMinute(minutesOf(r.time));
+    final seat = seatedOn(r);
+    final s = seat != null ? bizMinute(seat.toLocal().hour * 60 + seat.toLocal().minute) : bizMinute(minutesOf(r.time));
     // 已入座：從入座到清桌都算忙；還沒入座：前後 2 小時內算忙
     final busy = r.seatedAt != null ? s <= minute + 120 : (s - minute).abs() < 120;
     if (busy) out.addAll(r.tableIds);

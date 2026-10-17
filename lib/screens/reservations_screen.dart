@@ -79,14 +79,17 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
 
   void _reload() => setState(() => _future = _load());
 
-  Future<void> _run(Future<void> Function() f, String ok) async {
+  /// 執行並顯示結果；成功回 true
+  Future<bool> _run(Future<void> Function() f, String ok) async {
     try {
       await f();
-      if (!mounted) return; // 已經離開這個畫面（Codex 審查）
+      if (!mounted) return true; // 已經離開這個畫面（Codex 審查）
       showMessage(context, ok);
       _reload();
+      return true;
     } catch (e) {
       if (mounted) showMessage(context, friendlyError(e), error: true);
+      return false;
     }
   }
 
@@ -618,18 +621,21 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
       }
     }
     if (!mounted) return;
-    await _run(() => _repo.updateReservation(r.id, {'status': v}), '已改成「${reservationStatusLabel[v]}」');
-    // 入座時還沒排桌：順便排桌
-    if (v == 'arrived' && r.tableIds.isEmpty && _tables.any((t) => t.active) && mounted) {
+    final done = await _run(() => _repo.updateReservation(r.id, {'status': v}), '已改成「${reservationStatusLabel[v]}」');
+    // 入座成功、還沒排桌：順便排桌（失敗就不開；Codex 審查）
+    if (done && v == 'arrived' && r.tableIds.isEmpty && _tables.any((t) => t.active) && mounted) {
       await _assignTables(r);
     }
   }
 
   /// 排桌／換桌（0061）
-  Future<void> _assignTables(Reservation r) async {
+  Future<void> _assignTables(Reservation r0) async {
     final all = (await _future).$2;
     if (!mounted) return;
-    final minute = r.seatedAt != null ? bizMinute(r.seatedAt!.hour * 60 + r.seatedAt!.minute) : bizMinute(minutesOf(r.time));
+    // 用重新讀到的這筆（剛入座的話才有入座時間；Codex 審查）
+    final r = all.where((x) => x.id == r0.id).firstOrNull ?? r0;
+    final seat = seatedOn(r)?.toLocal();
+    final minute = seat != null ? bizMinute(seat.hour * 60 + seat.minute) : bizMinute(minutesOf(r.time));
     final ids = await pickTables(context,
         tables: _tables, selected: r.tableIds, party: r.party, busy: busyTables(all, r, minute));
     if (ids == null || !mounted) return;
