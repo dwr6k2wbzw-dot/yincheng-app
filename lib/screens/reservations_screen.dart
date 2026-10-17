@@ -474,7 +474,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
             ListTile(leading: const Icon(Icons.check_circle_outline), title: const Text('入座（已到店）'), onTap: () => Navigator.pop(c, 'arrived')),
           if (r.status != 'no_show')
             ListTile(leading: const Icon(Icons.person_off_outlined), title: const Text('未到（no-show）'), onTap: () => Navigator.pop(c, 'no_show')),
-          if (r.status != 'confirmed')
+          if (r.status != 'confirmed' && !r.walkIn)
             ListTile(leading: const Icon(Icons.undo), title: const Text('改回已確認'), onTap: () => Navigator.pop(c, 'confirmed')),
           if (r.status != 'cancelled')
             ListTile(

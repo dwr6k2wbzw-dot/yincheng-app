@@ -113,7 +113,9 @@ class _ReservationTimelineState extends State<ReservationTimeline> {
     }
     if (widget.isToday && _now + 60 > to) to = _now + 60;
     final startH = (from ~/ 60) - (from % 60 == 0 ? 1 : 0);
-    final endH = ((to + 59) ~/ 60).clamp(startH + 4, 31);
+    // 最多畫到早上 7 點；至少 4 小時（時段很晚的店也不會出錯；Codex 審查）
+    final capH = (to + 59) ~/ 60 > 31 ? 31 : (to + 59) ~/ 60;
+    final endH = capH < startH + 4 ? startH + 4 : capH;
     final t0 = startH * 60, t1 = endH * 60;
     double x(int m) => (m - t0) / 60 * _hourW;
     final width = (endH - startH) * _hourW;
@@ -418,7 +420,16 @@ Future<List<String>?> pickTables(BuildContext context,
                 TextButton(onPressed: () => Navigator.pop(c), child: const Text('取消')),
                 const SizedBox(width: 8),
                 FilledButton(
-                  onPressed: () => Navigator.pop(c, [for (final t in act) if (sel.contains(t.id)) t.id]),
+                  onPressed: () {
+                    final chosen = act.where((t) => sel.contains(t.id)).toList();
+                    // 併桌只能用「可併」的桌（Codex 審查）
+                    final bad = chosen.length > 1 ? chosen.where((t) => !t.combinable).map((t) => t.name).toList() : const <String>[];
+                    if (bad.isNotEmpty) {
+                      showMessage(c, '${bad.join('、')} 設定成不能併桌；要併桌請到桌位設定打開「可以併桌」', error: true);
+                      return;
+                    }
+                    Navigator.pop(c, [for (final t in chosen) t.id]);
+                  },
                   child: const Text('儲存'),
                 ),
               ]),
