@@ -27,7 +27,7 @@
   let seen = false;
   try { seen = sessionStorage.getItem('yc_intro') === '1'; sessionStorage.setItem('yc_intro', '1'); } catch (_) { seen = true; }
   // 小城外開場（老闆可選）：clock 老時鐘／door 推開老木門／rain 雨夜霓虹／sky 仰望天井／letter 拆一封信／grand 老爺鐘＋蒂芬妮桌燈（店裡實景）
-  const WKW_INTRO = 'clock';
+  const WKW_INTRO = 'grand'; // 老闆 2026-10-18 選 E
   const pick = ['clock', 'door', 'rain', 'sky', 'letter', 'grand'].includes(q.get('intro')) ? q.get('intro') : WKW_INTRO;
   if (q.get('intro') && q.get('intro') !== '0') seen = false; // 預覽用：網址指定就每次都放
   if (!seen && q.get('intro') !== '0' && wkw) {
