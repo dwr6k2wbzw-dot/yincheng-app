@@ -638,9 +638,13 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
 
   /// 現場客（0061）：直接入座；從時間軸空白處點進來會帶入那張桌
   Future<void> _walkIn(ReservationTable? table, int? minute) async {
-    final today = _day == _today();
+    // 現場客只能登記今天（入座時間由資料庫記現在時間；Codex 審查）
+    if (_day != _today()) {
+      showMessage(context, '現場客只能登記今天；其他天請用「電話訂位」', error: true);
+      return;
+    }
     final now = DateTime.now();
-    final m = today || minute == null ? bizMinute(now.hour * 60 + now.minute) : minute;
+    final m = bizMinute(now.hour * 60 + now.minute);
     var party = 2;
     final name = TextEditingController();
     var ids = <String>[if (table != null && table.active) table.id];
@@ -672,11 +676,6 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                     ? '選桌'
                     : '桌 ${[for (final id in ids) _tables.where((t) => t.id == id).firstOrNull?.name].whereType<String>().join('、')}'),
               ),
-              if (!today)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text('注意：登記在 ${_day.month}/${_day.day}（不是今天）', style: TextStyle(color: AppColors.warn, fontSize: 12)),
-                ),
             ]),
           ),
           actions: [

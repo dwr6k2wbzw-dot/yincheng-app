@@ -119,8 +119,8 @@ class _ReservationTimelineState extends State<ReservationTimeline> {
     final unassigned = <_Block>[];
     _Block mk(Reservation r) {
       final s = _startOf(r);
-      final e = r.clearedAt != null ? _minuteOf(r.clearedAt!).clamp(s + 10, t1) : t1;
-      return _Block(r, s, e);
+      final e = r.clearedAt != null ? _minuteOf(r.clearedAt!) : t1;
+      return _Block(r, s, e < s + 10 ? s + 10 : e);
     }
 
     for (final r in shown) {
@@ -135,14 +135,14 @@ class _ReservationTimelineState extends State<ReservationTimeline> {
     }
     for (final bs in byTable.values) {
       bs.sort((a, b) => a.start.compareTo(b.start));
-      for (var i = 0; i < bs.length - 1; i++) {
-        final cur = bs[i], next = bs[i + 1];
-        if (cur.end > next.start) {
-          if (cur.r.seatedAt == null) {
-            cur.end = next.start; // 還沒入座：畫到下一組開始
-          } else {
-            next.conflict = true; // 前一組還沒清桌
-          }
+      var occupied = -1; // 前面已入座的組最晚佔到幾點（還沒清桌就到最右邊）
+      for (var i = 0; i < bs.length; i++) {
+        final b = bs[i];
+        if (occupied > b.start) b.conflict = true; // 前面有一組還沒清桌（Codex 審查：往後每一組都要標）
+        if (b.r.seatedAt != null) {
+          if (b.end > occupied) occupied = b.end;
+        } else if (i + 1 < bs.length && b.end > bs[i + 1].start) {
+          b.end = bs[i + 1].start; // 還沒入座：畫到下一組開始
         }
       }
     }
@@ -150,7 +150,7 @@ class _ReservationTimelineState extends State<ReservationTimeline> {
     final lanes = <List<_Block>>[];
     unassigned.sort((a, b) => a.start.compareTo(b.start));
     for (final b in unassigned) {
-      b.end = b.r.clearedAt != null ? b.end : (b.start + 120).clamp(b.start + 30, t1);
+      if (b.r.clearedAt == null) b.end = b.start + 120 < t1 ? b.start + 120 : (t1 > b.start + 30 ? t1 : b.start + 30);
       final lane = lanes.firstWhere((l) => l.last.end <= b.start, orElse: () {
         final l = <_Block>[];
         lanes.add(l);
