@@ -210,25 +210,67 @@
   }
 
   // 小城外：手寫便條，時鐘指到訂位時間、蓋郵戳
+  // 小城外訂位成功的樣式（老闆可選）：note 手寫便條／rail 老車票／type 打字機／postcard 明信片／grand 老爺鐘
+  const WKW_DONE = 'grand'; // 老闆 2026-10-18 選 E
   function memo() {
-    done.classList.add('memo');
-    const m = (done.textContent.match(/(\d{1,2}):(\d{2})/) || [])
+    const kind = ['note', 'rail', 'type', 'postcard', 'grand'].includes(q.get('done')) ? q.get('done') : WKW_DONE;
+    done.classList.add('memo', 'm-' + kind);
+    const txt = done.textContent;
+    const m = txt.match(/(\d{1,2}):(\d{2})/) || [];
+    const dm = txt.match(/(\d{1,2})\/(\d{1,2})/) || [];
     const hh = +(m[1] || 20), mm = +(m[2] || 0);
     const time = (m[1] || '20') + ':' + (m[2] || '00');
+    const see = W.see ? W.see(time) : time;
+    const now = new Date(Date.now() + 8 * 3600e3);
+    const today = now.getUTCFullYear() + '.' + (now.getUTCMonth() + 1) + '.' + now.getUTCDate();
+    const hAng = (hh % 12) * 30 + mm * 0.5, mAng = mm * 6;
     const top = document.createElement('div');
     top.className = 'mm-top';
-    let ticks = '';
-    for (let i = 0; i < 12; i++) ticks += '<line x1="50" y1="9" x2="50" y2="14" transform="rotate(' + i * 30 + ' 50 50)"/>';
-    top.innerHTML = '<svg viewBox="0 0 100 100" class="mclock"><circle cx="50" cy="50" r="45"/>' + ticks +
-      '<line x1="50" y1="50" x2="50" y2="28" class="hh" style="--to:' + ((hh % 12) * 30 + mm * 0.5 + 720) + 'deg"/>' +
-      '<line x1="50" y1="50" x2="50" y2="16" class="mh" style="--to:' + (mm * 6 + 1440) + 'deg"/><circle cx="50" cy="50" r="3"/></svg>' +
-      '<p class="see">' + (W.see ? W.see(time) : time) + '</p>';
+    const add = (cls, html) => { const e = document.createElement('div'); e.className = cls; e.innerHTML = html; done.appendChild(e); return e; };
+    if (kind === 'rail') {
+      // 老式硬卡車票：票號、日期時間大字、剪票孔
+      top.innerHTML = '<div class="rl-head"><span>小城外</span><span class="rl-no">No. ' + String(Math.floor(Math.random() * 90000) + 10000) + '</span></div>' +
+        '<div class="rl-big"><b>' + (dm[1] ? dm[1] + '.' + dm[2] : '') + '</b><b>' + time + '</b></div><div class="rl-line">' + see + '</div>';
+      add('punch', '');
+      add('rl-stamp', '<b>' + (W.stamp || '') + '</b>');
+    } else if (kind === 'type') {
+      // 打字機：一個字一個字打出來
+      top.innerHTML = '<p class="tw"><span class="tw-t"></span><i class="caret"></i></p>';
+      const t = top.querySelector('.tw-t');
+      let i = 0;
+      const chars = Array.from(see);
+      setTimeout(function typing() { if (i < chars.length) { t.textContent += chars[i++]; setTimeout(typing, 110 + Math.random() * 90); } }, 700);
+      add('tw-stamp', W.stamp || '');
+    } else if (kind === 'postcard') {
+      // 明信片：郵票（老爺鐘圖）＋波浪郵戳，翻面出現
+      top.innerHTML = '<p class="pc-to">' + see + '</p>';
+      add('pc-stamp', '<svg viewBox="0 0 60 72"><rect x="2" y="2" width="56" height="68" fill="#2F3A26"/><path d="M18 22 Q30 10 42 22 V58 H18 Z" fill="#8A4A26"/>' +
+        '<circle cx="30" cy="27" r="8" fill="#EFE2BE"/><line x1="30" y1="27" x2="30" y2="22" stroke="#3A2A12" stroke-width="1.5"/><line x1="30" y1="27" x2="34" y2="29" stroke="#3A2A12" stroke-width="1.5"/>' +
+        '<line x1="30" y1="38" x2="30" y2="50" stroke="#C9A04E"/><circle cx="30" cy="52" r="3.5" fill="#C9A04E"/><text x="30" y="66" text-anchor="middle" font-size="6" fill="#E8D9B8">小城外</text></svg>');
+      add('pc-mark', '<svg viewBox="0 0 150 60"><circle cx="34" cy="30" r="26" fill="none" stroke="currentColor" stroke-width="2"/><text x="34" y="28" text-anchor="middle" font-size="9" fill="currentColor">' + (W.stamp || '') + '</text>' +
+        '<text x="34" y="40" text-anchor="middle" font-size="7" fill="currentColor">' + today + '</text>' +
+        '<path d="M64 18 q8 -6 16 0 t16 0 t16 0 t16 0 t16 0 M64 30 q8 -6 16 0 t16 0 t16 0 t16 0 t16 0 M64 42 q8 -6 16 0 t16 0 t16 0 t16 0 t16 0" fill="none" stroke="currentColor" stroke-width="2"/></svg>');
+    } else if (kind === 'grand') {
+      // 老爺鐘：墨綠牆、桌燈光暈、金色鐘面指到訂位時間
+      const R = ['XII', 'I', 'II', 'III', 'IIII', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI'];
+      let nums = '';
+      R.forEach((r, i) => { const a = (i * 30 - 90) * Math.PI / 180; nums += '<text x="' + (50 + Math.cos(a) * 34).toFixed(1) + '" y="' + (50 + Math.sin(a) * 34 + 3).toFixed(1) + '">' + r + '</text>'; });
+      top.innerHTML = '<svg viewBox="0 0 100 100" class="gdial"><circle cx="50" cy="50" r="47" class="rim"/><circle cx="50" cy="50" r="42" class="face"/>' + nums +
+        '<line x1="50" y1="50" x2="50" y2="31" class="hh" style="--to:' + (hAng + 720) + 'deg"/><line x1="50" y1="50" x2="50" y2="20" class="mh" style="--to:' + (mAng + 1440) + 'deg"/><circle cx="50" cy="50" r="3" class="pin"/></svg>' +
+        '<p class="see">' + see + '</p>';
+      add('g-glow', '');
+      add('postmark', '<b>' + (W.stamp || '') + '</b><small>' + today + '</small>');
+    } else {
+      // 手寫便條：小時鐘指到訂位時間、郵戳
+      let ticks = '';
+      for (let i = 0; i < 12; i++) ticks += '<line x1="50" y1="9" x2="50" y2="14" transform="rotate(' + i * 30 + ' 50 50)"/>';
+      top.innerHTML = '<svg viewBox="0 0 100 100" class="mclock"><circle cx="50" cy="50" r="45"/>' + ticks +
+        '<line x1="50" y1="50" x2="50" y2="28" class="hh" style="--to:' + (hAng + 720) + 'deg"/>' +
+        '<line x1="50" y1="50" x2="50" y2="16" class="mh" style="--to:' + (mAng + 1440) + 'deg"/><circle cx="50" cy="50" r="3"/></svg>' +
+        '<p class="see">' + see + '</p>';
+      add('postmark', '<b>' + (W.stamp || '') + '</b><small>' + today + '</small>');
+    }
     done.prepend(top);
-    const stamp = document.createElement('div');
-    stamp.className = 'postmark';
-    const d = new Date(Date.now() + 8 * 3600e3);
-    stamp.innerHTML = '<b>' + (W.stamp || '') + '</b><small>' + d.getUTCFullYear() + '.' + (d.getUTCMonth() + 1) + '.' + d.getUTCDate() + '</small>';
-    done.appendChild(stamp);
     done.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 })();
