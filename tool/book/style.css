@@ -85,3 +85,38 @@ body { position:relative; }
 /* 英文、日文字距收小 */
 html:not([lang^="zh"]) .ik, html:not([lang^="zh"]) .label { letter-spacing:.06em; }
 html:not([lang^="zh"]) .kicker { letter-spacing:.2em; text-indent:.2em; }
+
+/* ---------------- 節慶風格（theme.js，老闆 2026-10-17） ---------------- */
+body { position:relative; }
+.fx { position:absolute; inset:0; pointer-events:none; z-index:2; overflow:hidden; }
+.greet { display:flex; align-items:center; justify-content:center; gap:10px; margin:14px 0 0; font-size:15px; letter-spacing:.2em; }
+.greet .pk svg { width:24px; height:22px; display:block; }
+
+/* 萬聖節：黑金不變，多一點南瓜橘；蝙蝠飛過、小幽靈飄、南瓜臉閃爍、底部橘色霧 */
+.t-halloween { --gold-soft:rgba(240,145,58,.16); }
+.t-halloween .greet { color:#F0913A; text-shadow:0 0 12px rgba(240,145,58,.45); }
+.t-halloween .brand.hero::before { background:linear-gradient(to bottom, rgba(26,10,30,.55) 0%, rgba(14,8,10,.70) 55%, rgba(10,10,9,.92) 85%, var(--bg) 100%); }
+.t-halloween .card { border-color:#3A2A1C; }
+.t-halloween button.chip:not(:disabled):hover, .t-halloween input:focus, .t-halloween textarea:focus { border-color:#F0913A; }
+.t-halloween .pk-face { animation:flicker 2.6s infinite; }
+.fx .bat { position:absolute; color:#120C10; width:46px; filter:drop-shadow(0 0 1.5px rgba(255,190,120,.9)) drop-shadow(0 0 8px rgba(240,145,58,.6)); }
+.fx .moon { position:absolute; top:46px; left:7%; width:58px; height:58px; border-radius:50%; background:radial-gradient(circle at 38% 38%, #FFE3B0, #F2A65A 60%, #C9692A); box-shadow:0 0 30px 8px rgba(240,145,58,.35); opacity:.85; }
+.fx .bat svg { width:100%; display:block; animation:flap .32s ease-in-out infinite alternate; transform-origin:50% 40%; }
+.fx .b1 { top:40px; left:-60px; animation:fly 13s linear infinite; }
+.fx .b2 { top:130px; left:-60px; width:32px; animation:fly 17s linear 4s infinite; }
+.fx .b3 { top:12px; left:-60px; width:26px; animation:fly 21s linear 9s infinite; }
+.fx .ghost { position:absolute; color:rgba(242,238,230,.22); width:34px; }
+.fx .g1 { top:250px; left:5%; animation:float 6s ease-in-out infinite; }
+.fx .g2 { top:150px; right:7%; width:26px; animation:float 7.5s ease-in-out 1.5s infinite; }
+.fx .web { position:absolute; top:0; right:0; width:110px; height:110px; opacity:.22;
+  background:
+    repeating-radial-gradient(circle at 100% 0, transparent 0 17px, #CFC8BA 17px 18px),
+    conic-gradient(from 180deg at 100% 0, transparent 0 4deg, #CFC8BA 4deg 5deg, transparent 5deg 22deg, #CFC8BA 22deg 23deg, transparent 23deg 44deg, #CFC8BA 44deg 45deg, transparent 45deg 67deg, #CFC8BA 67deg 68deg, transparent 68deg 85deg, #CFC8BA 85deg 86deg, transparent 86deg);
+  -webkit-mask:radial-gradient(circle at 100% 0, #000 0 70%, transparent 71%); mask:radial-gradient(circle at 100% 0, #000 0 70%, transparent 71%); }
+.fx .fog { position:absolute; left:-10%; right:-10%; bottom:-40px; height:160px; background:radial-gradient(ellipse at 50% 100%, rgba(240,145,58,.16), transparent 70%); animation:fog 9s ease-in-out infinite alternate; }
+@keyframes fly { 0% { transform:translate(0, 0); } 25% { transform:translate(30vw, 26px); } 50% { transform:translate(60vw, -10px); } 75% { transform:translate(90vw, 22px); } 100% { transform:translate(calc(100vw + 120px), 0); } }
+@keyframes flap { from { transform:scaleY(1); } to { transform:scaleY(.45); } }
+@keyframes float { 0%, 100% { transform:translateY(0) rotate(-4deg); } 50% { transform:translateY(-18px) rotate(4deg); } }
+@keyframes flicker { 0%, 100% { opacity:1; } 45% { opacity:.85; } 50% { opacity:.4; } 55% { opacity:.95; } }
+@keyframes fog { from { transform:translateX(-4%); opacity:.8; } to { transform:translateX(4%); opacity:1; } }
+@media (prefers-reduced-motion: reduce) { .fx .bat, .fx .bat svg, .fx .ghost, .fx .fog, .t-halloween .pk-face { animation:none; } .fx .bat { display:none; } }

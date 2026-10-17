@@ -57,7 +57,7 @@ jobs:
           mkdir -p build/web/book && cp tool/book/* build/web/book/
           # 樣式、程式、logo 加版本號：網頁一換新，客人手機就不會混用舊的樣式
           v=$(echo "${{ github.sha }}" | cut -c1-8)
-          sed -i -E "s#(href|src)=\"(style\.css|common\.js|i18n\.js)\"#\1=\"\2?v=$v\"#g; s#'(logo-[a-z]+\.png|hero-[a-z]+\.jpg)'#'\1?v=$v'#g" build/web/book/*.html
+          sed -i -E "s#(href|src)=\"(style\.css|common\.js|i18n\.js|theme\.js)\"#\1=\"\2?v=$v\"#g; s#'(logo-[a-z]+\.png|hero-[a-z]+\.jpg)'#'\1?v=$v'#g" build/web/book/*.html
           grep -o 'style.css?v=[0-9a-f]*' build/web/book/index.html
           ls build/web/book
       - name: 檔名加版本號（避免手機一直用舊版的暫存）
