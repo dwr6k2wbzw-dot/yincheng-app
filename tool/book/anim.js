@@ -26,20 +26,80 @@
   // ---------- 1. 開場倒數 ----------
   let seen = false;
   try { seen = sessionStorage.getItem('yc_intro') === '1'; sessionStorage.setItem('yc_intro', '1'); } catch (_) { seen = true; }
+  // 小城外開場（老闆可選）：clock 老時鐘／door 推開老木門／rain 雨夜霓虹／sky 仰望天井／letter 拆一封信／grand 老爺鐘＋蒂芬妮桌燈（店裡實景）
+  const WKW_INTRO = 'grand'; // 老闆 2026-10-18 選 E
+  const pick = ['clock', 'door', 'rain', 'sky', 'letter', 'grand'].includes(q.get('intro')) ? q.get('intro') : WKW_INTRO;
+  if (q.get('intro') && q.get('intro') !== '0') seen = false; // 預覽用：網址指定就每次都放
   if (!seen && q.get('intro') !== '0' && wkw) {
-    // 小城外：老時鐘滴答＋一句話，抽格淡出
     const o = document.createElement('div');
-    o.className = 'intro wk';
+    o.className = 'intro wk wk-' + pick;
     o.setAttribute('aria-hidden', 'true');
-    let ticks = '';
-    for (let i = 0; i < 12; i++) ticks += '<line x1="100" y1="14" x2="100" y2="' + (i % 3 ? 22 : 28) + '" transform="rotate(' + i * 30 + ' 100 100)"/>';
-    o.innerHTML = '<div class="clock"><svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="92" class="face"/>' + ticks +
-      '<line x1="100" y1="100" x2="100" y2="52" class="hh"/><line x1="100" y1="100" x2="100" y2="30" class="mh"/>' +
-      '<g class="sh"><line x1="100" y1="116" x2="100" y2="22"/></g><circle cx="100" cy="100" r="4" class="pin"/></svg></div>' +
-      '<p class="line">' + (W.line || '') + '</p><span class="skip">' + (W.skip || '') + '</span>';
+    const line = '<p class="line">' + (W.line || '') + '</p>';
+    const skip = '<span class="skip">' + (W.skip || '') + '</span>';
+    let dur = 2600;
+    if (pick === 'door') {
+      // 推開老木門：門縫透光、兩扇門往內打開
+      o.innerHTML = '<div class="glow"></div>' + line +
+        '<div class="door l"><i class="pn"></i><i class="pn"></i><b class="knob"></b></div>' +
+        '<div class="door r"><i class="pn"></i><i class="pn"></i><b class="knob"></b></div>' + skip;
+      dur = 3000;
+    } else if (pick === 'rain') {
+      // 雨夜霓虹：雨絲落下、「小城外」霓虹招牌閃幾下亮起、地上倒影
+      let drops = '';
+      for (let i = 0; i < 46; i++) drops += '<i style="left:' + (Math.random() * 100).toFixed(1) + '%;animation-delay:' + (-Math.random()).toFixed(2) + 's;animation-duration:' + (0.45 + Math.random() * 0.35).toFixed(2) + 's;opacity:' + (0.25 + Math.random() * 0.5).toFixed(2) + '"></i>';
+      o.innerHTML = '<div class="rain">' + drops + '</div><div class="sign"><b>小城外</b><b class="refl">小城外</b></div>' + line + skip;
+      dur = 3000;
+    } else if (pick === 'sky') {
+      // 仰望天井：黑暗中一方天光慢慢打開、灰塵在光裡飄，最後光鋪滿畫面
+      let dust = '';
+      for (let i = 0; i < 26; i++) dust += '<i style="left:' + (20 + Math.random() * 60).toFixed(1) + '%;top:' + (20 + Math.random() * 60).toFixed(1) + '%;animation-delay:' + (-Math.random() * 4).toFixed(2) + 's"></i>';
+      o.innerHTML = '<div class="well"><div class="light">' + dust + '</div></div>' + line + skip;
+      dur = 3000;
+    } else if (pick === 'grand') {
+      // 老爺鐘＋蒂芬妮桌燈（老闆 2026-10-18 給的店內照片）：桌燈「喀」一聲亮起，照亮老爺鐘，鐘擺擺動、指針走
+      const R = ['XII', 'I', 'II', 'III', 'IIII', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI'];
+      let nums = '';
+      R.forEach((r, i) => {
+        const a = (i * 30 - 90) * Math.PI / 180;
+        nums += '<text x="' + (200 + Math.cos(a) * 33).toFixed(1) + '" y="' + (128 + Math.sin(a) * 33 + 3).toFixed(1) + '">' + r + '</text>';
+      });
+      o.innerHTML = '<div class="lampglow"></div><svg class="room" viewBox="0 0 360 560" preserveAspectRatio="xMidYMid meet">' +
+        '<defs><linearGradient id="wd" x1="0" x2="1"><stop offset="0" stop-color="#5A2E18"/><stop offset=".5" stop-color="#8A4A26"/><stop offset="1" stop-color="#4A2412"/></linearGradient>' +
+        '<radialGradient id="gd" cx=".4" cy=".35"><stop offset="0" stop-color="#F7E3A6"/><stop offset=".6" stop-color="#C9A04E"/><stop offset="1" stop-color="#7A5A22"/></radialGradient>' +
+        '<radialGradient id="dl" cx=".5" cy=".5"><stop offset="0" stop-color="#EFE2BE"/><stop offset="1" stop-color="#BFA36A"/></radialGradient></defs>' +
+        // 老爺鐘：圓拱頂、鐘面、長箱、鐘擺
+        '<g class="gclock"><path d="M150 70 Q200 30 250 70 V200 H150 Z" fill="url(#wd)"/><rect x="140" y="196" width="120" height="14" fill="#6B3519"/>' +
+        '<rect x="158" y="80" width="84" height="104" rx="4" fill="url(#gd)" opacity=".9"/>' +
+        '<circle cx="200" cy="128" r="42" fill="url(#dl)" stroke="#9C7A3A" stroke-width="3"/>' +
+        '<circle cx="200" cy="128" r="26" fill="none" stroke="#9C7A3A" stroke-width="1" opacity=".6"/>' + nums +
+        '<line x1="200" y1="128" x2="200" y2="108" class="gh"/><line x1="200" y1="128" x2="200" y2="96" class="gm"/><circle cx="200" cy="128" r="3" fill="#3A2A12"/>' +
+        '<rect x="152" y="210" width="96" height="290" fill="url(#wd)"/><rect x="166" y="226" width="68" height="250" rx="3" fill="#2A140A" stroke="#A86A34" stroke-width="2"/>' +
+        '<g class="pend"><line x1="200" y1="228" x2="200" y2="400" stroke="#C9A04E" stroke-width="2"/><circle cx="200" cy="410" r="20" fill="url(#gd)"/></g>' +
+        '<line x1="186" y1="232" x2="186" y2="330" stroke="#B8903E" stroke-width="1.2"/><line x1="214" y1="232" x2="214" y2="350" stroke="#B8903E" stroke-width="1.2"/>' +
+        '<rect x="144" y="500" width="112" height="16" fill="#4A2412"/></g>' +
+        // 蒂芬妮桌燈：彩色玻璃燈罩、鵝頸銅管、圓底座
+        '<g class="tlamp" transform="translate(-27.5 -260) scale(1.5)"><path d="M70 520 Q70 506 95 504 Q120 506 120 520 Z" fill="#B8903E"/><path d="M95 504 V470 Q95 400 70 392" fill="none" stroke="#B8903E" stroke-width="4"/>' +
+        '<g class="shade"><path d="M40 430 Q42 392 70 386 Q98 392 100 430 Z" fill="#3B2A10"/>' +
+        '<path d="M44 428 Q46 398 70 391 L70 428 Z" class="g1"/><path d="M70 391 Q94 398 96 428 L70 428 Z" class="g2"/>' +
+        '<path d="M52 410 L64 400 L70 416 L58 424 Z" class="g3"/><path d="M76 402 L88 408 L84 424 L72 420 Z" class="g4"/>' +
+        '<path d="M60 396 L70 392 L80 396 L70 404 Z" class="g5"/><path d="M40 430 H100 L96 436 H44 Z" fill="#7A5A22"/></g></g>' +
+        '</svg>' + line + skip;
+      dur = 3400;
+    } else if (pick === 'letter') {
+      // 拆一封信：牛皮信封、紅色火漆，封口打開、信紙抽出來寫著一句話
+      o.innerHTML = '<div class="env"><div class="paper"><p>' + (W.line || '') + '</p></div><div class="body"></div><div class="flap"></div><b class="seal">外</b></div>' + skip;
+      dur = 3200;
+    } else {
+      // 老時鐘滴答＋一句話，抽格淡出
+      let ticks = '';
+      for (let i = 0; i < 12; i++) ticks += '<line x1="100" y1="14" x2="100" y2="' + (i % 3 ? 22 : 28) + '" transform="rotate(' + i * 30 + ' 100 100)"/>';
+      o.innerHTML = '<div class="clock"><svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="92" class="face"/>' + ticks +
+        '<line x1="100" y1="100" x2="100" y2="52" class="hh"/><line x1="100" y1="100" x2="100" y2="30" class="mh"/>' +
+        '<g class="sh"><line x1="100" y1="116" x2="100" y2="22"/></g><circle cx="100" cy="100" r="4" class="pin"/></svg></div>' + line + skip;
+    }
     document.body.appendChild(o);
-    const done = () => { o.classList.add('out'); setTimeout(() => o.remove(), 800); clearTimeout(t); };
-    const t = setTimeout(done, 2600);
+    const done = () => { o.classList.add('out'); setTimeout(() => o.remove(), 900); clearTimeout(t); };
+    const t = setTimeout(done, dur);
     o.addEventListener('click', done);
   } else if (!seen && q.get('intro') !== '0') {
     const o = document.createElement('div');
