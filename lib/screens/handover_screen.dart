@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -155,61 +156,133 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
   }
 
   // ---------------- 交接 ----------------
-  Future<void> _writeHandover() async {
-    final body = TextEditingController();
+  // 0060：交接改成打勾清單（每一項一行）＋補充說明（選填）
+  Future<_HandoverDraft?> _handoverSheet({HandoverNote? n}) {
+    final editing = n != null;
+    final items = <TextEditingController>[
+      for (final i in n?.items ?? const <HandoverItem>[]) TextEditingController(text: i.body),
+    ];
+    // 舊交接（沒有清單）修改時：內容留在補充說明
+    if (items.isEmpty) items.add(TextEditingController());
+    final note = TextEditingController(text: n?.body ?? '');
+    final focus = <FocusNode>[for (final _ in items) FocusNode()];
     String? photo;
-    final ok = await showModalBottomSheet<bool>(
+    return showModalBottomSheet<_HandoverDraft>(
       context: context,
       isScrollControlled: true,
       backgroundColor: AppColors.card,
-      builder: (c) => StatefulBuilder(
-        builder: (c, set) => Padding(
+      builder: (c) => StatefulBuilder(builder: (c, set) {
+        void addItem() {
+          set(() {
+            items.add(TextEditingController());
+            focus.add(FocusNode());
+          });
+          WidgetsBinding.instance.addPostFrameCallback((_) => focus.last.requestFocus());
+        }
+
+        return Padding(
           padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(c).viewInsets.bottom + 16),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            const Text('寫交接', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 12),
-            TextField(
-              controller: body,
-              autofocus: true,
-              maxLines: 6,
-              minLines: 3,
-              maxLength: 1000,
-              decoration: const InputDecoration(hintText: '例：冰塊機漏水，已叫修，明天下午師傅來', border: OutlineInputBorder()),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: MediaQuery.of(c).size.height * 0.85),
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                Text(editing ? '修改交接' : '寫交接', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 4),
+                Text('一項一行，接班的人做完一項勾一項；全部勾完才能按「已處理」。',
+                    style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                const SizedBox(height: 10),
+                for (var i = 0; i < items.length; i++)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(children: [
+                      Icon(Icons.check_box_outline_blank, size: 20, color: AppColors.muted),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: items[i],
+                          focusNode: focus[i],
+                          autofocus: !editing && i == 0,
+                          maxLength: 200,
+                          textInputAction: TextInputAction.next,
+                          onSubmitted: (_) => i == items.length - 1 ? addItem() : focus[i + 1].requestFocus(),
+                          decoration: InputDecoration(
+                            hintText: i == 0 ? '例：冰塊機漏水，明天下午師傅來' : '第 ${i + 1} 項',
+                            counterText: '',
+                            isDense: true,
+                            border: const OutlineInputBorder(),
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: '刪除這一項',
+                        onPressed: items.length == 1
+                            ? () => set(() => items[0].clear())
+                            : () => set(() {
+                                  items.removeAt(i);
+                                  focus.removeAt(i);
+                                }),
+                        icon: Icon(Icons.close, size: 18, color: AppColors.muted),
+                      ),
+                    ]),
+                  ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(onPressed: items.length >= 50 ? null : addItem, icon: const Icon(Icons.add), label: const Text('新增一項')),
+                ),
+                const SizedBox(height: 4),
+                TextField(
+                  controller: note,
+                  maxLines: 4,
+                  minLines: 1,
+                  maxLength: 1000,
+                  decoration: const InputDecoration(labelText: '補充說明（選填）', border: OutlineInputBorder()),
+                ),
+                Row(children: [
+                  if (!editing) ...[
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        try {
+                          final p = await pickSlipImage();
+                          if (p != null) set(() => photo = p);
+                        } catch (e) {
+                          if (c.mounted) showMessage(c, '照片讀取失敗：$e', error: true);
+                        }
+                      },
+                      icon: const Icon(Icons.photo_camera_outlined),
+                      label: Text(photo == null ? '附照片' : '換照片'),
+                    ),
+                    if (photo != null) ...[
+                      const SizedBox(width: 8),
+                      Icon(Icons.check_circle, color: AppColors.good, size: 18),
+                      const Text(' 已附照片', style: TextStyle(fontSize: 13)),
+                      IconButton(onPressed: () => set(() => photo = null), icon: const Icon(Icons.close, size: 18)),
+                    ],
+                  ],
+                  const Spacer(),
+                  FilledButton(
+                    onPressed: () {
+                      final list = [for (final t in items) t.text.trim()]..removeWhere((x) => x.isEmpty);
+                      if (list.isEmpty && note.text.trim().isEmpty) {
+                        showMessage(c, '請至少寫一項交接', error: true);
+                        return;
+                      }
+                      Navigator.pop(c, _HandoverDraft(note.text.trim(), list, photo));
+                    },
+                    child: Text(editing ? '儲存' : '送出'),
+                  ),
+                ]),
+              ]),
             ),
-            Row(children: [
-              OutlinedButton.icon(
-                onPressed: () async {
-                  try {
-                    final p = await pickSlipImage();
-                    if (p != null) set(() => photo = p);
-                  } catch (e) {
-                    if (c.mounted) showMessage(c, '照片讀取失敗：$e', error: true);
-                  }
-                },
-                icon: const Icon(Icons.photo_camera_outlined),
-                label: Text(photo == null ? '附照片' : '換照片'),
-              ),
-              if (photo != null) ...[
-                const SizedBox(width: 8),
-                Icon(Icons.check_circle, color: AppColors.good, size: 18),
-                const Text(' 已附照片', style: TextStyle(fontSize: 13)),
-                IconButton(onPressed: () => set(() => photo = null), icon: const Icon(Icons.close, size: 18)),
-              ],
-              const Spacer(),
-              FilledButton(
-                onPressed: () {
-                  if (body.text.trim().isEmpty) return;
-                  Navigator.pop(c, true);
-                },
-                child: const Text('送出'),
-              ),
-            ]),
-          ]),
-        ),
-      ),
+          ),
+        );
+      }),
     );
-    if (ok != true) return;
-    await _run(() => _repo.addHandover(_store, body.text.trim(), photo == null ? null : dataUrlBytes(photo!)),
+  }
+
+  Future<void> _writeHandover() async {
+    final d = await _handoverSheet();
+    if (d == null) return;
+    await _run(() => _repo.addHandover(_store, d.body, d.items, d.photo == null ? null : dataUrlBytes(d.photo!)),
         ok: '已送出交接');
   }
 
@@ -231,30 +304,51 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
   }
 
   Future<void> _editHandover(HandoverNote n) async {
-    final c = TextEditingController(text: n.body);
-    final body = await showDialog<String>(
-      context: context,
-      builder: (d) => AlertDialog(
-        title: const Text('修改交接'),
-        content: TextField(controller: c, autofocus: true, maxLines: 6, minLines: 3, maxLength: 1000),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(d), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(d, c.text.trim()), child: const Text('儲存')),
-        ],
-      ),
-    );
-    if (body == null || body == n.body.trim()) return;
-    if (body.isEmpty) {
-      if (mounted) showMessage(context, '內容不能空白；不需要了可以直接刪除', error: true);
+    if (n.resolved) {
+      showMessage(context, '這則交接已處理，要修改請先按「改回未處理」', error: true);
       return;
     }
-    await _run(() => _repo.updateHandover(n.id, body), ok: '已修改');
+    final d = await _handoverSheet(n: n);
+    if (d == null) return;
+    if (d.body == n.body.trim() && listEquals(d.items, [for (final i in n.items) i.body])) return;
+    await _run(() => _repo.updateHandover(n.id, d.body, d.items), ok: '已修改');
   }
 
   static String _when(DateTime t) {
     final now = DateTime.now();
     final sameDay = t.year == now.year && t.month == now.month && t.day == now.day;
     return sameDay ? '今天 ${DateFormat('HH:mm').format(t)}' : DateFormat('M/d（E）HH:mm', 'zh_TW').format(t);
+  }
+
+  // 清單一項：點一下打勾／取消（已處理的交接不能改）
+  Widget _itemRow(HandoverNote n, HandoverItem it) {
+    final muted = it.done || n.resolved;
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: n.resolved ? null : () => _run(() => _repo.setHandoverItemDone(it.id, !it.done)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Icon(it.done ? Icons.check_box : Icons.check_box_outline_blank,
+              size: 24, color: it.done ? AppColors.good : (n.resolved ? AppColors.muted : AppColors.text)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(it.body,
+                  style: TextStyle(
+                    fontSize: 15,
+                    height: 1.4,
+                    color: muted ? AppColors.muted : null,
+                    decoration: it.done ? TextDecoration.lineThrough : null,
+                    decorationColor: AppColors.muted,
+                  )),
+              if (it.done)
+                Text('✓ ${it.doneName ?? ''}・${_when(it.doneAt!)}', style: TextStyle(color: AppColors.good, fontSize: 11)),
+            ]),
+          ),
+        ]),
+      ),
+    );
   }
 
   Widget _noteCard(HandoverNote n) {
@@ -275,6 +369,9 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
             Text(n.authorName.isEmpty ? '—' : n.authorName, style: const TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(width: 8),
             Expanded(child: Text(_when(n.createdAt), style: TextStyle(color: AppColors.muted, fontSize: 12))),
+            if (n.items.isNotEmpty)
+              Text('${n.items.length - n.itemsLeft}/${n.items.length}',
+                  style: TextStyle(color: n.itemsLeft == 0 ? AppColors.good : AppColors.muted, fontSize: 12, fontWeight: FontWeight.w600)),
             // 任何成員都能修改、刪除（老闆 2026-10-12，0044）
             PopupMenuButton<String>(
               tooltip: '修改／刪除',
@@ -287,7 +384,13 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
             ),
           ]),
           const SizedBox(height: 6),
-          SelectableText(n.body, style: TextStyle(fontSize: 15, height: 1.5, color: n.resolved ? AppColors.muted : null)),
+          for (final it in n.items) _itemRow(n, it),
+          if (n.body.trim().isNotEmpty)
+            Padding(
+              padding: EdgeInsets.only(top: n.items.isEmpty ? 0 : 4),
+              child: SelectableText(n.body,
+                  style: TextStyle(fontSize: n.items.isEmpty ? 15 : 13, height: 1.5, color: n.resolved || n.items.isNotEmpty ? AppColors.muted : null)),
+            ),
           if (n.editedAt != null)
             Padding(
               padding: const EdgeInsets.only(top: 2),
@@ -316,10 +419,13 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
             ),
             n.resolved
                 ? TextButton(onPressed: () => _run(() => _repo.setHandoverResolved(n.id, false)), child: const Text('改回未處理'))
-                : FilledButton.tonal(
-                    onPressed: () => _run(() => _repo.setHandoverResolved(n.id, true), ok: '已標成處理完'),
-                    child: const Text('已處理'),
-                  ),
+                : n.itemsLeft > 0
+                    // 0060：清單全部勾完才能按已處理
+                    ? FilledButton.tonal(onPressed: null, child: Text('還有 ${n.itemsLeft} 項'))
+                    : FilledButton.tonal(
+                        onPressed: () => _run(() => _repo.setHandoverResolved(n.id, true), ok: '已標成處理完'),
+                        child: const Text('已處理'),
+                      ),
           ]),
         ]),
       ),
@@ -348,7 +454,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
             ),
           ),
         const SizedBox(height: 8),
-        Text('大家都能寫交接、標已處理；打開這頁就會記錄你已讀。刪除只有老闆或店長可以。',
+        Text('大家都能寫交接、修改、刪除；做完一項勾一項，全部勾完才能按「已處理」。打開這頁就會記錄你已讀。',
             style: TextStyle(color: AppColors.muted, fontSize: 11, height: 1.5)),
       ]),
     );
@@ -677,4 +783,12 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
       ),
     );
   }
+}
+
+/// 寫／改交接的內容（0060）
+class _HandoverDraft {
+  final String body;
+  final List<String> items;
+  final String? photo;
+  const _HandoverDraft(this.body, this.items, this.photo);
 }

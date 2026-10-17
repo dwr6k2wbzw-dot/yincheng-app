@@ -682,6 +682,7 @@ class HandoverNote {
   final Map<String, String> readers; // userId → 名字
   final DateTime? editedAt; // 內容最後修改時間（0044：任何成員都能改）
   final String? editedName;
+  final List<HandoverItem> items; // 打勾清單（0060）；舊的交接沒有清單
   HandoverNote({
     required this.id,
     required this.body,
@@ -694,8 +695,10 @@ class HandoverNote {
     this.readers = const {},
     this.editedAt,
     this.editedName,
+    this.items = const [],
   });
   bool get resolved => resolvedAt != null;
+  int get itemsLeft => items.where((i) => !i.done).length;
   /// 對我來說是未讀：不是我寫的、我沒讀過、還沒處理
   bool unreadFor(String? me) => !resolved && me != null && authorId != me && !readers.containsKey(me);
 
@@ -710,10 +713,30 @@ class HandoverNote {
         resolvedName: r['resolved_name'] as String?,
         editedAt: r['edited_at'] == null ? null : DateTime.parse(r['edited_at'] as String).toLocal(),
         editedName: r['edited_name'] as String?,
+        items: ([for (final x in (r['handover_items'] as List? ?? const [])) HandoverItem.fromRow(x as Map<String, dynamic>)]
+          ..sort((a, b) => a.position.compareTo(b.position))),
         readers: {
           for (final x in (r['handover_reads'] as List? ?? const []))
             (x as Map)['user_id'] as String: x['user_name'] as String? ?? '',
         },
+      );
+}
+
+/// 交接清單的一項（0060）：一項一項打勾，全部勾完才能按已處理
+class HandoverItem {
+  final String id;
+  final int position;
+  final String body;
+  final DateTime? doneAt;
+  final String? doneName;
+  const HandoverItem({required this.id, required this.position, required this.body, this.doneAt, this.doneName});
+  bool get done => doneAt != null;
+  factory HandoverItem.fromRow(Map<String, dynamic> r) => HandoverItem(
+        id: r['id'] as String,
+        position: (r['position'] as num).toInt(),
+        body: r['body'] as String,
+        doneAt: r['done_at'] == null ? null : DateTime.parse(r['done_at'] as String).toLocal(),
+        doneName: r['done_name'] as String?,
       );
 }
 
