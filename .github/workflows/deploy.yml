@@ -59,7 +59,32 @@ jobs:
           v=$(echo "${{ github.sha }}" | cut -c1-8)
           sed -i -E "s#(href|src)=\"(style\.css|common\.js|i18n\.js|theme\.js|anim\.js)\"#\1=\"\2?v=$v\"#g; s#'(logo-[a-z]+\.png|hero-[a-z]+\.jpg)'#'\1?v=$v'#g" build/web/book/*.html
           grep -o 'style.css?v=[0-9a-f]*' build/web/book/index.html
-          ls build/web/book
+          # 分享預覽卡（老闆 2026-10-18）：各店專屬網址 book/<店>/，頁面帶店家的 og 標籤（LINE／IG／FB 預覽用）
+          site="https://dwr6k2wbzw-dot.github.io/yincheng-app/book"
+          og() { # $1 slug、$2 標題、$3 說明、$4 網址
+            printf '%s' "<meta property=\"og:type\" content=\"website\"><meta property=\"og:site_name\" content=\"$2\"><meta property=\"og:title\" content=\"$2｜線上訂位\"><meta property=\"og:description\" content=\"$3\"><meta property=\"og:url\" content=\"$4\"><meta property=\"og:image\" content=\"$site/og-$1.jpg?v=$v\"><meta property=\"og:image:width\" content=\"1200\"><meta property=\"og:image:height\" content=\"630\"><meta name=\"twitter:card\" content=\"summary_large_image\"><meta name=\"description\" content=\"$3\">"
+          }
+          tpl=build/web/book/index.html
+          for row in "yincheng|隱城·小城外|信義路三段 160 號 2 樓，以光影為幕、調酒為引。線上訂位，即時確認。" "xcw|小城外|大稻埕老宅二樓，仰望天井、感受歲月的溫度。線上訂位，即時確認。"; do
+            IFS='|' read -r slug name desc <<< "$row"
+            mkdir -p build/web/book/$slug
+            tags=$(og "$slug" "$name" "$desc" "$site/$slug/")
+            python3 - "$tpl" "build/web/book/$slug/index.html" "$slug" "$name" "$tags" <<'PY'
+          import sys
+          src, dst, slug, name, tags = sys.argv[1:6]
+          h = open(src, encoding='utf-8').read()
+          h = h.replace('<html ', '<html data-slug="%s" ' % slug, 1)
+          h = h.replace('<head>', '<head>\n<base href="../">', 1)
+          h = h.replace('<title>線上訂位</title>', '<title>%s｜線上訂位</title>' % name, 1)
+          h = h.replace('<!--OG-->', tags, 1)
+          open(dst, 'w', encoding='utf-8').write(h)
+          PY
+            grep -q 'og:image' build/web/book/$slug/index.html
+          done
+          # 舊網址 book/?s=… 也帶一組通用的預覽卡（隱城的照片）
+          tags=$(og yincheng "隱城·小城外" "線上訂位，即時確認。" "$site/")
+          python3 -c "import sys;p=sys.argv[1];h=open(p,encoding='utf-8').read().replace('<!--OG-->',sys.argv[2],1);open(p,'w',encoding='utf-8').write(h)" "$tpl" "$tags"
+          ls build/web/book build/web/book/xcw
       - name: 檔名加版本號（避免手機一直用舊版的暫存）
         run: |
           v=$(echo "${{ github.sha }}" | cut -c1-8)
