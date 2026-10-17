@@ -651,10 +651,7 @@ class DemoRepository implements Repository {
       final i = list.indexWhere((r) => r.id == id);
       if (i < 0) continue;
       final r = list[i];
-      list[i] = Reservation(
-          id: r.id, date: r.date, time: r.time, party: approve ? (r.requestedParty ?? r.party) : r.party, name: r.name,
-          phone: r.phone, email: r.email, note: r.note, status: r.status, source: r.source, createdAt: r.createdAt,
-          requestedParty: r.requestedParty, partyRequestStatus: approve ? 'approved' : 'rejected');
+      list[i] = r.copyWith(party: approve ? (r.requestedParty ?? r.party) : r.party, partyRequestStatus: approve ? 'approved' : 'rejected');
       return;
     }
   }
@@ -665,12 +662,48 @@ class DemoRepository implements Repository {
       final i = list.indexWhere((r) => r.id == id);
       if (i < 0) continue;
       final r = list[i];
-      list[i] = Reservation(
-          id: r.id, date: r.date, time: r.time, party: r.party, name: r.name, phone: r.phone, email: r.email,
-          note: values.containsKey('note') ? values['note'] as String? : r.note,
-          status: values['status'] as String? ?? r.status, source: r.source, createdAt: r.createdAt,
-          requestedParty: r.requestedParty, partyRequestStatus: r.partyRequestStatus);
+      final status = values['status'] as String? ?? r.status;
+      final seated = status == 'arrived';
+      list[i] = r.copyWith(
+        status: status,
+        note: values['note'] as String?,
+        clearNote: values.containsKey('note') && values['note'] == null,
+        tableIds: values.containsKey('table_ids') ? [for (final x in values['table_ids'] as List) x as String] : null,
+        seatedAt: seated && r.seatedAt == null ? DateTime.now() : null,
+        clearSeated: !seated,
+        clearedAt: values['cleared_at'] != null && r.clearedAt == null ? DateTime.now() : null,
+        clearCleared: !seated || (values.containsKey('cleared_at') && values['cleared_at'] == null),
+      );
       return;
     }
+  }
+
+  final Map<String, List<ReservationTable>> _demoTables = {};
+  @override
+  Future<List<ReservationTable>> reservationTables(String storeId) async => [
+        ...(_demoTables[storeId] ??= [
+          for (var i = 1; i <= 8; i++) ReservationTable(id: 'A$i', name: 'A$i', seats: 1, combinable: true, sort: i),
+          for (var i = 1; i <= 4; i++) ReservationTable(id: 'S$i', name: 'S$i', seats: 4, sort: 20 + i),
+        ])
+      ]..sort((a, b) => a.sort != b.sort ? a.sort.compareTo(b.sort) : a.name.compareTo(b.name));
+  @override
+  Future<void> saveReservationTable(String storeId, ReservationTable t) async {
+    final list = _demoTables[storeId] ??= [];
+    final i = list.indexWhere((x) => x.id == t.id);
+    final v = ReservationTable(id: t.id.isEmpty ? 'T${list.length + 1}' : t.id, name: t.name, seats: t.seats,
+        combinable: t.combinable, sort: t.sort, active: t.active);
+    if (i < 0) {
+      list.add(v);
+    } else {
+      list[i] = v;
+    }
+  }
+  @override
+  Future<void> addWalkIn(String storeId,
+      {required DateTime date, required String time, required int party, required String name, required List<String> tableIds}) async {
+    final list = _demoRes.putIfAbsent(storeId, () => []);
+    list.add(Reservation(
+        id: '$storeId-${list.length}', date: date, time: time, party: party, name: name, phone: '',
+        status: 'arrived', source: 'app', createdAt: DateTime.now(), tableIds: tableIds, seatedAt: DateTime.now(), walkIn: true));
   }
 }
