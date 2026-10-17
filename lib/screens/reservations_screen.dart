@@ -9,6 +9,7 @@ import '../data/repository.dart';
 import '../services/open_external.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'reservation_timeline.dart';
 
 /// 訂位管理（0050，老闆 2026-10-14）：老闆、店長、正職。客人在公開訂位頁訂位，這裡看清單、標到店／未到／取消、新增電話訂位。
 class ReservationsScreen extends StatefulWidget {
@@ -22,6 +23,8 @@ class ReservationsScreen extends StatefulWidget {
 class _ReservationsScreenState extends State<ReservationsScreen> {
   late DateTime _day = widget.initialDay ?? _today();
   bool _calOpen = false;
+  static bool _timelineView = true; // 0061：列表／時間軸（記住上次選的）
+  List<ReservationTable> _tables = const [];
   late Future<(ReservationSettings?, List<Reservation>)> _future;
   bool _started = false;
 
@@ -55,6 +58,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
       _repo.reservationSettings(_store),
       _repo.reservations(_store, day, day),
       _repo.specialDays(_store, day, day).then<List<ReservationSpecialDay>>((v) => v, onError: (_) => <ReservationSpecialDay>[]),
+      _repo.reservationTables(_store).then<List<ReservationTable>>((v) => v, onError: (_) => <ReservationTable>[]),
     ]);
     final list = r[1] as List<Reservation>;
     final special = (r[2] as List<ReservationSpecialDay>).firstOrNull;
@@ -65,6 +69,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
       guests = {}; // 讀不到熟客資料不影響訂位清單
     }
     if (gen == _loadGen) {
+      _tables = r[3] as List<ReservationTable>;
       _special = special;
       _guests = guests;
     }
@@ -99,6 +104,17 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                     icon: const Icon(Icons.link),
                     onPressed: () => _shareLink(settings),
                   ),
+                if (settings != null && widget.membership.isManager)
+                  IconButton(
+                    tooltip: '桌位設定',
+                    icon: const Icon(Icons.table_restaurant_outlined),
+                    onPressed: () async {
+                      final changed = await Navigator.of(context).push<bool>(MaterialPageRoute(
+                        builder: (_) => ReservationTablesScreen(storeId: _store, storeName: widget.membership.storeName),
+                      ));
+                      if (changed == true) _reload();
+                    },
+                  ),
                 if (settings != null && widget.membership.role == Role.owner)
                   IconButton(
                     tooltip: '訂位設定',
@@ -114,11 +130,18 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
             ),
             floatingActionButton: settings == null
                 ? null
-                : FloatingActionButton.extended(
-                    onPressed: () => _add(settings),
-                    icon: const Icon(Icons.add),
-                    label: const Text('電話訂位'),
-                  ),
+                : _timelineView
+                    ? FloatingActionButton.extended(
+                        heroTag: 'walkin',
+                        onPressed: () => _walkIn(null, null),
+                        icon: const Icon(Icons.directions_walk),
+                        label: const Text('現場客'),
+                      )
+                    : FloatingActionButton.extended(
+                        onPressed: () => _add(settings),
+                        icon: const Icon(Icons.add),
+                        label: const Text('電話訂位'),
+                      ),
             body: _body(snap),
           );
         },
@@ -205,11 +228,43 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
           );
         }(),
         const SizedBox(height: 12),
-        if (list.isEmpty)
+        // 0061：列表／時間軸
+        Row(children: [
+          SegmentedButton<bool>(
+            segments: const [
+              ButtonSegment(value: false, icon: Icon(Icons.view_list_outlined), label: Text('列表')),
+              ButtonSegment(value: true, icon: Icon(Icons.view_timeline_outlined), label: Text('時間軸')),
+            ],
+            selected: {_timelineView},
+            showSelectedIcon: false,
+            onSelectionChanged: (v) => setState(() => _timelineView = v.first),
+          ),
+          const Spacer(),
+          if (_timelineView)
+            TextButton.icon(
+              onPressed: () => _add(settings),
+              icon: const Icon(Icons.add_call, size: 18),
+              label: const Text('電話訂位'),
+            ),
+        ]),
+        const SizedBox(height: 12),
+        if (_timelineView)
+          ReservationTimeline(
+            key: ValueKey(_day),
+            day: _day,
+            isToday: _day == _today(),
+            list: list,
+            tables: _tables,
+            slots: settings.slots,
+            onTapReservation: _actions,
+            onTapEmpty: (t, m) => _walkIn(t, m),
+          ),
+        if (!_timelineView && list.isEmpty)
           Padding(
             padding: EdgeInsets.only(top: 48),
             child: Text('這天還沒有訂位', textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted)),
           ),
+        if (!_timelineView)
         for (final t in times) ...[
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 8, 4, 6),
@@ -247,8 +302,10 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
       subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(
           [
+            if (_tableNames(r).isNotEmpty) '桌 ${_tableNames(r)}',
             r.phone.isEmpty ? '沒留電話' : r.phone,
-            r.source == 'web' ? '網路訂位' : '電話訂位',
+            r.walkIn ? '現場客' : (r.source == 'web' ? '網路訂位' : '電話訂位'),
+            if (r.clearedAt != null) '已清桌',
             if (r.lang == 'en') '英文客人',
             if (r.lang == 'ja') '日文客人',
             if ((r.note ?? '').isNotEmpty) '備註：${r.note}',
@@ -281,6 +338,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
       ),
     );
   }
+
+  String _tableNames(Reservation r) =>
+      [for (final id in r.tableIds) _tables.where((t) => t.id == id).firstOrNull?.name].whereType<String>().join('、');
 
   List<Widget> _guestBadges(Reservation r) {
     final g = _guests[phoneDigitsOf(r.phone)];
@@ -391,10 +451,22 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                 onTap: () => Navigator.pop(c, 'party_no')),
             const Divider(height: 1),
           ],
+          if (r.active)
+            ListTile(
+                leading: const Icon(Icons.table_restaurant_outlined),
+                title: Text(r.tableIds.isEmpty ? '排桌' : '換桌（目前 ${_tableNames(r)}）'),
+                onTap: () => Navigator.pop(c, 'tables')),
+          if (r.status == 'arrived' && r.clearedAt == null)
+            ListTile(
+                leading: Icon(Icons.cleaning_services_outlined, color: AppColors.good),
+                title: const Text('清桌（客人離開了）'),
+                onTap: () => Navigator.pop(c, 'clear')),
+          if (r.status == 'arrived' && r.clearedAt != null)
+            ListTile(leading: const Icon(Icons.undo), title: const Text('取消清桌（客人還在）'), onTap: () => Navigator.pop(c, 'unclear')),
           if (r.phone.isNotEmpty)
             ListTile(leading: const Icon(Icons.call), title: Text('打電話 ${r.phone}'), onTap: () => Navigator.pop(c, 'call')),
           if (r.status != 'arrived')
-            ListTile(leading: const Icon(Icons.check_circle_outline), title: const Text('已到店'), onTap: () => Navigator.pop(c, 'arrived')),
+            ListTile(leading: const Icon(Icons.check_circle_outline), title: const Text('入座（已到店）'), onTap: () => Navigator.pop(c, 'arrived')),
           if (r.status != 'no_show')
             ListTile(leading: const Icon(Icons.person_off_outlined), title: const Text('未到（no-show）'), onTap: () => Navigator.pop(c, 'no_show')),
           if (r.status != 'confirmed')
@@ -420,6 +492,15 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     if (v == null || !mounted) return;
     if (v == 'call') {
       openExternal('tel:${r.phone.replaceAll(RegExp(r'[^0-9+]'), '')}');
+      return;
+    }
+    if (v == 'tables') {
+      await _assignTables(r);
+      return;
+    }
+    if (v == 'clear' || v == 'unclear') {
+      await _run(() => _repo.updateReservation(r.id, {'cleared_at': v == 'clear' ? DateTime.now().toUtc().toIso8601String() : null}),
+          v == 'clear' ? '已清桌' : '已改回入座中');
       return;
     }
     if (v == 'party_yes' || v == 'party_no') {
@@ -536,6 +617,78 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     }
     if (!mounted) return;
     await _run(() => _repo.updateReservation(r.id, {'status': v}), '已改成「${reservationStatusLabel[v]}」');
+    // 入座時還沒排桌：順便排桌
+    if (v == 'arrived' && r.tableIds.isEmpty && _tables.any((t) => t.active) && mounted) {
+      await _assignTables(r);
+    }
+  }
+
+  /// 排桌／換桌（0061）
+  Future<void> _assignTables(Reservation r) async {
+    final all = (await _future).$2;
+    if (!mounted) return;
+    final minute = r.seatedAt != null ? bizMinute(r.seatedAt!.hour * 60 + r.seatedAt!.minute) : bizMinute(minutesOf(r.time));
+    final ids = await pickTables(context,
+        tables: _tables, selected: r.tableIds, party: r.party, busy: busyTables(all, r, minute));
+    if (ids == null || !mounted) return;
+    await _run(() => _repo.updateReservation(r.id, {'table_ids': ids}), ids.isEmpty ? '已取消排桌' : '已排桌');
+  }
+
+  /// 現場客（0061）：直接入座；從時間軸空白處點進來會帶入那張桌
+  Future<void> _walkIn(ReservationTable? table, int? minute) async {
+    final today = _day == _today();
+    final now = DateTime.now();
+    final m = today || minute == null ? bizMinute(now.hour * 60 + now.minute) : minute;
+    var party = 2;
+    final name = TextEditingController();
+    var ids = <String>[if (table != null && table.active) table.id];
+    final all = (await _future).$2;
+    if (!mounted) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, set) => AlertDialog(
+          title: Text('現場客・${minuteLabel(m)}'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                const Text('人數'),
+                const Spacer(),
+                IconButton(onPressed: party > 1 ? () => set(() => party--) : null, icon: const Icon(Icons.remove_circle_outline)),
+                Text('$party', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
+                IconButton(onPressed: party < 999 ? () => set(() => party++) : null, icon: const Icon(Icons.add_circle_outline)),
+              ]),
+              TextField(controller: name, maxLength: 40, decoration: const InputDecoration(labelText: '稱呼（選填，例：王先生）')),
+              const SizedBox(height: 4),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final r = await pickTables(c, tables: _tables, selected: ids, party: party, busy: busyTables(all, null, m));
+                  if (r != null) set(() => ids = r);
+                },
+                icon: const Icon(Icons.table_restaurant_outlined),
+                label: Text(ids.isEmpty
+                    ? '選桌'
+                    : '桌 ${[for (final id in ids) _tables.where((t) => t.id == id).firstOrNull?.name].whereType<String>().join('、')}'),
+              ),
+              if (!today)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text('注意：登記在 ${_day.month}/${_day.day}（不是今天）', style: TextStyle(color: AppColors.warn, fontSize: 12)),
+                ),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
+            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('入座')),
+          ],
+        ),
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final n = name.text.trim();
+    await _run(
+        () => _repo.addWalkIn(_store, date: _day, time: minuteLabel(m), party: party, name: n.isEmpty ? '現場客' : n, tableIds: ids),
+        '已登記現場客');
   }
 
   void _shareLink(ReservationSettings s) {

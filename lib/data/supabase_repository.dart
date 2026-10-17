@@ -1016,7 +1016,7 @@ class SupabaseRepository implements Repository {
     final rows = await _db
         .from('reservations')
         .select('id, slot_date, slot_time, party_size, guest_name, phone, email, note, status, source, email_error, created_at, '
-            'requested_party, party_request_status, lang')
+            'requested_party, party_request_status, lang, table_ids, seated_at, cleared_at, walk_in')
         .eq('store_id', storeId)
         .gte('slot_date', _day.format(from))
         .lte('slot_date', _day.format(to))
@@ -1046,6 +1046,41 @@ class SupabaseRepository implements Repository {
   Future<void> updateReservation(String id, Map<String, dynamic> values) async {
     final rows = await _db.from('reservations').update(values).eq('id', id).select('id');
     if (rows.isEmpty) throw Exception('message: 沒有權限修改這筆訂位,');
+  }
+
+  // ---------------- 0061 時間軸：桌位、現場客 ----------------
+  @override
+  Future<List<ReservationTable>> reservationTables(String storeId) async {
+    final rows = await _db.from('reservation_tables').select().eq('store_id', storeId).order('sort').order('name');
+    return rows.map(ReservationTable.fromRow).toList();
+  }
+
+  @override
+  Future<void> saveReservationTable(String storeId, ReservationTable t) async {
+    final v = {'name': t.name.trim(), 'seats': t.seats, 'combinable': t.combinable, 'sort': t.sort, 'active': t.active};
+    if (t.id.isEmpty) {
+      await _db.from('reservation_tables').insert({'store_id': storeId, ...v});
+    } else {
+      final rows = await _db.from('reservation_tables').update(v).eq('id', t.id).select('id');
+      if (rows.isEmpty) throw Exception('message: 沒有權限修改桌位,');
+    }
+  }
+
+  @override
+  Future<void> addWalkIn(String storeId,
+      {required DateTime date, required String time, required int party, required String name, required List<String> tableIds}) async {
+    await _db.from('reservations').insert({
+      'store_id': storeId,
+      'slot_date': _day.format(date),
+      'slot_time': time,
+      'party_size': party,
+      'guest_name': name,
+      'phone': null,
+      'source': 'app',
+      'status': 'arrived',
+      'walk_in': true,
+      'table_ids': tableIds,
+    });
   }
 
   // ---------------- 0052 特殊日期、熟客 ----------------

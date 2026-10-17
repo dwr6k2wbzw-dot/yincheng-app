@@ -111,6 +111,11 @@ class Reservation {
   final int? requestedParty;
   final String? partyRequestStatus;
   final String lang; // 0058 客人訂位時選的語言 zh／en／ja
+  // 0061 時間軸：排到哪幾張桌（併桌＝多張）、入座／清桌時間、現場客
+  final List<String> tableIds;
+  final DateTime? seatedAt;
+  final DateTime? clearedAt;
+  final bool walkIn;
   const Reservation({
     required this.id,
     required this.date,
@@ -127,6 +132,10 @@ class Reservation {
     this.requestedParty,
     this.partyRequestStatus,
     this.lang = 'zh',
+    this.tableIds = const [],
+    this.seatedAt,
+    this.clearedAt,
+    this.walkIn = false,
   });
   factory Reservation.fromRow(Map<String, dynamic> r) => Reservation(
         id: r['id'] as String,
@@ -144,12 +153,46 @@ class Reservation {
         requestedParty: (r['requested_party'] as num?)?.toInt(),
         partyRequestStatus: r['party_request_status'] as String?,
         lang: r['lang'] as String? ?? 'zh',
+        tableIds: [for (final x in (r['table_ids'] as List? ?? const [])) x as String],
+        seatedAt: r['seated_at'] == null ? null : DateTime.parse(r['seated_at'] as String).toLocal(),
+        clearedAt: r['cleared_at'] == null ? null : DateTime.parse(r['cleared_at'] as String).toLocal(),
+        walkIn: r['walk_in'] as bool? ?? false,
+      );
+
+  /// 示範模式用：改幾個欄位
+  Reservation copyWith({String? status, String? note, bool clearNote = false, List<String>? tableIds, DateTime? seatedAt,
+          bool clearSeated = false, DateTime? clearedAt, bool clearCleared = false, int? party, String? partyRequestStatus}) =>
+      Reservation(
+        id: id, date: date, time: time, party: party ?? this.party, name: name, phone: phone, email: email,
+        note: clearNote ? null : (note ?? this.note), status: status ?? this.status, source: source, emailError: emailError,
+        createdAt: createdAt, requestedParty: requestedParty, partyRequestStatus: partyRequestStatus ?? this.partyRequestStatus,
+        lang: lang, tableIds: tableIds ?? this.tableIds, seatedAt: clearSeated ? null : (seatedAt ?? this.seatedAt),
+        clearedAt: clearCleared ? null : (clearedAt ?? this.clearedAt), walkIn: walkIn,
       );
   bool get partyPending => partyRequestStatus == 'pending' && requestedParty != null && status == 'confirmed';
   bool get active => status == 'confirmed' || status == 'arrived';
 }
 
-const reservationStatusLabel = {'confirmed': '已確認', 'arrived': '已到店', 'no_show': '未到', 'cancelled': '已取消'};
+const reservationStatusLabel = {'confirmed': '已確認', 'arrived': '已入座', 'no_show': '未到', 'cancelled': '已取消'};
+
+/// 桌位（0061）：桌號、人數、可併桌；老闆／店長在 App 設定
+class ReservationTable {
+  final String id; // 空字串＝新的
+  final String name;
+  final int seats;
+  final bool combinable;
+  final int sort;
+  final bool active;
+  const ReservationTable({this.id = '', required this.name, this.seats = 2, this.combinable = false, this.sort = 0, this.active = true});
+  factory ReservationTable.fromRow(Map<String, dynamic> r) => ReservationTable(
+        id: r['id'] as String,
+        name: r['name'] as String,
+        seats: (r['seats'] as num).toInt(),
+        combinable: r['combinable'] as bool? ?? false,
+        sort: (r['sort'] as num?)?.toInt() ?? 0,
+        active: r['active'] as bool? ?? true,
+      );
+}
 
 String hm(Object? v) {
   final s = (v ?? '00:00').toString();

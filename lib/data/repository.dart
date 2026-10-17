@@ -141,6 +141,11 @@ abstract class Repository {
   Future<void> addReservation(String storeId,
       {required DateTime date, required String time, required int party, required String name, required String phone, String? email, String? note});
   Future<void> updateReservation(String id, Map<String, dynamic> values);
+  // 0061 時間軸：桌位、現場客
+  Future<List<ReservationTable>> reservationTables(String storeId);
+  Future<void> saveReservationTable(String storeId, ReservationTable t);
+  Future<void> addWalkIn(String storeId,
+      {required DateTime date, required String time, required int party, required String name, required List<String> tableIds});
   /// 0055 客人申請改人數：同意（人數改成申請的）或不同意
   Future<void> decidePartyRequest(String id, bool approve, int expectedParty);
   // 0052 特殊日期、熟客
