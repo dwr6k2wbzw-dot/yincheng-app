@@ -211,7 +211,7 @@
 
   // 小城外：手寫便條，時鐘指到訂位時間、蓋郵戳
   // 小城外訂位成功的樣式（老闆可選）：note 手寫便條／rail 老車票／type 打字機／postcard 明信片／grand 老爺鐘
-  const WKW_DONE = 'note';
+  const WKW_DONE = 'grand'; // 老闆 2026-10-18 選 E
   function memo() {
     const kind = ['note', 'rail', 'type', 'postcard', 'grand'].includes(q.get('done')) ? q.get('done') : WKW_DONE;
     done.classList.add('memo', 'm-' + kind);
