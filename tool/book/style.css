@@ -385,3 +385,12 @@ body { position:relative; }
 .anim #done.m-grand .postmark { border-color:rgba(232,120,100,.7); color:rgba(240,140,120,.85); }
 
 .anim #done.m-rail .mm-top, .anim #done.m-type .mm-top, .anim #done.m-postcard .mm-top { display:block; }
+
+/* 已滿的日子：可以點（顯示另一家店），但看起來是滿的 */
+button.cd.full:not(.on) { opacity:.5; }
+/* 兩家互推（老闆 2026-10-18） */
+.alt { margin-top:14px; padding:14px; border:1px solid var(--gold); border-radius:12px; background:var(--gold-soft); }
+.altk { margin:0; font-size:13px; color:var(--gold); letter-spacing:.08em; }
+.altn { margin:6px 0 12px; font-size:18px; font-weight:600; }
+.altn small { display:block; font-size:13px; font-weight:400; color:var(--muted); margin-top:2px; }
+.altb { display:block; text-align:center; padding:13px; border-radius:12px; background:var(--gold); color:var(--accent-ink); font-weight:700; letter-spacing:.1em; text-decoration:none; }

@@ -21,7 +21,7 @@
   <div class="card info" id="info" hidden></div>
   <div id="app" hidden>
     <div class="card"><p class="label" data-i18n="date">1. 日期</p><p class="dsel" id="dsel"></p><div class="cal" id="cal"></div></div>
-    <div class="card"><p class="label" data-i18n="time">2. 時間</p><div class="grid" id="slots"></div><p class="note" id="dayInfo" style="white-space:pre-line"></p></div>
+    <div class="card"><p class="label" data-i18n="time">2. 時間</p><div class="grid" id="slots"></div><p class="note" id="dayInfo" style="white-space:pre-line"></p><div class="alt" id="alt" hidden></div></div>
     <div class="card"><p class="label" data-i18n="party">3. 人數</p>
       <div class="stepper"><button type="button" id="minus" aria-label="減少" data-i18n-aria="less">−</button><b id="party">2</b><button type="button" id="plus" aria-label="增加" data-i18n-aria="more">＋</button></div>
       <p class="note" id="partyNote"></p>
@@ -53,6 +53,10 @@
   // 英文／日文訂位可以不填電話（中文仍必填）
   if (YCI.lang !== 'zh') $('phone').required = false;
   let info = null, day = null, time = null, party = 2;
+  // 從另一家店的「改訂這家」連結過來：?d=日期&p=人數（老闆 2026-10-18 兩家互推）
+  const qs = new URLSearchParams(location.search);
+  const wantDay = /^\d{4}-\d{2}-\d{2}$/.test(qs.get('d') || '') ? qs.get('d') : null;
+  if (/^\d{1,2}$/.test(qs.get('p') || '') && +qs.get('p') >= 1) party = +qs.get('p');
   // 店家 logo（依網址 ?s=）
   const logos = { yincheng: 'logo-yincheng.png', xcw: 'logo-xcw.png' };
   if (logos[slug]) { $('logo').src = logos[slug]; $('logo').alt = ''; $('logo').hidden = false; }
@@ -68,10 +72,11 @@
     renderInfo();
     if (!info.enabled) { $('contact').textContent = (info.contact_note ? info.contact_note + '\n\n' : '') + T('paused'); return; }
     $('app').hidden = false;
-    party = Math.min(party, info.max_party);
+    party = Math.max(1, Math.min(party, info.max_party));
     $('partyNote').textContent = T('partyNote', info.max_party);
     if (!info.days.length) { $('contact').textContent += '\n' + T('noDays'); }
     const open = info.days.filter(d => partyOk(d, party));  // 預設選「現在人數訂得到」的第一天（Codex 審查）
+    if (!day && wantDay && info.days.some(d => d.date === wantDay && !d.closed)) day = wantDay;
     if (!day || !info.days.some(d => d.date === day)) day = open.length ? open[0].date : (info.days.length ? info.days[0].date : null);
     render();
   }
@@ -115,9 +120,9 @@
       const isToday = iso === realToday ? ' today' : '';
       if (!d) { h += '<span class="cd off' + isToday + '">' + dd + '</span>'; continue; }
       const full = !d.closed && (d.groups_left === 0 || d.guests_left === 0);
-      const offDay = d.closed || full;
+      const offDay = d.closed;  // 已滿的日子仍可點，讓客人看到另一家店有沒有位子（老闆 2026-10-18）
       const tag = d.closed ? (YCI.lang === 'zh' && d.note ? d.note : T('closed')) : full ? T('full') : '';
-      h += '<button type="button" class="cd' + isToday + (iso === day ? ' on' : '') + '" data-d="' + iso + '"' + (offDay ? ' disabled' : '') + '>' + dd +
+      h += '<button type="button" class="cd' + isToday + (full ? ' full' : '') + (iso === day ? ' on' : '') + '" data-d="' + iso + '"' + (offDay ? ' disabled' : '') + '>' + dd +
         (tag ? '<small>' + YC.esc(tag.slice(0, 4)) + '</small>' : '') + '</button>';
     }
     $('cal').innerHTML = h + '</div>';
@@ -157,6 +162,38 @@
     // 特殊日期有寫說明（沒公休、只改名額的日子）也顯示給客人看（Codex 審查）
     if (cur && !cur.closed && cur.note && YCI.lang === 'zh') msg = cur.note + (msg ? '\n' + msg : '');
     $('dayInfo').textContent = msg;
+    renderAlt(cur, ok);
+  }
+  // 兩家互推（老闆 2026-10-18）：這家這天滿了（或人數放不下），另一家同一天還訂得到 → 顯示「改訂另一家」
+  const OTHER = { yincheng: 'xcw', xcw: 'yincheng' };
+  let other = null, otherLoading = null;
+  async function loadOther() {
+    if (!OTHER[slug]) return null;
+    if (!otherLoading) otherLoading = YC.rpc('reservation_availability', { p_slug: OTHER[slug] }).then((r) => (other = r)).catch(() => null);
+    return otherLoading;
+  }
+  function otherOk(d, p) {
+    if (!other || !other.enabled || !d || d.closed || d.groups_left === 0) return false;
+    if (p > (other.max_party || 0)) return false;
+    if (d.guests_left != null && p > d.guests_left) return false;
+    if (d.large_left != null && p >= (other.large_party_size || 4) && d.large_left < 1) return false;
+    return d.slots && d.slots.length > 0;
+  }
+  async function renderAlt(cur, ok) {
+    const box = $('alt');
+    const show = () => {
+      const od = other && other.enabled ? other.days.find((x) => x.date === day) : null;
+      if (!cur || cur.closed || ok || !otherOk(od, party)) { box.hidden = true; box.innerHTML = ''; return; }
+      const o = OTHER[slug];
+      const href = o + '/?d=' + day + '&p=' + party + '&lang=' + YCI.lang;
+      box.innerHTML = '<p class="altk">' + T('altTitle') + '</p>' +
+        '<p class="altn">' + YC.esc(T('storeName')[o]) + '<small>' + YC.esc(T('storeIntro')[o]) + '</small></p>' +
+        '<a class="altb" href="' + href + '">' + YC.esc(T('altGo', T('storeName')[o])) + ' →</a>';
+      box.hidden = false;
+    };
+    if (!cur || cur.closed || ok) { box.hidden = true; return; }
+    show();
+    if (!other) { await loadOther(); show(); }
   }
   $('cal').onclick = (e) => { const b = e.target.closest('button[data-d]'); if (b && !b.disabled) { day = b.dataset.d; time = null; render(); } };
   $('slots').onclick = (e) => { const b = e.target.closest('button[data-t]'); if (b && !b.disabled) { time = b.dataset.t; render(); } };
