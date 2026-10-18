@@ -20,7 +20,7 @@
   </header>
   <div class="card info" id="info" hidden></div>
   <div id="app" hidden>
-    <div class="card"><p class="label"><span data-i18n="date">1. 日期</span><span class="lnote" id="window" hidden></span></p><p class="dsel" id="dsel"></p><div class="cal" id="cal"></div></div>
+    <div class="card"><p class="label"><span data-i18n="date">1. 日期</span><span class="lnote" id="window" hidden></span></p><p class="cutnote" id="cutoff" hidden></p><p class="dsel" id="dsel"></p><div class="cal" id="cal"></div></div>
     <div class="card"><p class="label" data-i18n="time">2. 時間</p><div class="grid" id="slots"></div><p class="note" id="dayInfo" style="white-space:pre-line"></p><div class="alt" id="alt" hidden></div></div>
     <div class="card"><p class="label" data-i18n="party">3. 人數</p>
       <div class="stepper"><button type="button" id="minus" aria-label="減少" data-i18n-aria="less">−</button><b id="party">2</b><button type="button" id="plus" aria-label="增加" data-i18n-aria="more">＋</button></div>
@@ -80,6 +80,12 @@
     const nDays = info.days.length ? Math.round((Date.parse(info.days[info.days.length - 1].date) - Date.parse(tpToday)) / 864e5) + 1 : 0;
     $('window').textContent = nDays > 0 ? T('window', nDays) : '';
     $('window').hidden = !(nDays > 0);
+    // 「今日18:00後僅開放電話預約」＋本店電話（時間跟著 App 的當天截止設定；老闆 2026-10-18）
+    if (info.same_day_cutoff) {
+      const tel = info.phone ? ' <a href="tel:' + YC.esc(info.phone.replace(/[^0-9+]/g, '')) + '">' + YC.esc(info.phone) + '</a>' : '';
+      $('cutoff').innerHTML = YC.esc(T('cutoffNote', info.same_day_cutoff)) + tel;
+      $('cutoff').hidden = false;
+    }
     const open = info.days.filter(d => partyOk(d, party));  // 預設選「現在人數訂得到」的第一天（Codex 審查）
     if (!day && wantDay && info.days.some(d => d.date === wantDay && !d.closed)) day = wantDay;
     if (!day || !info.days.some(d => d.date === day)) day = open.length ? open[0].date : (info.days.length ? info.days[0].date : null);

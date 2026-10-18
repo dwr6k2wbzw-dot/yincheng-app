@@ -397,3 +397,5 @@ button.cd.full:not(.on) { opacity:.5; }
 
 /* 日期標題旁：僅開放幾日內訂位（老闆 2026-10-18） */
 .lnote { margin-left:10px; padding:2px 8px; border:1px solid var(--line); border-radius:999px; color:var(--muted); font-size:12px; letter-spacing:.05em; vertical-align:1px; }
+.cutnote { margin:-4px 0 12px; font-size:13px; color:var(--muted); }
+.cutnote a { color:var(--gold); white-space:nowrap; text-underline-offset:3px; }
