@@ -394,3 +394,6 @@ button.cd.full:not(.on) { opacity:.5; }
 .altn { margin:6px 0 12px; font-size:18px; font-weight:600; }
 .altn small { display:block; font-size:13px; font-weight:400; color:var(--muted); margin-top:2px; }
 .altb { display:block; text-align:center; padding:13px; border-radius:12px; background:var(--gold); color:var(--accent-ink); font-weight:700; letter-spacing:.1em; text-decoration:none; }
+
+/* 日期標題旁：僅開放幾日內訂位（老闆 2026-10-18） */
+.lnote { margin-left:10px; padding:2px 8px; border:1px solid var(--line); border-radius:999px; color:var(--muted); font-size:12px; letter-spacing:.05em; vertical-align:1px; }
