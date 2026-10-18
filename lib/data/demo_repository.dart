@@ -673,6 +673,8 @@ class DemoRepository implements Repository {
         clearSeated: !seated,
         clearedAt: values['cleared_at'] != null && r.clearedAt == null ? DateTime.now() : null,
         clearCleared: !seated || (values.containsKey('cleared_at') && values['cleared_at'] == null),
+        hiddenAt: status == 'cancelled' && values['hidden_at'] != null && r.hiddenAt == null ? DateTime.now() : null,
+        clearHidden: status != 'cancelled' || (values.containsKey('hidden_at') && values['hidden_at'] == null),
       );
       return;
     }

@@ -45,41 +45,32 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     if (!_started) {
       _started = true;
       _future = _load();
-      _loadHidden();
     }
   }
 
-  // 已取消的訂位可以滑掉隱藏（老闆 2026-10-18）：只是這支手機不顯示，資料不刪
-  Set<String> _hidden = {};
+  // 已取消的訂位可以滑掉隱藏（老闆 2026-10-18，0064）：一個人滑掉大家都看不到；資料不刪，可以取消隱藏
   bool _showHidden = false;
-  String get _hiddenKey => 'resv_hidden_$_store';
-  Future<void> _loadHidden() async {
+  // 滑掉的那一刻先從畫面拿掉（Dismissible 必須馬上離開畫面），資料庫存好後重新讀取
+  final Map<String, bool> _hiddenNow = {};
+  Future<void> _setHidden(Reservation r, bool hide) async {
+    setState(() => _hiddenNow[r.id] = hide);
     try {
-      final v = (await SharedPreferences.getInstance()).getStringList(_hiddenKey) ?? const [];
-      if (mounted) setState(() => _hidden = v.toSet());
-    } catch (_) {}
-  }
-  Future<void> _saveHidden() async {
-    try {
-      final l = _hidden.toList();
-      // 只留最近 500 筆，避免越存越多
-      (await SharedPreferences.getInstance()).setStringList(_hiddenKey, l.length > 500 ? l.sublist(l.length - 500) : l);
-    } catch (_) {}
-  }
-  void _hide(Reservation r) {
-    setState(() => _hidden = {..._hidden, r.id});
-    _saveHidden();
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(
-        content: Text('已隱藏「${r.name}」這筆已取消的訂位'),
-        action: SnackBarAction(label: '復原', onPressed: () => _unhide(r.id)),
-      ));
-  }
-  void _unhide(String id) {
-    if (!mounted) return;
-    setState(() => _hidden = {..._hidden}..remove(id));
-    _saveHidden();
+      await _repo.updateReservation(r.id, {'hidden_at': hide ? DateTime.now().toUtc().toIso8601String() : null});
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          content: Text(hide ? '已隱藏「${r.name}」這筆已取消的訂位' : '已取消隱藏'),
+          action: hide ? SnackBarAction(label: '復原', onPressed: () => _setHidden(r, false)) : null,
+        ));
+    } catch (e) {
+      if (mounted) {
+        setState(() => _hiddenNow.remove(r.id));
+        showMessage(context, friendlyError(e), error: true);
+      }
+      return;
+    }
+    if (mounted) _reload();
   }
 
   ReservationSpecialDay? _special; // 這天的特殊日期（0052）
@@ -195,7 +186,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     }
     final active = list.where((r) => r.active).toList();
     final guests = active.fold<int>(0, (t, r) => t + r.party);
-    bool isHidden(Reservation r) => r.status == 'cancelled' && _hidden.contains(r.id);
+    bool isHidden(Reservation r) => r.status == 'cancelled' && (_hiddenNow[r.id] ?? r.hiddenAt != null);
     final hiddenCount = list.where(isHidden).length;
     final byTime = <String, List<Reservation>>{};
     for (final r in list) {
@@ -337,7 +328,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                         Text('隱藏', style: TextStyle(color: AppColors.muted)),
                       ]),
                     ),
-                    onDismissed: (_) => _hide(r),
+                    onDismissed: (_) => _setHidden(r, true),
                     child: _tile(r),
                   )
                 else if (isHidden(r))
@@ -348,7 +339,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                       Positioned(
                         right: 4,
                         top: 4,
-                        child: TextButton(onPressed: () => _unhide(r.id), child: const Text('取消隱藏')),
+                        child: TextButton(onPressed: () => _setHidden(r, false), child: const Text('取消隱藏')),
                       ),
                     ]),
                   )
