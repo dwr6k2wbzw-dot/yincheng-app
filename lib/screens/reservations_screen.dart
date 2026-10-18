@@ -261,7 +261,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
             isToday: _day == _today(),
             list: list,
             tables: _tables,
-            slots: settings.slots,
+            slots: settings.slotsFor(_day),
             onTapReservation: _actions,
             onTapEmpty: (t, m) => _walkIn(t, m),
           ),
@@ -904,10 +904,10 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
           Text('時段', style: TextStyle(color: AppColors.muted)),
           const SizedBox(height: 6),
           Wrap(spacing: 8, runSpacing: 8, children: [
-            for (final t in widget.settings.slots)
+            for (final t in widget.settings.slotsFor(_date))
               ChoiceChip(label: Text(t), selected: _time == t, onSelected: (_) => setState(() => _time = t)),
             // 自己選的時間（不在固定時段裡）
-            if (_time != null && !widget.settings.slots.contains(_time))
+            if (_time != null && !widget.settings.slotsFor(_date).contains(_time))
               ChoiceChip(label: Text(_time!), selected: true, onSelected: (_) => _pickCustomTime()),
             // 電話訂位可訂任何時間（老闆 2026-10-15）
             ActionChip(
@@ -995,6 +995,11 @@ class _ReservationSettingsScreenState extends State<ReservationSettingsScreen> {
   late bool _enabled = widget.settings.enabled;
   // 0054 時段自由增刪（老闆 2026-10-16）
   late final List<String> _slots = [...widget.settings.slots];
+  // 0063 依星期另設時段（老闆 2026-10-18：隱城週五週六 19:00 開始）
+  late final Map<int, List<String>> _wdSlots = {
+    for (final e in widget.settings.weekdaySlotTimes.entries) e.key: [...e.value],
+  };
+  static const _wdName = ['一', '二', '三', '四', '五', '六', '日'];
   late final _address = TextEditingController(text: widget.settings.address ?? '');
   late final _phone = TextEditingController(text: widget.settings.phone ?? '');
   late String _cutoff = widget.settings.sameDayCutoff;
@@ -1011,8 +1016,9 @@ class _ReservationSettingsScreenState extends State<ReservationSettingsScreen> {
   late final _contact = TextEditingController(text: widget.settings.contactNote ?? '');
   bool _saving = false;
 
-  Future<void> _addSlot() async {
-    final last = _slots.isEmpty ? '19:00' : _slots.last;
+  Future<void> _addSlot([List<String>? target]) async {
+    final list = target ?? _slots;
+    final last = list.isEmpty ? '19:00' : list.last;
     final t = await showTimePicker(
       context: context,
       initialTime: TimeOfDay(hour: minutesOf(last) ~/ 60, minute: minutesOf(last) % 60),
@@ -1020,17 +1026,52 @@ class _ReservationSettingsScreenState extends State<ReservationSettingsScreen> {
     );
     if (t == null || !mounted) return;
     final v = '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
-    if (_slots.contains(v)) {
+    if (list.contains(v)) {
       showMessage(context, '已經有 $v 這個時段');
       return;
     }
-    if (_slots.length >= 48) {
+    if (list.length >= 48) {
       showMessage(context, '時段最多 48 個', error: true);
       return;
     }
-    setState(() => _slots
+    setState(() => list
       ..add(v)
       ..sort());
+  }
+
+  Future<void> _addWeekday() async {
+    final free = [for (var i = 1; i <= 7; i++) if (!_wdSlots.containsKey(i)) i];
+    if (free.isEmpty) return;
+    final picked = await showDialog<Set<int>>(
+      context: context,
+      builder: (ctx) {
+        final sel = <int>{};
+        return StatefulBuilder(
+          builder: (ctx, setD) => AlertDialog(
+            title: const Text('哪幾天要另設時段？'),
+            content: Wrap(spacing: 6, runSpacing: 6, children: [
+              for (final i in free)
+                FilterChip(
+                  label: Text('週${_wdName[i - 1]}'),
+                  selected: sel.contains(i),
+                  onSelected: (v) => setD(() => v ? sel.add(i) : sel.remove(i)),
+                ),
+            ]),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+              FilledButton(onPressed: () => Navigator.pop(ctx, sel), child: const Text('確定')),
+            ],
+          ),
+        );
+      },
+    );
+    if (picked == null || picked.isEmpty || !mounted) return;
+    // 先複製平常的時段，再自己增刪
+    setState(() {
+      for (final i in picked) {
+        _wdSlots[i] = [..._slots];
+      }
+    });
   }
 
   Future<void> _pick(String current, void Function(String) set) async {
@@ -1080,12 +1121,18 @@ class _ReservationSettingsScreenState extends State<ReservationSettingsScreen> {
       showMessage(context, '至少要有一個訂位時段', error: true);
       return;
     }
+    final emptyWd = [for (final e in _wdSlots.entries) if (e.value.isEmpty) e.key];
+    if (emptyWd.isNotEmpty) {
+      showMessage(context, '週${_wdName[emptyWd.first - 1]}至少要有一個時段，或按「改回平常時段」', error: true);
+      return;
+    }
     setState(() => _saving = true);
     try {
       await AppScope.of(context).repo.saveReservationSettings(widget.membership.storeId, {
         'enabled': _enabled,
         'display_name': _name.text.trim(),
         'slot_times': _slots,
+        'weekday_slot_times': {for (final e in _wdSlots.entries) '${e.key}': e.value},
         'address': _address.text.trim().isEmpty ? null : _address.text.trim(),
         'phone': _phone.text.trim().isEmpty ? null : _phone.text.trim(),
         'same_day_cutoff': _cutoff,
@@ -1131,7 +1178,9 @@ class _ReservationSettingsScreenState extends State<ReservationSettingsScreen> {
               decoration: const InputDecoration(labelText: '電話（訂位頁可直接撥打）', counterText: '')),
           const SizedBox(height: 16),
           Row(children: [
-            Expanded(child: Text('訂位時段（點 ✕ 刪除）', style: TextStyle(color: AppColors.muted, fontSize: 13))),
+            Expanded(
+                child: Text(_wdSlots.isEmpty ? '訂位時段（點 ✕ 刪除）' : '平常的訂位時段（點 ✕ 刪除）',
+                    style: TextStyle(color: AppColors.muted, fontSize: 13))),
             TextButton.icon(onPressed: _addSlot, icon: const Icon(Icons.add, size: 18), label: const Text('新增時段')),
           ]),
           Wrap(spacing: 6, runSpacing: 6, children: [
@@ -1146,6 +1195,35 @@ class _ReservationSettingsScreenState extends State<ReservationSettingsScreen> {
             Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Text('至少要有一個時段', style: TextStyle(color: AppColors.bad, fontSize: 12)),
+            ),
+          // 0063 依星期另設時段：有設的那天用自己的時段，改這裡不影響平常的時段
+          for (final i in (_wdSlots.keys.toList()..sort())) ...[
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(
+                  child: Text('週${_wdName[i - 1]}的時段', style: TextStyle(color: AppColors.primary, fontSize: 13, fontWeight: FontWeight.w600))),
+              TextButton(onPressed: () => _addSlot(_wdSlots[i]), child: const Text('新增')),
+              TextButton(
+                  onPressed: () => setState(() => _wdSlots.remove(i)),
+                  child: Text('改回平常時段', style: TextStyle(color: AppColors.muted))),
+            ]),
+            Wrap(spacing: 6, runSpacing: 6, children: [
+              for (final t in _wdSlots[i]!)
+                InputChip(
+                  label: Text(t),
+                  onDeleted: () => setState(() => _wdSlots[i]!.remove(t)),
+                  deleteButtonTooltipMessage: '刪除 $t',
+                ),
+            ]),
+          ],
+          if (_wdSlots.length < 7)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: _addWeekday,
+                icon: const Icon(Icons.event_repeat, size: 18),
+                label: const Text('依星期另設時段（例如週五、週六晚一點開始）'),
+              ),
             ),
           const SizedBox(height: 8),
           ListTile(
