@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600&amp;display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
+<!--OG-->
 </head>
 <body>
 <main>
@@ -44,7 +45,8 @@
 <script src="i18n.js"></script>
 <script>
 (async function () {
-  const slug = new URLSearchParams(location.search).get('s') || '';
+  // 店家：網址 ?s=xxx，或各店專屬網址 book/xxx/（部署時產生，html 上有 data-slug）
+  const slug = new URLSearchParams(location.search).get('s') || document.documentElement.dataset.slug || '';
   const $ = (id) => document.getElementById(id);
   const T = (k, ...a) => YCI.t(k, ...a);
   YCI.apply(); YCI.mountSwitcher();

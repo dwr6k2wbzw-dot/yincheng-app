@@ -205,7 +205,8 @@ int minutesOf(String hhmm) {
 }
 
 /// 公開訂位頁網址
-String reservationPageUrl(String slug) => 'https://dwr6k2wbzw-dot.github.io/yincheng-app/book/?s=$slug';
+// 各店專屬網址（分享到 LINE／IG 會出現店家照片的預覽卡；老闆 2026-10-18）；舊的 ?s= 網址照樣能用
+String reservationPageUrl(String slug) => 'https://dwr6k2wbzw-dot.github.io/yincheng-app/book/$slug/';
 
 
 /// 某一天的線上訂位上限（0052）

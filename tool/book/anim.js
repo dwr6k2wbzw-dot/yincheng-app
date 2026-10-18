@@ -11,7 +11,7 @@
   const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   if (reduce || q.get('anim') === '0') return;
   const lang = (window.YCI && YCI.lang) || 'zh';
-  const wkw = q.get('s') === 'xcw'; // 小城外：老宅、王家衛
+  const wkw = (q.get('s') || document.documentElement.dataset.slug) === 'xcw'; // 小城外：老宅、王家衛
   const W = {
     zh: { skip: '點一下跳過', stamp: '已訂位', admit: '入場券', seat: '座位保留中',
           line: '時間，在這裡慢了下來', see: (t) => t + '，不見不散' },
