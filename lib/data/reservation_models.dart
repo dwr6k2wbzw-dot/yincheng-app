@@ -127,6 +127,7 @@ class Reservation {
   final DateTime? seatedAt;
   final DateTime? clearedAt;
   final bool walkIn;
+  final DateTime? hiddenAt; // 0064 已取消的訂位被滑掉隱藏（大家都看不到，資料還在）
   const Reservation({
     required this.id,
     required this.date,
@@ -147,6 +148,7 @@ class Reservation {
     this.seatedAt,
     this.clearedAt,
     this.walkIn = false,
+    this.hiddenAt,
   });
   factory Reservation.fromRow(Map<String, dynamic> r) => Reservation(
         id: r['id'] as String,
@@ -168,17 +170,19 @@ class Reservation {
         seatedAt: r['seated_at'] == null ? null : DateTime.parse(r['seated_at'] as String).toLocal(),
         clearedAt: r['cleared_at'] == null ? null : DateTime.parse(r['cleared_at'] as String).toLocal(),
         walkIn: r['walk_in'] as bool? ?? false,
+        hiddenAt: r['hidden_at'] == null ? null : DateTime.parse(r['hidden_at'] as String).toLocal(),
       );
 
   /// 示範模式用：改幾個欄位
   Reservation copyWith({String? status, String? note, bool clearNote = false, List<String>? tableIds, DateTime? seatedAt,
-          bool clearSeated = false, DateTime? clearedAt, bool clearCleared = false, int? party, String? partyRequestStatus}) =>
+          bool clearSeated = false, DateTime? clearedAt, bool clearCleared = false, int? party, String? partyRequestStatus, DateTime? hiddenAt, bool clearHidden = false}) =>
       Reservation(
         id: id, date: date, time: time, party: party ?? this.party, name: name, phone: phone, email: email,
         note: clearNote ? null : (note ?? this.note), status: status ?? this.status, source: source, emailError: emailError,
         createdAt: createdAt, requestedParty: requestedParty, partyRequestStatus: partyRequestStatus ?? this.partyRequestStatus,
         lang: lang, tableIds: tableIds ?? this.tableIds, seatedAt: clearSeated ? null : (seatedAt ?? this.seatedAt),
         clearedAt: clearCleared ? null : (clearedAt ?? this.clearedAt), walkIn: walkIn,
+        hiddenAt: clearHidden ? null : (hiddenAt ?? this.hiddenAt),
       );
   bool get partyPending => partyRequestStatus == 'pending' && requestedParty != null && status == 'confirmed';
   bool get active => status == 'confirmed' || status == 'arrived';

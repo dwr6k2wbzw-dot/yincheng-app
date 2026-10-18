@@ -48,6 +48,31 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     }
   }
 
+  // 已取消的訂位可以滑掉隱藏（老闆 2026-10-18，0064）：一個人滑掉大家都看不到；資料不刪，可以取消隱藏
+  bool _showHidden = false;
+  // 滑掉的那一刻先從畫面拿掉（Dismissible 必須馬上離開畫面），資料庫存好後重新讀取
+  final Map<String, bool> _hiddenNow = {};
+  Future<void> _setHidden(Reservation r, bool hide) async {
+    setState(() => _hiddenNow[r.id] = hide);
+    try {
+      await _repo.updateReservation(r.id, {'hidden_at': hide ? DateTime.now().toUtc().toIso8601String() : null});
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          content: Text(hide ? '已隱藏「${r.name}」這筆已取消的訂位' : '已取消隱藏'),
+          action: hide ? SnackBarAction(label: '復原', onPressed: () => _setHidden(r, false)) : null,
+        ));
+    } catch (e) {
+      if (mounted) {
+        setState(() => _hiddenNow.remove(r.id));
+        showMessage(context, friendlyError(e), error: true);
+      }
+      return;
+    }
+    if (mounted) _reload();
+  }
+
   ReservationSpecialDay? _special; // 這天的特殊日期（0052）
   Map<String, GuestStats> _guests = {}; // 熟客紀錄（以電話數字對回）
 
@@ -161,8 +186,11 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     }
     final active = list.where((r) => r.active).toList();
     final guests = active.fold<int>(0, (t, r) => t + r.party);
+    bool isHidden(Reservation r) => r.status == 'cancelled' && (_hiddenNow[r.id] ?? r.hiddenAt != null);
+    final hiddenCount = list.where(isHidden).length;
     final byTime = <String, List<Reservation>>{};
     for (final r in list) {
+      if (!_showHidden && isHidden(r)) continue;
       byTime.putIfAbsent(r.time, () => []).add(r);
     }
     final times = byTime.keys.toList()..sort();
@@ -265,10 +293,10 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
             onTapReservation: _actions,
             onTapEmpty: (t, m) => _walkIn(t, m),
           ),
-        if (!_useTimeline && list.isEmpty)
+        if (!_useTimeline && times.isEmpty)
           Padding(
             padding: EdgeInsets.only(top: 48),
-            child: Text('這天還沒有訂位', textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted)),
+            child: Text(list.isEmpty ? '這天還沒有訂位' : '這天沒有有效的訂位（已取消的都隱藏了）', textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted)),
           ),
         if (!_useTimeline)
         for (final t in times) ...[
@@ -283,9 +311,56 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
           ),
           SectionCard(
             padding: EdgeInsets.zero,
-            child: Column(children: [for (final r in byTime[t]!) _tile(r)]),
+            child: Column(children: [
+              for (final r in byTime[t]!)
+                // 已取消的往左滑可以隱藏（只有這支手機看不到，資料還在）
+                if (r.status == 'cancelled' && !isHidden(r))
+                  Dismissible(
+                    key: ValueKey('hide-${r.id}'),
+                    direction: DismissDirection.endToStart,
+                    background: Container(
+                      alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.only(right: 20),
+                      color: AppColors.line,
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(Icons.visibility_off_outlined, color: AppColors.muted, size: 20),
+                        const SizedBox(width: 6),
+                        Text('隱藏', style: TextStyle(color: AppColors.muted)),
+                      ]),
+                    ),
+                    onDismissed: (_) => _setHidden(r, true),
+                    child: _tile(r),
+                  )
+                else if (isHidden(r))
+                  Opacity(
+                    opacity: .6,
+                    child: Stack(children: [
+                      _tile(r),
+                      Positioned(
+                        right: 4,
+                        top: 4,
+                        child: TextButton(onPressed: () => _setHidden(r, false), child: const Text('取消隱藏')),
+                      ),
+                    ]),
+                  )
+                else
+                  _tile(r),
+            ]),
           ),
         ],
+        if (!_useTimeline && hiddenCount > 0)
+          Center(
+            child: TextButton.icon(
+              onPressed: () => setState(() => _showHidden = !_showHidden),
+              icon: Icon(_showHidden ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 18),
+              label: Text(_showHidden ? '收起已隱藏的取消訂位' : '已隱藏 $hiddenCount 筆取消的訂位・顯示'),
+            ),
+          ),
+        if (!_useTimeline && list.any((r) => r.status == 'cancelled' && !isHidden(r)))
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text('已取消的訂位可以往左滑隱藏', textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted, fontSize: 12)),
+          ),
       ]),
     );
   }
