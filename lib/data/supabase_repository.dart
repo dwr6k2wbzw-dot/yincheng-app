@@ -595,6 +595,21 @@ class SupabaseRepository implements Repository {
   }
 
   @override
+  Future<List<AppNotification>> reservationEvents(String storeId) async {
+    final since = DateTime.now().subtract(const Duration(days: 7)).toUtc().toIso8601String();
+    final rows = await _db
+        .from('app_notifications')
+        .select()
+        .eq('store_id', storeId)
+        .eq('kind', 'reservation')
+        .gte('created_at', since)
+        .order('created_at', ascending: false)
+        .limit(30);
+    final me = currentUserId;
+    return rows.map(AppNotification.fromRow).where((n) => me == null || n.actorId != me).toList();
+  }
+
+  @override
   Future<void> markNotificationsSeen(String storeId) =>
       _db.rpc('mark_notifications_seen', params: {'p_store': storeId});
 

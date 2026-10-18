@@ -706,4 +706,9 @@ class DemoRepository implements Repository {
         id: '$storeId-${list.length}', date: date, time: time, party: party, name: name, phone: '',
         status: 'arrived', source: 'app', createdAt: DateTime.now(), tableIds: tableIds, seatedAt: DateTime.now(), walkIn: true));
   }
+  @override
+  Future<List<AppNotification>> reservationEvents(String storeId) async => [
+        AppNotification(id: 901, kind: 'reservation', title: '新訂位', body: '王 先生・10/19 20:00・2 位', actorName: '客人',
+            createdAt: DateTime.now().subtract(const Duration(minutes: 12))),
+      ];
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../app_state.dart';
 import '../config.dart';
@@ -1221,11 +1222,79 @@ class ReservationSummaryCard extends StatefulWidget {
 
 class _ReservationSummaryCardState extends State<ReservationSummaryCard> {
   Future<List<Reservation>>? _future;
+  // 0062（老闆 2026-10-18）：新訂位、取消、改人數的動態；看過的時間記在這支手機（每家店分開）
+  List<AppNotification> _events = const [];
+  DateTime? _seen;
+  String get _seenKey => 'resv_seen_${widget.membership.storeId}';
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _future ??= _load();
+    if (_future == null) {
+      _future = _load();
+      _loadEvents();
+    }
+  }
+
+  Future<void> _loadEvents() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final ms = prefs.getInt(_seenKey);
+      final ev = await AppScope.of(context).repo.reservationEvents(widget.membership.storeId);
+      if (!mounted) return;
+      setState(() {
+        // 第一次用：以前的不算新的
+        _seen = ms == null ? DateTime.now() : DateTime.fromMillisecondsSinceEpoch(ms);
+        _events = ev;
+      });
+      if (ms == null) await prefs.setInt(_seenKey, DateTime.now().millisecondsSinceEpoch);
+    } catch (_) {
+      // 讀不到動態不影響卡片
+    }
+  }
+
+  List<AppNotification> get _unread => [for (final e in _events) if (_seen == null || e.createdAt.isAfter(_seen!)) e];
+
+  Future<void> _markSeen() async {
+    final now = DateTime.now();
+    setState(() => _seen = now);
+    try {
+      (await SharedPreferences.getInstance()).setInt(_seenKey, now.millisecondsSinceEpoch);
+    } catch (_) {}
+  }
+
+  static String _ago(DateTime t) {
+    final m = DateTime.now().difference(t).inMinutes;
+    if (m < 1) return '剛剛';
+    if (m < 60) return '$m 分鐘前';
+    if (m < 24 * 60) return '${m ~/ 60} 小時前';
+    return '${m ~/ (24 * 60)} 天前';
+  }
+
+  /// 卡片下方的動態列：紅點＋最新一則＋共幾則
+  Widget _eventsLine({bool compact = false}) {
+    final u = _unread;
+    if (u.isEmpty) return const SizedBox.shrink();
+    final e = u.first;
+    final color = e.title == '訂位取消' ? AppColors.bad : (e.title == '改人數申請' ? AppColors.warn : AppColors.good);
+    return Padding(
+      padding: EdgeInsets.only(top: compact ? 6 : 10),
+      child: Row(children: [
+        Container(width: 7, height: 7, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text('${e.title}・${e.body ?? ''}${compact ? '' : '・${_ago(e.createdAt)}'}',
+              maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: compact ? 11 : 12, color: color)),
+        ),
+        if (u.length > 1)
+          Container(
+            margin: const EdgeInsets.only(left: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+            decoration: BoxDecoration(color: AppColors.bad, borderRadius: BorderRadius.circular(9)),
+            child: Text('${u.length}', style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.w600)),
+          ),
+      ]),
+    );
   }
 
   Future<List<Reservation>> _load() {
@@ -1249,10 +1318,18 @@ class _ReservationSummaryCardState extends State<ReservationSummaryCard> {
           // 下一組：還沒到店的最早時段
           final waiting = list.where((r) => r.status == 'confirmed').map((r) => r.time).toList()..sort();
           Future<void> open() async {
+            // 有新動態：直接跳到最新那筆的日期；點開就算看過
+            final u = _unread;
+            final day = u.isNotEmpty ? u.first.refMonth : null;
+            if (u.isNotEmpty) await _markSeen();
+            if (!context.mounted) return;
             await Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => ReservationsScreen(membership: widget.membership),
+              builder: (_) => ReservationsScreen(membership: widget.membership, initialDay: day),
             ));
-            if (mounted) setState(() => _future = _load());
+            if (mounted) {
+              setState(() => _future = _load());
+              _loadEvents();
+            }
           }
 
           final ready = snap.hasData && !snap.hasError;
@@ -1281,6 +1358,7 @@ class _ReservationSummaryCardState extends State<ReservationSummaryCard> {
                       Text(ready ? '還沒有訂位' : sub, style: TextStyle(fontSize: 14, color: AppColors.muted)),
                     if (waiting.isNotEmpty)
                       Text('下一組 ${waiting.first}', style: TextStyle(fontSize: 11, color: AppColors.muted, fontFeatures: tabular)),
+                    _eventsLine(compact: true),
                   ]),
                 ),
               ),
@@ -1293,7 +1371,8 @@ class _ReservationSummaryCardState extends State<ReservationSummaryCard> {
               onTap: open,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                child: Row(children: [
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Row(children: [
                   Container(
                     width: 40,
                     height: 40,
@@ -1316,6 +1395,8 @@ class _ReservationSummaryCardState extends State<ReservationSummaryCard> {
                     ])
                   else
                     Icon(Icons.chevron_right, color: AppColors.muted),
+                ]),
+                _eventsLine(),
                 ]),
               ),
             ),

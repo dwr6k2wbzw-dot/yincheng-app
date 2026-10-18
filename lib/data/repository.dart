@@ -118,6 +118,7 @@ abstract class Repository {
 
   // App 內通知（小鈴鐺，0042）：最近 30 天、最多 50 則，不含自己做的事
   Future<NotificationFeed> notifications(String storeId);
+  Future<List<AppNotification>> reservationEvents(String storeId); // 0062：新訂位、取消、改人數（「今日訂位」卡片用）
   Future<void> markNotificationsSeen(String storeId);
 
   // 盤點
