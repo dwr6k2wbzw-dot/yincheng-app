@@ -20,7 +20,7 @@
   </header>
   <div class="card info" id="info" hidden></div>
   <div id="app" hidden>
-    <div class="card"><p class="label" data-i18n="date">1. 日期</p><p class="dsel" id="dsel"></p><div class="cal" id="cal"></div></div>
+    <div class="card"><p class="label"><span data-i18n="date">1. 日期</span><span class="lnote" id="window" hidden></span></p><p class="dsel" id="dsel"></p><div class="cal" id="cal"></div></div>
     <div class="card"><p class="label" data-i18n="time">2. 時間</p><div class="grid" id="slots"></div><p class="note" id="dayInfo" style="white-space:pre-line"></p><div class="alt" id="alt" hidden></div></div>
     <div class="card"><p class="label" data-i18n="party">3. 人數</p>
       <div class="stepper"><button type="button" id="minus" aria-label="減少" data-i18n-aria="less">−</button><b id="party">2</b><button type="button" id="plus" aria-label="增加" data-i18n-aria="more">＋</button></div>
@@ -75,6 +75,11 @@
     party = Math.max(1, Math.min(party, info.max_party));
     $('partyNote').textContent = T('partyNote', info.max_party);
     if (!info.days.length) { $('contact').textContent += '\n' + T('noDays'); }
+    // 「僅開放一週內訂位」：天數跟著 App 設定（可訂天數）變；由最後一天推回（老闆 2026-10-18）
+    const tpToday = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
+    const nDays = info.days.length ? Math.round((Date.parse(info.days[info.days.length - 1].date) - Date.parse(tpToday)) / 864e5) + 1 : 0;
+    $('window').textContent = nDays > 0 ? T('window', nDays) : '';
+    $('window').hidden = !(nDays > 0);
     const open = info.days.filter(d => partyOk(d, party));  // 預設選「現在人數訂得到」的第一天（Codex 審查）
     if (!day && wantDay && info.days.some(d => d.date === wantDay && !d.closed)) day = wantDay;
     if (!day || !info.days.some(d => d.date === day)) day = open.length ? open[0].date : (info.days.length ? info.days[0].date : null);
