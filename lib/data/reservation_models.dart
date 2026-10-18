@@ -23,6 +23,8 @@ class ReservationSettings {
   final List<String> slotTimes;
   final String? address;
   final String? phone;
+  // 0063 依星期另設時段（1＝週一…7＝週日；沒設的照 slots）
+  final Map<int, List<String>> weekdaySlotTimes;
   const ReservationSettings({
     required this.storeId,
     required this.slug,
@@ -45,6 +47,7 @@ class ReservationSettings {
     this.slotTimes = const [],
     this.address,
     this.phone,
+    this.weekdaySlotTimes = const {},
   });
   factory ReservationSettings.fromRow(Map<String, dynamic> r) => ReservationSettings(
         storeId: r['store_id'] as String,
@@ -68,7 +71,15 @@ class ReservationSettings {
         slotTimes: [for (final x in (r['slot_times'] as List? ?? const [])) hm(x)],
         address: r['address'] as String?,
         phone: r['phone'] as String?,
+        weekdaySlotTimes: {
+          for (final e in ((r['weekday_slot_times'] as Map?) ?? const {}).entries)
+            if (int.tryParse('${e.key}') != null && e.value is List && (e.value as List).isNotEmpty)
+              int.parse('${e.key}'): ([for (final x in e.value as List) hm(x)]..sort()),
+        },
       );
+
+  /// 這一天的時段：那個星期有另外設定就用它，否則照平常的時段（0063）
+  List<String> slotsFor(DateTime day) => weekdaySlotTimes[day.weekday] ?? slots;
 
   /// 這一天的上限（特殊日期優先；每週公休＝不開放線上訂位）
   DayLimits limitsFor(DateTime day, ReservationSpecialDay? sp) => DayLimits(
