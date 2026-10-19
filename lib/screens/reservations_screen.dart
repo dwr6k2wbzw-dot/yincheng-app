@@ -887,7 +887,8 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
       showMessage(context, '請選時段', error: true);
       return;
     }
-    if (raw.isNotEmpty && title == null && !hasTitle(raw)) {
+    // 「現場客」快選（老闆 2026-10-20）不用選先生／小姐
+    if (raw.isNotEmpty && raw != _walkInName && title == null && !hasTitle(raw)) {
       showMessage(context, '請選先生或小姐', error: true);
       return;
     }
@@ -1010,6 +1011,7 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
           TextField(
             controller: _name,
             maxLength: 36,
+            onChanged: (_) => setState(() {}), // 讓「現場客」快選的勾選狀態跟著變
             decoration: InputDecoration(
               labelText: '姓名',
               counterText: '',
@@ -1025,9 +1027,26 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
                         selected: _title == t,
                         showCheckmark: false,
                         visualDensity: VisualDensity.compact,
-                        onSelected: (v) => setState(() => _title = v ? t : null),
+                        onSelected: (v) => setState(() {
+                          _title = v ? t : null;
+                          if (v && _name.text.trim() == _walkInName) _name.clear();
+                        }),
                       ),
                     ),
+                  // 現場客快選：名字直接填「現場客」（老闆 2026-10-20）
+                  Padding(
+                    padding: const EdgeInsets.only(left: 6),
+                    child: ChoiceChip(
+                      label: const Text(_walkInName),
+                      selected: _name.text.trim() == _walkInName,
+                      showCheckmark: false,
+                      visualDensity: VisualDensity.compact,
+                      onSelected: (v) => setState(() {
+                        _title = null;
+                        _name.text = v ? _walkInName : '';
+                      }),
+                    ),
+                  ),
                 ]),
               ),
             ),
@@ -1819,6 +1838,9 @@ class _ReservationCalendarScreenState extends State<ReservationCalendarScreen> {
     );
   }
 }
+
+/// 電話訂位名字的「現場客」快選（老闆 2026-10-20）
+const _walkInName = '現場客';
 
 /// 稱謂（老闆 2026-10-15）：訂位姓名後面接「先生」或「小姐」
 const reservationTitles = ['先生', '小姐'];
