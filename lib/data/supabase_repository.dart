@@ -1066,7 +1066,9 @@ class SupabaseRepository implements Repository {
   // ---------------- 0061 時間軸：桌位、現場客 ----------------
   @override
   Future<List<ReservationTable>> reservationTables(String storeId) async {
-    final rows = await _db.from('reservation_tables').select().eq('store_id', storeId).order('sort').order('name');
+    final rows = await _db.from('reservation_tables').select().eq('store_id', storeId)
+        // supabase 的 order() 預設由大到小，要明確指定由小到大（A1 在最上面）
+        .order('sort', ascending: true).order('name', ascending: true);
     return rows.map(ReservationTable.fromRow).toList();
   }
 
