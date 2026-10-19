@@ -100,6 +100,8 @@
     // 低消（老闆 2026-10-17）
     const minAmt = { yincheng: 800, xcw: 600 }[slug];
     if (minAmt) rows.push('<div class="irow"><span class="ik">' + T('minSpend') + '</span><span>' + T('minSpendText', minAmt) + '</span></div>');
+    // 小城外咖啡時段（老闆 2026-10-19）：週六日下午，不開放預約
+    if (slug === 'xcw') rows.push('<div class="irow"><span class="ik">' + T('coffee') + '</span><span>' + T('coffeeText') + '</span></div>');
     $('info').innerHTML = rows.join('');
     $('info').hidden = !rows.length;
   }
