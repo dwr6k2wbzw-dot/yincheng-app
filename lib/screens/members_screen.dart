@@ -11,9 +11,9 @@ import '../widgets/common.dart';
 /// 各身分能看到什麼（顯示在邀請與修改身分的選項下方）
 const _roleHints = {
   Role.manager: '營收、進貨、成本率都看得到，可核銷、核准盤點；看不到租金、人事與損益',
-  Role.bartender: '進貨、盤點；看不到營收與成本',
+  Role.bartender: '進貨、盤點、訂位；看不到營收與成本',
   Role.staff: '看得到營收與進貨成本率、可手動登記每日營收（暫記，以日報表為準）、進貨、盤點；看不到租金、人事與損益',
-  Role.parttime: '只看得到班表與交接、提醒（可以寫交接、打勾）；看不到營收、進貨、成本',
+  Role.parttime: '看得到訂位（可登記、修改）、班表與交接、提醒（可以寫交接、打勾）；看不到營收、進貨、成本',
 };
 const _invitableRoles = [Role.manager, Role.staff, Role.parttime];
 

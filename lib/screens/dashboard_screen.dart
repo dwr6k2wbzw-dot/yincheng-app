@@ -222,10 +222,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: LinearProgressIndicator(minHeight: 2, color: AppColors.primary, backgroundColor: AppColors.line),
                   ),
                 ),
-              if (widget.membership.isPartTime)
-                Text('兼職帳號：可以看班表、交接與提醒。點右上角小鈴鐺左邊的「交接・提醒」圖示寫交接、打勾提醒。',
-                    style: TextStyle(color: AppColors.muted, fontSize: 13, height: 1.5))
-              else if (widget.membership.canSeeRevenue)
+              if (widget.membership.isPartTime) ...[
+                // 0065（老闆 2026-10-19）：訂位所有成員都看得到
+                ReservationSummaryCard(key: ValueKey('rs-${widget.membership.storeId}-$_gen'), membership: widget.membership),
+                const SizedBox(height: 12),
+                Text('兼職帳號：可以看訂位、班表、交接與提醒。點右上角小鈴鐺左邊的「交接・提醒」圖示寫交接、打勾提醒。',
+                    style: TextStyle(color: AppColors.muted, fontSize: 13, height: 1.5)),
+              ] else if (widget.membership.canSeeRevenue)
                 ..._managerView(d)
               else
                 ..._staffView(d),
@@ -235,6 +238,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
 
   List<Widget> _staffView(_DashboardData d) => [
+        ReservationSummaryCard(key: ValueKey('rs-${widget.membership.storeId}-$_gen'), membership: widget.membership),
+        const SizedBox(height: 12),
         SectionCard(
           child: Text('這個身分看不到營收與成本分析。\n可以在下方分頁記錄進貨與盤點。',
               style: TextStyle(color: AppColors.muted, height: 1.5)),
