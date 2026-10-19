@@ -40,6 +40,16 @@ class _Block {
   final int start; // 營業日的分鐘數（凌晨 0～6 點算 24～30 點）
   int end;
   bool conflict;
+  /// 併桌但不相鄰的其他桌：只標「併桌」，人數只在第一段顯示（老闆 2026-10-19）
+  bool secondary = false;
+}
+
+/// 併桌在相鄰的幾列合成一個色塊（老闆 2026-10-19：A1＋A2 坐 2 位要顯示成一組 2 位，不是各 2 位）
+class _Span {
+  _Span(this.block, this.firstRow, this.rowCount);
+  final _Block block;
+  final int firstRow; // 第幾列（含未排桌列）
+  final int rowCount;
 }
 
 const _hourW = 104.0;
@@ -158,6 +168,35 @@ class _ReservationTimelineState extends State<ReservationTimeline> {
         }
       }
     }
+    // 併桌：同一組訂位在相鄰列的桌合成一個色塊；不相鄰的其他段標「併桌」不重複顯示人數
+    final rowOf = {for (var i = 0; i < tables.length; i++) tables[i].id: i};
+    final hidden = <_Block>{};
+    final mergedRows = <(int, int, _Block)>[]; // (桌的列序, 列數, 合併後的色塊)
+    for (final r in shown) {
+      final ids = r.tableIds.where(rowOf.containsKey).toSet().toList()..sort((a, b) => rowOf[a]!.compareTo(rowOf[b]!));
+      if (ids.length < 2) continue;
+      final runs = <List<String>>[];
+      for (final id in ids) {
+        if (runs.isNotEmpty && rowOf[id]! == rowOf[runs.last.last]! + 1) {
+          runs.last.add(id);
+        } else {
+          runs.add([id]);
+        }
+      }
+      for (var k = 0; k < runs.length; k++) {
+        final parts = [for (final id in runs[k]) byTable[id]!.firstWhere((b) => b.r.id == r.id)];
+        if (parts.length == 1) {
+          parts.first.secondary = k > 0;
+          continue;
+        }
+        final m = _Block(r, parts.first.start, parts.map((b) => b.end).reduce((a, b) => a < b ? a : b),
+            conflict: parts.any((b) => b.conflict))
+          ..secondary = k > 0;
+        hidden.addAll(parts);
+        mergedRows.add((rowOf[runs[k].first]!, parts.length, m));
+      }
+    }
+
     // 未排桌：同時段的排成好幾列
     final lanes = <List<_Block>>[];
     unassigned.sort((a, b) => a.start.compareTo(b.start));
@@ -210,7 +249,7 @@ class _ReservationTimelineState extends State<ReservationTimeline> {
             child: Stack(children: [
               for (var h = startH; h < endH; h++)
                 Positioned(left: x(h * 60), top: 0, bottom: 0, child: Container(width: 0.6, color: AppColors.line)),
-              for (final b in blocks)
+              for (final b in blocks.where((b) => !hidden.contains(b)))
                 Positioned(
                   left: x(b.start) + 1,
                   width: (x(b.end) - x(b.start) - 2).clamp(36, width).toDouble(),
@@ -222,6 +261,7 @@ class _ReservationTimelineState extends State<ReservationTimeline> {
           ),
         );
 
+    final spans = [for (final m in mergedRows) _Span(m.$3, lanes.length + m.$1, m.$2)];
     final rows = <(Widget, Widget)>[
       for (var i = 0; i < lanes.length; i++)
         (label(i == 0 ? '未排桌' : '', i == 0 ? '點一下排桌' : '', color: AppColors.warn), row(lanes[i], null)),
@@ -273,6 +313,14 @@ class _ReservationTimelineState extends State<ReservationTimeline> {
                     ),
                     for (final r in rows) r.$2,
                   ]),
+                  for (final sp in spans)
+                    Positioned(
+                      left: x(sp.block.start) + 1,
+                      width: (x(sp.block.end) - x(sp.block.start) - 2).clamp(36, width).toDouble(),
+                      top: _headH + sp.firstRow * _rowH + 3,
+                      height: sp.rowCount * _rowH - 6,
+                      child: _blockView(sp.block),
+                    ),
                   if (widget.isToday && _now >= t0 && _now <= t1)
                     Positioned(
                       left: x(_now) - 1,
@@ -325,10 +373,12 @@ class _ReservationTimelineState extends State<ReservationTimeline> {
                 overflow: TextOverflow.clip,
                 style: TextStyle(fontSize: 10, color: base, fontWeight: FontWeight.w600),
               ),
-              Text(r.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: cleared ? AppColors.muted : null)),
+              Text(b.secondary ? '併桌・${r.name}' : r.name,
+                  maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: cleared || b.secondary ? AppColors.muted : null)),
             ]),
           ),
-          Text('${r.party}', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: cleared ? AppColors.muted : null)),
+          if (!b.secondary)
+            Text('${r.party}', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: cleared ? AppColors.muted : null)),
         ]),
       ),
     );
