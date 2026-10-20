@@ -3,7 +3,8 @@
 // 新增節慶：在 THEMES 加一筆（日期 MM-DD，含頭尾），style.css 加對應的 .t-<id> 樣式。
 (function () {
   const THEMES = [
-    { id: 'halloween', from: '10-20', to: '10-31',
+    // off：不自動換上（老闆 2026-10-21 拿掉萬聖節風格；?theme=halloween 仍可預覽）
+    { id: 'halloween', from: '10-20', to: '10-31', off: true,
       greet: { zh: '萬聖節快樂', en: 'Happy Halloween', ja: 'ハッピーハロウィン' } },
   ];
 
@@ -12,7 +13,7 @@
   const md = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', month: '2-digit', day: '2-digit' })
     .format(new Date()).replace('/', '-');
   const inRange = (t) => t.from <= t.to ? (md >= t.from && md <= t.to) : (md >= t.from || md <= t.to);
-  const theme = q === 'none' ? null : (THEMES.find((t) => t.id === q) || (q ? null : THEMES.find(inRange)));
+  const theme = q === 'none' ? null : (THEMES.find((t) => t.id === q) || (q ? null : THEMES.find((t) => !t.off && inRange(t))));
   if (!theme) return;
 
   const lang = (window.YCI && YCI.lang) || 'zh';
