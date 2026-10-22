@@ -63,7 +63,7 @@
         const a = (i * 30 - 90) * Math.PI / 180;
         nums += '<text x="' + (200 + Math.cos(a) * 33).toFixed(1) + '" y="' + (128 + Math.sin(a) * 33 + 3).toFixed(1) + '">' + r + '</text>';
       });
-      // 2026-10-22 老闆選「光影＋王家衛鏡頭感」：推開木門 → 黑暗中桌燈亮起、彩色玻璃投在老牆、光束裡飄灰塵、
+      // 2026-10-22 老闆選「光影＋王家衛鏡頭感」：（天井樓梯）→ 黑暗中桌燈亮起、彩色玻璃投在老牆、光束裡飄灰塵、
       // 窗外雨夜霓虹、鐘擺抽格殘影、墨綠暗紅調色＋底片顆粒＋暗角、鏡頭慢慢推近
       let dust = '', rain = '', bokeh = '';
       for (let i = 0; i < 22; i++) dust += '<i style="left:' + (8 + Math.random() * 80).toFixed(1) + '%;top:' + (10 + Math.random() * 80).toFixed(1) + '%;animation-delay:' + (-Math.random() * 6).toFixed(2) + 's;animation-duration:' + (5 + Math.random() * 4).toFixed(1) + 's"></i>';
@@ -71,7 +71,38 @@
       ['#E0574A', '#3FA27A', '#E8A33C', '#E0574A', '#5A7FD0'].forEach((c, i) => {
         bokeh += '<b style="left:' + (10 + i * 18 + Math.random() * 8).toFixed(1) + '%;top:' + (25 + Math.random() * 45).toFixed(1) + '%;background:' + c + ';animation-delay:' + (-Math.random() * 4).toFixed(2) + 's"></b>';
       });
-      const leaf = '<i class="pn"></i><i class="pn"></i><b class="knob"></b>';
+      // 2026-10-22 老闆：門拿掉，改成店裡的天井樓梯（老闆給的照片）：壁燈亮起、照亮掛著小城外招牌的老牆與磨石子扶手，
+      // 鏡頭沿著樓梯往上爬，抽格切進二樓的老爺鐘與桌燈
+      const sc = document.querySelector('script[src*="anim.js"]');
+      const logoUrl = new URL('logo-xcw.png', sc ? sc.src : location.href).href;
+      let sdust = '';
+      for (let i = 0; i < 16; i++) sdust += '<i style="left:' + (8 + Math.random() * 40).toFixed(1) + '%;top:' + (8 + Math.random() * 40).toFixed(1) + '%;animation-delay:' + (-Math.random() * 6).toFixed(2) + 's;animation-duration:' + (5 + Math.random() * 4).toFixed(1) + 's"></i>';
+      const stair = '<div class="stair"><div class="cam"><svg viewBox="0 0 360 640" preserveAspectRatio="xMidYMid slice">' +
+        '<defs><radialGradient id="sw" cx=".3" cy=".13" r="1"><stop offset="0" stop-color="#EBC9AE"/><stop offset=".22" stop-color="#B98670"/><stop offset=".55" stop-color="#6E4638"/><stop offset="1" stop-color="#24160F"/></radialGradient>' +
+        '<filter id="tz" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="1.6" numOctaves="1" seed="4"/><feColorMatrix values="0 0 0 0 .36  0 0 0 0 .32  0 0 0 0 .28  0 0 0 -2.2 1.35"/><feComposite in2="SourceGraphic" operator="in"/></filter>' +
+        '<linearGradient id="tzc" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7A6658"/><stop offset="1" stop-color="#2A201A"/></linearGradient>' +
+        '<linearGradient id="fr" x1="0" x2="1"><stop offset="0" stop-color="#5A1E0E"/><stop offset=".5" stop-color="#9A3E1E"/><stop offset="1" stop-color="#5A1E0E"/></linearGradient></defs>' +
+        '<rect width="360" height="640" fill="url(#sw)"/>' +
+        // 左邊：暗色門框、上方小窗、牆角柱
+        '<rect x="0" y="0" width="46" height="640" fill="#1E1714"/><rect x="6" y="210" width="34" height="430" fill="#120D0B" stroke="#3A2C24" stroke-width="2"/>' +
+        '<rect x="8" y="20" width="30" height="150" fill="#2A2420"/><rect x="11" y="26" width="24" height="64" class="swin"/><rect x="11" y="96" width="24" height="68" fill="#3B3632"/>' +
+        '<rect x="46" y="0" width="34" height="640" fill="#A27C69" opacity=".75"/><line x1="80" y1="0" x2="80" y2="640" stroke="#5A3E33" stroke-width="1.5"/>' +
+        // 壁燈：鑄鐵臂、六角燈籠
+        '<g class="lant"><path d="M84 132 Q96 132 100 120 L106 110" fill="none" stroke="#2A2422" stroke-width="4"/><rect x="80" y="118" width="8" height="26" rx="3" fill="#2A2422"/>' +
+        '<path d="M96 66 L118 66 L124 80 L90 80 Z" fill="#2A2422"/><path d="M106 56 L112 66 H100 Z" fill="#2A2422"/>' +
+        '<path d="M92 80 H122 L118 108 H96 Z" class="lglass"/><rect x="94" y="108" width="26" height="6" fill="#2A2422"/></g>' +
+        // 木框招牌：深色板子、金色 logo、小城外
+        '<g class="plaq"><rect x="128" y="196" width="104" height="104" fill="url(#fr)"/><rect x="134" y="202" width="92" height="92" fill="none" stroke="#C88A4E" stroke-width="1"/>' +
+        '<rect x="140" y="208" width="80" height="80" fill="#26291F"/><image href="' + logoUrl + '" x="164" y="216" width="32" height="32"/>' +
+        '<text x="180" y="266" class="pq">小城外</text><text x="180" y="278" class="pq en">CITY NORTH</text></g>' +
+        // 牆上管線與開關
+        '<path d="M80 336 H176" stroke="#E8D4C4" stroke-width="4" opacity=".7"/><rect x="176" y="328" width="26" height="16" rx="1.5" fill="#E9DED2"/><rect x="183" y="332" width="12" height="8" fill="#D6CABD"/>' +
+        // 磨石子樓梯扶手：斜斜往右上爬
+        '<path d="M190 640 V452 L360 262 V640 Z" fill="url(#tzc)"/><path d="M190 640 V452 L360 262 V640 Z" fill="#000" filter="url(#tz)" opacity=".9"/>' +
+        '<path d="M180 452 L190 452 L360 262 L360 250 Z" fill="#8A7E72"/><path d="M180 452 H190 V640 H180 Z" fill="#4A4038"/>' +
+        '<path d="M204 470 L212 476 L206 560 L214 640 H202 L198 560 Z" fill="#E9E0D4" opacity=".75"/>' +
+        '<path d="M340 300 L360 290 V330 Z" fill="none" stroke="#1E1A16" stroke-width="2"/>' +
+        '</svg><div class="sdust">' + sdust + '</div></div><div class="sglow"></div></div>';
       o.innerHTML = '<div class="stage"><div class="wall"></div><div class="win">' + bokeh + '<span class="rn">' + rain + '</span></div>' +
         '<div class="tints"><i></i><i></i><i></i></div><div class="beam">' + dust + '</div>' +
         '<div class="lampglow"></div><svg class="room" viewBox="0 0 360 560" preserveAspectRatio="xMidYMid meet">' +
@@ -98,9 +129,8 @@
         '<path d="M52 410 L64 400 L70 416 L58 424 Z" class="g3"/><path d="M76 402 L88 408 L84 424 L72 420 Z" class="g4"/>' +
         '<path d="M60 396 L70 392 L80 396 L70 404 Z" class="g5"/><path d="M40 430 H100 L96 436 H44 Z" fill="#7A5A22"/></g></g>' +
         '</svg>' + line + '</div>' +
-        '<div class="grade"></div><div class="grain"></div><div class="vig"></div>' +
-        '<div class="door l">' + leaf + '</div><div class="door r">' + leaf + '</div>' + skip;
-      dur = 5600;
+        stair + '<div class="grade"></div><div class="grain"></div><div class="vig"></div>' + skip;
+      dur = 6600;
     } else if (pick === 'letter') {
       // 拆一封信：牛皮信封、紅色火漆，封口打開、信紙抽出來寫著一句話
       o.innerHTML = '<div class="env"><div class="paper"><p>' + (W.line || '') + '</p></div><div class="body"></div><div class="flap"></div><b class="seal">外</b></div>' + skip;
