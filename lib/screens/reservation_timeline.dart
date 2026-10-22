@@ -374,7 +374,13 @@ class _ReservationTimelineState extends State<ReservationTimeline> {
                 style: TextStyle(fontSize: 10, color: base, fontWeight: FontWeight.w600),
               ),
               Text(b.secondary ? '併桌・${r.name}' : r.name,
-                  maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: cleared || b.secondary ? AppColors.muted : null)),
+                  maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, height: 1.15, color: cleared || b.secondary ? AppColors.muted : null)),
+              // 備註（老闆 2026-10-23：時間軸也要看得到）；太長的點色塊看完整內容
+              if (!b.secondary && (r.note ?? '').trim().isNotEmpty)
+                Text('📝 ${r.note!.trim().replaceAll('\n', ' ')}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 10, height: 1.15, color: cleared ? AppColors.muted : AppColors.warn)),
             ]),
           ),
           if (!b.secondary)
