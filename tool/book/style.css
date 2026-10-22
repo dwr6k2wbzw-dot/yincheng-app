@@ -468,3 +468,68 @@ form.card > .note:last-child { text-align:center; }
 .hold { text-align:left; }
 /* 小城外（王家衛）保留自己的紅色點綴 */
 .wkw .label::before { background:#D98A6E; box-shadow:0 0 8px rgba(217,138,110,.6); }
+
+/* ---- 小城外開場 grand 加強（老闆 2026-10-22：光影＋王家衛鏡頭感）---- */
+.intro.wk-grand { padding-top:0; overflow:hidden; perspective:900px; }
+.intro.wk-grand .stage { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; padding-top:6vh;
+  transform-origin:42% 45%; animation:camPush 3.8s 1.2s steps(19) both; }
+.intro.wk-grand .wall { position:absolute; inset:0; opacity:0; animation:wallLit 1.2s 1.8s ease-out forwards;
+  background:
+    radial-gradient(ellipse 60% 45% at 38% 46%, rgba(120,92,52,.55), transparent 70%),
+    linear-gradient(transparent 68%, rgba(40,22,10,.85) 68%, rgba(40,22,10,.85) 69%, #24170D 69%, #1A110A),
+    linear-gradient(90deg, #22291D, #2E3524 40%, #1E2419); }
+.intro.wk-grand .win { position:absolute; right:6%; top:9%; width:30%; height:26%; border:5px solid #3A2414; border-radius:3px; overflow:hidden; opacity:0;
+  background:linear-gradient(#0B1416, #12201C); box-shadow:inset 0 0 0 2px #1D120A; animation:wallLit 1.1s 2s ease-out forwards; }
+.intro.wk-grand .win::after { content:""; position:absolute; left:50%; top:0; bottom:0; width:4px; margin-left:-2px; background:#3A2414; }
+.intro.wk-grand .win b { position:absolute; width:26px; height:26px; margin:-13px; border-radius:50%; filter:blur(6px); opacity:.55; animation:bokeh 4s ease-in-out infinite alternate; }
+.intro.wk-grand .win .rn i { position:absolute; top:-30%; width:1.5px; height:22%; border-radius:2px; background:linear-gradient(transparent, rgba(210,230,235,.55)); animation:winRain linear infinite; }
+.intro.wk-grand .tints { position:absolute; inset:0; pointer-events:none; mix-blend-mode:screen; opacity:0; animation:tintOn 1s 1.9s steps(4) forwards, lampFlicker 5s 3s infinite; }
+.intro.wk-grand .tints i { position:absolute; width:28vmin; height:18vmin; border-radius:50%; filter:blur(18px); }
+.intro.wk-grand .tints i:nth-child(1) { left:4%; top:20%; background:rgba(217,98,46,.55); }
+.intro.wk-grand .tints i:nth-child(2) { left:26%; top:12%; background:rgba(242,198,78,.45); }
+.intro.wk-grand .tints i:nth-child(3) { left:14%; top:30%; background:rgba(110,154,58,.5); }
+.intro.wk-grand .beam { position:absolute; left:6%; top:38%; width:56%; height:56%; pointer-events:none; opacity:0;
+  background:conic-gradient(from 160deg at 50% 0%, transparent 0deg, rgba(255,214,140,.16) 18deg, rgba(255,214,140,.22) 22deg, transparent 40deg);
+  -webkit-mask-image:linear-gradient(#000 30%, transparent); mask-image:linear-gradient(#000 30%, transparent); animation:tintOn .9s 1.8s steps(3) forwards; }
+.intro.wk-grand .beam i { position:absolute; width:3px; height:3px; border-radius:50%; background:rgba(255,236,190,.9); box-shadow:0 0 4px rgba(255,220,150,.8); animation:dust 6s ease-in-out infinite; }
+.intro.wk-grand .room { position:relative; z-index:1; animation:roomLit 1.1s 1.6s ease-out forwards; }
+.intro.wk-grand .lampglow { animation:lampOn 1.2s 1.6s steps(1) forwards, lampFlicker 5s 3s infinite; }
+.intro.wk-grand .shade path[class^="g"] { animation:glassOn .8s 1.65s steps(3) forwards; }
+.intro.wk-grand .shade { animation:shadeGlow .9s 1.7s forwards; }
+.intro.wk-grand .gm { animation:grandMin 3.6s 1.2s steps(18) both; }
+.intro.wk-grand .pend { animation:pendulum 1.2s steps(9) infinite alternate; }
+.intro.wk-grand .pend.ghost { opacity:.28; }
+.intro.wk-grand .pend.g1st { animation-delay:-.1s; }
+.intro.wk-grand .pend.g2nd { animation-delay:-.2s; opacity:.12; }
+.intro.wk-grand .line { position:relative; z-index:1; animation:stepPrint 1.2s 2.5s steps(7) both; }
+.intro.wk-grand .grade { position:absolute; inset:0; pointer-events:none; mix-blend-mode:soft-light;
+  background:linear-gradient(160deg, rgba(40,110,80,.55), rgba(20,40,30,.2) 45%, rgba(170,40,40,.45)); }
+.intro.wk-grand .grain { position:absolute; inset:-50%; pointer-events:none; opacity:.14; mix-blend-mode:overlay; animation:grain .5s steps(4) infinite;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='160' height='160' filter='url(%23n)'/></svg>"); }
+.intro.wk-grand .vig { position:absolute; inset:0; pointer-events:none; background:radial-gradient(ellipse at 50% 45%, transparent 45%, rgba(0,0,0,.75) 100%); }
+.intro.wk-grand .skip { z-index:4; }
+.intro.wk-grand .grade, .intro.wk-grand .grain, .intro.wk-grand .vig { z-index:3; }
+@keyframes camPush { from { transform:scale(1); } to { transform:scale(1.09) translateY(1.5%); } }
+@keyframes wallLit { to { opacity:1; } }
+@keyframes tintOn { to { opacity:1; } }
+@keyframes bokeh { from { transform:translate(0,0) scale(1); opacity:.35; } to { transform:translate(6px,-4px) scale(1.3); opacity:.7; } }
+@keyframes winRain { to { transform:translateY(560%); } }
+@keyframes grain { 0% { transform:translate(0,0); } 25% { transform:translate(-5%,3%); } 50% { transform:translate(4%,-4%); } 75% { transform:translate(-3%,-2%); } 100% { transform:translate(2%,4%); } }
+.intro.wk-grand .line { max-width:84vw; white-space:normal; font-size:16px; letter-spacing:.22em; text-indent:.22em; }
+/* 天井樓梯（老闆 2026-10-22 照片）：壁燈閃兩下亮起 → 鏡頭沿樓梯往上爬 → 抽格切進二樓 */
+.intro.wk-grand .stair { position:absolute; inset:0; z-index:2; overflow:hidden; background:#0E0A08; animation:stairOut .4s 1.6s steps(4) forwards; }
+.intro.wk-grand .stair .cam { position:absolute; inset:0; transform-origin:30% 30%; filter:brightness(.12) saturate(.6); animation:stairLit 1s .3s ease-out forwards, stairClimb 2s .1s steps(15) both; }
+.intro.wk-grand .stair svg { width:100%; height:100%; display:block; }
+.intro.wk-grand .stair .lglass { fill:#5A4A3A; animation:lantOn .6s .25s steps(1) forwards; }
+.intro.wk-grand .stair .swin { fill:#3A3E40; animation:swinOn .8s .6s ease-out forwards; }
+.intro.wk-grand .stair .pq { font:600 11px/1 "Noto Serif TC", serif; fill:#C9A04E; text-anchor:middle; letter-spacing:.2em; }
+.intro.wk-grand .stair .pq.en { font-size:5.5px; letter-spacing:.3em; fill:#9C7A3A; }
+.intro.wk-grand .stair .sglow { position:absolute; inset:0; pointer-events:none; mix-blend-mode:screen; opacity:0;
+  background:radial-gradient(circle at 30% 14%, rgba(255,226,170,.55), rgba(255,190,120,.18) 22%, transparent 48%); animation:lampOn .6s .25s steps(1) forwards, lampFlicker 4s 1s infinite; }
+.intro.wk-grand .stair .sdust { position:absolute; inset:0; pointer-events:none; opacity:0; animation:tintOn .8s .6s forwards; }
+.intro.wk-grand .stair .sdust i { position:absolute; width:3px; height:3px; border-radius:50%; background:rgba(255,236,200,.85); box-shadow:0 0 4px rgba(255,220,160,.8); animation:dust 6s ease-in-out infinite; }
+@keyframes stairLit { to { filter:brightness(1) saturate(1); } }
+@keyframes stairClimb { from { transform:scale(1.02); } to { transform:scale(1.22) translate(-4%, -6%); } }
+@keyframes stairOut { 0% { opacity:1; } 25% { opacity:.4; } 50% { opacity:.8; } 100% { opacity:0; visibility:hidden; } }
+@keyframes lantOn { 0% { fill:#5A4A3A; } 100% { fill:#FFF3D6; filter:drop-shadow(0 0 6px #FFE2A8); } }
+@keyframes swinOn { to { fill:#C9D3D6; } }
