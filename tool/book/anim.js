@@ -63,7 +63,18 @@
         const a = (i * 30 - 90) * Math.PI / 180;
         nums += '<text x="' + (200 + Math.cos(a) * 33).toFixed(1) + '" y="' + (128 + Math.sin(a) * 33 + 3).toFixed(1) + '">' + r + '</text>';
       });
-      o.innerHTML = '<div class="lampglow"></div><svg class="room" viewBox="0 0 360 560" preserveAspectRatio="xMidYMid meet">' +
+      // 2026-10-22 老闆選「光影＋王家衛鏡頭感」：推開木門 → 黑暗中桌燈亮起、彩色玻璃投在老牆、光束裡飄灰塵、
+      // 窗外雨夜霓虹、鐘擺抽格殘影、墨綠暗紅調色＋底片顆粒＋暗角、鏡頭慢慢推近
+      let dust = '', rain = '', bokeh = '';
+      for (let i = 0; i < 22; i++) dust += '<i style="left:' + (8 + Math.random() * 80).toFixed(1) + '%;top:' + (10 + Math.random() * 80).toFixed(1) + '%;animation-delay:' + (-Math.random() * 6).toFixed(2) + 's;animation-duration:' + (5 + Math.random() * 4).toFixed(1) + 's"></i>';
+      for (let i = 0; i < 14; i++) rain += '<i style="left:' + (Math.random() * 100).toFixed(1) + '%;animation-delay:' + (-Math.random() * 3).toFixed(2) + 's;animation-duration:' + (1.6 + Math.random() * 1.6).toFixed(2) + 's"></i>';
+      ['#E0574A', '#3FA27A', '#E8A33C', '#E0574A', '#5A7FD0'].forEach((c, i) => {
+        bokeh += '<b style="left:' + (10 + i * 18 + Math.random() * 8).toFixed(1) + '%;top:' + (25 + Math.random() * 45).toFixed(1) + '%;background:' + c + ';animation-delay:' + (-Math.random() * 4).toFixed(2) + 's"></b>';
+      });
+      const leaf = '<i class="pn"></i><i class="pn"></i><b class="knob"></b>';
+      o.innerHTML = '<div class="stage"><div class="wall"></div><div class="win">' + bokeh + '<span class="rn">' + rain + '</span></div>' +
+        '<div class="tints"><i></i><i></i><i></i></div><div class="beam">' + dust + '</div>' +
+        '<div class="lampglow"></div><svg class="room" viewBox="0 0 360 560" preserveAspectRatio="xMidYMid meet">' +
         '<defs><linearGradient id="wd" x1="0" x2="1"><stop offset="0" stop-color="#5A2E18"/><stop offset=".5" stop-color="#8A4A26"/><stop offset="1" stop-color="#4A2412"/></linearGradient>' +
         '<radialGradient id="gd" cx=".4" cy=".35"><stop offset="0" stop-color="#F7E3A6"/><stop offset=".6" stop-color="#C9A04E"/><stop offset="1" stop-color="#7A5A22"/></radialGradient>' +
         '<radialGradient id="dl" cx=".5" cy=".5"><stop offset="0" stop-color="#EFE2BE"/><stop offset="1" stop-color="#BFA36A"/></radialGradient></defs>' +
@@ -74,6 +85,9 @@
         '<circle cx="200" cy="128" r="26" fill="none" stroke="#9C7A3A" stroke-width="1" opacity=".6"/>' + nums +
         '<line x1="200" y1="128" x2="200" y2="108" class="gh"/><line x1="200" y1="128" x2="200" y2="96" class="gm"/><circle cx="200" cy="128" r="3" fill="#3A2A12"/>' +
         '<rect x="152" y="210" width="96" height="290" fill="url(#wd)"/><rect x="166" y="226" width="68" height="250" rx="3" fill="#2A140A" stroke="#A86A34" stroke-width="2"/>' +
+        // 鐘擺＋兩道抽格殘影（王家衛 step-printing）
+        '<g class="pend ghost g2nd"><line x1="200" y1="228" x2="200" y2="400" stroke="#C9A04E" stroke-width="2"/><circle cx="200" cy="410" r="20" fill="url(#gd)"/></g>' +
+        '<g class="pend ghost g1st"><line x1="200" y1="228" x2="200" y2="400" stroke="#C9A04E" stroke-width="2"/><circle cx="200" cy="410" r="20" fill="url(#gd)"/></g>' +
         '<g class="pend"><line x1="200" y1="228" x2="200" y2="400" stroke="#C9A04E" stroke-width="2"/><circle cx="200" cy="410" r="20" fill="url(#gd)"/></g>' +
         '<line x1="186" y1="232" x2="186" y2="330" stroke="#B8903E" stroke-width="1.2"/><line x1="214" y1="232" x2="214" y2="350" stroke="#B8903E" stroke-width="1.2"/>' +
         '<rect x="144" y="500" width="112" height="16" fill="#4A2412"/></g>' +
@@ -83,8 +97,10 @@
         '<path d="M44 428 Q46 398 70 391 L70 428 Z" class="g1"/><path d="M70 391 Q94 398 96 428 L70 428 Z" class="g2"/>' +
         '<path d="M52 410 L64 400 L70 416 L58 424 Z" class="g3"/><path d="M76 402 L88 408 L84 424 L72 420 Z" class="g4"/>' +
         '<path d="M60 396 L70 392 L80 396 L70 404 Z" class="g5"/><path d="M40 430 H100 L96 436 H44 Z" fill="#7A5A22"/></g></g>' +
-        '</svg>' + line + skip;
-      dur = 3400;
+        '</svg>' + line + '</div>' +
+        '<div class="grade"></div><div class="grain"></div><div class="vig"></div>' +
+        '<div class="door l">' + leaf + '</div><div class="door r">' + leaf + '</div>' + skip;
+      dur = 5600;
     } else if (pick === 'letter') {
       // 拆一封信：牛皮信封、紅色火漆，封口打開、信紙抽出來寫著一句話
       o.innerHTML = '<div class="env"><div class="paper"><p>' + (W.line || '') + '</p></div><div class="body"></div><div class="flap"></div><b class="seal">外</b></div>' + skip;
