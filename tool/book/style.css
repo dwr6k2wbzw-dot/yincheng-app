@@ -397,3 +397,74 @@ button.cd.full:not(.on) { opacity:.5; }
 
 /* 日期標題旁：僅開放幾日內訂位（老闆 2026-10-18） */
 .lnote { margin-left:10px; padding:2px 8px; border:1px solid var(--line); border-radius:999px; color:var(--muted); font-size:12px; letter-spacing:.05em; vertical-align:1px; }
+
+/* ---------------- 精緻化（老闆 2026-10-22：維持黑金，做得更精緻） ----------------
+   只改外觀，不動功能；整段刪掉就恢復原樣。 */
+:root { --card:#13120F; --card2:#1A1814; --line:#2A2620; --line-gold:rgba(211,177,110,.22); --gold-hi:#E8CF95; --gold-lo:#B08E52; }
+body { background:
+  radial-gradient(120% 60% at 50% 0%, rgba(211,177,110,.07), transparent 60%),
+  var(--bg); background-attachment:fixed; }
+/* 標題區：店名更有份量、logo 微光 */
+.brand.hero { padding:56px 16px 44px; }
+.brand img { filter:drop-shadow(0 0 18px rgba(211,177,110,.18)); }
+h1 { font-size:30px; letter-spacing:.32em; text-indent:.32em; text-shadow:0 2px 24px rgba(0,0,0,.6); }
+.kicker { margin-top:12px; }
+.kicker::before, .kicker::after { width:36px; background:linear-gradient(90deg, transparent, var(--gold)); }
+.kicker::after { background:linear-gradient(90deg, var(--gold), transparent); }
+.sub { font-size:13px; letter-spacing:.06em; }
+/* 卡片：細金邊、上緣一道光、圓角加大 */
+.card { position:relative; border-radius:20px; padding:22px 18px; margin-bottom:16px; border-color:var(--line);
+  background:linear-gradient(180deg, #171511 0%, var(--card) 38%); box-shadow:0 1px 0 rgba(255,255,255,.03) inset, 0 18px 40px -24px rgba(0,0,0,.9); }
+.card::before { content:""; position:absolute; top:0; left:18px; right:18px; height:1px; background:linear-gradient(90deg, transparent, rgba(211,177,110,.35), transparent); }
+/* 步驟標題：襯線字、下方細線 */
+.label { display:flex; align-items:center; flex-wrap:wrap; gap:10px; font-family:"Noto Serif TC", "Songti TC", serif; font-size:15px; font-weight:600; letter-spacing:.24em; color:var(--gold); padding-bottom:12px; margin-bottom:16px; border-bottom:1px solid var(--line); }
+.label::before { content:""; width:6px; height:6px; transform:rotate(45deg); background:var(--gold); box-shadow:0 0 8px rgba(211,177,110,.6); flex:none; }
+.lnote { font-family:-apple-system, "PingFang TC", "Noto Sans TC", sans-serif; font-weight:400; letter-spacing:.04em; }
+/* 地址電話 */
+.info { padding:16px 18px; }
+.info::before { display:none; }
+.irow + .irow { margin-top:10px; padding-top:10px; border-top:1px dashed var(--line); }
+.ik { min-width:4.2em; }
+/* 選到的日期 */
+.dsel { text-align:center; font-family:"Noto Serif TC", "Songti TC", serif; letter-spacing:.08em; border-color:var(--line-gold); background:rgba(211,177,110,.05); }
+/* 月曆：可訂的日子乾淨、選到的是金色圓 */
+.calhead b { font-family:"Noto Serif TC", "Songti TC", serif; letter-spacing:.14em; }
+.calgrid { gap:4px; }
+.wk { font-size:12px; letter-spacing:.1em; }
+.cd { border-radius:50%; }
+span.cd.off { color:#3A372F; }
+button.cd { border-color:transparent; background:rgba(255,255,255,.035); }
+button.cd:not(:disabled):hover { border-color:var(--line-gold); background:rgba(211,177,110,.08); }
+button.cd.on, button.chip.on, .primary, .altb, .langs button.on {
+  background:linear-gradient(160deg, var(--gold-hi) 0%, var(--gold) 45%, var(--gold-lo) 100%); border-color:transparent; }
+button.cd.on { box-shadow:0 6px 18px -6px rgba(211,177,110,.55); }
+button.cd:disabled { opacity:.28; }
+.cd.today::before { top:4px; width:4px; height:4px; margin-left:-2px; border-radius:50%; }
+.cd small { font-size:8.5px; letter-spacing:0; }
+/* 時段 */
+.grid { gap:10px; }
+button.chip { border-radius:999px; padding:10px 12px; background:transparent; border-color:#34302A; letter-spacing:.04em; }
+button.chip:not(:disabled):hover { border-color:var(--gold); color:var(--gold-hi); }
+button.chip.on { box-shadow:0 6px 18px -6px rgba(211,177,110,.55); }
+/* 人數 */
+.stepper { justify-content:center; gap:28px; padding:4px 0; }
+.stepper button { width:48px; height:48px; border-color:var(--line-gold); transition:background .15s, border-color .15s; }
+.stepper button:hover { background:var(--gold-soft); border-color:var(--gold); }
+.stepper b { font-family:"Noto Serif TC", "Songti TC", serif; font-size:34px; font-weight:600; color:var(--gold-hi); min-width:2.2ch; }
+#partyNote { text-align:center; }
+/* 聯絡資料 */
+label.f { letter-spacing:.08em; }
+input, textarea { background:#0D0C0A; border-color:#2E2A23; border-radius:12px; padding:13px 14px; transition:border-color .15s, box-shadow .15s; }
+#titles .chip { min-width:76px; }
+/* 確認按鈕 */
+.primary { border-radius:999px; padding:17px; letter-spacing:.32em; text-indent:.32em; box-shadow:0 10px 30px -10px rgba(211,177,110,.55), 0 1px 0 rgba(255,255,255,.35) inset; transition:transform .12s, box-shadow .2s; }
+.primary:not(:disabled):active { transform:translateY(1px) scale(.995); }
+.primary.ghost, .primary.danger { background:transparent; box-shadow:none; }
+.note { line-height:1.6; }
+form.card > .note:last-child { text-align:center; }
+/* 訂位完成 */
+#done { text-align:center; padding:30px 20px; }
+#done .big.ok { font-family:"Noto Serif TC", "Songti TC", serif; letter-spacing:.3em; text-indent:.3em; }
+.hold { text-align:left; }
+/* 小城外（王家衛）保留自己的紅色點綴 */
+.wkw .label::before { background:#D98A6E; box-shadow:0 0 8px rgba(217,138,110,.6); }
