@@ -537,3 +537,5 @@ form.card > .note:last-child { text-align:center; }
 span.cd.off { color:#8E887C; }
 button.cd:disabled { opacity:1; color:#B5AE9F; background:transparent; }
 button.cd:disabled small { color:#C9A974; }
+.cd, button.cd { font-size:17px; }
+.cd small { font-size:10.5px; }
