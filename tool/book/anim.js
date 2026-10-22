@@ -130,7 +130,7 @@
         '<path d="M60 396 L70 392 L80 396 L70 404 Z" class="g5"/><path d="M40 430 H100 L96 436 H44 Z" fill="#7A5A22"/></g></g>' +
         '</svg>' + line + '</div>' +
         stair + '<div class="grade"></div><div class="grain"></div><div class="vig"></div>' + skip;
-      dur = 6600;
+      dur = 5000;
     } else if (pick === 'letter') {
       // 拆一封信：牛皮信封、紅色火漆，封口打開、信紙抽出來寫著一句話
       o.innerHTML = '<div class="env"><div class="paper"><p>' + (W.line || '') + '</p></div><div class="body"></div><div class="flap"></div><b class="seal">外</b></div>' + skip;
