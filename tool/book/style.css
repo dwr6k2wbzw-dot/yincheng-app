@@ -533,3 +533,9 @@ form.card > .note:last-child { text-align:center; }
 @keyframes stairOut { 0% { opacity:1; } 25% { opacity:.4; } 50% { opacity:.8; } 100% { opacity:0; visibility:hidden; } }
 @keyframes lantOn { 0% { fill:#5A4A3A; } 100% { fill:#FFF3D6; filter:drop-shadow(0 0 6px #FFE2A8); } }
 @keyframes swinOn { to { fill:#C9D3D6; } }
+/* 不開放訂位的日子（過去、超過一週、公休）字改亮一點，黑底才看得清楚（老闆 2026-10-22） */
+span.cd.off { color:#8E887C; }
+button.cd:disabled { opacity:1; color:#B5AE9F; background:transparent; }
+button.cd:disabled small { color:#C9A974; }
+.cd, button.cd { font-size:17px; }
+.cd small { font-size:10.5px; }
