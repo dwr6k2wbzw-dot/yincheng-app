@@ -539,3 +539,4 @@ button.cd:disabled { opacity:1; color:#B5AE9F; background:transparent; }
 button.cd:disabled small { color:#C9A974; }
 .cd, button.cd { font-size:17px; }
 .cd small { font-size:10.5px; }
+button.cd:disabled small { font-size:12.5px; } /* 公休字再大兩階（老闆 2026-10-23） */
