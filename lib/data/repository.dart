@@ -140,7 +140,7 @@ abstract class Repository {
   Future<void> saveReservationSettings(String storeId, Map<String, dynamic> values);
   Future<List<Reservation>> reservations(String storeId, DateTime from, DateTime to);
   Future<void> addReservation(String storeId,
-      {required DateTime date, required String time, required int party, required String name, required String phone, String? email, String? note});
+      {required DateTime date, required String time, required int party, required String name, required String phone, String? email, String? note, List<String> tableIds = const []});
   Future<void> updateReservation(String id, Map<String, dynamic> values);
   // 0061 時間軸：桌位、現場客
   Future<List<ReservationTable>> reservationTables(String storeId);

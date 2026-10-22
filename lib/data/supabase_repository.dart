@@ -1043,7 +1043,7 @@ class SupabaseRepository implements Repository {
 
   @override
   Future<void> addReservation(String storeId,
-      {required DateTime date, required String time, required int party, required String name, required String phone, String? email, String? note}) async {
+      {required DateTime date, required String time, required int party, required String name, required String phone, String? email, String? note, List<String> tableIds = const []}) async {
     await _db.from('reservations').insert({
       'store_id': storeId,
       'slot_date': _day.format(date),
@@ -1053,6 +1053,7 @@ class SupabaseRepository implements Repository {
       'phone': phone.isEmpty ? null : phone, // 0057 可以不留電話
       if (email != null && email.isNotEmpty) 'email': email,
       if (note != null && note.isNotEmpty) 'note': note,
+      if (tableIds.isNotEmpty) 'table_ids': tableIds, // 電話訂位選位置（老闆 2026-10-22）
       'source': 'app',
     });
   }
