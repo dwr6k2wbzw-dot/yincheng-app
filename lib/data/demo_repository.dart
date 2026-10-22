@@ -597,11 +597,11 @@ class DemoRepository implements Repository {
       (_demoRes[storeId] ?? []).where((r) => !r.date.isBefore(from) && !r.date.isAfter(to)).toList();
   @override
   Future<void> addReservation(String storeId,
-      {required DateTime date, required String time, required int party, required String name, required String phone, String? email, String? note}) async {
+      {required DateTime date, required String time, required int party, required String name, required String phone, String? email, String? note, List<String> tableIds = const []}) async {
     final list = _demoRes.putIfAbsent(storeId, () => []);
     list.add(Reservation(
         id: '$storeId-${list.length}', date: date, time: time, party: party, name: name, phone: phone, email: email, note: note,
-        status: 'confirmed', source: 'app', createdAt: DateTime.now()));
+        status: 'confirmed', source: 'app', createdAt: DateTime.now(), tableIds: tableIds));
   }
   final _demoSpecial = <String, Map<String, ReservationSpecialDay>>{};
   final _demoGuests = <String, Map<String, GuestProfile>>{};

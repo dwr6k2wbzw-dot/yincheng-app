@@ -627,7 +627,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
       final s = (await _future).$1;
       if (s == null || !mounted) return;
       final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(
-        builder: (_) => _AddReservationScreen(membership: widget.membership, settings: s, day: r.date, existing: r),
+        builder: (_) => _AddReservationScreen(membership: widget.membership, settings: s, day: r.date, existing: r, tables: _tables),
       ));
       if (saved == true) _reload();
       return;
@@ -802,7 +802,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
 
   Future<void> _add(ReservationSettings s) async {
     final added = await Navigator.of(context).push<bool>(MaterialPageRoute(
-      builder: (_) => _AddReservationScreen(membership: widget.membership, settings: s, day: _day),
+      builder: (_) => _AddReservationScreen(membership: widget.membership, settings: s, day: _day, tables: _tables),
     ));
     if (added == true) _reload();
   }
@@ -810,7 +810,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
 
 /// 電話訂位（員工代客人輸入；不受線上訂位的天數、截止時間、每組人數限制，但會提醒超過這天的名額）
 class _AddReservationScreen extends StatefulWidget {
-  const _AddReservationScreen({required this.membership, required this.settings, required this.day, this.existing});
+  const _AddReservationScreen(
+      {required this.membership, required this.settings, required this.day, this.existing, this.tables = const []});
+  final List<ReservationTable> tables; // 0061 桌位；沒設定桌位的店不顯示「位置」
   final Membership membership;
   final ReservationSettings settings;
   final DateTime day;
@@ -823,6 +825,27 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
   late DateTime _date = widget.existing?.date ?? widget.day;
   late String? _time = widget.existing?.time;
   late int _party = widget.existing?.party ?? 2;
+  // 位置（老闆 2026-10-22：電話訂位可以選位置）
+  late List<String> _tableIds = [...?widget.existing?.tableIds];
+  bool get _hasTables => widget.tables.any((t) => t.active) || _tableIds.isNotEmpty;
+  String get _tableLabel =>
+      [for (final id in _tableIds) widget.tables.where((t) => t.id == id).firstOrNull?.name].whereType<String>().join('、');
+
+  Future<void> _pickTables() async {
+    final time = _time;
+    if (time == null) {
+      showMessage(context, '請先選時段，才知道哪些位置有人', error: true);
+      return;
+    }
+    List<Reservation> same = const [];
+    try {
+      same = await AppScope.of(context).repo.reservations(widget.membership.storeId, _date, _date);
+    } catch (_) {} // 讀不到就不標「這時段有人」，仍可選
+    if (!mounted) return;
+    final ids = await pickTables(context,
+        tables: widget.tables, selected: _tableIds, party: _party, busy: busyTables(same, widget.existing, bizMinute(minutesOf(time))));
+    if (ids != null && mounted) setState(() => _tableIds = ids);
+  }
   // 網路訂位那筆最多 50 位（資料庫限制）；電話訂位不設上限（防打錯 9999）
   int get _maxParty => widget.existing?.source == 'web' ? 50 : 9999;
 
@@ -883,6 +906,7 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
     final phone = _phone.text.trim();
     final email = _email.text.trim();
     final note = _note.text.trim();
+    final tableIds = [..._tableIds];
     if (time == null) {
       showMessage(context, '請選時段', error: true);
       return;
@@ -940,10 +964,11 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
           'phone': phone.isEmpty ? null : phone,
           'email': email.isEmpty ? null : email,
           'note': note.isEmpty ? null : note,
+          'table_ids': tableIds,
         });
       } else {
         await repo.addReservation(widget.membership.storeId,
-            date: date, time: time, party: party, name: name, phone: phone, email: email, note: note);
+            date: date, time: time, party: party, name: name, phone: phone, email: email, note: note, tableIds: tableIds);
       }
       if (mounted) {
         showMessage(context, _editing ? '已儲存修改' : '已新增訂位');
@@ -1008,6 +1033,21 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
             ),
             IconButton(onPressed: _party < _maxParty ? () => setState(() => _party++) : null, icon: const Icon(Icons.add_circle_outline)),
           ]),
+          // 位置（選填）：跟排桌同一個選桌畫面，可併桌、可自動選桌
+          if (_hasTables) ...[
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.table_restaurant_outlined),
+              title: const Text('位置（選填）'),
+              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                Text(_tableIds.isEmpty ? '不指定' : _tableLabel,
+                    style: TextStyle(fontSize: 16, color: _tableIds.isEmpty ? AppColors.muted : null)),
+                const Icon(Icons.chevron_right),
+              ]),
+              onTap: _pickTables,
+            ),
+            const SizedBox(height: 4),
+          ],
           TextField(
             controller: _name,
             maxLength: 36,
