@@ -518,7 +518,17 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
       showDragHandle: true,
       builder: (c) => SafeArea(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          ListTile(title: Text('${r.name}・${r.party} 位・${r.time}', style: const TextStyle(fontWeight: FontWeight.w700))),
+          ListTile(
+            title: Text('${r.name}・${r.party} 位・${r.time}', style: const TextStyle(fontWeight: FontWeight.w700)),
+            // 時間軸點進來也看得到電話與完整備註（老闆 2026-10-23）
+            subtitle: Text(
+              [
+                r.phone.isEmpty ? '沒留電話' : r.phone,
+                if ((r.note ?? '').trim().isNotEmpty) '備註：${r.note!.trim()}',
+              ].join('\n'),
+              style: const TextStyle(fontSize: 13),
+            ),
+          ),
           if (r.partyPending) ...[
             ListTile(
                 leading: Icon(Icons.check, color: AppColors.good),
