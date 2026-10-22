@@ -6,8 +6,8 @@
     // off：不自動換上（老闆 2026-10-21 拿掉萬聖節風格；?theme=halloween 仍可預覽）
     { id: 'halloween', from: '10-20', to: '10-31', off: true,
       greet: { zh: '萬聖節快樂', en: 'Happy Halloween', ja: 'ハッピーハロウィン' } },
-    // 十週年（老闆 2026-10-23 要看看；日期未定，先不自動換上，?theme=anniv10 預覽）
-    { id: 'anniv10', from: '01-01', to: '01-01', off: true,
+    // 小城外十週年（老闆 2026-10-23：只顯示小城外，即日起到 11/30）
+    { id: 'anniv10', from: '10-23', to: '11-30', stores: ['xcw'],
       greet: { zh: '十 週 年', en: 'TENTH ANNIVERSARY', ja: '十 周 年' } },
   ];
 
@@ -16,7 +16,9 @@
   const md = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', month: '2-digit', day: '2-digit' })
     .format(new Date()).replace('/', '-');
   const inRange = (t) => t.from <= t.to ? (md >= t.from && md <= t.to) : (md >= t.from || md <= t.to);
-  const theme = q === 'none' ? null : (THEMES.find((t) => t.id === q) || (q ? null : THEMES.find((t) => !t.off && inRange(t))));
+  const slug = new URLSearchParams(location.search).get('s') || document.documentElement.dataset.slug || '';
+  const forStore = (t) => !t.stores || t.stores.includes(slug); // stores：只在這幾家店顯示
+  const theme = q === 'none' ? null : (THEMES.find((t) => t.id === q) || (q ? null : THEMES.find((t) => !t.off && inRange(t) && forStore(t))));
   if (!theme) return;
 
   const lang = (window.YCI && YCI.lang) || 'zh';
