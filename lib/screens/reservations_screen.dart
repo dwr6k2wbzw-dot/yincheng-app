@@ -198,7 +198,14 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
       onRefresh: () async => _reload(),
       child: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 96), children: [
         // 日期：點了在下面展開月曆（老闆 2026-10-17：跟客人訂位頁同一種樣式）
-        InkWell(
+        // 左右箭頭切前一天／後一天（老闆 2026-10-24）
+        Row(children: [
+          IconButton(
+            tooltip: '前一天',
+            onPressed: () => _shiftDay(-1),
+            icon: Icon(Icons.chevron_left, color: AppColors.primary, size: 30),
+          ),
+          Expanded(child: InkWell(
           borderRadius: BorderRadius.circular(12),
           onTap: () => setState(() => _calOpen = !_calOpen),
           child: Container(
@@ -214,10 +221,25 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                     '${_day.month}月${_day.day}日 ${DateFormat('E', 'zh_TW').format(_day)}${_day == _today() ? '（今日）' : ''}',
                     style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, fontFeatures: tabular)),
               ),
+              if (_day != _today())
+                InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => _shiftDay(0),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    child: Text('回今天', style: TextStyle(color: AppColors.primary, fontSize: 13)),
+                  ),
+                ),
               Icon(_calOpen ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, color: AppColors.muted),
             ]),
           ),
-        ),
+        )),
+          IconButton(
+            tooltip: '後一天',
+            onPressed: () => _shiftDay(1),
+            icon: Icon(Icons.chevron_right, color: AppColors.primary, size: 30),
+          ),
+        ]),
         if (_calOpen)
           ReservationMonthCalendar(
             membership: widget.membership,
@@ -510,6 +532,14 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
         () => _repo.saveGuestProfile(_store, GuestProfile(phoneDigits: digits, tags: tags.toList(), note: note.text),
             resetNoshow: reset),
         reset ? '已儲存並解除未到紀錄' : '已儲存熟客資料');
+  }
+
+  /// 前一天／後一天；0＝回今天
+  void _shiftDay(int d) {
+    _calOpen = false;
+    final t = _today();
+    _day = d == 0 ? t : DateTime(_day.year, _day.month, _day.day + d);
+    _reload();
   }
 
   Future<void> _actions(Reservation r) async {
