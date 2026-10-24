@@ -62,7 +62,50 @@
   if (logos[slug]) { $('logo').src = logos[slug]; $('logo').alt = ''; $('logo').hidden = false; }
   // 標題區背景照片（老闆 2026-10-15：隱城）
   const heros = { yincheng: 'hero-yincheng.jpg', xcw: 'hero-xcw.jpg' };
-  if (heros[slug]) { const b = document.querySelector('.brand'); b.classList.add('hero'); b.style.backgroundImage = "url('" + heros[slug] + "')"; }
+  // 小城外：頁面最上面放形象影片（老闆 2026-10-24），有影片就不再放封面照片
+  const films = { xcw: { src: 'hero-xcw.mp4', poster: 'hero-xcw-poster.jpg' } };
+  if (films[slug]) mountFilm(films[slug]);
+  else if (heros[slug]) { const b = document.querySelector('.brand'); b.classList.add('hero'); b.style.backgroundImage = "url('" + heros[slug] + "')"; }
+
+  function mountFilm(f) {
+    const L = { zh: ['開啟聲音', '關閉聲音'], en: ['Sound on', 'Sound off'], ja: ['音声オン', '音声オフ'] }[YCI.lang] || ['開啟聲音', '關閉聲音'];
+    const box = document.createElement('section');
+    box.className = 'film';
+    const v = document.createElement('video');
+    v.muted = true; v.defaultMuted = true; v.loop = true; v.playsInline = true;
+    v.setAttribute('muted', ''); v.setAttribute('playsinline', ''); v.setAttribute('webkit-playsinline', '');
+    v.preload = 'auto'; v.poster = f.poster; v.src = f.src;
+    v.setAttribute('aria-hidden', 'true');
+    const off = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M17 9l4 6M21 9l-4 6"/></svg>';
+    const on = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>';
+    const btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'snd';
+    const paint = () => { btn.innerHTML = v.muted ? off : on; btn.setAttribute('aria-label', v.muted ? L[0] : L[1]); };
+    paint();
+    btn.addEventListener('click', () => { v.muted = !v.muted; if (!v.muted && v.paused) v.play().catch(() => {}); paint(); });
+    box.append(v, btn);
+    const head = document.querySelector('header.brand');
+    head.parentNode.insertBefore(box, head);
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let visible = true, started = false;
+    const go = () => { if (visible) v.play().catch(() => {}); };
+    // 點影片：暫停／繼續
+    v.addEventListener('click', () => { if (v.paused) { visible = true; v.play().catch(() => {}); } else v.pause(); });
+    // 開場動畫（老爺鐘）播完才從頭開始放影片
+    function start() {
+      if (started) return;
+      if (document.querySelector('.intro')) return setTimeout(start, 200);
+      started = true;
+      if (!reduce) { try { v.currentTime = 0; } catch (_) {} go(); }
+    }
+    setTimeout(start, 60);
+    // 滑出畫面就暫停，省電
+    if ('IntersectionObserver' in window) new IntersectionObserver((es) => {
+      visible = es[0].isIntersecting;
+      if (!started) return;
+      if (visible) { if (!reduce) go(); } else v.pause();
+    }, { threshold: 0.15 }).observe(box);
+  }
 
   async function load() {
     info = await YC.rpc('reservation_availability', { p_slug: slug });
