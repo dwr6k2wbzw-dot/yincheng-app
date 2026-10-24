@@ -177,6 +177,7 @@
     const bg = document.createElement('div');
     bg.className = 'hbg';
     bg.style.backgroundImage = head.style.backgroundImage;
+    if (head.style.backgroundPosition) bg.style.backgroundPosition = head.style.backgroundPosition;
     head.style.backgroundImage = 'none';
     const grain = document.createElement('div'); grain.className = 'grain';
     if (wkw) {

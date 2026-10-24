@@ -62,7 +62,9 @@
   if (logos[slug]) { $('logo').src = logos[slug]; $('logo').alt = ''; $('logo').hidden = false; }
   // 標題區背景照片（老闆 2026-10-15：隱城）
   const heros = { yincheng: 'hero-yincheng.jpg', xcw: 'hero-xcw.jpg' };
-  if (heros[slug]) { const b = document.querySelector('.brand'); b.classList.add('hero'); b.style.backgroundImage = "url('" + heros[slug] + "')"; }
+  // 照片取景：小城外往右移，露出左上的壁燈（老闆 2026-10-24）
+  const heroPos = { xcw: '22% 45%' };
+  if (heros[slug]) { const b = document.querySelector('.brand'); b.classList.add('hero'); b.style.backgroundImage = "url('" + heros[slug] + "')"; if (heroPos[slug]) b.style.backgroundPosition = heroPos[slug]; }
 
   async function load() {
     info = await YC.rpc('reservation_availability', { p_slug: slug });
