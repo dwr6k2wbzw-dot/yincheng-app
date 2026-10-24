@@ -9,6 +9,7 @@ import '../data/models.dart';
 import '../data/repository.dart';
 import '../services/open_external.dart';
 import '../theme.dart';
+import '../widgets/auto_refresh.dart';
 import '../widgets/common.dart';
 import 'reservation_timeline.dart';
 
@@ -21,7 +22,7 @@ class ReservationsScreen extends StatefulWidget {
   State<ReservationsScreen> createState() => _ReservationsScreenState();
 }
 
-class _ReservationsScreenState extends State<ReservationsScreen> {
+class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBindingObserver, AutoRefresh {
   late DateTime _day = widget.initialDay ?? _today();
   bool _calOpen = false;
   static bool _timelineView = true; // 0061：列表／時間軸（記住上次選的）
@@ -103,7 +104,21 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
     return (r[0] as ReservationSettings?, list);
   }
 
-  void _reload() => setState(() => _future = _load());
+  void _reload() {
+    markRefreshed();
+    setState(() => _future = _load());
+  }
+
+  // 每分鐘安靜重讀（別人新增、取消的訂位自己出現）；換了日期或手動重新整理過，這次的結果就不用
+  @override
+  Future<void> autoRefresh() async {
+    final day = _day;
+    final f = _load();
+    final gen = _loadGen;
+    final v = await f;
+    if (!mounted || gen != _loadGen || day != _day) return;
+    setState(() => _future = Future.value(v));
+  }
 
   /// 執行並顯示結果；成功回 true
   Future<bool> _run(Future<void> Function() f, String ok) async {
@@ -1472,7 +1487,7 @@ class ReservationSummaryCard extends StatefulWidget {
   State<ReservationSummaryCard> createState() => _ReservationSummaryCardState();
 }
 
-class _ReservationSummaryCardState extends State<ReservationSummaryCard> {
+class _ReservationSummaryCardState extends State<ReservationSummaryCard> with WidgetsBindingObserver, AutoRefresh {
   Future<List<Reservation>>? _future;
   // 0062（老闆 2026-10-18）：新訂位、取消、改人數的動態；看過的時間記在這支手機（每家店分開）
   List<AppNotification> _events = const [];
@@ -1552,6 +1567,15 @@ class _ReservationSummaryCardState extends State<ReservationSummaryCard> {
   Future<List<Reservation>> _load() {
     final d = _ReservationsScreenState._today();
     return AppScope.of(context).repo.reservations(widget.membership.storeId, d, d);
+  }
+
+  // 首頁「今日訂位」卡片：每分鐘安靜重讀組數、位數和新動態
+  @override
+  Future<void> autoRefresh() async {
+    final v = await _load();
+    if (!mounted) return;
+    setState(() => _future = Future.value(v));
+    await _loadEvents();
   }
 
   @override
