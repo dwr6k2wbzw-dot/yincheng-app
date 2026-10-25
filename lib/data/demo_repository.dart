@@ -523,6 +523,12 @@ class DemoRepository implements Repository {
 
   @override
   Future<void> saveProduct(String storeId, Product p) async {
+    // 同名的停用品項：恢復那一個（與正式資料庫一致）
+    final old = p.id.isEmpty ? _products.where((x) => x.name == p.name.trim() && _inactive.contains(x.id)).firstOrNull : null;
+    if (old != null) {
+      _inactive.remove(old.id);
+      p = Product(old.id, p.name, p.category, p.unit, parLevel: p.parLevel);
+    }
     final i = _products.indexWhere((x) => x.id == p.id);
     final np = Product(p.id.isEmpty ? 'p${_seq++}' : p.id, p.name, p.category, p.unit, parLevel: p.parLevel);
     if (i < 0) {

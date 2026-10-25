@@ -951,6 +951,19 @@ class SupabaseRepository implements Repository {
   Future<void> saveProduct(String storeId, Product p) async {
     final row = {'name': p.name.trim(), 'category': p.category, 'unit': p.unit.trim(), 'par_level': p.parLevel};
     if (p.id.isEmpty) {
+      // 同名的品項以前停用過（清單上看不到）：直接恢復那一個，不另外新增（老闆 2026-10-25：新增時一直說已有相同名稱）
+      final old = await _db
+          .from('products')
+          .select('id')
+          .eq('store_id', storeId)
+          .eq('name', row['name'] as String)
+          .eq('active', false)
+          .maybeSingle();
+      if (old != null) {
+        final r = await _db.from('products').update({...row, 'active': true}).eq('id', old['id'] as String).select('id');
+        if (r.isEmpty) throw Exception('message: 只有老闆、店長或正職可以修改品項,');
+        return;
+      }
       await _db.from('products').insert({...row, 'store_id': storeId});
     } else {
       final r = await _db.from('products').update(row).eq('id', p.id).select('id');
