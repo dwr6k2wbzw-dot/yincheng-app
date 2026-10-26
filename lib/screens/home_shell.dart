@@ -168,7 +168,8 @@ class _HomeShellState extends State<HomeShell> {
               if (ok == true) await state.repo.signOut();
             },
             itemBuilder: (_) => [
-              if (m.role == Role.owner)
+              // 成員管理：老闆；0068 起店長也可以（邀請、看清單、取消自己發的邀請）
+              if (m.role == Role.owner || m.role == Role.manager)
                 const PopupMenuItem(value: 'members', child: ListTile(leading: Icon(Icons.group_outlined), title: Text('成員管理'))),
               const PopupMenuItem(value: 'code', child: ListTile(leading: Icon(Icons.key_outlined), title: Text('輸入邀請碼'))),
               const PopupMenuItem(value: 'speed', child: ListTile(leading: Icon(Icons.speed), title: Text('載入速度'))),

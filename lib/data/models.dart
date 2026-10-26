@@ -452,7 +452,8 @@ class MemberInvite {
   final Role role;
   final DateTime createdAt;
   final DateTime expiresAt;
-  MemberInvite({required this.id, required this.displayName, required this.role, required this.createdAt, required this.expiresAt});
+  final String? invitedBy; // 誰發的（0068：店長只能取消自己發的）
+  MemberInvite({required this.id, required this.displayName, required this.role, required this.createdAt, required this.expiresAt, this.invitedBy});
   bool get expired => expiresAt.isBefore(DateTime.now());
   factory MemberInvite.fromRow(Map<String, dynamic> r) => MemberInvite(
         id: r['id'] as String,
@@ -460,6 +461,7 @@ class MemberInvite {
         role: roleFrom(r['role'] as String),
         createdAt: DateTime.parse(r['created_at'] as String).toLocal(),
         expiresAt: DateTime.parse(r['expires_at'] as String).toLocal(),
+        invitedBy: r['invited_by'] as String?,
       );
 }
 
