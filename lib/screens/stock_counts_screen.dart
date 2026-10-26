@@ -382,6 +382,91 @@ class _StockCountScreenState extends State<StockCountScreen> {
   }
 }
 
+/// 刪除類別結果：moved＝品項移到 target；deactivated＝品項一起停用
+class CategoryDeleteResult {
+  const CategoryDeleteResult(this.target, this.ids, {this.complete = true});
+  final String? target; // null＝一起停用
+  final Set<String> ids; // 已處理的品項
+  final bool complete; // false＝中途出錯，類別可能還在
+}
+
+/// 刪除類別（老闆 2026-10-16；2026-10-26 品項表單也能刪）：
+/// 類別是跟著品項存的，所以刪除＝把裡面的品項移到別的類別，或一起停用。
+/// 沒帶 items 就自己去讀這個類別的品項。取消回傳 null。酒水／餐食／雜項不能刪。
+Future<CategoryDeleteResult?> deleteStockCategory(
+    BuildContext context, Membership membership, String cat, List<String> cats,
+    {List<Product>? items}) async {
+  if (stockCategories.contains(cat)) return null;
+  final repo = AppScope.of(context).repo;
+  try {
+    items ??= (await repo.products(membership.storeId)).where((p) => p.category == cat).toList();
+  } catch (e) {
+    if (context.mounted) showMessage(context, friendlyError(e), error: true);
+    return null;
+  }
+  if (!context.mounted) return null;
+  final list = items;
+  final others = [...{...stockCategories, ...cats}].where((c) => c != cat).toList();
+  String target = others.first;
+  final action = await showDialog<String>(
+    context: context,
+    builder: (c) => StatefulBuilder(
+      builder: (c, setD) => AlertDialog(
+        title: Text('刪除「$cat」類別？'),
+        content: list.isEmpty
+            ? const Text('這個類別目前沒有品項，可以直接刪除。')
+            : Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('這個類別有 ${list.length} 個品項。要把它們移到：'),
+                const SizedBox(height: 8),
+                Wrap(spacing: 8, runSpacing: 8, children: [
+                  for (final o in others)
+                    ChoiceChip(label: Text(o), selected: target == o, onSelected: (_) => setD(() => target = o)),
+                ]),
+                const SizedBox(height: 12),
+                Text('或是把這些品項一起停用（以前的盤點紀錄會保留）。', style: TextStyle(color: AppColors.muted, fontSize: 12)),
+              ]),
+        actions: list.isEmpty
+            ? [
+                TextButton(onPressed: () => Navigator.pop(c), child: const Text('取消')),
+                FilledButton(onPressed: () => Navigator.pop(c, 'move'), child: const Text('刪除')),
+              ]
+            : [
+                TextButton(onPressed: () => Navigator.pop(c), child: const Text('取消')),
+                TextButton(
+                    onPressed: () => Navigator.pop(c, 'deactivate'),
+                    child: Text('一起停用', style: TextStyle(color: AppColors.bad))),
+                FilledButton(onPressed: () => Navigator.pop(c, 'move'), child: Text('移到「$target」')),
+              ],
+      ),
+    ),
+  );
+  if (action == null || !context.mounted) return null;
+  final done = <String>{};
+  try {
+    for (final p in list) {
+      if (action == 'move') {
+        await repo.saveProduct(membership.storeId, Product(p.id, p.name, target, p.unit, parLevel: p.parLevel));
+      } else {
+        await repo.deactivateProduct(p.id);
+      }
+      done.add(p.id);
+    }
+    if (context.mounted) {
+      showMessage(
+          context,
+          list.isEmpty
+              ? '「$cat」已刪除'
+              : action == 'move'
+                  ? '已把 ${list.length} 個品項移到「$target」，「$cat」已刪除'
+                  : '已停用 ${list.length} 個品項，「$cat」已刪除');
+    }
+  } catch (e) {
+    if (context.mounted) showMessage(context, friendlyError(e), error: true);
+    return CategoryDeleteResult(action == 'move' ? target : null, done, complete: false);
+  }
+  return CategoryDeleteResult(action == 'move' ? target : null, done);
+}
+
 /// 品項管理（老闆／店長／正職，0051）：新增、修改、停用
 class ProductsScreen extends StatefulWidget {
   const ProductsScreen({super.key, required this.membership});
@@ -407,51 +492,9 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
   List<String> _cats = stockCategories;
 
-  /// 刪除類別：類別是跟著品項存的，所以刪除＝把裡面的品項移到別的類別，或一起停用
   Future<void> _deleteCategory(String cat, List<Product> items) async {
-    final others = _cats.where((c) => c != cat).toList();
-    String target = others.first;
-    final action = await showDialog<String>(
-      context: context,
-      builder: (c) => StatefulBuilder(
-        builder: (c, setD) => AlertDialog(
-          title: Text('刪除「$cat」類別？'),
-          content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('這個類別有 ${items.length} 個品項。要把它們移到：'),
-            const SizedBox(height: 8),
-            Wrap(spacing: 8, runSpacing: 8, children: [
-              for (final o in others)
-                ChoiceChip(label: Text(o), selected: target == o, onSelected: (_) => setD(() => target = o)),
-            ]),
-            const SizedBox(height: 12),
-            Text('或是把這些品項一起停用（以前的盤點紀錄會保留）。', style: TextStyle(color: AppColors.muted, fontSize: 12)),
-          ]),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(c), child: const Text('取消')),
-            TextButton(
-                onPressed: () => Navigator.pop(c, 'deactivate'),
-                child: Text('一起停用', style: TextStyle(color: AppColors.bad))),
-            FilledButton(onPressed: () => Navigator.pop(c, 'move'), child: Text('移到「$target」')),
-          ],
-        ),
-      ),
-    );
-    if (action == null || !mounted) return;
-    final repo = AppScope.of(context).repo;
-    try {
-      for (final p in items) {
-        if (action == 'move') {
-          await repo.saveProduct(widget.membership.storeId, Product(p.id, p.name, target, p.unit, parLevel: p.parLevel));
-        } else {
-          await repo.deactivateProduct(p.id);
-        }
-      }
-      if (!mounted) return;
-      showMessage(context, action == 'move' ? '已把 ${items.length} 個品項移到「$target」，「$cat」已刪除' : '已停用 ${items.length} 個品項，「$cat」已刪除');
-    } catch (e) {
-      if (mounted) showMessage(context, friendlyError(e), error: true);
-    }
-    if (!mounted) return;
+    final r = await deleteStockCategory(context, widget.membership, cat, _cats, items: items);
+    if (r == null || !mounted) return;
     _changed = true;
     setState(() => _future = _load());
   }
@@ -582,6 +625,36 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     });
   }
   bool _saving = false;
+  bool _catChanged = false; // 這頁刪過類別：離開時要讓品項管理重新讀取
+
+  /// 按類別的 ×：剛新增、還沒存過的直接拿掉；店裡已有的類別要處理裡面的品項（移走或停用）
+  Future<void> _removeCategory(String c) async {
+    final saved = widget.categories.contains(c) || c == widget.product?.category;
+    if (!saved) {
+      setState(() {
+        _cats.remove(c);
+        if (_cat == c) _cat = widget.category != c && widget.category != null ? widget.category! : '酒水';
+      });
+      return;
+    }
+    setState(() => _saving = true);
+    final r = await deleteStockCategory(context, widget.membership, c, _cats);
+    if (!mounted) return;
+    setState(() => _saving = false);
+    if (r == null) return;
+    _catChanged = true;
+    final mine = widget.product != null && r.ids.contains(widget.product!.id);
+    // 正在修改的這個品項跟著類別一起停用了：直接回清單
+    if (mine && r.target == null) {
+      Navigator.pop(context, true);
+      return;
+    }
+    if (!r.complete) return;
+    setState(() {
+      _cats.remove(c);
+      if (_cat == c) _cat = r.target ?? '酒水';
+    });
+  }
 
   Future<void> _save() async {
     final name = _name.text.trim();
@@ -633,7 +706,13 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
 
   @override
   // 儲存／停用進行中不能離開（Codex 審查：避免清單沒更新、重複新增）
-  Widget build(BuildContext context) => PopScope(canPop: !_saving, child: Scaffold(
+  Widget build(BuildContext context) => PopScope(
+      canPop: !_saving && !_catChanged,
+      onPopInvokedWithResult: (didPop, _) {
+        // 刪過類別：回上一頁時帶 true，品項管理才會重新讀取
+        if (!didPop && !_saving && _catChanged) Navigator.of(context).pop(true);
+      },
+      child: Scaffold(
         appBar: AppBar(title: Text(widget.product == null ? '新增品項' : '修改品項')),
         body: ListView(padding: const EdgeInsets.all(16), children: [
           TextField(controller: _name, maxLength: 60, decoration: const InputDecoration(labelText: '品項名稱', counterText: '')),
@@ -642,16 +721,14 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           const SizedBox(height: 6),
           Wrap(spacing: 8, runSpacing: 8, children: [
             for (final c in _cats)
-              // 剛新增、還沒有品項的類別可以直接按 × 刪掉
-              if (!stockCategories.contains(c) && !widget.categories.contains(c) && c != widget.product?.category)
+              // 酒水／餐食／雜項固定；其他類別都可以按 × 刪除（老闆 2026-10-26）
+              if (!stockCategories.contains(c))
                 InputChip(
                   label: Text(c),
                   selected: _cat == c,
                   onSelected: (_) => setState(() => _cat = c),
-                  onDeleted: () => setState(() {
-                    _cats.remove(c);
-                    if (_cat == c) _cat = widget.category ?? '酒水';
-                  }),
+                  deleteButtonTooltipMessage: '刪除類別',
+                  onDeleted: _saving ? null : () => _removeCategory(c),
                 )
               else
                 ChoiceChip(label: Text(c), selected: _cat == c, onSelected: (_) => setState(() => _cat = c)),
