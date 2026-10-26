@@ -87,8 +87,8 @@ class _StockCountsScreenState extends State<StockCountsScreen> {
       );
 
   Widget _body(List<Product> products, Map<String, StockLevel> last) {
-    // 品項管理：老闆、店長、正職（0051，老闆 2026-10-16）
-    final isMgr = widget.membership.isManager || widget.membership.role == Role.staff;
+    // 品項管理：老闆、店長、正職（0051，老闆 2026-10-16）＋兼職（0067，老闆 2026-10-26）
+    final isMgr = widget.membership.isManager || widget.membership.role == Role.staff || widget.membership.isPartTime;
     final low = products.where((p) => _isLow(p, last[p.id])).toList();
     final cats = ['全部', ...stockCategories, ...{for (final p in products) p.category}.where((c) => !stockCategories.contains(c))];
     final shown = products.where((p) => _cat == '全部' || p.category == _cat).toList();
@@ -115,7 +115,7 @@ class _StockCountsScreenState extends State<StockCountsScreen> {
             Text(
                 isMgr
                     ? '先到「品項管理」新增要盤點的東西（名稱、類別、單位、安全量），就可以開始盤點。'
-                    : '請老闆、店長或正職先到「品項管理」新增要盤點的品項。',
+                    : '請老闆、店長、正職或兼職先到「品項管理」新增要盤點的品項。',
                 style: TextStyle(color: AppColors.muted, height: 1.5)),
           ]),
         )
