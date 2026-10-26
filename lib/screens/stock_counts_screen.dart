@@ -208,6 +208,7 @@ class _StockCountScreenState extends State<StockCountScreen> {
   final _tenth = <String, int>{};
   final _done = <String>{};
   String _q = '';
+  String _cat = '全部'; // 盤點時只看某一類（老闆 2026-10-27）
   bool _saving = false;
 
   @override
@@ -272,7 +273,18 @@ class _StockCountScreenState extends State<StockCountScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final list = widget.products.where((p) => _q.isEmpty || p.name.toLowerCase().contains(_q.toLowerCase())).toList();
+    final list = widget.products
+        .where((p) => _q.isEmpty || p.name.toLowerCase().contains(_q.toLowerCase()))
+        .where((p) => _cat == '全部' || p.category == _cat)
+        .toList();
+    // 類別：照品項管理的順序，再接店裡自己加的類別
+    final present = {for (final p in widget.products) p.category};
+    final cats = ['全部', ...stockCategories.where(present.contains), ...present.where((c) => !stockCategories.contains(c))];
+    String chipLabel(String c) {
+      final items = c == '全部' ? widget.products : widget.products.where((p) => p.category == c);
+      final done = items.where((p) => _done.contains(p.id)).length;
+      return '$c $done/${items.length}';
+    }
     final groups = <String, List<Product>>{};
     for (final p in list) {
       groups.putIfAbsent(p.category, () => []).add(p);
@@ -302,15 +314,27 @@ class _StockCountScreenState extends State<StockCountScreen> {
             decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: '搜尋品項'),
             onChanged: (v) => setState(() => _q = v.trim()),
           ),
-          const SizedBox(height: 6),
-          Text('數量＝整數＋剩幾成（例如 3 瓶又剩 4 成＝3.4）。沒變的按「同上次」。',
-              style: TextStyle(color: AppColors.muted, fontSize: 12, height: 1.5)),
+          const SizedBox(height: 10),
+          // 類別：點一下只看那一類，數字是「已盤／總數」
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(children: [
+              for (final c in cats)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(label: Text(chipLabel(c)), selected: _cat == c, onSelected: (_) => setState(() => _cat = c)),
+                ),
+            ]),
+          ),
           for (final cat in groups.keys) ...[
             const SizedBox(height: 14),
             Text(cat, style: TextStyle(color: AppColors.primary, fontSize: 13, letterSpacing: 2)),
             const SizedBox(height: 6),
             for (final p in groups[cat]!) ...[_countRow(p), const SizedBox(height: 8)],
           ],
+          const SizedBox(height: 10),
+          Text('數量＝整數＋剩幾成（例如 3 瓶又剩 4 成＝3.4）。沒變的按「同上次」。',
+              style: TextStyle(color: AppColors.muted, fontSize: 12, height: 1.5)),
         ]),
         bottomNavigationBar: SafeArea(
           child: Padding(
