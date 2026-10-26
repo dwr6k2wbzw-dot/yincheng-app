@@ -116,7 +116,7 @@ class SupabaseRepository implements Repository {
   Future<List<MemberInvite>> openInvites(String storeId) async {
     final rows = await _db
         .from('member_invites')
-        .select('id, display_name, role, created_at, expires_at')
+        .select('id, display_name, role, created_at, expires_at, invited_by')
         .eq('store_id', storeId)
         .isFilter('claimed_at', null)
         .isFilter('revoked_at', null)

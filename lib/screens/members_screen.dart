@@ -13,11 +13,11 @@ const _roleHints = {
   Role.manager: '營收、進貨、成本率都看得到，可核銷、核准盤點；看不到租金、人事與損益',
   Role.bartender: '進貨、盤點、訂位；看不到營收與成本',
   Role.staff: '看得到營收與進貨成本率、可手動登記每日營收（暫記，以日報表為準）、進貨、盤點；看不到租金、人事與損益',
-  Role.parttime: '看得到訂位（可登記、修改）、班表與交接、提醒（可以寫交接、打勾）；看不到營收、進貨、成本',
+  Role.parttime: '看得到訂位（可登記、修改）、庫存（可盤點、管理品項）、班表與交接、提醒（可以寫交接、打勾）；看不到營收、進貨、成本',
 };
 const _invitableRoles = [Role.manager, Role.staff, Role.parttime];
 
-/// 成員管理（只有老闆）：成員清單、邀請碼、修改身分、停權
+/// 成員管理：老闆可以邀請、修改身分、停權；店長（0068，老闆 2026-10-27）可以邀請、看清單、取消自己發的邀請
 class MembersScreen extends StatefulWidget {
   const MembersScreen({super.key, required this.membership});
   final Membership membership;
@@ -47,6 +47,8 @@ class _MembersScreenState extends State<MembersScreen> {
 
   void _reload() => setState(() => _future = _load());
 
+  bool get _isOwner => widget.membership.role == Role.owner;
+
   @override
   Widget build(BuildContext context) {
     final state = AppScope.of(context);
@@ -74,7 +76,7 @@ class _MembersScreenState extends State<MembersScreen> {
               if (invites.isNotEmpty) ...[
                 const SizedBox(height: 16),
                 _header('等待加入（邀請碼還沒被使用）'),
-                for (final i in invites) _inviteTile(i),
+                for (final i in invites) _inviteTile(i, canRevoke: _isOwner || i.invitedBy == me),
               ],
               if (inactive.isNotEmpty) ...[
                 const SizedBox(height: 16),
@@ -99,7 +101,7 @@ class _MembersScreenState extends State<MembersScreen> {
       );
 
   Widget _memberTile(MemberInfo m, {required bool isMe}) {
-    final editable = !isMe && m.role != Role.owner;
+    final editable = _isOwner && !isMe && m.role != Role.owner; // 修改身分、停權只有老闆
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: SectionCard(
@@ -130,7 +132,7 @@ class _MembersScreenState extends State<MembersScreen> {
             style: TextStyle(fontSize: 12, color: muted ? AppColors.muted : (r == Role.owner ? AppColors.warn : null))),
       );
 
-  Widget _inviteTile(MemberInvite i) => Padding(
+  Widget _inviteTile(MemberInvite i, {required bool canRevoke}) => Padding(
         padding: const EdgeInsets.only(bottom: 8),
         child: SectionCard(
           padding: EdgeInsets.zero,
@@ -143,7 +145,7 @@ class _MembersScreenState extends State<MembersScreen> {
             ),
             trailing: Row(mainAxisSize: MainAxisSize.min, children: [
               _roleChip(i.role),
-              IconButton(tooltip: '取消邀請', icon: const Icon(Icons.close), onPressed: () => _revoke(i)),
+              if (canRevoke) IconButton(tooltip: '取消邀請', icon: const Icon(Icons.close), onPressed: () => _revoke(i)),
             ]),
           ),
         ),
@@ -247,7 +249,8 @@ class _MembersScreenState extends State<MembersScreen> {
 
   Future<void> _invite() async {
     final state = AppScope.of(context);
-    final ownerStores = state.memberships.where((x) => x.role == Role.owner).toList();
+    // 可以邀請的店：自己是老闆或店長的店
+    final ownerStores = state.memberships.where((x) => x.role == Role.owner || x.role == Role.manager).toList();
     final created = await Navigator.of(context).push<bool>(MaterialPageRoute(
       builder: (_) => _InviteScreen(current: widget.membership, ownerStores: ownerStores),
     ));
