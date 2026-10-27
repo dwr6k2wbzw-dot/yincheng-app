@@ -73,7 +73,7 @@ void main() {
     PlanPerson(id: 'w', name: 'w', full: true, offTarget: 9, marks: const ['B', 'BH']),
     PlanPerson(id: 'l', name: 'l', full: true, offTarget: 9, marks: const ['B', 'BH']),
     PlanPerson(id: 't', name: 't', full: false, minShifts: 3, maxShifts: 10, marks: const ['18:00-00:30']),
-    PlanPerson(id: 'v', name: 'v', full: false, maxShifts: 8, marks: const ['19:00-00:30']),
+    PlanPerson(id: 'v', name: 'v', full: false, marks: const ['19:00-00:30']), // 不限天數（人力才補得滿）
   ];
   final xneed = {for (var d = 1; d <= days; d++) d: switch (wd(d)) { 1 || 2 => 2, 5 || 6 => 4, _ => 3 }};
   final r = planShifts(year: y, month: mo, people: xc, needByDay: xneed, minFullByDay: {for (var d = 1; d <= days; d++) d: 1});
