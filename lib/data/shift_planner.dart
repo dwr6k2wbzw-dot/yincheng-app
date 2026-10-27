@@ -5,6 +5,7 @@
 //   1. 照日期順序，每天補到「需要的人數」（先補正職下限），挑「落後進度最多」的人
 //      （正職：該上的天數按日子平均分；兼職：最少～最多天數的中間值）
 //   2. 正職還沒上到該上的天數、兼職還沒到最少天數 → 補在人力最吃緊的日子
+//   3. 還不夠人的日子：找還有空的人補，都排滿了就跟別天換班
 //   3. 上班記號：用排班條件的記號（第一個優先；同一天別人用過的換下一個，例如 B、BH 輪流）
 //      正職沒上班的日子：員工填想休的 → 指休，其他 → 休；兼職沒上班留空白
 //   員工填「想休」的日子一定不排（老闆選：盡量照排，人不夠時提醒）；兼職有填「可以上」就只排那些天。
@@ -209,7 +210,13 @@ PlanResult planShifts({
     var fulls = people.where((p) => p.full && work[p.id]!.contains(d)).length;
     final need = needByDay[d] ?? 0;
     final minFull = minFullByDay[d] ?? 0;
-    final cands = [for (final p in people) if (can(p, d) && capOk(p)) (p, score(p, d))]
+    // 照進度：不讓同一個人在月初就把天數用完（月底才不會沒人）
+    bool paceOk(PlanPerson p) {
+      final t = target(p);
+      return t == null || work[p.id]!.length < t * d / days + 1.5;
+    }
+
+    final cands = [for (final p in people) if (can(p, d) && capOk(p) && paceOk(p)) (p, score(p, d))]
       ..sort((a, b) => b.$2.compareTo(a.$2));
     final picked = <PlanPerson>[];
     for (final (p, _) in cands) {
@@ -246,6 +253,54 @@ PlanResult planShifts({
         return a.$2.compareTo(b.$2);
       });
       work[p.id]!.add(ds.first.$1);
+    }
+  }
+
+  // 第三輪：還不夠人的日子，找還有空的人補；都排滿了就跟別天換班
+  //   （把某人從人多的那天、或有人能頂替的那天挪過來；保留的格子不動）
+  bool fixDay(int d) {
+    final c = [for (final p in people) if (!work[p.id]!.contains(d) && can(p, d) && capOk(p)) (p, score(p, d))]
+      ..sort((a, b) => b.$2.compareTo(a.$2));
+    if (c.isNotEmpty) {
+      work[c.first.$1.id]!.add(d);
+      return true;
+    }
+    final order = [...people]..shuffle(rnd);
+    for (final p in order) {
+      final w = work[p.id]!;
+      if (w.contains(d) || !can(p, d)) continue;
+      final es = [for (final e in w) if (!out[p.id]!.containsKey(e)) (e, rnd.nextDouble())]
+        ..sort((a, b) {
+          final sa = staffedOn(a.$1) - (needByDay[a.$1] ?? 0), sb = staffedOn(b.$1) - (needByDay[b.$1] ?? 0);
+          return sa != sb ? sb.compareTo(sa) : a.$2.compareTo(b.$2);
+        });
+      for (final (e, _) in es) {
+        w.remove(e);
+        if (!can(p, d)) {
+          w.add(e);
+          continue;
+        }
+        if (staffedOn(e) >= (needByDay[e] ?? 0)) {
+          w.add(d);
+          return true;
+        }
+        final q = [for (final x in people) if (x.id != p.id && !work[x.id]!.contains(e) && can(x, e) && capOk(x)) (x, score(x, e))]
+          ..sort((a, b) => b.$2.compareTo(a.$2));
+        if (q.isNotEmpty) {
+          work[q.first.$1.id]!.add(e);
+          w.add(d);
+          return true;
+        }
+        w.add(e);
+      }
+    }
+    return false;
+  }
+
+  for (var round = 0; round < 3; round++) {
+    for (var d = 1; d <= days; d++) {
+      var guard = 0;
+      while (staffedOn(d) < (needByDay[d] ?? 0) && guard++ < 20 && fixDay(d)) {}
     }
   }
 
