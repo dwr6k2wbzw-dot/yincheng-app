@@ -176,14 +176,14 @@ jobs:
           git config user.email "claude-change@noreply" && git config user.name "Claude（App 功能許願）"
           git commit -qm "App 功能許願 $SHORT" -m "由 App 內功能許願產生（claude-change.yml），需老闆在 App 核准才會上線。"
           git push -qf origin "HEAD:refs/heads/$BRANCH"
-      - name: 開 PR（已經有就沿用）
+      - name: 開 PR（選用；repo 沒開放 Actions 建立 PR 時略過，上線時直接合併分支）
         id: pr
         run: |
-          pr=$(gh pr list --head "$BRANCH" --state open --json number -q '.[0].number')
+          pr=$(gh pr list --head "$BRANCH" --state open --json number -q '.[0].number' 2>/dev/null || true)
           if [ -z "$pr" ]; then
             url=$(gh pr create --base main --head "$BRANCH" --title "App 功能許願 $SHORT" \
-              --body "由 App 內「功能許願」產生。需求內容與預覽請在 App 查看；**老闆在 App 按「上線」才會合併**，請不要直接在 GitHub 合併。")
-            pr=$(basename "$url")
+              --body "由 App 內「功能許願」產生。需求內容與預覽請在 App 查看；**老闆在 App 按「上線」才會合併**，請不要直接在 GitHub 合併。" 2>/dev/null) \
+              && pr=$(basename "$url") || echo "::notice::沒有開 PR（repo 設定未允許 Actions 建立 PR），上線時直接合併分支"
           fi
           echo "pr=$pr" >> "$GITHUB_OUTPUT"
       - uses: subosito/flutter-action@v2

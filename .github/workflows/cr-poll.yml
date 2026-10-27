@@ -1,0 +1,32 @@
+# App 內功能許願：每 5 分鐘處理排隊的工作（派工給 Claude、合併老闆核准的修改並發佈、關閉取消的 PR）
+# 用 GitHub 身分證明（OIDC）向 Supabase Edge Function change-request 取工作，不需要額外的 GitHub 金鑰。
+# 公開 repo 的 Actions 免費，沒有工作時約 15 秒就結束。
+name: App 功能許願（排程處理）
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+concurrency:
+  group: cr-poll
+  cancel-in-progress: false
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+  id-token: write
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 50
+      - name: 處理排隊的工作
+        env:
+          CR_URL: https://yfulcyeoqavqarpfnznw.supabase.co/functions/v1/change-request
+          CR_AUDIENCE: yincheng-change-request
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: python3 tool/change_request/poll.py

@@ -314,7 +314,7 @@ class _ChangeRequestDetailScreenState extends State<ChangeRequestDetailScreen> {
       context: context,
       builder: (d) => AlertDialog(
         title: const Text('上線'),
-        content: const Text('確定看過預覽、沒問題了嗎？\n上線後約 5 分鐘，所有人的 App 都會換成新版。'),
+        content: const Text('確定看過預覽、沒問題了嗎？\n上線後約 10～15 分鐘，所有人的 App 都會換成新版。'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('再看看')),
           FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('上線')),
@@ -402,7 +402,7 @@ class _ChangeRequestDetailScreenState extends State<ChangeRequestDetailScreen> {
         children.add(Row(children: [
           const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
           const SizedBox(width: 10),
-          Expanded(child: Text(s == ChangeStatus.queued ? '排隊中，馬上開始…' : 'Claude 正在修改，通常 10～20 分鐘。')),
+          Expanded(child: Text(s == ChangeStatus.queued ? '排隊中，幾分鐘內會開始…' : 'Claude 正在修改，通常 15～30 分鐘。')),
         ]));
         text('可以先離開這個畫面，改好會在小鈴鐺通知。', color: AppColors.muted);
         if (_c.hasPreview) text('（下面的預覽還是上一版）', color: AppColors.muted);
@@ -421,7 +421,7 @@ class _ChangeRequestDetailScreenState extends State<ChangeRequestDetailScreen> {
           Expanded(child: Text('上線中…')),
         ]));
       case ChangeStatus.merged:
-        text('已上線！約 5 分鐘後小鈴鐺會出現「App 有新版本」，點一下就會換成新版。', color: AppColors.good);
+        text('已上線！約 10 分鐘後小鈴鐺會出現「App 有新版本」，點一下就會換成新版。', color: AppColors.good);
       case ChangeStatus.cancelled:
         text('已取消', color: AppColors.muted);
     }

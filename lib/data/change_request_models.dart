@@ -48,7 +48,7 @@ class ChangeRequest {
   /// 還在進行（排隊、修改中、上線中）：畫面會自動更新
   bool get busy => status == ChangeStatus.queued || status == ChangeStatus.running || status == ChangeStatus.approved;
   bool get finished => status == ChangeStatus.merged || status == ChangeStatus.cancelled;
-  bool get hasPreview => previewUrl != null && prNumber != null;
+  bool get hasPreview => previewUrl != null;
 
   factory ChangeRequest.fromRow(Map<String, dynamic> r) => ChangeRequest(
         id: r['id'] as String,
