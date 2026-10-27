@@ -402,7 +402,7 @@ class SupabaseRepository implements Repository {
     final from = DateTime(month.year, month.month, 1);
     final to = DateTime(month.year, month.month + 1, 1);
     final m = _day.format(from);
-    final r = await Future.wait([
+    final r = await Future.wait<dynamic>([
       _db.from('shift_people').select().eq('store_id', storeId).order('sort_order').order('name'),
       _db
           .from('shift_entries')
@@ -413,7 +413,17 @@ class SupabaseRepository implements Repository {
           .limit(5000),
       _db.from('shift_day_notes').select('note_date, note').eq('store_id', storeId).gte('note_date', m).lt('note_date', _day.format(to)),
       _db.from('shift_month_stats').select('person_id, should_off, prev_unused_special, comp_unused, special_total').eq('store_id', storeId).eq('period_month', m),
-      _db.from('shift_month_files').select('photo_path').eq('store_id', storeId).eq('period_month', m),
+      _db.from('shift_month_files').select('id, photo_path, uploaded_at').eq('store_id', storeId).eq('period_month', m).order('uploaded_at'),
+      // 照片辨識草稿（0070）：員工、兼職讀不到（RLS），會是空的
+      _db
+          .from('shift_photo_drafts')
+          .select('id, status, created_at, processed_at, message, photo_count, draft')
+          .eq('store_id', storeId)
+          .eq('period_month', m)
+          .inFilter('status', ['pending', 'ready', 'failed'])
+          .order('created_at', ascending: false)
+          .limit(1)
+          .then((v) => v, onError: (_) => <Map<String, dynamic>>[]),
     ]);
     final people = (r[0] as List).map((x) => ShiftPerson.fromRow(x as Map<String, dynamic>)).toList();
     final marks = <String, Map<int, String>>{};
@@ -432,8 +442,14 @@ class SupabaseRepository implements Repository {
           specialTotal: n(s['special_total']),
         )
     };
-    final files = r[4] as List;
-    return ShiftMonth(from, people, marks, notes, stats, files.isEmpty ? null : files.first['photo_path'] as String);
+    final photos = [
+      for (final f in r[4] as List)
+        ShiftPhoto(f['id'] as String, f['photo_path'] as String,
+            f['uploaded_at'] == null ? null : DateTime.parse(f['uploaded_at'] as String).toLocal())
+    ];
+    final drafts = r[5] as List;
+    return ShiftMonth(from, people, marks, notes, stats, photos,
+        drafts.isEmpty ? null : ShiftDraft.fromRow(drafts.first as Map<String, dynamic>));
   }
 
   @override
@@ -494,11 +510,34 @@ class SupabaseRepository implements Repository {
     final path = '$storeId/schedules/$m-${DateTime.now().millisecondsSinceEpoch}.jpg';
     await _db.storage.from('receipts').uploadBinary(path, jpeg,
         fileOptions: const FileOptions(contentType: 'image/jpeg', upsert: false));
-    await _db.from('shift_month_files').upsert({
+    // 0070：每張照片一列（不再蓋掉同月的舊照片）；另附影像給每小時同步的 Claude 辨識成班表草稿
+    final hex = StringBuffer(r'\x');
+    for (final b in jpeg) {
+      hex.write(b.toRadixString(16).padLeft(2, '0'));
+    }
+    await _db.from('shift_month_files').insert({
       'store_id': storeId,
       'period_month': _day.format(DateTime(month.year, month.month, 1)),
       'photo_path': path,
-    }, onConflict: 'store_id,period_month');
+      'image': hex.toString(),
+    });
+  }
+
+  @override
+  Future<void> deleteShiftPhoto(String photoId) async {
+    final rows = await _db.from('shift_month_files').delete().eq('id', photoId).select('id');
+    if (rows.isEmpty) throw Exception('message: 沒有權限刪除這張照片（只有老闆、店長可以刪）,');
+  }
+
+  @override
+  Future<int> applyShiftDraft(ShiftDraft d) async {
+    final n = await _db.rpc('apply_shift_draft', params: {'p_id': d.id, 'p_expected': d.processedAtRaw});
+    return (n as num?)?.toInt() ?? 0;
+  }
+
+  @override
+  Future<void> dismissShiftDraft(String draftId) async {
+    await _db.from('shift_photo_drafts').update({'status': 'dismissed'}).eq('id', draftId);
   }
 
   // ---------------- 交接事項與工作提醒 ----------------

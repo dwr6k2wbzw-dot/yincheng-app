@@ -102,6 +102,10 @@ abstract class Repository {
   Future<void> saveShiftPerson(String storeId, ShiftPerson p, {bool isNew = false});
   Future<void> saveShiftStats(String storeId, String personId, DateTime month, ShiftStats s);
   Future<void> uploadShiftPhoto(String storeId, DateTime month, Uint8List jpeg);
+  Future<void> deleteShiftPhoto(String photoId); // 0070：一個月多張，刪掉其中一張
+  /// 套用照片辨識草稿（0070）：整月換成照片上的班，回傳寫入格數
+  Future<int> applyShiftDraft(ShiftDraft d);
+  Future<void> dismissShiftDraft(String draftId);
   Future<String> shiftPhotoUrl(String path);
 
   // 交接事項與工作提醒（同店成員可看、可寫交接、可打勾；提醒只有老闆／店長能建立）
