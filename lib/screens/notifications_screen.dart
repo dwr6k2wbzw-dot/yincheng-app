@@ -9,6 +9,7 @@ import '../data/repository.dart';
 import '../services/app_update.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'change_requests_screen.dart';
 import 'handover_screen.dart';
 import 'reservations_screen.dart';
 
@@ -137,6 +138,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         Navigator.of(context).push(MaterialPageRoute(
           builder: (_) => ReservationsScreen(membership: widget.membership, initialDay: n.refMonth),
         ));
+      case 'change_request':
+        // 功能許願（0069）：修改好了、等核准、退回、已上線
+        Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => ChangeRequestsScreen(membership: widget.membership),
+        ));
     }
   }
 
@@ -145,6 +151,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         'reminder' => Icons.alarm,
         'schedule' => Icons.calendar_month_outlined,
         'reservation' => Icons.event_seat_outlined,
+        'change_request' => Icons.auto_awesome,
         _ => Icons.notifications_outlined,
       };
 

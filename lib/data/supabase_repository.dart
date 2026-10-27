@@ -1226,4 +1226,64 @@ class SupabaseRepository implements Repository {
       if (resetNoshow) 'noshow_reset_at': DateTime.now().toUtc().toIso8601String(),
     }, onConflict: 'store_id,phone_digits');
   }
+
+  // ---------------- 功能許願（0069） ----------------
+  @override
+  Future<List<ChangeRequest>> changeRequests(String storeId) async {
+    final rows = await _db
+        .from('change_requests')
+        .select('id, store_id, title, requested_by, requester_name, status, preview_url, pr_number, last_error, run_count, '
+            'created_at, updated_at, run_started_at')
+        .eq('store_id', storeId)
+        .order('created_at', ascending: false)
+        .limit(50);
+    return _rows(rows).map(ChangeRequest.fromRow).toList();
+  }
+
+  @override
+  Future<List<ChangeMessage>> changeMessages(String requestId) async {
+    final rows = await _db
+        .from('change_request_messages')
+        .select('id, kind, author_name, body, created_at')
+        .eq('request_id', requestId)
+        .order('id');
+    return _rows(rows).map(ChangeMessage.fromRow).toList();
+  }
+
+  @override
+  Future<ChangeQuota> changeQuota(String storeId) async {
+    final r = await _db.rpc('cr_quota', params: {'p_store': storeId});
+    final m = _row(r is List ? (r.isEmpty ? null : r.first) : r) ?? const {};
+    return ChangeQuota((m['used'] as num?)?.toInt() ?? 0, (m['monthly_limit'] as num?)?.toInt());
+  }
+
+  @override
+  Future<String> createChangeRequest(String storeId, String body) async =>
+      await _db.rpc('cr_create', params: {'p_store': storeId, 'p_body': body}) as String;
+
+  @override
+  Future<void> followupChangeRequest(String requestId, String body) =>
+      _db.rpc('cr_followup', params: {'p_id': requestId, 'p_body': body});
+
+  @override
+  Future<void> submitChangeRequest(String requestId) => _db.rpc('cr_submit', params: {'p_id': requestId});
+
+  @override
+  Future<void> approveChangeRequest(String requestId) => _db.rpc('cr_approve', params: {'p_id': requestId});
+
+  @override
+  Future<void> returnChangeRequest(String requestId, String reason) =>
+      _db.rpc('cr_return', params: {'p_id': requestId, 'p_reason': reason});
+
+  @override
+  Future<void> cancelChangeRequest(String requestId) => _db.rpc('cr_cancel', params: {'p_id': requestId});
+
+  @override
+  Future<void> kickChangeRequests() async {
+    try {
+      await _db.functions.invoke('change-request', body: {'op': 'kick'});
+    } catch (_) {
+      // 派工失敗不影響畫面；下次打開許願頁會再試
+    }
+  }
 }

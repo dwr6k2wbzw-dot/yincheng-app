@@ -7,6 +7,7 @@ import '../data/models.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../data/repository.dart';
+import 'change_requests_screen.dart';
 import 'dashboard_screen.dart';
 import 'members_screen.dart';
 import 'handover_screen.dart';
@@ -137,6 +138,10 @@ class _HomeShellState extends State<HomeShell> {
                 Navigator.of(context).push(MaterialPageRoute(builder: (_) => MembersScreen(membership: m)));
                 return;
               }
+              if (v == 'wish') {
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => ChangeRequestsScreen(membership: m)));
+                return;
+              }
               if (v == 'code') {
                 enterInviteCode(context);
                 return;
@@ -171,6 +176,9 @@ class _HomeShellState extends State<HomeShell> {
               // 成員管理：老闆；0068 起店長也可以（邀請、看清單、取消自己發的邀請）
               if (m.role == Role.owner || m.role == Role.manager)
                 const PopupMenuItem(value: 'members', child: ListTile(leading: Icon(Icons.group_outlined), title: Text('成員管理'))),
+              // 功能許願（0069）：老闆、店長請 Claude 修改 App
+              if (m.role == Role.owner || m.role == Role.manager)
+                const PopupMenuItem(value: 'wish', child: ListTile(leading: Icon(Icons.auto_awesome), title: Text('功能許願'))),
               const PopupMenuItem(value: 'code', child: ListTile(leading: Icon(Icons.key_outlined), title: Text('輸入邀請碼'))),
               const PopupMenuItem(value: 'speed', child: ListTile(leading: Icon(Icons.speed), title: Text('載入速度'))),
               const PopupMenuItem(value: 'logout', child: ListTile(leading: Icon(Icons.logout), title: Text('登出'))),

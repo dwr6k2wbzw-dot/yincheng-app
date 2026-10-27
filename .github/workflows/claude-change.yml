@@ -1,0 +1,313 @@
+# App 內「功能許願」（老闆 2026-10-27）：老闆／店長在 App 寫需求 → Supabase Edge Function change-request 派工到這裡
+#   1. prepare：用 GitHub 身分證明（OIDC）向 Edge Function 取這次的需求內容
+#   2. claude：Claude Code（老闆的 Claude 訂閱，Secret CLAUDE_CODE_OAUTH_TOKEN）改程式
+#      → 這個工作只有「讀」權限、拿不到 GitHub 身分證明，Claude 不能推程式、不能冒名回報
+#   3. publish：檢查修改範圍（只能改 lib/、assets/、tool/book/，不能夾帶金鑰）→ 推到 cr/<代號> 分支、開 PR
+#      → 建置預覽版放到 previews 分支
+#   4. pages：組合正式版＋預覽，發佈到 GitHub Pages（預覽網址 …/yincheng-app/preview/<代號>/）
+#   5. report：把結果（修改好了／失敗原因）回報給 App
+# 只有老闆在 App 按「上線」，Edge Function 才會合併 PR → deploy.yml 正式發佈。
+name: App 功能許願（Claude 修改）
+on:
+  workflow_dispatch:
+    inputs:
+      request_id:
+        description: 需求代號（App 產生）
+        required: true
+      nonce:
+        description: 這次派工的一次性代碼
+        required: true
+concurrency:
+  group: change-request-${{ inputs.request_id }}
+  cancel-in-progress: false
+permissions:
+  contents: read
+env:
+  CR_URL: https://yfulcyeoqavqarpfnznw.supabase.co/functions/v1/change-request
+  CR_AUDIENCE: yincheng-change-request
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      short: ${{ steps.f.outputs.short }}
+      branch: ${{ steps.f.outputs.branch }}
+    steps:
+      - name: 取需求內容
+        id: f
+        env:
+          REQ_ID: ${{ inputs.request_id }}
+          NONCE: ${{ inputs.nonce }}
+        run: |
+          echo "$REQ_ID" | grep -Eq '^[0-9a-f-]{36}$' || { echo "::error::需求代號格式不對"; exit 1; }
+          echo "$NONCE" | grep -Eq '^[0-9a-f-]{36}$' || { echo "::error::代碼格式不對"; exit 1; }
+          tok=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$CR_AUDIENCE" | jq -r .value)
+          code=$(curl -sS -o request.json -w '%{http_code}' -X POST "$CR_URL" \
+            -H "Authorization: Bearer $tok" -H 'Content-Type: application/json' \
+            -d "$(jq -nc --arg id "$REQ_ID" --arg n "$NONCE" '{op:"fetch",id:$id,nonce:$n}')")
+          [ "$code" = "200" ] || { echo "::error title=取需求失敗::HTTP $code"; exit 1; }
+          short=$(echo "$REQ_ID" | tr -d '-' | cut -c1-8)
+          echo "short=$short" >> "$GITHUB_OUTPUT"
+          echo "branch=cr/$short" >> "$GITHUB_OUTPUT"
+          echo "::notice title=需求::$(jq -r .title request.json)（第 $(jq -r .run_count request.json) 次）"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: request
+          path: request.json
+          retention-days: 3
+
+  claude:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    env:
+      BRANCH: ${{ needs.prepare.outputs.branch }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 50
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: request
+          path: ${{ runner.temp }}/req
+      - name: 接續上一版的修改（再改一次時）
+        id: base
+        run: |
+          git config user.email "claude-change@noreply" && git config user.name "Claude"
+          fresh=""
+          if git ls-remote --exit-code --heads origin "$BRANCH" > /dev/null; then
+            git fetch -q --depth 50 origin "$BRANCH"
+            git checkout -q -B work FETCH_HEAD
+            if ! git merge -q --no-edit origin/main > /dev/null 2>&1; then
+              git merge --abort || true
+              git checkout -q -B work origin/main
+              fresh="--fresh"
+              echo "::notice::上一版接不上最新版，從最新版重新做"
+            fi
+          fi
+          git rev-parse origin/main > "$RUNNER_TEMP/base_sha"
+          python3 tool/change_request/build_prompt.py "$RUNNER_TEMP/req/request.json" "$RUNNER_TEMP/prompt.txt" $fresh
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: 安裝 Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+      - name: Claude 修改程式
+        id: c
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/out"
+          if [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+            echo "還沒設定 Claude 授權碼（GitHub Secret CLAUDE_CODE_OAUTH_TOKEN），請老闆依說明設定" > "$RUNNER_TEMP/out/error.txt"
+            exit 0
+          fi
+          set +e
+          timeout 30m claude -p "$(cat "$RUNNER_TEMP/prompt.txt")" \
+            --allowedTools "Read,Edit,Write,Glob,Grep,Bash(flutter analyze:*),Bash(dart format:*)" \
+            --max-turns 80 --output-format json > "$RUNNER_TEMP/out/claude.json" 2> "$RUNNER_TEMP/out/claude.err"
+          rc=$?
+          set -e
+          jq -r '.result // empty' "$RUNNER_TEMP/out/claude.json" > "$RUNNER_TEMP/out/summary.txt" 2>/dev/null || true
+          if [ $rc -ne 0 ] || [ "$(jq -r '.is_error // false' "$RUNNER_TEMP/out/claude.json" 2>/dev/null)" = "true" ]; then
+            if [ $rc -eq 124 ]; then msg="Claude 修改超過 30 分鐘，請把需求拆小一點再試"
+            elif grep -qiE "auth|token|401|credential" "$RUNNER_TEMP/out/claude.err" "$RUNNER_TEMP/out/claude.json" 2>/dev/null; then msg="Claude 授權碼無效或過期，請老闆重新產生並更新 CLAUDE_CODE_OAUTH_TOKEN"
+            elif grep -qiE "usage limit|rate limit|429" "$RUNNER_TEMP/out/claude.err" "$RUNNER_TEMP/out/claude.json" 2>/dev/null; then msg="Claude 訂閱用量暫時到上限，請晚一點按「再改一次」"
+            else msg="Claude 修改時發生錯誤（第 $rc 號），請按「再改一次」重試"; fi
+            echo "$msg" > "$RUNNER_TEMP/out/error.txt"
+            tail -c 1500 "$RUNNER_TEMP/out/claude.err" || true
+          fi
+          # 不論成敗都把修改打包（相對最新版 main 的完整差異）
+          git add -A
+          git diff --cached --binary "$(cat "$RUNNER_TEMP/base_sha")" > "$RUNNER_TEMP/out/change.patch"
+          echo "差異大小：$(wc -c < "$RUNNER_TEMP/out/change.patch") bytes"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: claude-out
+          path: ${{ runner.temp }}/out
+          retention-days: 7
+          include-hidden-files: true
+
+  publish:
+    needs: [prepare, claude]
+    if: always() && needs.prepare.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      ok: ${{ steps.done.outputs.ok }}
+      pr: ${{ steps.pr.outputs.pr }}
+    env:
+      SHORT: ${{ needs.prepare.outputs.short }}
+      BRANCH: ${{ needs.prepare.outputs.branch }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: claude-out
+          path: ${{ runner.temp }}/out
+      - name: 檢查修改並提交
+        id: apply
+        run: |
+          mkdir -p "$RUNNER_TEMP/out"
+          fail() { echo "$1" > "$RUNNER_TEMP/out/error.txt"; echo "::error title=未通過::$1"; exit 1; }
+          [ -s "$RUNNER_TEMP/out/error.txt" ] && fail "$(cat "$RUNNER_TEMP/out/error.txt")"
+          [ -s "$RUNNER_TEMP/out/change.patch" ] || fail "Claude 沒有改到任何程式（可能需要資料庫修改，請看 Claude 的說明）"
+          git apply --index --binary "$RUNNER_TEMP/out/change.patch" || fail "修改套用失敗，請按「再改一次」重試"
+          msg=$(python3 tool/change_request/check_patch.py) || fail "$msg"
+          echo "$msg"
+          git config user.email "claude-change@noreply" && git config user.name "Claude（App 功能許願）"
+          git commit -qm "App 功能許願 $SHORT" -m "由 App 內功能許願產生（claude-change.yml），需老闆在 App 核准才會上線。"
+          git push -qf origin "HEAD:refs/heads/$BRANCH"
+      - name: 開 PR（選用；repo 沒開放 Actions 建立 PR 時略過，上線時直接合併分支）
+        id: pr
+        run: |
+          pr=$(gh pr list --head "$BRANCH" --state open --json number -q '.[0].number' 2>/dev/null || true)
+          if [ -z "$pr" ]; then
+            url=$(gh pr create --base main --head "$BRANCH" --title "App 功能許願 $SHORT" \
+              --body "由 App 內「功能許願」產生。需求內容與預覽請在 App 查看；**老闆在 App 按「上線」才會合併**，請不要直接在 GitHub 合併。" 2>/dev/null) \
+              && pr=$(basename "$url") || echo "::notice::沒有開 PR（repo 設定未允許 Actions 建立 PR），上線時直接合併分支"
+          fi
+          echo "pr=$pr" >> "$GITHUB_OUTPUT"
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: 建置預覽版
+        run: |
+          set +e
+          if [ ! -d web ]; then flutter create --platforms web --project-name yincheng_ops --org tw.yincheng . > /dev/null; fi
+          rm -f test/widget_test.dart
+          python3 tool/patch_index.py
+          mkdir -p web/icons && cp tool/icons/Icon-*.png tool/icons/apple-touch-icon.png web/icons/ && cp tool/icons/favicon.png web/favicon.png
+          cp tool/icons/apple-touch-icon.png web/icons/xcw-touch-180-v2.png && cp tool/icons/favicon.png web/icons/xcw-favicon-v2.png
+          flutter pub get > /dev/null
+          flutter build web --release --pwa-strategy=none --base-href "/${{ github.event.repository.name }}/preview/$SHORT/" > build.txt 2>&1
+          rc=$?
+          set -e
+          if [ $rc -ne 0 ]; then
+            grep -iE "error" build.txt | head -20
+            echo "預覽版建置失敗（程式有錯），請按「再改一次」讓 Claude 修正" > "$RUNNER_TEMP/out/error.txt"
+            exit 1
+          fi
+          v="${GITHUB_RUN_ID}"
+          sed -i "s#src=\"flutter_bootstrap.js\"#src=\"flutter_bootstrap.js?v=$v\"#" build/web/index.html
+          sed -i "s#\"mainJsPath\":\"main.dart.js\"#\"mainJsPath\":\"main.dart.js?v=$v\"#" build/web/flutter_bootstrap.js
+          # 預覽版標示（資料是真的，提醒小心操作）；不註冊離線暫存
+          python3 tool/change_request/mark_preview.py build/web/index.html
+      - name: 放到預覽分支
+        run: |
+          live=$(git ls-remote --heads origin 'cr/*' | sed 's#.*refs/heads/cr/##')
+          mkdir -p "$RUNNER_TEMP/pv" && cd "$RUNNER_TEMP/pv"
+          git init -q -b previews
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}"
+          if git fetch -q --depth 1 origin previews; then git checkout -q -B previews FETCH_HEAD; fi
+          # 清掉已經上線或取消的預覽
+          for d in */; do
+            [ -d "$d" ] || continue
+            name="${d%/}"
+            echo "$live" | grep -qx "$name" || rm -rf "$name"
+          done
+          rm -rf "$SHORT" && cp -a "$GITHUB_WORKSPACE/build/web" "$SHORT"
+          git add -A
+          git -c user.email=ci@noreply -c user.name=ci commit -qm "preview $SHORT run $GITHUB_RUN_ID" || true
+          git push -q origin HEAD:previews
+      - id: done
+        run: echo "ok=true" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: publish-error
+          path: ${{ runner.temp }}/out/error.txt
+          retention-days: 7
+
+  pages:
+    needs: publish
+    if: needs.publish.outputs.ok == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+      - name: 組合正式版＋預覽
+        run: |
+          git fetch -q --depth 1 origin web-build
+          mkdir -p "$RUNNER_TEMP/main" && git archive FETCH_HEAD | tar -x -C "$RUNNER_TEMP/main"
+          bash tool/change_request/assemble_site.sh "$RUNNER_TEMP/main" "$RUNNER_TEMP/site"
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ runner.temp }}/site
+      - uses: actions/deploy-pages@v4
+
+  report:
+    needs: [prepare, claude, publish, pages]
+    if: always() && needs.prepare.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: claude-out
+          path: out
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: publish-error
+          path: perr
+      - name: 回報給 App
+        env:
+          REQ_ID: ${{ inputs.request_id }}
+          NONCE: ${{ inputs.nonce }}
+          OK: ${{ needs.publish.outputs.ok == 'true' }}
+          PR: ${{ needs.publish.outputs.pr }}
+          SHORT: ${{ needs.prepare.outputs.short }}
+          BRANCH: ${{ needs.prepare.outputs.branch }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          summary=$(cat out/summary.txt 2>/dev/null || true)
+          err=$(cat perr/error.txt 2>/dev/null || cat out/error.txt 2>/dev/null || true)
+          [ "$OK" = "true" ] || [ -n "$err" ] || err="修改過程發生錯誤，請按「再改一次」重試"
+          preview="https://dwr6k2wbzw-dot.github.io/yincheng-app/preview/$SHORT/"
+          body=$(jq -nc --arg id "$REQ_ID" --arg n "$NONCE" --argjson ok "$OK" --arg b "$BRANCH" --arg pr "$PR" \
+            --arg p "$preview" --arg r "$RUN_URL" --arg s "$summary" --arg e "$err" \
+            '{op:"report",id:$id,nonce:$n,ok:$ok,branch:(if $ok then $b else null end),
+              pr_number:(if $ok and ($pr|length>0) then ($pr|tonumber) else null end),
+              preview_url:(if $ok then $p else null end),run_url:$r,
+              summary:(if ($s|length)>0 then $s else null end),error:(if $ok then null else $e end)}')
+          tok=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$CR_AUDIENCE" | jq -r .value)
+          code=$(curl -sS -o resp.json -w '%{http_code}' -X POST "$CR_URL" -H "Authorization: Bearer $tok" -H 'Content-Type: application/json' -d "$body")
+          echo "::notice title=回報::HTTP $code $(cat resp.json)"
+          [ "$code" = "200" ]

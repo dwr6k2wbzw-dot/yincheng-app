@@ -725,4 +725,68 @@ class DemoRepository implements Repository {
         AppNotification(id: 901, kind: 'reservation', title: '新訂位', body: '王 先生・10/19 20:00・2 位', actorName: '客人',
             createdAt: DateTime.now().subtract(const Duration(minutes: 12))),
       ];
+
+  // ---------------- 功能許願（0069）示範：送出後幾秒變成「修改好了」 ----------------
+  final List<ChangeRequest> _changes = [];
+  final Map<String, List<ChangeMessage>> _changeMsgs = {};
+  int _changeUsed = 0;
+  void _changeMsg(String id, String kind, String who, String body) =>
+      (_changeMsgs[id] ??= []).add(ChangeMessage(id: ++_seq, kind: kind, authorName: who, body: body, createdAt: DateTime.now()));
+  void _changeSet(String id, ChangeRequest Function(ChangeRequest) f) {
+    final i = _changes.indexWhere((c) => c.id == id);
+    if (i >= 0) _changes[i] = f(_changes[i]);
+  }
+
+  void _changeRun(String id) {
+    _changeSet(id, (c) => c.copyWith(status: ChangeStatus.running, runCount: c.runCount + 1));
+    Future.delayed(const Duration(seconds: 4), () {
+      _changeSet(id, (c) => c.copyWith(status: ChangeStatus.ready, previewUrl: 'https://example.com/preview/', prNumber: 1));
+      _changeMsg(id, 'claude', 'Claude', '（示範）已照需求修改，請點「看預覽」確認。');
+    });
+  }
+
+  @override
+  Future<List<ChangeRequest>> changeRequests(String storeId) async =>
+      _changes.where((c) => c.storeId == storeId).toList().reversed.toList();
+  @override
+  Future<List<ChangeMessage>> changeMessages(String requestId) async => List.of(_changeMsgs[requestId] ?? const []);
+  @override
+  Future<ChangeQuota> changeQuota(String storeId) async => ChangeQuota(_changeUsed, 10);
+  @override
+  Future<String> createChangeRequest(String storeId, String body) async {
+    final id = 'cr-${++_seq}';
+    _changeUsed++;
+    _changes.add(ChangeRequest(
+        id: id, storeId: storeId, title: body.trim().split('\n').first, requestedBy: 'demo', requesterName: '示範老闆',
+        status: ChangeStatus.queued, createdAt: DateTime.now(), updatedAt: DateTime.now()));
+    _changeMsg(id, 'request', '示範老闆', body.trim());
+    _changeRun(id);
+    return id;
+  }
+  @override
+  Future<void> followupChangeRequest(String requestId, String body) async {
+    _changeUsed++;
+    _changeMsg(requestId, 'followup', '示範老闆', body.trim());
+    _changeRun(requestId);
+  }
+  @override
+  Future<void> submitChangeRequest(String requestId) async {
+    _changeSet(requestId, (c) => c.copyWith(status: ChangeStatus.review));
+    _changeMsg(requestId, 'system', '示範店長', '已送審，等老闆核准上線');
+  }
+  @override
+  Future<void> approveChangeRequest(String requestId) async {
+    _changeSet(requestId, (c) => c.copyWith(status: ChangeStatus.merged));
+    _changeMsg(requestId, 'system', 'Claude', '已上線（示範）');
+  }
+  @override
+  Future<void> returnChangeRequest(String requestId, String reason) async {
+    _changeSet(requestId, (c) => c.copyWith(status: ChangeStatus.ready));
+    _changeMsg(requestId, 'system', '示範老闆', '老闆退回：$reason');
+  }
+  @override
+  Future<void> cancelChangeRequest(String requestId) async =>
+      _changeSet(requestId, (c) => c.copyWith(status: ChangeStatus.cancelled));
+  @override
+  Future<void> kickChangeRequests() async {}
 }
