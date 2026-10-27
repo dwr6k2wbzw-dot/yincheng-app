@@ -126,6 +126,9 @@ abstract class Repository {
   /// need 為 null＝取消這天的特別人力
   Future<void> setShiftStaffingDay(String storeId, DateTime day, int? need);
   Future<void> saveShiftDeadline(String storeId, int day);
+  /// 自訂規則：kind apart（不能同一天上班）／with（a 上班時 b 也要上）
+  Future<void> addShiftPairRule(String storeId, String a, String b, String kind);
+  Future<void> deleteShiftPairRule(String id);
   /// 套用自動排班：列出的人這個月整個換成 plan，回傳寫入格數
   Future<int> applyShiftPlan(String storeId, DateTime month, Map<String, Map<int, String>> plan);
 

@@ -694,6 +694,7 @@ class SupabaseRepository implements Repository {
       _db.from('shift_staffing_days').select('day, need').eq('store_id', storeId).gte('day', _day.format(from)).lt('day', _day.format(to)),
       _db.from('shift_settings').select('request_deadline').eq('store_id', storeId).maybeSingle(),
       _db.from('shift_rules').select().eq('store_id', storeId),
+      _db.from('shift_pair_rules').select('id, person_a, person_b, kind').eq('store_id', storeId).order('created_at'),
       _db
           .from('shift_requests')
           .select('person_id, req_date, kind')
@@ -703,7 +704,7 @@ class SupabaseRepository implements Repository {
           .limit(5000),
     ]);
     final requests = <String, Map<int, String>>{};
-    for (final e in r[4] as List) {
+    for (final e in r[5] as List) {
       requests.putIfAbsent(e['person_id'] as String, () => {})[DateTime.parse(e['req_date'] as String).day] = e['kind'] as String;
     }
     return ShiftPlanSetup(
@@ -715,8 +716,16 @@ class SupabaseRepository implements Repository {
       deadline: ((r[2] as Map?)?['request_deadline'] as num?)?.toInt() ?? 20,
       rules: {for (final x in r[3] as List) x['person_id'] as String: ShiftRule.fromRow(x as Map<String, dynamic>)},
       requests: requests,
+      pairRules: [for (final x in r[4] as List) PairRule.fromRow(x as Map<String, dynamic>)],
     );
   }
+
+  @override
+  Future<void> addShiftPairRule(String storeId, String a, String b, String kind) =>
+      _db.from('shift_pair_rules').insert({'store_id': storeId, 'person_a': a, 'person_b': b, 'kind': kind});
+
+  @override
+  Future<void> deleteShiftPairRule(String id) => _db.from('shift_pair_rules').delete().eq('id', id);
 
   @override
   Future<void> claimShiftPerson(String personId) => _db.rpc('shift_claim_person', params: {'p_person': personId});

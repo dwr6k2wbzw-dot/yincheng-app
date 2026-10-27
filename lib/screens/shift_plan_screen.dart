@@ -482,6 +482,99 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
     if (saved == true) _load();
   }
 
+  String _pname(String id) => widget.people.where((p) => p.id == id).firstOrNull?.name ?? '（已移除）';
+  String _pairText(PairRule r) =>
+      r.isApart ? '${_pname(r.a)} 跟 ${_pname(r.b)} 不能同一天上班' : '${_pname(r.a)} 上班的日子，${_pname(r.b)} 也要上班';
+
+  Widget _pairRulesCard() => SectionCard(
+        padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('自訂規則', style: TextStyle(fontWeight: FontWeight.w700)),
+          Text('例如：誰跟誰不能同一天上班、新人要跟誰一起上。自動排班一定照著排；只有老闆、店長看得到。',
+              style: TextStyle(color: AppColors.muted, fontSize: 12)),
+          const SizedBox(height: 4),
+          if (_setup!.pairRules.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text('還沒有', style: TextStyle(color: AppColors.muted))),
+          for (final r in _setup!.pairRules)
+            Row(children: [
+              Icon(r.isApart ? Icons.do_not_disturb_alt : Icons.group_outlined, size: 18, color: r.isApart ? AppColors.warn : AppColors.good),
+              const SizedBox(width: 8),
+              Expanded(child: Text(_pairText(r))),
+              IconButton(
+                tooltip: '刪掉這條',
+                icon: const Icon(Icons.close),
+                onPressed: () async {
+                  try {
+                    await _repo.deleteShiftPairRule(r.id);
+                    _load();
+                  } catch (e) {
+                    if (mounted) showMessage(context, friendlyError(e), error: true);
+                  }
+                },
+              ),
+            ]),
+          TextButton.icon(onPressed: _addPairRule, icon: const Icon(Icons.add), label: const Text('新增規則')),
+        ]),
+      );
+
+  Future<void> _addPairRule() async {
+    final ps = widget.people.where((p) => p.active).toList();
+    if (ps.length < 2) return;
+    String? a, b;
+    var kind = 'apart';
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, set) => AlertDialog(
+          title: const Text('新增規則'),
+          content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'apart', label: Text('不能同一天')),
+                ButtonSegment(value: 'with', label: Text('要一起上')),
+              ],
+              selected: {kind},
+              onSelectionChanged: (v) => set(() => kind = v.first),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: a,
+              decoration: InputDecoration(labelText: kind == 'apart' ? '這個人' : '這個人上班的日子'),
+              items: [for (final p in ps) DropdownMenuItem(value: p.id, child: Text(p.name))],
+              onChanged: (v) => set(() {
+                a = v;
+                if (b == a) b = null;
+              }),
+            ),
+            DropdownButtonFormField<String>(
+              value: b,
+              decoration: InputDecoration(labelText: kind == 'apart' ? '跟這個人不能同一天上班' : '這個人也要上班'),
+              items: [for (final p in ps) if (p.id != a) DropdownMenuItem(value: p.id, child: Text(p.name))],
+              onChanged: (v) => set(() => b = v),
+            ),
+            const SizedBox(height: 8),
+            Text(kind == 'apart' ? '例：Perry 跟 Eason 不能同一天上班' : '例：新人上班的日子，老手也要上班（反過來不一定）',
+                style: TextStyle(color: AppColors.muted, fontSize: 12)),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
+            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('新增')),
+          ],
+        ),
+      ),
+    );
+    if (ok != true) return;
+    if (a == null || b == null || a == b) {
+      if (mounted) showMessage(context, '請選兩個不同的人', error: true);
+      return;
+    }
+    try {
+      await _repo.addShiftPairRule(_store, a!, b!, kind);
+      _load();
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e).contains('duplicate') || friendlyError(e).contains('重複') ? '這條規則已經有了' : friendlyError(e), error: true);
+    }
+  }
+
   String _ruleSummary(ShiftPerson p) {
     final r = _setup!.rules[p.id];
     if (r == null || r.isEmpty) return '沒設（照預設排）';
@@ -581,6 +674,8 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
                       ]),
                     ),
                   ),
+                  const SizedBox(height: 10),
+                  _pairRulesCard(),
                   const SizedBox(height: 10),
                   SectionCard(
                     padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
@@ -855,7 +950,15 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
         ? {for (final p in _people) p.id: Map<int, String>.from(_cur!.marks[p.id] ?? const {})}
         : <String, Map<int, String>>{};
     final res = planShifts(
-        year: _m.year, month: _m.month, people: people, needByDay: need, minFullByDay: minFull, fixed: fixed, requests: s.requests, seed: _seed);
+        year: _m.year,
+        month: _m.month,
+        people: people,
+        needByDay: need,
+        minFullByDay: minFull,
+        fixed: fixed,
+        requests: s.requests,
+        pairRules: s.pairRules,
+        seed: _seed);
     setState(() {
       _plan = res;
       _entries = {for (final e in res.entries.entries) e.key: Map<int, String>.from(e.value)};

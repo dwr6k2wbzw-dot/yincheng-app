@@ -68,6 +68,18 @@ class ShiftRule {
       (note == null || note!.isEmpty);
 }
 
+/// 自訂規則（老闆店長設）：apart＝兩個人不能同一天上班；with＝a 上班的日子 b 也要上班
+class PairRule {
+  final String id;
+  final String a;
+  final String b;
+  final String kind; // apart／with
+  const PairRule({this.id = '', required this.a, required this.b, required this.kind});
+  bool get isApart => kind == 'apart';
+  factory PairRule.fromRow(Map<String, dynamic> r) =>
+      PairRule(id: r['id'] as String, a: r['person_a'] as String, b: r['person_b'] as String, kind: r['kind'] as String);
+}
+
 /// 每天需要幾人（依星期）
 class StaffingNeed {
   final int need;
@@ -82,7 +94,9 @@ class ShiftPlanSetup {
   final int deadline; // 每月幾號前填好下個月
   final Map<String, ShiftRule> rules; // 人 → 條件（員工只讀得到自己的）
   final Map<String, Map<int, String>> requests; // 人 → 日 → off／on
+  final List<PairRule> pairRules; // 自訂規則（只有老闆店長讀得到）
   const ShiftPlanSetup({
+    this.pairRules = const [],
     this.staffing = const {},
     this.specialDays = const {},
     this.deadline = 20,
@@ -139,6 +153,7 @@ PlanResult planShifts({
   required Map<int, int> minFullByDay,
   Map<String, Map<int, String>> fixed = const {},
   Map<String, Map<int, String>> requests = const {},
+  List<PairRule> pairRules = const [],
   int seed = 0,
 }) {
   final rnd = Random(seed);
@@ -163,6 +178,15 @@ PlanResult planShifts({
     final r = requests[p.id]?[d];
     if (r == 'off') return false;
     if (!p.full && hasOn[p.id]! && r != 'on') return false;
+    // 自訂規則：不能同一天的人那天已經上班 → 不排；要跟誰一起上 → 那個人那天沒上就不排
+    for (final r in pairRules) {
+      if (r.isApart) {
+        final other = r.a == p.id ? r.b : (r.b == p.id ? r.a : null);
+        if (other != null && (work[other]?.contains(d) ?? false)) return false;
+      } else if (r.a == p.id && !(work[r.b]?.contains(d) ?? false)) {
+        return false;
+      }
+    }
     final w = work[p.id]!;
     var run = 1;
     for (var x = d - 1; w.contains(x); x--) {
@@ -218,24 +242,23 @@ PlanResult planShifts({
 
     final cands = [for (final p in people) if (can(p, d) && capOk(p) && paceOk(p)) (p, score(p, d))]
       ..sort((a, b) => b.$2.compareTo(a.$2));
-    final picked = <PlanPerson>[];
+    // 一個一個加（加了之後再檢查下一個，自訂規則才會生效）；跑兩次讓「要跟誰一起上」的人有機會排到
     for (final (p, _) in cands) {
       if (fulls >= minFull || cnt >= need) break;
-      if (p.full) {
-        picked.add(p);
+      if (p.full && !work[p.id]!.contains(d) && can(p, d)) {
+        work[p.id]!.add(d);
         fulls++;
         cnt++;
       }
     }
-    for (final (p, _) in cands) {
-      if (cnt >= need) break;
-      if (!picked.contains(p)) {
-        picked.add(p);
-        cnt++;
+    for (var pass = 0; pass < 2; pass++) {
+      for (final (p, _) in cands) {
+        if (cnt >= need) break;
+        if (!work[p.id]!.contains(d) && can(p, d)) {
+          work[p.id]!.add(d);
+          cnt++;
+        }
       }
-    }
-    for (final p in picked) {
-      work[p.id]!.add(d);
     }
   }
 
@@ -275,6 +298,8 @@ PlanResult planShifts({
           return sa != sb ? sb.compareTo(sa) : a.$2.compareTo(b.$2);
         });
       for (final (e, _) in es) {
+        // 有人規定要跟 p 一起上、那天也有上 → p 不能從那天挪走
+        if (pairRules.any((r) => !r.isApart && r.b == p.id && (work[r.a]?.contains(e) ?? false))) continue;
         w.remove(e);
         if (!can(p, d)) {
           w.add(e);
@@ -334,6 +359,23 @@ PlanResult planShifts({
     final fulls = people.where((p) => p.full && work[p.id]!.contains(d)).length;
     if (fulls < minFull && staffed[d]! >= need) {
       warnings.add('$month/$d 正職只有 $fulls 人（至少要 $minFull 人）');
+    }
+  }
+  final names = {for (final p in people) p.id: p.name};
+  for (final r in pairRules) {
+    final a = names[r.a], b = names[r.b];
+    if (a == null || b == null) continue;
+    final bad = [
+      for (var d = 1; d <= days; d++)
+        if (r.isApart
+            ? work[r.a]!.contains(d) && work[r.b]!.contains(d)
+            : work[r.a]!.contains(d) && !work[r.b]!.contains(d))
+          d
+    ];
+    if (bad.isNotEmpty) {
+      warnings.add(r.isApart
+          ? '$a 跟 $b 有 ${bad.length} 天同一天上班（$month/${bad.join('、')}，是原本排好的格子）'
+          : '$a 有 ${bad.length} 天沒跟 $b 一起上（$month/${bad.join('、')}）');
     }
   }
   for (final p in people) {

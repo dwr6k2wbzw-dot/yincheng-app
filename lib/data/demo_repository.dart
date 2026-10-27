@@ -136,7 +136,13 @@ class DemoRepository implements Repository {
   var _deadline = 20;
   @override
   Future<ShiftPlanSetup> shiftPlanSetup(String storeId, DateTime month) async => ShiftPlanSetup(
-      staffing: _staffing, specialDays: _staffDays, deadline: _deadline, rules: _shiftRules, requests: _shiftReq);
+      staffing: _staffing, specialDays: _staffDays, deadline: _deadline, rules: _shiftRules, requests: _shiftReq, pairRules: [..._pairRules]);
+  final _pairRules = <PairRule>[];
+  @override
+  Future<void> addShiftPairRule(String storeId, String a, String b, String kind) async =>
+      _pairRules.add(PairRule(id: '${DateTime.now().microsecondsSinceEpoch}', a: a, b: b, kind: kind));
+  @override
+  Future<void> deleteShiftPairRule(String id) async => _pairRules.removeWhere((r) => r.id == id);
   @override
   Future<void> claimShiftPerson(String personId) async {}
   @override

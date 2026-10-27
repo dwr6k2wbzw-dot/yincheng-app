@@ -67,6 +67,21 @@ void main() {
     check('$tag 每天至少 1 個正職', [for (var d = 1; d <= days; d++) d].every((d) => ['A', 'B', 'C', 'D', 'E'].any((n) => isWork(e[n]![d]))));
   }
 
+  // ---- 自訂規則：A、B 不能同一天；p1 上班時 C 也要上 ----
+  final rules = [const PairRule(a: 'A', b: 'B', kind: 'apart'), const PairRule(a: 'p1', b: 'C', kind: 'with')];
+  for (var seed = 0; seed < 20; seed++) {
+    final r = planShifts(
+        year: y, month: mo, people: people, needByDay: need, minFullByDay: minFull, requests: requests, pairRules: rules, seed: seed);
+    final e = r.entries;
+    final tag = '[規則 seed $seed]';
+    final both = [for (var d = 1; d <= days; d++) if (isWork(e['A']![d]) && isWork(e['B']![d])) d];
+    check('$tag A 跟 B 沒有同一天上班', both.isEmpty, '$both');
+    final alone = [for (var d = 1; d <= days; d++) if (isWork(e['p1']![d]) && !isWork(e['C']![d])) d];
+    check('$tag p1 上班那天 C 都有上', alone.isEmpty, '$alone');
+    final shortDays = [for (var d = 1; d <= days; d++) if (r.staffed[d]! < need[d]!) d];
+    check('$tag 人力都補足（24 號以外）', shortDays.every((d) => d == 24), '$shortDays');
+  }
+
   // ---- 小城外：班別輪流（B、BH），兼職時段 ----
   final xc = [
     PlanPerson(id: 'g', name: 'g', full: true, offTarget: 9, marks: const ['RBK', 'B']),
