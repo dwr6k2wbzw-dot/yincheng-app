@@ -73,7 +73,7 @@ class ShiftPlanCard extends StatelessWidget {
       child: SectionCard(
         padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
         child: Column(children: [
-          tile(Icons.event_busy_outlined, '填 ${next.month} 月想休／可以上的日子', '正職點想休、兼職點可以上，排班會照著排',
+          tile(Icons.event_busy_outlined, '填 ${next.month} 月指休／可以上的日子', '正職點指休、兼職點可以上，排班會照著排',
               () => go(ShiftRequestScreen(membership: membership, month: next))),
           if (manager) ...[
             Divider(height: 8, color: AppColors.cardHigh),
@@ -208,7 +208,7 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('${_month.month} 月想休／可以上')),
+      appBar: AppBar(title: Text('${_month.month} 月指休／可以上')),
       body: _loading && _sm == null
           ? const Center(child: CircularProgressIndicator())
           : _error != null
@@ -298,7 +298,7 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
             p == null
                 ? ''
                 : _planFull(p, _setup)
-                    ? '點一下＝想休，再點＝想上班，再點＝取消。目前想休 $offCount 天${onCount > 0 ? '、想上班 $onCount 天' : ''}。'
+                    ? '點一下＝指休，再點＝想上班，再點＝取消。目前指休 $offCount 天${onCount > 0 ? '、想上班 $onCount 天' : ''}。'
                     : '點一下＝可以上，再點＝不能上，再點＝取消。有填可以上，排班就只排那些天。目前可以上 $onCount 天${offCount > 0 ? '、不能上 $offCount 天' : ''}。',
             style: const TextStyle(fontSize: 13),
           ),
@@ -322,9 +322,9 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
       ),
       const SizedBox(height: 8),
       Wrap(spacing: 12, runSpacing: 4, children: [
-        _legend(const Color(0xFFE0A34A), '想休／不能上'),
+        _legend(const Color(0xFFE0A34A), '指休／不能上'),
         _legend(AppColors.good, '可以上／想上班'),
-        Text('右上小數字＝其他人想休', style: TextStyle(color: AppColors.muted, fontSize: 12)),
+        Text('右上小數字＝其他人指休', style: TextStyle(color: AppColors.muted, fontSize: 12)),
       ]),
     ]);
   }
@@ -354,7 +354,7 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
           Center(
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               Text('$d', style: TextStyle(fontWeight: FontWeight.w700, color: _open ? null : AppColors.muted)),
-              Text(kind == 'off' ? (_person == null || _planFull(_person!, _setup) ? '想休' : '不能上') : kind == 'on' ? (_person == null || _planFull(_person!, _setup) ? '想上' : '可以上') : (note ?? ''),
+              Text(kind == 'off' ? (_person == null || _planFull(_person!, _setup) ? '指休' : '不能上') : kind == 'on' ? (_person == null || _planFull(_person!, _setup) ? '想上' : '可以上') : (note ?? ''),
                   maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10)),
             ]),
           ),
@@ -1005,7 +1005,7 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
             Text('${p.name}・${DateFormat('M/d（E）', 'zh_TW').format(DateTime(_m.year, _m.month, d))}',
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
             if (_setup!.requests[p.id]?[d] != null)
-              Text(_setup!.requests[p.id]![d] == 'off' ? '這天${_planFull(p, _setup) ? '想休' : '不能上'}' : '這天${_planFull(p, _setup) ? '想上班' : '可以上'}',
+              Text(_setup!.requests[p.id]![d] == 'off' ? '這天${_planFull(p, _setup) ? '指休' : '不能上'}' : '這天${_planFull(p, _setup) ? '想上班' : '可以上'}',
                   style: TextStyle(color: AppColors.warn, fontSize: 13)),
             const SizedBox(height: 12),
             Wrap(spacing: 10, runSpacing: 10, children: [
@@ -1125,8 +1125,8 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
         ]);
     return ListView(padding: const EdgeInsets.fromLTRB(12, 8, 12, 32), children: [
       Text(
-          '照每天要幾人、每個人的條件、大家填的想休／可以上排出來的草稿，還沒寫進班表。'
-          '點格子可以改；小圓點＝有填（橘：想休／不能上，綠：可以上／想上班）。',
+          '照每天要幾人、每個人的條件、大家填的指休／可以上排出來的草稿，還沒寫進班表。'
+          '點格子可以改；小圓點＝有填（橘：指休／不能上，綠：可以上／想上班）。',
           style: TextStyle(color: AppColors.muted, fontSize: 12)),
       SwitchListTile(
         contentPadding: EdgeInsets.zero,

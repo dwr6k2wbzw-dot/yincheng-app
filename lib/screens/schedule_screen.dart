@@ -872,7 +872,7 @@ class _PeopleScreenState extends State<_PeopleScreen> {
             ),
           const SizedBox(height: 8),
           Text('人員不會被刪除（避免舊班表對不上）；不用了就關掉「顯示在班表」。'
-              '員工第一次填「想休」時會自己選班表上的名字，選錯了在這裡解除。',
+              '員工第一次填「指休」時會自己選班表上的名字，選錯了在這裡解除。',
               style: TextStyle(color: AppColors.muted, fontSize: 12)),
         ]),
       );

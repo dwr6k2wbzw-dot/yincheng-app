@@ -358,7 +358,7 @@ PlanResult planShifts({
     if (staffed[d]! < need) {
       final off = [for (final p in people) if (requests[p.id]?[d] == 'off') p.name];
       warnings.add('$month/$d（${'一二三四五六日'[wd(d) - 1]}）少 ${need - staffed[d]!} 人'
-          '${off.isEmpty ? '' : '（想休：${off.join('、')}）'}');
+          '${off.isEmpty ? '' : '（指休：${off.join('、')}）'}');
     }
     final minFull = minFullByDay[d] ?? 0;
     final fulls = people.where((p) => p.full && work[p.id]!.contains(d)).length;
