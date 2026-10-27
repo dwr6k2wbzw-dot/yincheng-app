@@ -68,20 +68,33 @@ class ShiftPlanCard extends StatelessWidget {
       onChanged();
     }
 
+    // 跟著目前看的月份（老闆 2026-10-27）：
+    //   * 這個月已經排好班（有人有格子）→ 整張卡片不顯示（填指休、自動排班、排班條件都不出現）
+    //   * 「填指休」只在下個月以後才有（員工只能填下個月以後）；「自動排班」不排已經過去的月份
+    final thisMonth = DateTime(now.year, now.month);
+    final scheduled = data.people.any((p) => p.active && (data.marks[p.id]?.isNotEmpty ?? false));
+    final showRequest = !scheduled && !viewMonth.isBefore(next);
+    final showAuto = manager && !scheduled && !viewMonth.isBefore(thisMonth);
+    final tiles = <Widget>[
+      if (showRequest)
+        tile(Icons.event_busy_outlined, '填 ${viewMonth.month} 月指休／可以上的日子', '正職點指休、兼職點可以上，排班會照著排',
+            () => go(ShiftRequestScreen(membership: membership, month: viewMonth))),
+      if (showAuto)
+        tile(Icons.auto_awesome_outlined, '自動排 ${viewMonth.month} 月班表', '先出草稿給你看，確認才套用',
+            () => go(ShiftAutoPlanScreen(membership: membership, month: viewMonth, markBg: markBg))),
+      if (manager && !scheduled)
+        tile(Icons.tune, '排班條件', '每天要幾人、每個人的條件、填寫截止日',
+            () => go(ShiftRulesScreen(membership: membership, month: viewMonth, people: data.people))),
+    ];
+    if (tiles.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: SectionCard(
         padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
         child: Column(children: [
-          tile(Icons.event_busy_outlined, '填 ${next.month} 月指休／可以上的日子', '正職點指休、兼職點可以上，排班會照著排',
-              () => go(ShiftRequestScreen(membership: membership, month: next))),
-          if (manager) ...[
-            Divider(height: 8, color: AppColors.cardHigh),
-            tile(Icons.auto_awesome_outlined, '自動排 ${viewMonth.month} 月班表', '先出草稿給你看，確認才套用',
-                () => go(ShiftAutoPlanScreen(membership: membership, month: viewMonth, markBg: markBg))),
-            Divider(height: 8, color: AppColors.cardHigh),
-            tile(Icons.tune, '排班條件', '每天要幾人、每個人的條件、填寫截止日',
-                () => go(ShiftRulesScreen(membership: membership, month: viewMonth, people: data.people))),
+          for (final (i, t) in tiles.indexed) ...[
+            if (i > 0) Divider(height: 8, color: AppColors.cardHigh),
+            t,
           ],
         ]),
       ),
