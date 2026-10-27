@@ -109,7 +109,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/out"
           if [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
-            echo "還沒設定 Claude 授權碼（GitHub Secret CLAUDE_CODE_OAUTH_TOKEN），請老闆依說明設定" > "$RUNNER_TEMP/out/error.txt"
+            echo "還沒設定後臺授權碼（GitHub Secret CLAUDE_CODE_OAUTH_TOKEN），請老闆依說明設定" > "$RUNNER_TEMP/out/error.txt"
             exit 0
           fi
           set +e
@@ -120,10 +120,10 @@ jobs:
           set -e
           jq -r '.result // empty' "$RUNNER_TEMP/out/claude.json" > "$RUNNER_TEMP/out/summary.txt" 2>/dev/null || true
           if [ $rc -ne 0 ] || [ "$(jq -r '.is_error // false' "$RUNNER_TEMP/out/claude.json" 2>/dev/null)" = "true" ]; then
-            if [ $rc -eq 124 ]; then msg="Claude 修改超過 30 分鐘，請把需求拆小一點再試"
-            elif grep -qiE "auth|token|401|credential" "$RUNNER_TEMP/out/claude.err" "$RUNNER_TEMP/out/claude.json" 2>/dev/null; then msg="Claude 授權碼無效或過期，請老闆重新產生並更新 CLAUDE_CODE_OAUTH_TOKEN"
-            elif grep -qiE "usage limit|rate limit|429" "$RUNNER_TEMP/out/claude.err" "$RUNNER_TEMP/out/claude.json" 2>/dev/null; then msg="Claude 訂閱用量暫時到上限，請晚一點按「再改一次」"
-            else msg="Claude 修改時發生錯誤（第 $rc 號），請按「再改一次」重試"; fi
+            if [ $rc -eq 124 ]; then msg="後臺修改超過 30 分鐘，請把需求拆小一點再試"
+            elif grep -qiE "auth|token|401|credential" "$RUNNER_TEMP/out/claude.err" "$RUNNER_TEMP/out/claude.json" 2>/dev/null; then msg="後臺授權碼無效或過期，請老闆重新產生並更新 CLAUDE_CODE_OAUTH_TOKEN"
+            elif grep -qiE "usage limit|rate limit|429" "$RUNNER_TEMP/out/claude.err" "$RUNNER_TEMP/out/claude.json" 2>/dev/null; then msg="後臺訂閱用量暫時到上限，請晚一點按「再改一次」"
+            else msg="後臺修改時發生錯誤（第 $rc 號），請按「再改一次」重試"; fi
             echo "$msg" > "$RUNNER_TEMP/out/error.txt"
             tail -c 1500 "$RUNNER_TEMP/out/claude.err" || true
           fi
@@ -169,7 +169,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/out"
           fail() { echo "$1" > "$RUNNER_TEMP/out/error.txt"; echo "::error title=未通過::$1"; exit 1; }
           [ -s "$RUNNER_TEMP/out/error.txt" ] && fail "$(cat "$RUNNER_TEMP/out/error.txt")"
-          [ -s "$RUNNER_TEMP/out/change.patch" ] || fail "Claude 沒有改到任何程式（可能需要資料庫修改，請看 Claude 的說明）"
+          [ -s "$RUNNER_TEMP/out/change.patch" ] || fail "後臺沒有改到任何程式（可能需要資料庫修改，請看後臺的說明）"
           git apply --index --binary "$RUNNER_TEMP/out/change.patch" || fail "修改套用失敗，請按「再改一次」重試"
           msg=$(python3 tool/change_request/check_patch.py) || fail "$msg"
           echo "$msg"
@@ -204,7 +204,7 @@ jobs:
           set -e
           if [ $rc -ne 0 ]; then
             grep -iE "error" build.txt | head -20
-            echo "預覽版建置失敗（程式有錯），請按「再改一次」讓 Claude 修正" > "$RUNNER_TEMP/out/error.txt"
+            echo "預覽版建置失敗（程式有錯），請按「再改一次」讓後臺修正" > "$RUNNER_TEMP/out/error.txt"
             exit 1
           fi
           v="${GITHUB_RUN_ID}"

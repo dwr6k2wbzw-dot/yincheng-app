@@ -845,7 +845,8 @@ class AppNotification {
         body: r['body'] as String?,
         refMonth: r['ref_month'] == null ? null : DateTime.parse(r['ref_month'] as String),
         actorId: r['actor_id'] as String?,
-        actorName: r['actor_name'] as String? ?? '',
+        // 功能許願的通知：Claude 一律顯示成「後臺」（老闆 2026-10-27）
+        actorName: (r['actor_name'] as String? ?? '').replaceAll('Claude', '後臺'),
         createdAt: DateTime.parse(r['created_at'] as String).toLocal(),
       );
 }

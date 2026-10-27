@@ -741,7 +741,7 @@ class DemoRepository implements Repository {
     _changeSet(id, (c) => c.copyWith(status: ChangeStatus.running, runCount: c.runCount + 1));
     Future.delayed(const Duration(seconds: 4), () {
       _changeSet(id, (c) => c.copyWith(status: ChangeStatus.ready, previewUrl: 'https://example.com/preview/', prNumber: 1));
-      _changeMsg(id, 'claude', 'Claude', '（示範）已照需求修改，請點「看預覽」確認。');
+      _changeMsg(id, 'claude', '後臺', '（示範）已照需求修改，請點「看預覽」確認。');
     });
   }
 
@@ -777,7 +777,7 @@ class DemoRepository implements Repository {
   @override
   Future<void> approveChangeRequest(String requestId) async {
     _changeSet(requestId, (c) => c.copyWith(status: ChangeStatus.merged));
-    _changeMsg(requestId, 'system', 'Claude', '已上線（示範）');
+    _changeMsg(requestId, 'system', '後臺', '已上線（示範）');
   }
   @override
   Future<void> returnChangeRequest(String requestId, String reason) async {
