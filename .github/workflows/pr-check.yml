@@ -27,6 +27,16 @@ jobs:
           cp tool/icons/apple-touch-icon.png web/icons/xcw-touch-180-v2.png && cp tool/icons/favicon.png web/icons/xcw-favicon-v2.png
           sed -i 's/"name": ".*"/"name": "小城外"/; s/"short_name": ".*"/"short_name": "小城外"/; s/"background_color": ".*"/"background_color": "#0F1115"/; s/"theme_color": ".*"/"theme_color": "#0F1115"/' web/manifest.json
       - run: flutter pub get
+      - name: 自動排班演算法檢查
+        run: |
+          set +e
+          dart run tool/shift_plan_check.dart > plan.txt 2>&1
+          rc=$?; cat plan.txt
+          if [ $rc -ne 0 ]; then
+            msg=$(grep -E "FAIL|rror" plan.txt | head -40 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=shift-plan::${msg}"
+          fi
+          exit $rc
       - name: 靜態檢查（只擋錯誤）
         run: |
           set +e

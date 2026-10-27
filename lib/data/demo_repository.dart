@@ -128,6 +128,52 @@ class DemoRepository implements Repository {
   @override
   Future<String> shiftPhotoUrl(String path) async => '';
 
+  // 自動排班（示範：只存在記憶體）
+  final _shiftReq = <String, Map<int, String>>{};
+  final _shiftRules = <String, ShiftRule>{};
+  var _staffing = <int, StaffingNeed>{for (var w = 1; w <= 7; w++) w: StaffingNeed(w >= 5 && w <= 6 ? 4 : 3, 1)};
+  final _staffDays = <int, int>{};
+  var _deadline = 20;
+  @override
+  Future<ShiftPlanSetup> shiftPlanSetup(String storeId, DateTime month) async => ShiftPlanSetup(
+      staffing: _staffing, specialDays: _staffDays, deadline: _deadline, rules: _shiftRules, requests: _shiftReq, pairRules: [..._pairRules]);
+  final _pairRules = <PairRule>[];
+  @override
+  Future<void> addShiftPairRule(String storeId, String a, String b, String kind) async =>
+      _pairRules.add(PairRule(id: '${DateTime.now().microsecondsSinceEpoch}', a: a, b: b, kind: kind));
+  @override
+  Future<void> deleteShiftPairRule(String id) async => _pairRules.removeWhere((r) => r.id == id);
+  @override
+  Future<void> claimShiftPerson(String personId) async {}
+  @override
+  Future<void> clearShiftPersonUser(String personId) async {}
+  @override
+  Future<void> setShiftRequest(String storeId, String personId, DateTime date, String? kind) async {
+    final m = _shiftReq.putIfAbsent(personId, () => {});
+    if (kind == null) {
+      m.remove(date.day);
+    } else {
+      m[date.day] = kind;
+    }
+  }
+  @override
+  Future<void> saveShiftRule(String storeId, ShiftRule r) async => _shiftRules[r.personId] = r;
+  @override
+  Future<void> saveShiftStaffing(String storeId, Map<int, StaffingNeed> staffing) async => _staffing = {...staffing};
+  @override
+  Future<void> setShiftStaffingDay(String storeId, DateTime day, int? need) async {
+    if (need == null) {
+      _staffDays.remove(day.day);
+    } else {
+      _staffDays[day.day] = need;
+    }
+  }
+  @override
+  Future<void> saveShiftDeadline(String storeId, int day) async => _deadline = day;
+  @override
+  Future<int> applyShiftPlan(String storeId, DateTime month, Map<String, Map<int, String>> plan) async =>
+      plan.values.fold<int>(0, (a, m) => a + m.length);
+
   // 交接・提醒（示範：只存在記憶體）
   final _notes = <HandoverNote>[];
   final _reminders = <WorkReminder>[];

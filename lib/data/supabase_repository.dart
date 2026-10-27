@@ -686,6 +686,108 @@ class SupabaseRepository implements Repository {
   }
 
   @override
+  Future<ShiftPlanSetup> shiftPlanSetup(String storeId, DateTime month) async {
+    final from = DateTime(month.year, month.month, 1);
+    final to = DateTime(month.year, month.month + 1, 1);
+    final r = await Future.wait<dynamic>([
+      _db.from('shift_staffing').select('weekday, need, min_full').eq('store_id', storeId),
+      _db.from('shift_staffing_days').select('day, need').eq('store_id', storeId).gte('day', _day.format(from)).lt('day', _day.format(to)),
+      _db.from('shift_settings').select('request_deadline').eq('store_id', storeId).maybeSingle(),
+      _db.from('shift_rules').select().eq('store_id', storeId),
+      _db.from('shift_pair_rules').select('id, person_a, person_b, kind').eq('store_id', storeId).order('created_at'),
+      _db
+          .from('shift_requests')
+          .select('person_id, req_date, kind')
+          .eq('store_id', storeId)
+          .gte('req_date', _day.format(from))
+          .lt('req_date', _day.format(to))
+          .limit(5000),
+    ]);
+    final requests = <String, Map<int, String>>{};
+    for (final e in r[5] as List) {
+      requests.putIfAbsent(e['person_id'] as String, () => {})[DateTime.parse(e['req_date'] as String).day] = e['kind'] as String;
+    }
+    return ShiftPlanSetup(
+      staffing: {
+        for (final x in r[0] as List)
+          (x['weekday'] as num).toInt(): StaffingNeed((x['need'] as num).toInt(), (x['min_full'] as num?)?.toInt() ?? 0)
+      },
+      specialDays: {for (final x in r[1] as List) DateTime.parse(x['day'] as String).day: (x['need'] as num).toInt()},
+      deadline: ((r[2] as Map?)?['request_deadline'] as num?)?.toInt() ?? 20,
+      rules: {for (final x in r[3] as List) x['person_id'] as String: ShiftRule.fromRow(x as Map<String, dynamic>)},
+      requests: requests,
+      pairRules: [for (final x in r[4] as List) PairRule.fromRow(x as Map<String, dynamic>)],
+    );
+  }
+
+  @override
+  Future<void> addShiftPairRule(String storeId, String a, String b, String kind) =>
+      _db.from('shift_pair_rules').insert({'store_id': storeId, 'person_a': a, 'person_b': b, 'kind': kind});
+
+  @override
+  Future<void> deleteShiftPairRule(String id) => _db.from('shift_pair_rules').delete().eq('id', id);
+
+  @override
+  Future<void> claimShiftPerson(String personId) => _db.rpc('shift_claim_person', params: {'p_person': personId});
+
+  @override
+  Future<void> clearShiftPersonUser(String personId) async {
+    final rows = await _db.from('shift_people').update({'user_id': null}).eq('id', personId).select('id');
+    if (rows.isEmpty) throw Exception('message: 沒有權限修改班表人員,');
+  }
+
+  @override
+  Future<void> setShiftRequest(String storeId, String personId, DateTime date, String? kind) async {
+    if (kind == null) {
+      final rows = await _db.from('shift_requests').delete().eq('person_id', personId).eq('req_date', _day.format(date)).select('person_id');
+      if (rows.isEmpty) throw Exception('message: 已經過了填寫截止日，請找老闆或店長改,');
+    } else {
+      await _db.from('shift_requests').upsert(
+          {'store_id': storeId, 'person_id': personId, 'req_date': _day.format(date), 'kind': kind},
+          onConflict: 'person_id,req_date');
+    }
+  }
+
+  @override
+  Future<void> saveShiftRule(String storeId, ShiftRule r) async {
+    if (r.isEmpty) {
+      await _db.from('shift_rules').delete().eq('person_id', r.personId);
+    } else {
+      await _db.from('shift_rules').upsert(r.toRow(storeId), onConflict: 'person_id');
+    }
+  }
+
+  @override
+  Future<void> saveShiftStaffing(String storeId, Map<int, StaffingNeed> staffing) => _db.from('shift_staffing').upsert([
+        for (final e in staffing.entries) {'store_id': storeId, 'weekday': e.key, 'need': e.value.need, 'min_full': e.value.minFull}
+      ], onConflict: 'store_id,weekday');
+
+  @override
+  Future<void> setShiftStaffingDay(String storeId, DateTime day, int? need) async {
+    if (need == null) {
+      await _db.from('shift_staffing_days').delete().eq('store_id', storeId).eq('day', _day.format(day));
+    } else {
+      await _db.from('shift_staffing_days').upsert({'store_id': storeId, 'day': _day.format(day), 'need': need}, onConflict: 'store_id,day');
+    }
+  }
+
+  @override
+  Future<void> saveShiftDeadline(String storeId, int day) =>
+      _db.from('shift_settings').upsert({'store_id': storeId, 'request_deadline': day}, onConflict: 'store_id');
+
+  @override
+  Future<int> applyShiftPlan(String storeId, DateTime month, Map<String, Map<int, String>> plan) async {
+    final n = await _db.rpc('apply_shift_plan', params: {
+      'p_store': storeId,
+      'p_month': _day.format(DateTime(month.year, month.month, 1)),
+      'p_plan': {
+        for (final e in plan.entries) e.key: {for (final d in e.value.entries) '${d.key}': d.value}
+      },
+    });
+    return (n as num?)?.toInt() ?? 0;
+  }
+
+  @override
   Future<String> shiftPhotoUrl(String path) => _db.storage.from('receipts').createSignedUrl(path, 3600);
 
   @override

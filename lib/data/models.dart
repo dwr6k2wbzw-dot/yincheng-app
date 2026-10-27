@@ -597,8 +597,16 @@ class ShiftPerson {
   final DateTime? hireDate;
   final bool active;
   final String? roleCode; // 班別（例 B／R）
+  final String? userId; // 對應的 App 帳號（0073：成員自己選「我是誰」）
   ShiftPerson(
-      {required this.id, required this.name, this.kind = 'full', this.sortOrder = 0, this.hireDate, this.active = true, this.roleCode});
+      {required this.id,
+      required this.name,
+      this.kind = 'full',
+      this.sortOrder = 0,
+      this.hireDate,
+      this.active = true,
+      this.roleCode,
+      this.userId});
   bool get isFull => kind == 'full';
   factory ShiftPerson.fromRow(Map<String, dynamic> r) => ShiftPerson(
         id: r['id'] as String,
@@ -608,6 +616,7 @@ class ShiftPerson {
         hireDate: _date(r['hire_date']),
         active: r['active'] as bool? ?? true,
         roleCode: r['role_code'] as String?,
+        userId: r['user_id'] as String?,
       );
 }
 

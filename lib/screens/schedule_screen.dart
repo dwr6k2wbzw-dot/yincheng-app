@@ -8,6 +8,7 @@ import '../data/repository.dart';
 import '../services/slip_scan.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'shift_plan_screen.dart';
 
 /// 班表（隱城、小城外）：一週一張表；最下面是每天人力。
 /// 隱城：記號 V／休／指休／O，正職看「本週休」、兼職看「本週上班」。
@@ -278,7 +279,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               ? ShiftStats(shouldOff: st.shouldOff, prevUnused: st.prevUnused, compUnused: a, specialTotal: b)
               : ShiftStats(shouldOff: a, prevUnused: b, compUnused: st.compUnused, specialTotal: st.specialTotal));
       if (hire != p.hireDate) {
-        await _repo.saveShiftPerson(_store, ShiftPerson(id: p.id, name: p.name, kind: p.kind, sortOrder: p.sortOrder, hireDate: hire, active: p.active, roleCode: p.roleCode));
+        await _repo.saveShiftPerson(_store, ShiftPerson(id: p.id, name: p.name, kind: p.kind, sortOrder: p.sortOrder, hireDate: hire, active: p.active, roleCode: p.roleCode, userId: p.userId));
       }
       _reload();
     } catch (e) {
@@ -430,6 +431,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               ]),
               _todayCard(d),
               _draftCard(d),
+              if (d.people.any((p) => p.active))
+                ShiftPlanCard(membership: widget.membership, data: d, viewMonth: _month, markBg: _markBg, onChanged: _reload),
               const SizedBox(height: 8),
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
@@ -804,6 +807,24 @@ class _PeopleScreenState extends State<_PeopleScreen> {
                 value: active,
                 onChanged: (v) => set(() => active = v),
               ),
+            if (p != null && p.userId != null)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  icon: const Icon(Icons.link_off, size: 18),
+                  label: const Text('解除對應的 App 帳號（選錯人時用）'),
+                  onPressed: () async {
+                    try {
+                      await AppScope.of(context).repo.clearShiftPersonUser(p.id);
+                      if (c.mounted) Navigator.pop(c, false);
+                      final d = await AppScope.of(context).repo.shiftMonth(widget.storeId, DateTime.now());
+                      if (mounted) setState(() => _people = d.people);
+                    } catch (e) {
+                      if (mounted) showMessage(context, friendlyError(e), error: true);
+                    }
+                  },
+                ),
+              ),
           ]),
           actions: [
             TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
@@ -821,7 +842,8 @@ class _PeopleScreenState extends State<_PeopleScreen> {
         sortOrder: int.tryParse(order.text) ?? 0,
         hireDate: p?.hireDate,
         active: active,
-        roleCode: role.text.trim().isEmpty ? null : role.text.trim());
+        roleCode: role.text.trim().isEmpty ? null : role.text.trim(),
+        userId: p?.userId);
     try {
       await repo.saveShiftPerson(widget.storeId, np, isNew: p == null);
       final d = await repo.shiftMonth(widget.storeId, DateTime.now());
@@ -843,13 +865,14 @@ class _PeopleScreenState extends State<_PeopleScreen> {
           for (final p in _people)
             ListTile(
               title: Text(p.name, style: TextStyle(color: p.active ? null : AppColors.muted)),
-              subtitle: Text('${p.isFull ? '正職' : '兼職'}${p.roleCode == null ? '' : '・${p.roleCode}'}・排序 ${p.sortOrder}${p.active ? '' : '・已隱藏'}',
+              subtitle: Text('${p.isFull ? '正職' : '兼職'}${p.roleCode == null ? '' : '・${p.roleCode}'}・排序 ${p.sortOrder}${p.active ? '' : '・已隱藏'}${p.userId == null ? '・還沒對應 App 帳號' : '・已對應 App 帳號'}',
                   style: const TextStyle(fontSize: 12)),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => _edit(p),
             ),
           const SizedBox(height: 8),
-          Text('人員不會被刪除（避免舊班表對不上）；不用了就關掉「顯示在班表」。',
+          Text('人員不會被刪除（避免舊班表對不上）；不用了就關掉「顯示在班表」。'
+              '員工第一次填「想休」時會自己選班表上的名字，選錯了在這裡解除。',
               style: TextStyle(color: AppColors.muted, fontSize: 12)),
         ]),
       );
