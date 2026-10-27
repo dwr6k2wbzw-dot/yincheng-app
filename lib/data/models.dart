@@ -620,6 +620,81 @@ class ShiftStats {
   const ShiftStats({this.shouldOff, this.prevUnused, this.compUnused, this.specialTotal});
 }
 
+/// 一張原始班表照片
+class ShiftPhoto {
+  final String id;
+  final String path;
+  final DateTime? uploadedAt;
+  const ShiftPhoto(this.id, this.path, this.uploadedAt);
+}
+
+/// 照片辨識草稿（0070）：pending 辨識中、ready 待確認、failed 失敗
+class ShiftDraft {
+  final String id;
+  final String status;
+  final DateTime createdAt;
+  final String? processedAtRaw; // 原字串，套用時原樣送回（資料庫比對用）
+  final String? message;
+  final int? photoCount;
+  final List<ShiftDraftPerson> people;
+  final Map<String, Map<int, String>> entries; // 人名 → 日 → 記號
+  final Map<int, String> notes;
+  final List<String> warnings;
+  ShiftDraft({
+    required this.id,
+    required this.status,
+    required this.createdAt,
+    this.processedAtRaw,
+    this.message,
+    this.photoCount,
+    this.people = const [],
+    this.entries = const {},
+    this.notes = const {},
+    this.warnings = const [],
+  });
+  bool get isPending => status == 'pending';
+  bool get isReady => status == 'ready';
+  bool get isFailed => status == 'failed';
+  int get cellCount => entries.values.fold(0, (a, e) => a + e.length);
+
+  factory ShiftDraft.fromRow(Map<String, dynamic> r) {
+    final d = (r['draft'] as Map?)?.cast<String, dynamic>() ?? const {};
+    Map<int, String> days(dynamic m) => {
+          for (final e in ((m as Map?) ?? const {}).entries)
+            if (int.tryParse('${e.key}') != null) int.parse('${e.key}'): '${e.value}'
+        };
+    final people = [
+      for (final p in (d['people'] as List?) ?? const [])
+        if (p is Map && (p['name'] ?? '').toString().trim().isNotEmpty)
+          ShiftDraftPerson(p['name'].toString().trim(), p['kind'] == 'part' ? 'part' : 'full')
+    ];
+    final entries = {
+      for (final e in ((d['entries'] as Map?) ?? const {}).entries) e.key.toString().trim(): days(e.value)
+    };
+    for (final n in entries.keys) {
+      if (!people.any((p) => p.name == n)) people.add(ShiftDraftPerson(n, 'full'));
+    }
+    return ShiftDraft(
+      id: r['id'] as String,
+      status: r['status'] as String,
+      createdAt: DateTime.parse(r['created_at'] as String).toLocal(),
+      processedAtRaw: r['processed_at'] as String?,
+      message: r['message'] as String?,
+      photoCount: (r['photo_count'] as num?)?.toInt(),
+      people: people,
+      entries: entries,
+      notes: days(d['notes']),
+      warnings: [for (final w in (d['warnings'] as List?) ?? const []) '$w'],
+    );
+  }
+}
+
+class ShiftDraftPerson {
+  final String name;
+  final String kind;
+  const ShiftDraftPerson(this.name, this.kind);
+}
+
 /// 一個月的班表
 class ShiftMonth {
   final DateTime month;
@@ -627,8 +702,9 @@ class ShiftMonth {
   final Map<String, Map<int, String>> marks; // 人 → 日 → 記號（V／休／指休／O）
   final Map<int, String> notes; // 日 → 備註
   final Map<String, ShiftStats> stats; // 人 → 手動填的數字
-  final String? photoPath;
-  ShiftMonth(this.month, this.people, this.marks, this.notes, this.stats, this.photoPath);
+  final List<ShiftPhoto> photos; // 原始班表照片（0070 起一個月可以多張，依上傳順序）
+  final ShiftDraft? draft; // 照片辨識草稿（只有老闆／店長讀得到；沒有或已處理是 null）
+  ShiftMonth(this.month, this.people, this.marks, this.notes, this.stats, this.photos, [this.draft]);
 
   int get days => DateTime(month.year, month.month + 1, 0).day;
   String? mark(String personId, int day) => marks[personId]?[day];

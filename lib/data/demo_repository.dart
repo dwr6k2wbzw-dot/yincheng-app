@@ -107,7 +107,7 @@ class DemoRepository implements Repository {
         {'p1': {1: 'V', 2: '休', 3: '指休'}, 'p2': {1: 'V', 3: 'O'}},
         {3: '月會日'},
         {'p1': const ShiftStats(shouldOff: 8, prevUnused: 3)},
-        null,
+        const [],
       );
   @override
   Future<void> setShift(String storeId, String personId, DateTime date, String? mark) async {}
@@ -119,6 +119,12 @@ class DemoRepository implements Repository {
   Future<void> saveShiftStats(String storeId, String personId, DateTime month, ShiftStats s) async {}
   @override
   Future<void> uploadShiftPhoto(String storeId, DateTime month, Uint8List jpeg) async {}
+  @override
+  Future<void> deleteShiftPhoto(String photoId) async {}
+  @override
+  Future<int> applyShiftDraft(ShiftDraft d) async => 0;
+  @override
+  Future<void> dismissShiftDraft(String draftId) async {}
   @override
   Future<String> shiftPhotoUrl(String path) async => '';
 

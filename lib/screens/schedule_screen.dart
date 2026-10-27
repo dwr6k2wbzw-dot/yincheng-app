@@ -301,7 +301,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     if (photo == null) return;
     try {
       await _repo.uploadShiftPhoto(_store, _month, dataUrlBytes(photo));
-      if (mounted) showMessage(context, '已上傳 ${_month.month} 月班表照片');
+      if (mounted) showMessage(context, '已新增 ${_month.month} 月班表照片，會自動辨識成草稿（1 小時內）');
       _reload();
     } catch (e) {
       if (mounted) showMessage(context, friendlyError(e), error: true);
@@ -309,6 +309,100 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   Future<void> _showPhoto(String path) => showStoragePhoto(context, path);
+
+  Future<void> _deletePhoto(ShiftPhoto ph, int no) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text('刪掉照片 $no？'),
+        content: const Text('只刪這張照片，已經排好的班不會變。剩下的照片會重新辨識一次。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('刪除')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await _repo.deleteShiftPhoto(ph.id);
+      _reload();
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+    }
+  }
+
+  Future<void> _openDraft(ShiftMonth d, ShiftDraft dr) async {
+    final applied = await Navigator.of(context).push<bool>(MaterialPageRoute(
+        builder: (_) => _DraftScreen(month: _month, current: d, draft: dr, repo: _repo, markBg: _markBg)));
+    if (applied == true && mounted) showMessage(context, '已套用照片上的 ${_month.month} 月班表');
+    _reload();
+  }
+
+  /// 照片辨識草稿卡片（只有老闆／店長看得到）
+  Widget _draftCard(ShiftMonth d) {
+    final dr = d.draft;
+    if (dr == null || !_canEdit) return const SizedBox.shrink();
+    final (IconData icon, Color color, String title, String sub) = dr.isReady
+        ? (
+            Icons.auto_awesome_outlined,
+            AppColors.primary,
+            '照片辨識好了，請確認',
+            '讀到 ${dr.cellCount} 格${dr.warnings.isEmpty ? '' : '，${dr.warnings.length} 處要看'}・點這裡看草稿再決定要不要套用'
+          )
+        : dr.isFailed
+            ? (Icons.error_outline, AppColors.warn, '照片辨識失敗', '${dr.message ?? ''}　可以刪掉照片重傳，或直接點格子排班')
+            : (
+                Icons.hourglass_top_outlined,
+                AppColors.muted,
+                '照片辨識中…',
+                dr.message ?? '每小時處理一次，通常 1 小時內好，好了小鈴鐺會通知'
+              );
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: SectionCard(
+        child: InkWell(
+          onTap: dr.isReady ? () => _openDraft(d, dr) : null,
+          child: Row(children: [
+            Icon(icon, color: color),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(title, style: TextStyle(fontWeight: FontWeight.w600, color: color)),
+                const SizedBox(height: 2),
+                Text(sub, style: TextStyle(color: AppColors.muted, fontSize: 12)),
+              ]),
+            ),
+            if (dr.isReady) const Icon(Icons.chevron_right),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _photoRow(ShiftMonth d) {
+    if (d.photos.isEmpty && !_canEdit) return const SizedBox.shrink();
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(d.photos.isEmpty ? '原始班表照片' : '原始班表照片（${d.photos.length} 張）',
+          style: TextStyle(color: AppColors.muted, fontSize: 12)),
+      const SizedBox(height: 6),
+      Wrap(spacing: 8, runSpacing: 8, children: [
+        for (final (i, ph) in d.photos.indexed)
+          InputChip(
+            avatar: const Icon(Icons.image_outlined, size: 18),
+            label: Text('照片 ${i + 1}'),
+            onPressed: () => _showPhoto(ph.path),
+            onDeleted: _canEdit ? () => _deletePhoto(ph, i + 1) : null,
+            deleteButtonTooltipMessage: '刪掉這張',
+          ),
+        if (_canEdit && d.photos.length < 10)
+          OutlinedButton.icon(
+            onPressed: _uploadPhoto,
+            icon: const Icon(Icons.add_photo_alternate_outlined),
+            label: Text(d.photos.isEmpty ? '從相簿上傳班表照片' : '再加一張'),
+          ),
+      ]),
+    ]);
+  }
 
   // ---------------- 畫面 ----------------
   @override
@@ -334,6 +428,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 IconButton(onPressed: () => _shiftMonth(1), icon: const Icon(Icons.chevron_right)),
               ]),
               _todayCard(d),
+              _draftCard(d),
               const SizedBox(height: 8),
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
@@ -375,26 +470,18 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               else if (full.isNotEmpty)
                 _monthSummary(d, full),
               const SizedBox(height: 12),
-              Wrap(spacing: 8, runSpacing: 8, children: [
-                if (d.photoPath != null)
-                  OutlinedButton.icon(
-                    onPressed: () => _showPhoto(d.photoPath!),
-                    icon: const Icon(Icons.image_outlined),
-                    label: const Text('原始班表照片'),
-                  ),
-                if (_canEdit) ...[
-                  OutlinedButton.icon(
-                    onPressed: _uploadPhoto,
-                    icon: const Icon(Icons.photo_library_outlined),
-                    label: Text(d.photoPath == null ? '從相簿上傳班表照片' : '從相簿更換班表照片'),
-                  ),
-                  OutlinedButton.icon(
+              _photoRow(d),
+              if (_canEdit) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
                     onPressed: () => _managePeople(d),
                     icon: const Icon(Icons.people_outline),
                     label: const Text('班表人員'),
                   ),
-                ],
-              ]),
+                ),
+              ],
               if (_canEdit)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
@@ -763,4 +850,213 @@ class _PeopleScreenState extends State<_PeopleScreen> {
               style: TextStyle(color: AppColors.muted, fontSize: 12)),
         ]),
       );
+}
+
+/// 照片辨識草稿：整月預覽（跟目前班表不同的格子框起來）→ 套用或捨棄（0070）
+class _DraftScreen extends StatefulWidget {
+  const _DraftScreen(
+      {required this.month, required this.current, required this.draft, required this.repo, required this.markBg});
+  final DateTime month;
+  final ShiftMonth current;
+  final ShiftDraft draft;
+  final Repository repo;
+  final Color? Function(String?) markBg;
+  @override
+  State<_DraftScreen> createState() => _DraftScreenState();
+}
+
+class _DraftScreenState extends State<_DraftScreen> {
+  bool _busy = false;
+
+  ShiftDraft get _d => widget.draft;
+  int get _days => DateTime(widget.month.year, widget.month.month + 1, 0).day;
+
+  String? _now(String name, int day) {
+    final p = widget.current.people.where((x) => x.name == name).firstOrNull;
+    return p == null ? null : widget.current.mark(p.id, day);
+  }
+
+  /// 跟目前班表不同的格子數（含目前有、照片上沒有的）
+  int get _changed {
+    var n = 0;
+    final names = {..._d.entries.keys, ...widget.current.people.map((p) => p.name)};
+    for (final name in names) {
+      for (var day = 1; day <= _days; day++) {
+        if ((_d.entries[name]?[day]) != _now(name, day)) n++;
+      }
+    }
+    return n;
+  }
+
+  List<String> get _newPeople =>
+      [for (final p in _d.people) if (!widget.current.people.any((x) => x.name == p.name)) p.name];
+
+  /// 目前有排班、但照片上沒有的人（套用後這個月會變空白）
+  List<String> get _dropped => [
+        for (final p in widget.current.people)
+          if ((widget.current.marks[p.id] ?? const {}).isNotEmpty && !_d.entries.containsKey(p.name)) p.name
+      ];
+
+  Future<void> _apply() async {
+    final hasData = widget.current.marks.values.any((m) => m.isNotEmpty);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text('套用到 ${widget.month.month} 月班表？'),
+        content: Text([
+          if (hasData) '${widget.month.month} 月目前的班會整個換成照片上的內容（$_changed 格不同）。'
+          else '會把照片上的 ${_d.cellCount} 格排進 ${widget.month.month} 月班表。',
+          if (_newPeople.isNotEmpty) '會新增班表人員：${_newPeople.join('、')}。',
+          if (_dropped.isNotEmpty) '${_dropped.join('、')} 不在照片上，這個月的班會清空。',
+          '套用後還是可以點格子修改。',
+        ].join('\n\n')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('套用')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    setState(() => _busy = true);
+    try {
+      await widget.repo.applyShiftDraft(_d);
+      if (mounted) Navigator.pop(context, true);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _busy = false);
+        showMessage(context, friendlyError(e), error: true);
+      }
+    }
+  }
+
+  Future<void> _dismiss() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('捨棄這份草稿？'),
+        content: const Text('班表不會變動，照片會留著。之後再加照片或刪照片，會重新辨識一次。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('捨棄')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    setState(() => _busy = true);
+    try {
+      await widget.repo.dismissShiftDraft(_d.id);
+      if (mounted) Navigator.pop(context, false);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _busy = false);
+        showMessage(context, friendlyError(e), error: true);
+      }
+    }
+  }
+
+  Widget _cell(String? text, {Color? bg, bool changed = false, bool header = false, double w = 44}) => Container(
+        width: w,
+        height: header ? 36 : 34,
+        margin: const EdgeInsets.all(1),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(4),
+          border: changed ? Border.all(color: AppColors.primary, width: 2) : null,
+        ),
+        child: Text(text ?? '',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: header ? 11 : (text != null && text.length > 4 ? 9 : 12), height: 1.1)),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final wd = DateFormat('E', 'zh_TW');
+    final full = _d.people.where((p) => p.kind == 'full').toList();
+    final part = _d.people.where((p) => p.kind != 'full').toList();
+    Widget row(ShiftDraftPerson p) => Row(children: [
+          _cell(p.name, w: 64),
+          for (var day = 1; day <= _days; day++)
+            _cell(
+              (_d.entries[p.name]?[day])?.replaceFirst('-', '\n'),
+              bg: widget.markBg(_d.entries[p.name]?[day]),
+              changed: (_d.entries[p.name]?[day]) != _now(p.name, day),
+            ),
+        ]);
+    return Scaffold(
+      appBar: AppBar(title: Text('${widget.month.month} 月班表草稿')),
+      body: ListView(padding: const EdgeInsets.fromLTRB(12, 8, 12, 32), children: [
+        Text(
+            '依 ${_d.photoCount ?? widget.current.photos.length} 張照片讀出 ${_d.cellCount} 格。'
+            '${widget.current.marks.values.any((m) => m.isNotEmpty) ? '框起來的是跟目前班表不同的格子（$_changed 格）。' : ''}'
+            '文字辨識可能讀錯，請對照照片看過再套用。',
+            style: TextStyle(color: AppColors.muted, fontSize: 12)),
+        if (_d.warnings.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          SectionCard(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('要特別看的地方', style: TextStyle(color: AppColors.warn, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 6),
+              for (final w in _d.warnings)
+                Padding(padding: const EdgeInsets.only(bottom: 4), child: Text('・$w', style: const TextStyle(fontSize: 13))),
+            ]),
+          ),
+        ],
+        if (_newPeople.isNotEmpty || _dropped.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          if (_newPeople.isNotEmpty) Text('新的人（套用時自動加進班表人員）：${_newPeople.join('、')}', style: const TextStyle(fontSize: 13)),
+          if (_dropped.isNotEmpty)
+            Text('照片上沒有、這個月會清空：${_dropped.join('、')}', style: TextStyle(fontSize: 13, color: AppColors.warn)),
+        ],
+        const SizedBox(height: 12),
+        SectionCard(
+          padding: const EdgeInsets.all(6),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                _cell('', w: 64, header: true),
+                for (var day = 1; day <= _days; day++)
+                  _cell('$day\n${wd.format(DateTime(widget.month.year, widget.month.month, day))}', header: true),
+              ]),
+              if (_d.notes.isNotEmpty)
+                Row(children: [
+                  _cell('備註', w: 64),
+                  for (var day = 1; day <= _days; day++)
+                    _cell(_d.notes[day], bg: _d.notes[day] == null ? null : AppColors.primary.withValues(alpha: 0.15)),
+                ]),
+              for (final p in full) row(p),
+              if (part.isNotEmpty) const SizedBox(height: 6),
+              for (final p in part) row(p),
+            ]),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          for (final (i, ph) in widget.current.photos.indexed)
+            ActionChip(
+              avatar: const Icon(Icons.image_outlined, size: 18),
+              label: Text('看照片 ${i + 1}'),
+              onPressed: () => showStoragePhoto(context, ph.path),
+            ),
+        ]),
+        const SizedBox(height: 20),
+        Row(children: [
+          Expanded(
+            child: OutlinedButton(onPressed: _busy ? null : _dismiss, child: const Text('捨棄')),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 2,
+            child: FilledButton(
+              onPressed: _busy ? null : _apply,
+              child: _busy
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                  : Text('套用到 ${widget.month.month} 月班表'),
+            ),
+          ),
+        ]),
+      ]),
+    );
+  }
 }
