@@ -3,10 +3,19 @@
 --fresh：之前的修改接不上最新版 App，這次要從最新版重新做一次。
 """
 import json
+import os
 import pathlib
 import sys
 
 KIND = {"request": "需求", "followup": "再改一次", "claude": "Claude 的回覆", "system": "系統"}
+
+
+def photo_files(pid: str) -> list[str]:
+    """需求附的照片（0071）：prepare 工作存成 <代號>.jpg／.png，放在 PHOTO_DIR"""
+    d = os.environ.get("PHOTO_DIR", "")
+    if not d:
+        return []
+    return [os.path.join(d, f"{pid}.{ext}") for ext in ("jpg", "png") if os.path.exists(os.path.join(d, f"{pid}.{ext}"))]
 
 
 def main() -> None:
@@ -19,6 +28,9 @@ def main() -> None:
         head = f"### {KIND.get(m.get('kind'), m.get('kind'))}" + (f"（{who}，{m.get('at', '')}）" if who else "")
         lines.append(head)
         lines.append(str(m.get("body", "")).strip())
+        shots = [f for pid in (m.get("photos") or []) for f in photo_files(pid)]
+        if shots:
+            lines.append("（附照片，請用 Read 打開看：" + "、".join(shots) + "）")
         lines.append("")
     history = "\n".join(lines).strip()
     if req.get("run_count", 1) > 1 and not fresh:

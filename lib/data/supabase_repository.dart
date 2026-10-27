@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:intl/intl.dart';
@@ -1247,7 +1248,27 @@ class SupabaseRepository implements Repository {
         .select('id, kind, author_name, body, created_at')
         .eq('request_id', requestId)
         .order('id');
-    return _rows(rows).map(ChangeMessage.fromRow).toList();
+    // 附的照片（0071）；資料庫還沒更新時就當沒有照片
+    final photos = <int, List<String>>{};
+    try {
+      final ps = await _db
+          .from('change_request_photos')
+          .select('id, message_id')
+          .eq('request_id', requestId)
+          .order('created_at');
+      for (final p in _rows(ps)) {
+        (photos[(p['message_id'] as num).toInt()] ??= []).add(p['id'] as String);
+      }
+    } catch (_) {}
+    return _rows(rows)
+        .map((r) => ChangeMessage.fromRow(r, photoIds: photos[(r['id'] as num).toInt()] ?? const []))
+        .toList();
+  }
+
+  @override
+  Future<Uint8List> changePhoto(String photoId) async {
+    final b64 = await _db.rpc('cr_photo', params: {'p_photo': photoId}) as String;
+    return base64Decode(b64);
   }
 
   @override
@@ -1258,12 +1279,23 @@ class SupabaseRepository implements Repository {
   }
 
   @override
-  Future<String> createChangeRequest(String storeId, String body) async =>
-      await _db.rpc('cr_create', params: {'p_store': storeId, 'p_body': body}) as String;
+  Future<String> createChangeRequest(String storeId, String body, {List<String> photos = const []}) async =>
+      await _db.rpc('cr_create', params: {
+        'p_store': storeId,
+        'p_body': body,
+        if (photos.isNotEmpty) 'p_photos': [for (final p in photos) _b64(p)],
+      }) as String;
+
+  /// data URL → 純 base64
+  static String _b64(String dataUrl) => dataUrl.contains(',') ? dataUrl.substring(dataUrl.indexOf(',') + 1) : dataUrl;
 
   @override
-  Future<void> followupChangeRequest(String requestId, String body) =>
-      _db.rpc('cr_followup', params: {'p_id': requestId, 'p_body': body});
+  Future<void> followupChangeRequest(String requestId, String body, {List<String> photos = const []}) =>
+      _db.rpc('cr_followup', params: {
+        'p_id': requestId,
+        'p_body': body,
+        if (photos.isNotEmpty) 'p_photos': [for (final p in photos) _b64(p)],
+      });
 
   @override
   Future<void> submitChangeRequest(String requestId) => _db.rpc('cr_submit', params: {'p_id': requestId});

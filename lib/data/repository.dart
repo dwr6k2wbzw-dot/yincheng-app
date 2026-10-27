@@ -145,9 +145,12 @@ abstract class Repository {
   Future<List<ChangeRequest>> changeRequests(String storeId);
   Future<List<ChangeMessage>> changeMessages(String requestId);
   Future<ChangeQuota> changeQuota(String storeId);
-  Future<String> createChangeRequest(String storeId, String body);
+  /// photos：附的照片（JPEG data URL，最多 5 張；0071）
+  Future<String> createChangeRequest(String storeId, String body, {List<String> photos = const []});
   /// 再改一次（看了預覽想調整、失敗重試、老闆退回後再改）
-  Future<void> followupChangeRequest(String requestId, String body);
+  Future<void> followupChangeRequest(String requestId, String body, {List<String> photos = const []});
+  /// 附的照片（只有老闆／店長看得到）
+  Future<Uint8List> changePhoto(String photoId);
   Future<void> submitChangeRequest(String requestId); // 店長送審
   Future<void> approveChangeRequest(String requestId); // 老闆核准上線
   Future<void> returnChangeRequest(String requestId, String reason); // 老闆退回
