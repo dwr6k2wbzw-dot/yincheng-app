@@ -24,8 +24,10 @@ class ShiftRule {
   final Set<int> noWeekdays; // 固定不排（1＝週一…7＝週日）
   final List<String> marks; // 上班時排的記號／班別／時段（第一個優先）
   final String? note;
+  final bool planAsPart; // 0074：班表上是正職，但排班時跟兼職一樣（不照應休、沒上班留空白）
   const ShiftRule({
     required this.personId,
+    this.planAsPart = false,
     this.monthOff,
     this.minShifts,
     this.maxShifts,
@@ -44,6 +46,7 @@ class ShiftRule {
         noWeekdays: {for (final x in (r['no_weekdays'] as List?) ?? const []) if (_int(x) != null) _int(x)!},
         marks: [for (final x in (r['marks'] as List?) ?? const []) '$x'],
         note: r['note'] as String?,
+        planAsPart: r['plan_as_part'] == true,
       );
 
   Map<String, dynamic> toRow(String storeId) => {
@@ -56,6 +59,7 @@ class ShiftRule {
         'no_weekdays': (noWeekdays.toList()..sort()),
         'marks': marks,
         'note': (note == null || note!.trim().isEmpty) ? null : note!.trim(),
+        'plan_as_part': planAsPart,
       };
 
   bool get isEmpty =>
@@ -65,6 +69,7 @@ class ShiftRule {
       maxConsecutive == null &&
       noWeekdays.isEmpty &&
       marks.isEmpty &&
+      !planAsPart &&
       (note == null || note!.isEmpty);
 }
 

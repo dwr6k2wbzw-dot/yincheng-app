@@ -22,6 +22,9 @@ final _md = DateFormat('M/d', 'zh_TW');
 List<String> _storeMarks(String storeName) => AppConfig.shiftMarks[storeName] ?? const ['V', '休', '指休', 'O'];
 bool _isWork(String? m) => ShiftMonth.isOn(m);
 
+/// 排班時算正職嗎（排班條件設「排班時當兼職」的正職，排班時跟兼職一樣；0074）
+bool _planFull(ShiftPerson p, ShiftPlanSetup? s) => p.isFull && !(s?.rules[p.id]?.planAsPart ?? false);
+
 /// 這家店沒設排班條件時，上班用的記號
 List<String> _defaultMarks(String storeName, bool full) => storeName == '小城外'
     ? (full ? const ['B', 'BH'] : const ['18:00-00:30'])
@@ -184,7 +187,7 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
     }
     final cur = _setup!.requests[p.id]?[day];
     // 正職：想休 → 想上班 → 取消；兼職：可以上 → 不能上 → 取消
-    final order = p.isFull ? [null, 'off', 'on'] : [null, 'on', 'off'];
+    final order = _planFull(p, _setup) ? [null, 'off', 'on'] : [null, 'on', 'off'];
     final next = order[(order.indexOf(cur) + 1) % order.length];
     setState(() {
       final m = _setup!.requests.putIfAbsent(p.id, () => {});
@@ -294,7 +297,7 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
           Text(
             p == null
                 ? ''
-                : p.isFull
+                : _planFull(p, _setup)
                     ? '點一下＝想休，再點＝想上班，再點＝取消。目前想休 $offCount 天${onCount > 0 ? '、想上班 $onCount 天' : ''}。'
                     : '點一下＝可以上，再點＝不能上，再點＝取消。有填可以上，排班就只排那些天。目前可以上 $onCount 天${offCount > 0 ? '、不能上 $offCount 天' : ''}。',
             style: const TextStyle(fontSize: 13),
@@ -351,7 +354,7 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
           Center(
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               Text('$d', style: TextStyle(fontWeight: FontWeight.w700, color: _open ? null : AppColors.muted)),
-              Text(kind == 'off' ? (_person?.isFull ?? true ? '想休' : '不能上') : kind == 'on' ? (_person?.isFull ?? true ? '想上' : '可以上') : (note ?? ''),
+              Text(kind == 'off' ? (_person == null || _planFull(_person!, _setup) ? '想休' : '不能上') : kind == 'on' ? (_person == null || _planFull(_person!, _setup) ? '想上' : '可以上') : (note ?? ''),
                   maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10)),
             ]),
           ),
@@ -579,7 +582,8 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
     final r = _setup!.rules[p.id];
     if (r == null || r.isEmpty) return '沒設（照預設排）';
     return [
-      if (p.isFull && r.monthOff != null) '每月休 ${_n(r.monthOff!)} 天',
+      if (p.isFull && r.planAsPart) '排班時當兼職',
+      if (p.isFull && !r.planAsPart && r.monthOff != null) '每月休 ${_n(r.monthOff!)} 天',
       if (r.minShifts != null || r.maxShifts != null) '上 ${r.minShifts ?? 0}～${r.maxShifts ?? '不限'} 天',
       if (r.maxConsecutive != null) '最多連上 ${r.maxConsecutive} 天',
       if (r.noWeekdays.isNotEmpty) '不排${(r.noWeekdays.toList()..sort()).map(_wdName).join('、')}',
@@ -739,6 +743,7 @@ class _RuleEditorState extends State<_RuleEditor> {
   late final _note = TextEditingController(text: widget.rule.note ?? '');
   late final Set<int> _noWd = {...widget.rule.noWeekdays};
   late final List<String> _marks = [...widget.rule.marks];
+  late bool _asPart = widget.rule.planAsPart;
   bool _busy = false;
 
   List<String> get _choices {
@@ -755,6 +760,7 @@ class _RuleEditorState extends State<_RuleEditor> {
     final r = ShiftRule(
       personId: widget.person.id,
       monthOff: widget.person.isFull && _off.text.trim().isNotEmpty ? double.tryParse(_off.text.trim()) : null,
+      planAsPart: widget.person.isFull && _asPart,
       minShifts: i(_min),
       maxShifts: i(_max),
       maxConsecutive: i(_consec),
@@ -786,6 +792,15 @@ class _RuleEditorState extends State<_RuleEditor> {
       appBar: AppBar(title: Text('${p.name} 的排班條件')),
       body: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 40), children: [
         if (p.isFull)
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('排班時當兼職'),
+            subtitle: const Text('班表上還是正職；自動排班不照應休，照最少／最多天數和填的「可以上」排，沒上班的日子留空白',
+                style: TextStyle(fontSize: 12)),
+            value: _asPart,
+            onChanged: (v) => setState(() => _asPart = v),
+          ),
+        if (p.isFull && !_asPart)
           TextField(
               controller: _off,
               keyboardType: numKb,
@@ -813,7 +828,7 @@ class _RuleEditorState extends State<_RuleEditor> {
         const SizedBox(height: 16),
         Text(widget.storeName == '小城外' ? '上班排哪些班別／時段（照點的順序，第一個優先）' : '上班排哪個記號（照點的順序，第一個優先）',
             style: const TextStyle(fontWeight: FontWeight.w600)),
-        Text('沒選＝${_defaultMarks(widget.storeName, p.isFull).join('、')}（有上個月的班就照上個月最常排的）',
+        Text('沒選＝${_defaultMarks(widget.storeName, p.isFull && !_asPart).join('、')}（有上個月的班就照上個月最常排的）',
             style: TextStyle(color: AppColors.muted, fontSize: 12)),
         const SizedBox(height: 6),
         Wrap(spacing: 6, runSpacing: 6, children: [
@@ -923,18 +938,19 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
           final r = s.rules[p.id];
           final should = _cur!.stats[p.id]?.shouldOff;
           final off = should ?? r?.monthOff;
-          if (p.isFull && off == null) noOff.add(p.name);
+          final full = _planFull(p, s);
+          if (full && off == null) noOff.add(p.name);
           final usual = _usualMarks(p);
           return PlanPerson(
             id: p.id,
             name: p.name,
-            full: p.isFull,
+            full: full,
             offTarget: off ?? defaultOff,
             minShifts: r?.minShifts,
             maxShifts: r?.maxShifts,
             maxConsecutive: r?.maxConsecutive ?? 6,
             noWeekdays: r?.noWeekdays ?? const {},
-            marks: (r?.marks.isNotEmpty ?? false) ? r!.marks : (usual.isNotEmpty ? usual : _defaultMarks(_storeName, p.isFull)),
+            marks: (r?.marks.isNotEmpty ?? false) ? r!.marks : (usual.isNotEmpty ? usual : _defaultMarks(_storeName, full)),
           );
         }(),
     ];
@@ -989,7 +1005,7 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
             Text('${p.name}・${DateFormat('M/d（E）', 'zh_TW').format(DateTime(_m.year, _m.month, d))}',
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
             if (_setup!.requests[p.id]?[d] != null)
-              Text(_setup!.requests[p.id]![d] == 'off' ? '這天${p.isFull ? '想休' : '不能上'}' : '這天${p.isFull ? '想上班' : '可以上'}',
+              Text(_setup!.requests[p.id]![d] == 'off' ? '這天${_planFull(p, _setup) ? '想休' : '不能上'}' : '這天${_planFull(p, _setup) ? '想上班' : '可以上'}',
                   style: TextStyle(color: AppColors.warn, fontSize: 13)),
             const SizedBox(height: 12),
             Wrap(spacing: 10, runSpacing: 10, children: [
@@ -1096,7 +1112,7 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
     final short = [for (var d = 1; d <= _days; d++) if (_staffed(d) < (_plan!.need[d] ?? 0)) d];
     final warnings = _plan!.warnings;
     Widget row(ShiftPerson p) => Row(children: [
-          _cell(p.isFull ? p.name : '${p.name}\n兼職', w: 64),
+          _cell(_planFull(p, _setup) ? p.name : '${p.name}\n${p.isFull ? '當兼職' : '兼職'}', w: 64),
           for (var d = 1; d <= _days; d++)
             _cell(
               (_entries[p.id]?[d])?.replaceFirst('-', '\n'),
