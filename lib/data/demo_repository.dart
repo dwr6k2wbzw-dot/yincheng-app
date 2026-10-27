@@ -753,7 +753,7 @@ class DemoRepository implements Repository {
   @override
   Future<ChangeQuota> changeQuota(String storeId) async => ChangeQuota(_changeUsed, 10);
   @override
-  Future<String> createChangeRequest(String storeId, String body) async {
+  Future<String> createChangeRequest(String storeId, String body, {List<String> photos = const []}) async {
     final id = 'cr-${++_seq}';
     _changeUsed++;
     _changes.add(ChangeRequest(
@@ -764,7 +764,9 @@ class DemoRepository implements Repository {
     return id;
   }
   @override
-  Future<void> followupChangeRequest(String requestId, String body) async {
+  Future<Uint8List> changePhoto(String photoId) async => Uint8List(0);
+  @override
+  Future<void> followupChangeRequest(String requestId, String body, {List<String> photos = const []}) async {
     _changeUsed++;
     _changeMsg(requestId, 'followup', '示範老闆', body.trim());
     _changeRun(requestId);

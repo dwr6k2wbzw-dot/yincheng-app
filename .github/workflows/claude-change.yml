@@ -54,10 +54,26 @@ jobs:
           echo "short=$short" >> "$GITHUB_OUTPUT"
           echo "branch=cr/$short" >> "$GITHUB_OUTPUT"
           echo "::notice title=需求::$(jq -r .title request.json)（第 $(jq -r .run_count request.json) 次）"
+          # 需求附的照片（0071）：一次取一張，存成 photos/<代號>.jpg／.png
+          mkdir -p photos
+          for pid in $(jq -r '[.messages[].photos // [] | .[]] | .[]' request.json); do
+            echo "$pid" | grep -Eq '^[0-9a-f-]{36}$' || continue
+            tok=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$CR_AUDIENCE" | jq -r .value)
+            code=$(curl -sS -o photo.json -w '%{http_code}' -X POST "$CR_URL" \
+              -H "Authorization: Bearer $tok" -H 'Content-Type: application/json' \
+              -d "$(jq -nc --arg id "$REQ_ID" --arg n "$NONCE" --arg p "$pid" '{op:"photo",id:$id,nonce:$n,photo_id:$p}')")
+            if [ "$code" != "200" ]; then echo "::warning title=照片::$pid 取不到（HTTP $code）"; continue; fi
+            ext=$([ "$(jq -r .mime photo.json)" = "image/png" ] && echo png || echo jpg)
+            jq -r .data photo.json | base64 -d > "photos/$pid.$ext"
+          done
+          rm -f photo.json
+          echo "照片：$(ls photos | wc -l) 張"
       - uses: actions/upload-artifact@v4
         with:
           name: request
-          path: request.json
+          path: |
+            request.json
+            photos/
           retention-days: 3
 
   claude:
@@ -94,7 +110,7 @@ jobs:
             fi
           fi
           git rev-parse origin/main > "$RUNNER_TEMP/base_sha"
-          python3 tool/change_request/build_prompt.py "$RUNNER_TEMP/req/request.json" "$RUNNER_TEMP/prompt.txt" $fresh
+          PHOTO_DIR="$RUNNER_TEMP/req/photos" python3 tool/change_request/build_prompt.py "$RUNNER_TEMP/req/request.json" "$RUNNER_TEMP/prompt.txt" $fresh
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -113,7 +129,8 @@ jobs:
             exit 0
           fi
           set +e
-          timeout 30m claude -p "$(cat "$RUNNER_TEMP/prompt.txt")" \
+          mkdir -p "$RUNNER_TEMP/req/photos"
+          timeout 30m claude -p "$(cat "$RUNNER_TEMP/prompt.txt")" --add-dir "$RUNNER_TEMP/req/photos" \
             --allowedTools "Read,Edit,Write,Glob,Grep,Bash(flutter analyze:*),Bash(dart format:*)" \
             --max-turns 80 --output-format json > "$RUNNER_TEMP/out/claude.json" 2> "$RUNNER_TEMP/out/claude.err"
           rc=$?

@@ -94,13 +94,16 @@ class ChangeMessage {
   final String authorName;
   final String body;
   final DateTime createdAt;
-  ChangeMessage({required this.id, required this.kind, required this.authorName, required this.body, required this.createdAt});
-  factory ChangeMessage.fromRow(Map<String, dynamic> r) => ChangeMessage(
+  /// 附的照片代號（0071）
+  final List<String> photoIds;
+  ChangeMessage({required this.id, required this.kind, required this.authorName, required this.body, required this.createdAt, this.photoIds = const []});
+  factory ChangeMessage.fromRow(Map<String, dynamic> r, {List<String> photoIds = const []}) => ChangeMessage(
         id: (r['id'] as num).toInt(),
         kind: r['kind'] as String,
         authorName: backstageText(r['author_name'] as String? ?? ''),
         body: backstageText(r['body'] as String),
         createdAt: DateTime.parse(r['created_at'] as String).toLocal(),
+        photoIds: photoIds,
       );
 }
 

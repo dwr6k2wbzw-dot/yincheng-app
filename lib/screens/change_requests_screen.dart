@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -7,6 +8,7 @@ import '../app_state.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
 import '../services/open_external.dart';
+import '../services/slip_scan.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 
@@ -72,10 +74,11 @@ class _ChangeRequestsScreenState extends State<ChangeRequestsScreen> {
         title: '我想改…（${widget.membership.storeName}）',
         hint: _exampleHint,
         action: '送出給後臺',
-        note: '第一行當標題。寫清楚在哪個畫面、想看到什麼，越具體越準。\n只會改「${widget.membership.storeName}」，另一家店不受影響；兩家都要改，請到另一家店再許一次。');
+        note: '第一行當標題。寫清楚在哪個畫面、想看到什麼，越具體越準。\n只會改「${widget.membership.storeName}」，另一家店不受影響；兩家都要改，請到另一家店再許一次。',
+        allowPhotos: true);
     if (body == null || !mounted) return;
     try {
-      final id = await _repo.createChangeRequest(_store, body);
+      final id = await _repo.createChangeRequest(_store, body.text, photos: body.photos);
       _repo.kickChangeRequests().then((_) => _load());
       await _load();
       if (!mounted) return;
@@ -194,45 +197,121 @@ class ChangeStatusChip extends StatelessWidget {
   }
 }
 
-/// 寫需求／再改一次／退回原因的輸入框（從下方滑出）
-Future<String?> showChangeComposer(BuildContext context,
-    {required String title, String? hint, required String action, String? note}) {
+/// 輸入框送出的內容：文字＋附的照片（JPEG data URL，0071）
+class ChangeInput {
+  final String text;
+  final List<String> photos;
+  const ChangeInput(this.text, this.photos);
+}
+
+/// 寫需求／再改一次／退回原因的輸入框（從下方滑出）；allowPhotos＝可以附照片（最多 5 張）
+Future<ChangeInput?> showChangeComposer(BuildContext context,
+    {required String title, String? hint, required String action, String? note, bool allowPhotos = false}) {
   final c = TextEditingController();
-  return showModalBottomSheet<String>(
+  final photos = <String>[];
+  var picking = false;
+  return showModalBottomSheet<ChangeInput>(
     context: context,
     isScrollControlled: true,
     backgroundColor: AppColors.card,
-    builder: (s) => Padding(
-      padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.of(s).viewInsets.bottom),
-      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
-        const SizedBox(height: 4),
-        Text(note ?? '第一行當標題。寫清楚在哪個畫面、想看到什麼，越具體越準。',
-            style: TextStyle(color: AppColors.muted, fontSize: 12, height: 1.5)),
-        const SizedBox(height: 12),
-        TextField(
-          controller: c,
-          autofocus: true,
-          minLines: 4,
-          maxLines: 10,
-          maxLength: 4000,
-          decoration: InputDecoration(hintText: hint, border: const OutlineInputBorder()),
-        ),
-        const SizedBox(height: 8),
-        Row(children: [
-          TextButton(onPressed: () => Navigator.pop(s), child: const Text('取消')),
-          const Spacer(),
-          FilledButton.icon(
-            icon: const Icon(Icons.send, size: 18),
-            onPressed: () {
-              final t = c.text.trim();
-              if (t.isEmpty) return;
-              Navigator.pop(s, t);
-            },
-            label: Text(action),
+    builder: (s) => StatefulBuilder(
+      builder: (s, setS) => Padding(
+        padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.of(s).viewInsets.bottom),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 4),
+          Text(note ?? '第一行當標題。寫清楚在哪個畫面、想看到什麼，越具體越準。',
+              style: TextStyle(color: AppColors.muted, fontSize: 12, height: 1.5)),
+          const SizedBox(height: 12),
+          TextField(
+            controller: c,
+            autofocus: true,
+            minLines: 4,
+            maxLines: 10,
+            maxLength: 4000,
+            decoration: InputDecoration(hintText: hint, border: const OutlineInputBorder()),
           ),
+          if (allowPhotos) ...[
+            const SizedBox(height: 4),
+            SizedBox(
+              height: 72,
+              child: ListView(scrollDirection: Axis.horizontal, children: [
+                for (var i = 0; i < photos.length; i++)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Stack(children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.memory(dataUrlBytes(photos[i]), width: 72, height: 72, fit: BoxFit.cover),
+                      ),
+                      Positioned(
+                        right: 0,
+                        top: 0,
+                        child: InkWell(
+                          onTap: () => setS(() => photos.removeAt(i)),
+                          child: Container(
+                            decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                            padding: const EdgeInsets.all(2),
+                            child: const Icon(Icons.close, size: 16, color: Colors.white),
+                          ),
+                        ),
+                      ),
+                    ]),
+                  ),
+                if (photos.length < 5)
+                  InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: picking
+                        ? null
+                        : () async {
+                            setS(() => picking = true);
+                            try {
+                              final d = await pickSlipImage(fromLibrary: true);
+                              if (d != null) setS(() => photos.add(d));
+                            } catch (e) {
+                              if (s.mounted) showMessage(s, '照片讀取失敗，請再試一次', error: true);
+                            } finally {
+                              if (s.mounted) setS(() => picking = false);
+                            }
+                          },
+                    child: Container(
+                      width: 72,
+                      height: 72,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: AppColors.line),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        picking
+                            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                            : Icon(Icons.add_photo_alternate_outlined, color: AppColors.primary),
+                        const SizedBox(height: 2),
+                        Text('加照片', style: TextStyle(fontSize: 11, color: AppColors.muted)),
+                      ]),
+                    ),
+                  ),
+              ]),
+            ),
+            const SizedBox(height: 4),
+            Text('可以附截圖或照片（最多 5 張），在上面圈出想改的地方更準。',
+                style: TextStyle(color: AppColors.muted, fontSize: 11)),
+          ],
+          const SizedBox(height: 8),
+          Row(children: [
+            TextButton(onPressed: () => Navigator.pop(s), child: const Text('取消')),
+            const Spacer(),
+            FilledButton.icon(
+              icon: const Icon(Icons.send, size: 18),
+              onPressed: () {
+                final t = c.text.trim();
+                if (t.isEmpty) return;
+                Navigator.pop(s, ChangeInput(t, List.of(photos)));
+              },
+              label: Text(action),
+            ),
+          ]),
         ]),
-      ]),
+      ),
     ),
   );
 }
@@ -308,9 +387,10 @@ class _ChangeRequestDetailScreenState extends State<ChangeRequestDetailScreen> {
         title: _c.status == ChangeStatus.failed ? '再試一次' : '再改一次',
         hint: _c.status == ChangeStatus.failed ? '可以補充說明，或直接寫「請重試」' : '例如：按鈕再大一點、顏色改成金色',
         note: '寫下要怎麼調整，後臺會接著上一版修改。這也算一次修改次數。',
-        action: '送出');
+        action: '送出',
+        allowPhotos: true);
     if (body == null) return;
-    await _do(() => _repo.followupChangeRequest(_c.id, body), kick: true, ok: '已送出，後臺開始修改');
+    await _do(() => _repo.followupChangeRequest(_c.id, body.text, photos: body.photos), kick: true, ok: '已送出，後臺開始修改');
   }
 
   Future<void> _approve() async {
@@ -333,7 +413,7 @@ class _ChangeRequestDetailScreenState extends State<ChangeRequestDetailScreen> {
     final reason = await showChangeComposer(context,
         title: '退回', hint: '例如：欄位放到最下面', note: '寫下要店長或後臺再調整的地方。', action: '退回');
     if (reason == null) return;
-    await _do(() => _repo.returnChangeRequest(_c.id, reason), ok: '已退回');
+    await _do(() => _repo.returnChangeRequest(_c.id, reason.text), ok: '已退回');
   }
 
   Future<void> _cancel() async {
@@ -495,8 +575,61 @@ class _ChangeRequestDetailScreenState extends State<ChangeRequestDetailScreen> {
               style: TextStyle(fontSize: 11, color: claude ? AppColors.primary : AppColors.muted)),
           const SizedBox(height: 4),
           SelectableText(m.body, style: const TextStyle(height: 1.5)),
+          if (m.photoIds.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(spacing: 6, runSpacing: 6, children: [for (final id in m.photoIds) _ChangePhotoThumb(id: id)]),
+          ],
         ]),
       ),
     );
   }
+}
+
+/// 許願附的照片縮圖（點了放大）；讀過的存在記憶體，不重複下載
+class _ChangePhotoThumb extends StatefulWidget {
+  const _ChangePhotoThumb({required this.id});
+  final String id;
+  static final _cache = <String, Uint8List>{};
+  @override
+  State<_ChangePhotoThumb> createState() => _ChangePhotoThumbState();
+}
+
+class _ChangePhotoThumbState extends State<_ChangePhotoThumb> {
+  Future<Uint8List>? _f;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _f ??= _ChangePhotoThumb._cache.containsKey(widget.id)
+        ? Future.value(_ChangePhotoThumb._cache[widget.id])
+        : AppScope.of(context).repo.changePhoto(widget.id).then((b) => _ChangePhotoThumb._cache[widget.id] = b);
+  }
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<Uint8List>(
+        future: _f,
+        builder: (context, snap) {
+          final box = BoxDecoration(color: AppColors.bg, borderRadius: BorderRadius.circular(8));
+          if (snap.hasError) {
+            return Container(width: 72, height: 72, decoration: box, child: Icon(Icons.broken_image_outlined, color: AppColors.muted));
+          }
+          if (!snap.hasData || snap.data!.isEmpty) {
+            return Container(width: 72, height: 72, decoration: box, child: Icon(Icons.image_outlined, color: AppColors.muted));
+          }
+          final bytes = snap.data!;
+          return InkWell(
+            onTap: () => showDialog<void>(
+              context: context,
+              builder: (c) => Dialog(
+                insetPadding: const EdgeInsets.all(8),
+                child: InteractiveViewer(maxScale: 6, child: Image.memory(bytes, fit: BoxFit.contain)),
+              ),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.memory(bytes, width: 72, height: 72, fit: BoxFit.cover),
+            ),
+          );
+        },
+      );
 }
