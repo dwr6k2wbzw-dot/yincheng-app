@@ -1,7 +1,9 @@
 import 'dart:typed_data';
 
+import 'change_request_models.dart';
 import 'models.dart';
 import 'reservation_models.dart';
+export 'change_request_models.dart';
 export 'reservation_models.dart';
 
 /// App 與資料來源之間的介面。正式使用 SupabaseRepository；示範模式使用 DemoRepository。
@@ -139,6 +141,20 @@ abstract class Repository {
   /// 停用品項（不刪除，歷史盤點照常顯示）
   Future<void> deactivateProduct(String productId);
 
+  // ---------------- 功能許願（0069，只有老闆／店長） ----------------
+  Future<List<ChangeRequest>> changeRequests(String storeId);
+  Future<List<ChangeMessage>> changeMessages(String requestId);
+  Future<ChangeQuota> changeQuota(String storeId);
+  Future<String> createChangeRequest(String storeId, String body);
+  /// 再改一次（看了預覽想調整、失敗重試、老闆退回後再改）
+  Future<void> followupChangeRequest(String requestId, String body);
+  Future<void> submitChangeRequest(String requestId); // 店長送審
+  Future<void> approveChangeRequest(String requestId); // 老闆核准上線
+  Future<void> returnChangeRequest(String requestId, String reason); // 老闆退回
+  Future<void> cancelChangeRequest(String requestId);
+  /// 請 Edge Function 處理排隊中的工作（派工給 Claude、合併、關閉）；失敗不影響畫面
+  Future<void> kickChangeRequests();
+
   // ---------------- 訂位（0050） ----------------
   Future<ReservationSettings?> reservationSettings(String storeId);
   Future<void> saveReservationSettings(String storeId, Map<String, dynamic> values);
@@ -177,5 +193,6 @@ String friendlyError(Object e) {
   if (msg.contains('rate limit')) return '操作太頻繁，請稍後再試。';
   if (msg.contains('Signups not allowed') || msg.contains('signups are disabled')) return '目前沒有開放建立帳號，請聯絡老闆。';
   if (msg.contains('Password should be')) return '密碼太短，請至少 8 個字。';
+  if (msg.contains('change_requests_title_check')) return '第一行請寫個簡短的標題。';
   return msg;
 }

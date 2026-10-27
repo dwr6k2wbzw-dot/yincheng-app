@@ -107,10 +107,12 @@ jobs:
           git -c user.email=ci@noreply -c user.name=ci commit -qm "build ${{ github.sha }}"
           git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" web-build
           rm -rf .git
+      - name: 加上功能許願的預覽（preview/<代號>/，只放還沒上線或取消的）
+        run: bash tool/change_request/assemble_site.sh build/web "$RUNNER_TEMP/site"
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: build/web
+          path: ${{ runner.temp }}/site
   deploy:
     needs: build
     runs-on: ubuntu-latest

@@ -39,7 +39,8 @@ self.addEventListener('fetch', (event) => {
   const base = new URL(self.registration.scope).pathname;
   if (!url.pathname.startsWith(base)) return;
   const rest = url.pathname.slice(base.length);
-  if (rest.startsWith('book/') || rest === 'version.txt' || rest === 'sw.js') return;
+  // preview/：功能許願的預覽版，不經過正式版的暫存
+  if (rest.startsWith('book/') || rest.startsWith('preview/') || rest === 'version.txt' || rest === 'sw.js') return;
   if (url.searchParams.get('v') === V) { event.respondWith(cacheFirst(req, APP)); return; }
   event.respondWith(networkFirst(req));
 });
