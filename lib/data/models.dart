@@ -708,9 +708,13 @@ class ShiftMonth {
 
   int get days => DateTime(month.year, month.month + 1, 0).day;
   String? mark(String personId, int day) => marks[personId]?[day];
+  /// 月休（休＋指休）；特休另計、不算月休（老闆紙本班表的算法，0072）
   static bool isOff(String? m) => m == '休' || m == '指休';
-  /// 有排班（V、O、班別代碼、時段）＝上班；休、指休、空白＝沒上班
-  static bool isOn(String? m) => m != null && m.isNotEmpty && !isOff(m);
+  static bool isLeave(String? m) => m == '特休';
+  /// 當天沒上班（休、指休、特休）
+  static bool isAway(String? m) => isOff(m) || isLeave(m);
+  /// 有排班（V、O、班別代碼、時段）＝上班；休、指休、特休、空白＝沒上班
+  static bool isOn(String? m) => m != null && m.isNotEmpty && !isAway(m);
   static bool isRange(String? m) => m != null && m.contains(':') && m.contains('-');
 
   /// 一格的時數：時段照實際（過午夜算隔天）；班別代碼查表；其他 0
@@ -736,6 +740,7 @@ class ShiftMonth {
   /// 人力＝當天 V＋O 的人數
   int staffing(int day) => people.where((p) => isOn(mark(p.id, day))).length;
   int offDays(String personId) => (marks[personId] ?? {}).values.where(isOff).length;
+  int leaveDays(String personId) => (marks[personId] ?? {}).values.where(isLeave).length;
   int workDays(String personId) => (marks[personId] ?? {}).values.where(isOn).length;
 }
 

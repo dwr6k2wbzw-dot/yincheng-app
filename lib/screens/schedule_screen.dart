@@ -26,6 +26,7 @@ const _assignedColor = Color(0xFFE5735F);
 Color? _markBg(String? m) => switch (m) {
       '休' => _offColor.withValues(alpha: 0.85),
       '指休' => _assignedColor.withValues(alpha: 0.85),
+      '特休' => const Color(0xFFC0392B).withValues(alpha: 0.85), // 照老闆紙本班表的紅色（0072）
       'O' => AppColors.primary.withValues(alpha: 0.35),
       // 顏色照老闆班別表：R 白、R1 灰、RBK 粉紫、B 系藍、BHP 系黃
       'R' => const Color(0xFFE8E8E8).withValues(alpha: 0.30),
@@ -37,7 +38,7 @@ Color? _markBg(String? m) => switch (m) {
       _ => null,
     };
 
-const _markLabel = {'V': '上班', '休': '休假', '指休': '指定休', 'O': 'O'};
+const _markLabel = {'V': '上班', '休': '休假', '指休': '指定休', '特休': '特休', 'O': 'O'};
 final _rangeRe = RegExp(r'^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$');
 
 /// 格子裡顯示的字：時段拆成兩行
@@ -513,7 +514,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     final now = DateTime.now();
     if (now.year != _month.year || now.month != _month.month) return const SizedBox.shrink();
     final on = d.people.where((p) => p.active && ShiftMonth.isOn(d.mark(p.id, now.day))).map((p) => p.name).toList();
-    final off = d.people.where((p) => p.active && p.isFull && ShiftMonth.isOff(d.mark(p.id, now.day))).map((p) => p.name).toList();
+    final off = d.people.where((p) => p.active && p.isFull && ShiftMonth.isAway(d.mark(p.id, now.day))).map((p) => p.name).toList();
     final note = d.notes[now.day];
     return SectionCard(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -692,7 +693,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 final st = d.stats[p.id] ?? const ShiftStats();
                 final should = st.shouldOff, prev = st.prevUnused;
                 final taken = d.offDays(p.id).toDouble();
-                final remain = (should != null && prev != null) ? prev - (taken - should) : null;
+                // 排「特休」的天數直接用掉特休（0072，老闆 2026-10-27 隱城也加特休）
+                final leave = d.leaveDays(p.id).toDouble();
+                final remain = (should != null && prev != null) ? prev - (taken - should) - leave : null;
                 return row([
                   p.name,
                   n(should),
@@ -705,7 +708,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           ],
         ),
         const SizedBox(height: 6),
-        Text('已休＝休＋指休；剩餘未休特休＝原未休特休 −（已休 − 應休）',
+        Text('已休＝休＋指休；剩餘未休特休＝原未休特休 −（已休 − 應休）− 排特休的天數',
             style: TextStyle(color: AppColors.muted, fontSize: 11)),
       ]),
     );
@@ -753,7 +756,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           ],
         ),
         const SizedBox(height: 6),
-        Text('總時數＝整個月（含月底最後一天）；月休＝休＋指休；未休／補休、累計特休由老闆或店長填。',
+        Text('總時數＝整個月（含月底最後一天）；月休＝休＋指休（特休另計、不算月休）；未休／補休、累計特休由老闆或店長填。',
             style: TextStyle(color: AppColors.muted, fontSize: 11)),
       ]),
     );
