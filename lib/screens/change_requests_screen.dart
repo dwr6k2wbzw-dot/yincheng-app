@@ -68,7 +68,11 @@ class _ChangeRequestsScreenState extends State<ChangeRequestsScreen> {
       showMessage(context, '本月修改次數已用完（每月 ${_quota!.limit} 次），請跟老闆說', error: true);
       return;
     }
-    final body = await showChangeComposer(context, title: '我想改…', hint: _exampleHint, action: '送出給 Claude');
+    final body = await showChangeComposer(context,
+        title: '我想改…（${widget.membership.storeName}）',
+        hint: _exampleHint,
+        action: '送出給後臺',
+        note: '第一行當標題。寫清楚在哪個畫面、想看到什麼，越具體越準。\n只會改「${widget.membership.storeName}」，另一家店不受影響；兩家都要改，請到另一家店再許一次。');
     if (body == null || !mounted) return;
     try {
       final id = await _repo.createChangeRequest(_store, body);
@@ -117,7 +121,7 @@ class _ChangeRequestsScreenState extends State<ChangeRequestsScreen> {
                   child: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 96), children: [
                     SectionCard(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        const Text('寫下想怎麼改 App，Claude 會直接改好，給你一個預覽網址先試用。',
+                        Text('寫下想怎麼改「${widget.membership.storeName}」的 App，後臺會直接改好，給你一個預覽網址先試用。另一家店不受影響。',
                             style: TextStyle(height: 1.5)),
                         const SizedBox(height: 6),
                         Text(
@@ -303,10 +307,10 @@ class _ChangeRequestDetailScreenState extends State<ChangeRequestDetailScreen> {
     final body = await showChangeComposer(context,
         title: _c.status == ChangeStatus.failed ? '再試一次' : '再改一次',
         hint: _c.status == ChangeStatus.failed ? '可以補充說明，或直接寫「請重試」' : '例如：按鈕再大一點、顏色改成金色',
-        note: '寫下要怎麼調整，Claude 會接著上一版修改。這也算一次修改次數。',
+        note: '寫下要怎麼調整，後臺會接著上一版修改。這也算一次修改次數。',
         action: '送出');
     if (body == null) return;
-    await _do(() => _repo.followupChangeRequest(_c.id, body), kick: true, ok: '已送出，Claude 開始修改');
+    await _do(() => _repo.followupChangeRequest(_c.id, body), kick: true, ok: '已送出，後臺開始修改');
   }
 
   Future<void> _approve() async {
@@ -327,7 +331,7 @@ class _ChangeRequestDetailScreenState extends State<ChangeRequestDetailScreen> {
 
   Future<void> _return() async {
     final reason = await showChangeComposer(context,
-        title: '退回', hint: '例如：欄位放到最下面', note: '寫下要店長或 Claude 再調整的地方。', action: '退回');
+        title: '退回', hint: '例如：欄位放到最下面', note: '寫下要店長或後臺再調整的地方。', action: '退回');
     if (reason == null) return;
     await _do(() => _repo.returnChangeRequest(_c.id, reason), ok: '已退回');
   }
@@ -402,7 +406,7 @@ class _ChangeRequestDetailScreenState extends State<ChangeRequestDetailScreen> {
         children.add(Row(children: [
           const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
           const SizedBox(width: 10),
-          Expanded(child: Text(s == ChangeStatus.queued ? '排隊中，幾分鐘內會開始…' : 'Claude 正在修改，通常 15～30 分鐘。')),
+          Expanded(child: Text(s == ChangeStatus.queued ? '排隊中，幾分鐘內會開始…' : '後臺正在修改，通常 15～30 分鐘。')),
         ]));
         text('可以先離開這個畫面，改好會在小鈴鐺通知。', color: AppColors.muted);
         if (_c.hasPreview) text('（下面的預覽還是上一版）', color: AppColors.muted);
@@ -411,7 +415,7 @@ class _ChangeRequestDetailScreenState extends State<ChangeRequestDetailScreen> {
         text('預覽版用的是真的資料，試的時候請小心（例如不要真的取消訂位）。', color: AppColors.muted);
       case ChangeStatus.failed:
         text(_c.lastError ?? '這次沒有成功', color: AppColors.bad);
-        text('可以按「再試一次」，或補充說明讓 Claude 換個方式做。', color: AppColors.muted);
+        text('可以按「再試一次」，或補充說明讓後臺換個方式做。', color: AppColors.muted);
       case ChangeStatus.review:
         text(_owner ? '店長已送審，看過預覽沒問題就按「上線」，或寫原因退回。' : '已送審，等老闆核准上線。');
       case ChangeStatus.approved:
@@ -465,7 +469,7 @@ class _ChangeRequestDetailScreenState extends State<ChangeRequestDetailScreen> {
     final label = switch (m.kind) {
       'request' => '需求・${m.authorName}',
       'followup' => '再改一次・${m.authorName}',
-      'claude' => 'Claude',
+      'claude' => '後臺',
       _ => m.authorName,
     };
     if (system) {

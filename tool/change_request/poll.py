@@ -32,7 +32,7 @@ def gh(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run(["gh", *args], capture_output=True, text=True)
 
 
-CONFLICT = "這段時間 App 有其他更新，修改接不上，請按「再改一次」讓 Claude 重新套用"
+CONFLICT = "這段時間 App 有其他更新，修改接不上，請按「再改一次」讓後臺重新套用"
 
 
 def git(*args: str) -> subprocess.CompletedProcess:

@@ -1,4 +1,7 @@
 /// App 內「功能許願」（0069，老闆 2026-10-27）：老闆／店長寫需求 → Claude 改程式 → 看預覽 → 老闆核准上線
+/// 畫面上一律稱「後臺」（老闆 2026-10-27）：資料庫或 GitHub 回報的文字裡若寫 Claude，顯示時換掉
+String backstageText(String s) => s.replaceAll('Claude', '後臺');
+
 enum ChangeStatus { queued, running, ready, failed, review, approved, merged, cancelled }
 
 ChangeStatus changeStatusFrom(String s) =>
@@ -6,7 +9,7 @@ ChangeStatus changeStatusFrom(String s) =>
 
 String changeStatusLabel(ChangeStatus s) => switch (s) {
       ChangeStatus.queued => '排隊中',
-      ChangeStatus.running => 'Claude 修改中',
+      ChangeStatus.running => '後臺修改中',
       ChangeStatus.ready => '修改好了，請看預覽',
       ChangeStatus.failed => '沒有成功',
       ChangeStatus.review => '等老闆核准',
@@ -59,7 +62,7 @@ class ChangeRequest {
         status: changeStatusFrom(r['status'] as String),
         previewUrl: r['preview_url'] as String?,
         prNumber: (r['pr_number'] as num?)?.toInt(),
-        lastError: r['last_error'] as String?,
+        lastError: r['last_error'] == null ? null : backstageText(r['last_error'] as String),
         runCount: (r['run_count'] as num?)?.toInt() ?? 0,
         createdAt: DateTime.parse(r['created_at'] as String).toLocal(),
         updatedAt: DateTime.parse(r['updated_at'] as String).toLocal(),
@@ -95,8 +98,8 @@ class ChangeMessage {
   factory ChangeMessage.fromRow(Map<String, dynamic> r) => ChangeMessage(
         id: (r['id'] as num).toInt(),
         kind: r['kind'] as String,
-        authorName: r['author_name'] as String? ?? '',
-        body: r['body'] as String,
+        authorName: backstageText(r['author_name'] as String? ?? ''),
+        body: backstageText(r['body'] as String),
         createdAt: DateTime.parse(r['created_at'] as String).toLocal(),
       );
 }
