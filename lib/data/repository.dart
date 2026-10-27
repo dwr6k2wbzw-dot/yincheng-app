@@ -3,8 +3,10 @@ import 'dart:typed_data';
 import 'change_request_models.dart';
 import 'models.dart';
 import 'reservation_models.dart';
+import 'shift_planner.dart';
 export 'change_request_models.dart';
 export 'reservation_models.dart';
+export 'shift_planner.dart';
 
 /// App 與資料來源之間的介面。正式使用 SupabaseRepository；示範模式使用 DemoRepository。
 abstract class Repository {
@@ -109,6 +111,23 @@ abstract class Repository {
   Future<int> applyShiftDraft(ShiftDraft d);
   Future<void> dismissShiftDraft(String draftId);
   Future<String> shiftPhotoUrl(String path);
+
+  // 自動排班（0073）
+  /// 這個月的排班設定：每日人力、特別日子、截止日、排班條件（員工只讀得到自己的）、大家填的想休／可上
+  Future<ShiftPlanSetup> shiftPlanSetup(String storeId, DateTime month);
+  /// 成員自己選「我是班表上的誰」
+  Future<void> claimShiftPerson(String personId);
+  /// 老闆／店長解除班表人員對應的帳號
+  Future<void> clearShiftPersonUser(String personId);
+  /// kind：off 想休／on 可以上／null 清掉
+  Future<void> setShiftRequest(String storeId, String personId, DateTime date, String? kind);
+  Future<void> saveShiftRule(String storeId, ShiftRule r);
+  Future<void> saveShiftStaffing(String storeId, Map<int, StaffingNeed> staffing);
+  /// need 為 null＝取消這天的特別人力
+  Future<void> setShiftStaffingDay(String storeId, DateTime day, int? need);
+  Future<void> saveShiftDeadline(String storeId, int day);
+  /// 套用自動排班：列出的人這個月整個換成 plan，回傳寫入格數
+  Future<int> applyShiftPlan(String storeId, DateTime month, Map<String, Map<int, String>> plan);
 
   // 交接事項與工作提醒（同店成員可看、可寫交接、可打勾；提醒只有老闆／店長能建立）
   Future<HandoverBoard> handoverBoard(String storeId, {bool withSchedule = false});
