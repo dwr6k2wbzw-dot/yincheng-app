@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>線上訂位</title>
 <meta name="theme-color" content="#0A0A09">
+<link rel="icon" id="fav" href="data:,">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600&amp;display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
@@ -59,7 +60,7 @@
   if (/^\d{1,2}$/.test(qs.get('p') || '') && +qs.get('p') >= 1) party = +qs.get('p');
   // 店家 logo（依網址 ?s=）
   const logos = { yincheng: 'logo-yincheng.png', xcw: 'logo-xcw.png' };
-  if (logos[slug]) { $('logo').src = logos[slug]; $('logo').alt = ''; $('logo').hidden = false; }
+  if (logos[slug]) { $('logo').src = logos[slug]; $('logo').alt = ''; $('logo').hidden = false; $('fav').href = logos[slug]; }
   // 標題區背景照片（老闆 2026-10-15：隱城）
   const heros = { yincheng: 'hero-yincheng.jpg', xcw: 'hero-xcw.jpg' };
   // 照片取景：小城外往右移，露出左上的壁燈（老闆 2026-10-24）

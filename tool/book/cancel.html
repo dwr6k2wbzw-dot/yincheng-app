@@ -6,6 +6,7 @@
 <meta name="robots" content="noindex">
 <title>我的訂位</title>
 <meta name="theme-color" content="#0A0A09">
+<link rel="icon" id="fav" href="data:,">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600&amp;display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
@@ -31,7 +32,7 @@
   function show(r, msg) {
     const lg = document.getElementById('logo');
     const lf = r.slug === 'yincheng' ? 'logo-yincheng.png' : r.slug === 'xcw' ? 'logo-xcw.png' : '';
-    if (lf) { lg.src = lf; lg.hidden = false; }
+    if (lf) { lg.src = lf; lg.hidden = false; document.getElementById('fav').href = lf; }
     if (want == null) want = r.requested_party && r.party_request_status === 'pending' ? r.requested_party : r.party;
     const pending = r.party_request_status === 'pending';
     let h = '<p class="big">' + YC.esc(r.display_name) + '</p><p>' + YC.dateLabel(r.date) + ' ' + r.time + '　' + T('guests', r.party) + '<br>' +
