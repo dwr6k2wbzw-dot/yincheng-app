@@ -31,7 +31,7 @@ Future<void> main() async {
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Text('畫面發生錯誤（請截圖回報後臺）\n\n${d.exceptionAsString()}',
-                style: TextStyle(color: AppColors.bad, fontSize: 14)),
+                style: TextStyle(color: AppColors.bad, fontSize: AppType.body)),
           ),
         ),
       );
@@ -58,7 +58,7 @@ Future<void> main() async {
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
-            child: Text('啟動失敗（請截圖回報後臺）\n\n$e', style: TextStyle(color: AppColors.bad, fontSize: 14)),
+            child: Text('啟動失敗（請截圖回報後臺）\n\n$e', style: TextStyle(color: AppColors.bad, fontSize: AppType.body)),
           ),
         ),
       ),

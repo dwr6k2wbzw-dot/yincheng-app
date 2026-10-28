@@ -194,7 +194,7 @@ class _VendorSlipEditScreenState extends State<VendorSlipEditScreen> {
             child: Text(
               '這張是文字辨識產生的草稿，字和數字可能讀錯。請對照紙本或 Dropbox 裡的掃描檔'
               '${s.sourceFile == null ? '' : '（${s.sourceFile}）'}修改，確認後按「確認無誤」。',
-              style: TextStyle(color: AppColors.warn, fontSize: 13, height: 1.5),
+              style: TextStyle(color: AppColors.warn, fontSize: AppType.small, height: 1.5),
             ),
           ),
         const SizedBox(height: 8),
@@ -240,7 +240,7 @@ class _VendorSlipEditScreenState extends State<VendorSlipEditScreen> {
         if (mismatch)
           Padding(
             padding: EdgeInsets.only(top: 4),
-            child: Text('品項金額加起來和單據合計不一樣', style: TextStyle(color: AppColors.bad, fontSize: 12)),
+            child: Text('品項金額加起來和單據合計不一樣', style: TextStyle(color: AppColors.bad, fontSize: AppType.small)),
           ),
         const SizedBox(height: 8),
         for (final (i, l) in _lines.indexed) _lineCard(i, l),

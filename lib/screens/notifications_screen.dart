@@ -210,7 +210,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                             [if ((n.body ?? '').isNotEmpty) n.body!, _when(n.createdAt)].join('\n'),
                             maxLines: 3,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 12),
+                            style: const TextStyle(fontSize: AppType.small),
                           ),
                           trailing: f.isUnread(n)
                               ? Container(
@@ -224,7 +224,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   ),
                 const SizedBox(height: 12),
                 Text('有人新增交接、新增提醒、修改班表，或 App 有新版本時會通知；自己做的不會通知自己。',
-                    style: TextStyle(color: AppColors.muted, fontSize: 11, height: 1.5)),
+                    style: TextStyle(color: AppColors.muted, fontSize: AppType.caption, height: 1.5)),
               ]),
             );
           },

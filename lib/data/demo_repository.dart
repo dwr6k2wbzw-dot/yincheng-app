@@ -8,7 +8,8 @@ import 'repository.dart';
 /// 登入任何帳號都會以「老闆」身分進入；帳號含 staff 則以員工身分進入（可測試權限差異）。
 class DemoRepository implements Repository {
   final _auth = StreamController<bool>.broadcast();
-  bool _signedIn = false;
+  // 截圖檢查用（ui-shots.yml）：示範版網址加 ?auto=1 直接登入
+  bool _signedIn = Uri.base.queryParameters.containsKey('auto');
   String _email = '';
   int _seq = 0;
 

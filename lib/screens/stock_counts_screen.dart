@@ -94,7 +94,7 @@ class _StockCountsScreenState extends State<StockCountsScreen> {
     final shown = products.where((p) => _cat == '全部' || p.category == _cat).toList();
     return ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 96), children: [
       Row(children: [
-        Expanded(child: Text('庫存', style: TextStyle(fontSize: 12, color: AppColors.muted, letterSpacing: 2))),
+        Expanded(child: Text('庫存', style: TextStyle(fontSize: AppType.small, color: AppColors.muted, letterSpacing: 2))),
         if (isMgr)
           TextButton.icon(
             onPressed: () => _open(ProductsScreen(membership: widget.membership)),
@@ -126,7 +126,7 @@ class _StockCountsScreenState extends State<StockCountsScreen> {
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: AppColors.bad.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(AppRadius.lg),
               border: Border.all(color: AppColors.bad.withValues(alpha: 0.4)),
             ),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -143,7 +143,7 @@ class _StockCountsScreenState extends State<StockCountsScreen> {
                     Expanded(child: Text(p.name)),
                     Text('剩 ${fmtQty(last[p.id]!.qty)} ${p.unit}',
                         style: TextStyle(color: AppColors.bad, fontWeight: FontWeight.w600, fontFeatures: tabular)),
-                    Text('（安全量 ${fmtQty(p.parLevel!)}）', style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                    Text('（安全量 ${fmtQty(p.parLevel!)}）', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
                   ]),
                 ),
             ]),
@@ -178,15 +178,15 @@ class _StockCountsScreenState extends State<StockCountsScreen> {
             Text(
               '${p.category}・${s == null ? '還沒盤過' : '${DateFormat('M/d').format(s.date)} 盤'}'
               '${p.parLevel == null ? '' : '・安全量 ${fmtQty(p.parLevel!)}'}',
-              style: TextStyle(color: AppColors.muted, fontSize: 12),
+              style: TextStyle(color: AppColors.muted, fontSize: AppType.small),
             ),
           ]),
         ),
         Text.rich(TextSpan(children: [
           TextSpan(
               text: s == null ? '—' : fmtQty(s.qty),
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: low ? AppColors.bad : null, fontFeatures: tabular)),
-          TextSpan(text: ' ${p.unit}', style: TextStyle(fontSize: 12, color: AppColors.muted)),
+              style: TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w600, color: low ? AppColors.bad : null, fontFeatures: tabular)),
+          TextSpan(text: ' ${p.unit}', style: TextStyle(fontSize: AppType.small, color: AppColors.muted)),
         ])),
       ]),
     );
@@ -328,13 +328,13 @@ class _StockCountScreenState extends State<StockCountScreen> {
           ),
           for (final cat in groups.keys) ...[
             const SizedBox(height: 14),
-            Text(cat, style: TextStyle(color: AppColors.primary, fontSize: 13, letterSpacing: 2)),
+            Text(cat, style: TextStyle(color: AppColors.primary, fontSize: AppType.small, letterSpacing: 2)),
             const SizedBox(height: 6),
             for (final p in groups[cat]!) ...[_countRow(p), const SizedBox(height: 8)],
           ],
           const SizedBox(height: 10),
           Text('數量＝整數＋剩幾成（例如 3 瓶又剩 4 成＝3.4）。沒變的按「同上次」。',
-              style: TextStyle(color: AppColors.muted, fontSize: 12, height: 1.5)),
+              style: TextStyle(color: AppColors.muted, fontSize: AppType.small, height: 1.5)),
         ]),
         bottomNavigationBar: SafeArea(
           child: Padding(
@@ -360,14 +360,14 @@ class _StockCountScreenState extends State<StockCountScreen> {
       padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
       decoration: BoxDecoration(
         color: AppColors.card,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
         border: Border.all(color: done ? AppColors.primary.withValues(alpha: 0.6) : AppColors.line),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           if (done) ...[Icon(Icons.check_circle, size: 16, color: AppColors.primary), const SizedBox(width: 6)],
           Expanded(child: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w600))),
-          Text(last == null ? '上次：沒盤過' : '上次 ${fmtQty(last.qty)}', style: TextStyle(color: AppColors.muted, fontSize: 12)),
+          Text(last == null ? '上次：沒盤過' : '上次 ${fmtQty(last.qty)}', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
         ]),
         const SizedBox(height: 4),
         Row(children: [
@@ -378,7 +378,7 @@ class _StockCountScreenState extends State<StockCountScreen> {
           ),
           SizedBox(
             width: 44,
-            child: Text('$w', textAlign: TextAlign.center, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600, fontFeatures: tabular)),
+            child: Text('$w', textAlign: TextAlign.center, style: const TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w600, fontFeatures: tabular)),
           ),
           IconButton(tooltip: '加 1', onPressed: () => _set(p.id, whole: w + 1), icon: const Icon(Icons.add_circle_outline)),
           const SizedBox(width: 4),
@@ -447,7 +447,7 @@ Future<CategoryDeleteResult?> deleteStockCategory(
                     ChoiceChip(label: Text(o), selected: target == o, onSelected: (_) => setD(() => target = o)),
                 ]),
                 const SizedBox(height: 12),
-                Text('或是把這些品項一起停用（以前的盤點紀錄會保留）。', style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                Text('或是把這些品項一起停用（以前的盤點紀錄會保留）。', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
               ]),
         actions: list.isEmpty
             ? [
@@ -563,7 +563,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                   Row(children: [
                     Expanded(
                       child: Text('$cat・${groups[cat]!.length} 項',
-                          style: TextStyle(color: AppColors.primary, fontSize: 13, letterSpacing: 2)),
+                          style: TextStyle(color: AppColors.primary, fontSize: AppType.small, letterSpacing: 2)),
                     ),
                     TextButton.icon(
                       onPressed: () => _edit(null, category: cat),
@@ -581,19 +581,19 @@ class _ProductsScreenState extends State<ProductsScreen> {
                   if (groups[cat]!.isEmpty)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8),
-                      child: Text('還沒有品項', style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                      child: Text('還沒有品項', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
                     ),
                   for (final p in groups[cat]!)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: Material(
                       color: AppColors.card,
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(AppRadius.lg),
                       child: ListTile(
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.lg)),
                         title: Text(p.name),
                         subtitle: Text('${p.category}・${p.unit}${p.parLevel == null ? '' : '・安全量 ${fmtQty(p.parLevel!)}'}',
-                            style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                            style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => _edit(p),
                       ),
@@ -823,11 +823,11 @@ class _StockHistoryScreenState extends State<StockHistoryScreen> {
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Material(
                     color: AppColors.card,
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
                     child: ListTile(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.lg)),
                       title: Text(DateFormat('yyyy/M/d（E）', 'zh_TW').format(c.bizDate)),
-                      subtitle: Text('${c.lineCount} 項', style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                      subtitle: Text('${c.lineCount} 項', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => _CountDetail(count: c))),
                     ),

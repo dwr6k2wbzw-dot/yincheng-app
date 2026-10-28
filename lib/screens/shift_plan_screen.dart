@@ -62,7 +62,7 @@ class ShiftPlanCard extends StatelessWidget {
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-                  Text(sub, style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                  Text(sub, style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
                 ]),
               ),
               const Icon(Icons.chevron_right),
@@ -242,9 +242,9 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
     if (!_manager && _me == null) {
       final free = active.where((p) => p.userId == null).toList();
       return ListView(padding: const EdgeInsets.all(16), children: [
-        const Text('你是班表上的哪一位？', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        const Text('你是班表上的哪一位？', style: TextStyle(fontSize: AppType.title, fontWeight: FontWeight.w700)),
         const SizedBox(height: 4),
-        Text('第一次使用要先選一次，之後就不用再選。', style: TextStyle(color: AppColors.muted, fontSize: 13)),
+        Text('第一次使用要先選一次，之後就不用再選。', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
         const SizedBox(height: 12),
         if (free.isEmpty)
           Text('班表上的名字都有人選了，請找老闆或店長幫你加進班表人員。', style: TextStyle(color: AppColors.warn))
@@ -272,7 +272,7 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
 
     return ListView(padding: const EdgeInsets.fromLTRB(12, 8, 12, 32), children: [
       Row(children: [
-        IconButton(
+        IconButton(tooltip: '上個月', 
             onPressed: () {
               _month = DateTime(_month.year, _month.month - 1);
               _load();
@@ -280,9 +280,9 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
             icon: const Icon(Icons.chevron_left)),
         Expanded(
           child: Text(DateFormat('yyyy 年 M 月', 'zh_TW').format(_month),
-              textAlign: TextAlign.center, style: const TextStyle(fontSize: 16)),
+              textAlign: TextAlign.center, style: const TextStyle(fontSize: AppType.title)),
         ),
-        IconButton(
+        IconButton(tooltip: '下個月', 
             onPressed: () {
               _month = DateTime(_month.year, _month.month + 1);
               _load();
@@ -310,7 +310,7 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
             _open
                 ? '${_md.format(_deadline)} 前可以改${_manager ? '（老闆、店長隨時可改）' : ''}'
                 : '已經過了填寫截止日（${_md.format(_deadline)}），要改請找老闆或店長',
-            style: TextStyle(color: _open ? AppColors.muted : AppColors.warn, fontSize: 12),
+            style: TextStyle(color: _open ? AppColors.muted : AppColors.warn, fontSize: AppType.small),
           ),
           const SizedBox(height: 4),
           Text(
@@ -319,14 +319,14 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
                 : _planFull(p, _setup)
                     ? '點一下＝指休，再點＝想上班，再點＝取消。目前指休 $offCount 天${onCount > 0 ? '、想上班 $onCount 天' : ''}。'
                     : '點一下＝可以上，再點＝不能上，再點＝取消。有填可以上，排班就只排那些天。目前可以上 $onCount 天${offCount > 0 ? '、不能上 $offCount 天' : ''}。',
-            style: const TextStyle(fontSize: 13),
+            style: const TextStyle(fontSize: AppType.small),
           ),
         ]),
       ),
       const SizedBox(height: 10),
       Row(children: [
         for (final w in ['日', '一', '二', '三', '四', '五', '六'])
-          Expanded(child: Text(w, textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted, fontSize: 12))),
+          Expanded(child: Text(w, textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted, fontSize: AppType.small))),
       ]),
       const SizedBox(height: 4),
       GridView.count(
@@ -343,15 +343,15 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
       Wrap(spacing: 12, runSpacing: 4, children: [
         _legend(const Color(0xFFE0A34A), '指休／不能上'),
         _legend(AppColors.good, '可以上／想上班'),
-        Text('右上小數字＝其他人指休', style: TextStyle(color: AppColors.muted, fontSize: 12)),
+        Text('右上小數字＝其他人指休', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
       ]),
     ]);
   }
 
   Widget _legend(Color c, String t) => Row(mainAxisSize: MainAxisSize.min, children: [
-        Container(width: 14, height: 14, decoration: BoxDecoration(color: c, borderRadius: BorderRadius.circular(3))),
+        Container(width: 14, height: 14, decoration: BoxDecoration(color: c, borderRadius: BorderRadius.circular(AppRadius.xs))),
         const SizedBox(width: 4),
-        Text(t, style: TextStyle(color: AppColors.muted, fontSize: 12)),
+        Text(t, style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
       ]);
 
   Widget _dayCell(int d, String? kind, int others, String? note) {
@@ -366,7 +366,7 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
         margin: const EdgeInsets.all(2),
         decoration: BoxDecoration(
           color: bg,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(AppRadius.sm),
           border: bg == null ? Border.all(color: AppColors.cardHigh) : null,
         ),
         child: Stack(children: [
@@ -374,14 +374,14 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               Text('$d', style: TextStyle(fontWeight: FontWeight.w700, color: _open ? null : AppColors.muted)),
               Text(kind == 'off' ? (_person == null || _planFull(_person!, _setup) ? '指休' : '不能上') : kind == 'on' ? (_person == null || _planFull(_person!, _setup) ? '想上' : '可以上') : (note ?? ''),
-                  maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 10)),
+                  maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: AppType.micro)),
             ]),
           ),
           if (others > 0)
             Positioned(
               right: 4,
               top: 2,
-              child: Text('$others', style: TextStyle(fontSize: 10, color: AppColors.warn, fontWeight: FontWeight.w700)),
+              child: Text('$others', style: TextStyle(fontSize: AppType.micro, color: AppColors.warn, fontWeight: FontWeight.w700)),
             ),
         ]),
       ),
@@ -514,7 +514,7 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Text('自訂規則', style: TextStyle(fontWeight: FontWeight.w700)),
           Text('例如：誰跟誰不能同一天上班、新人要跟誰一起上。自動排班一定照著排；只有老闆、店長看得到。',
-              style: TextStyle(color: AppColors.muted, fontSize: 12)),
+              style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
           const SizedBox(height: 4),
           if (_setup!.pairRules.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text('還沒有', style: TextStyle(color: AppColors.muted))),
           for (final r in _setup!.pairRules)
@@ -576,7 +576,7 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
             ),
             const SizedBox(height: 8),
             Text(kind == 'apart' ? '例：Perry 跟 Eason 不能同一天上班' : '例：新人上班的日子，老手也要上班（反過來不一定）',
-                style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
           ]),
           actions: [
             TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
@@ -624,7 +624,7 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
                   SectionCard(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       const Text('每天需要幾個人', style: TextStyle(fontWeight: FontWeight.w700)),
-                      Text('「正職至少」＝這天至少要有幾個正職', style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                      Text('「正職至少」＝這天至少要有幾個正職', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
                       const SizedBox(height: 6),
                       for (var w = 1; w <= 7; w++)
                         Row(children: [
@@ -706,12 +706,12 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       const Text('每個人的條件', style: TextStyle(fontWeight: FontWeight.w700)),
                       Text('沒設的照預設：正職照該月「應休」天數排休，最多連上 6 天',
-                          style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                          style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
                       for (final p in widget.people.where((x) => x.active))
                         ListTile(
                           contentPadding: EdgeInsets.zero,
                           title: Text('${p.name}（${p.isFull ? '正職' : '兼職'}）'),
-                          subtitle: Text(_ruleSummary(p), style: const TextStyle(fontSize: 12)),
+                          subtitle: Text(_ruleSummary(p), style: const TextStyle(fontSize: AppType.small)),
                           trailing: const Icon(Icons.chevron_right),
                           onTap: () => _editRule(p),
                         ),
@@ -731,12 +731,12 @@ class _Stepper extends StatelessWidget {
   final String prefix, suffix;
   @override
   Widget build(BuildContext context) => Row(mainAxisSize: MainAxisSize.min, children: [
-        IconButton(
+        IconButton(tooltip: '減少', 
             visualDensity: VisualDensity.compact,
             onPressed: value > min ? () => onChanged(value - 1) : null,
             icon: const Icon(Icons.remove_circle_outline)),
-        Text('$prefix$value$suffix', style: const TextStyle(fontSize: 13)),
-        IconButton(
+        Text('$prefix$value$suffix', style: const TextStyle(fontSize: AppType.small)),
+        IconButton(tooltip: '增加', 
             visualDensity: VisualDensity.compact,
             onPressed: value < max ? () => onChanged(value + 1) : null,
             icon: const Icon(Icons.add_circle_outline)),
@@ -819,7 +819,7 @@ class _RuleEditorState extends State<_RuleEditor> {
             contentPadding: EdgeInsets.zero,
             title: const Text('排班時當兼職'),
             subtitle: const Text('班表上還是正職；自動排班不照應休，照最少／最多天數和填的「可以上」排，沒上班的日子留空白',
-                style: TextStyle(fontSize: 12)),
+                style: TextStyle(fontSize: AppType.small)),
             value: _asPart,
             onChanged: (v) => setState(() => _asPart = v),
           ),
@@ -852,7 +852,7 @@ class _RuleEditorState extends State<_RuleEditor> {
         Text('上班排哪些班別／時段（照點的順序，第一個優先）',
             style: const TextStyle(fontWeight: FontWeight.w600)),
         Text('沒選＝${_defaultMarks(widget.storeName, p.isFull && !_asPart, widget.options).join('、')}（有上個月的班就照上個月最常排的）',
-            style: TextStyle(color: AppColors.muted, fontSize: 12)),
+            style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
         const SizedBox(height: 6),
         Wrap(spacing: 6, runSpacing: 6, children: [
           for (final m in _choices)
@@ -1026,10 +1026,10 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
           padding: const EdgeInsets.all(16),
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Text('${p.name}・${DateFormat('M/d（E）', 'zh_TW').format(DateTime(_m.year, _m.month, d))}',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                style: const TextStyle(fontSize: AppType.title, fontWeight: FontWeight.w700)),
             if (_setup!.requests[p.id]?[d] != null)
               Text(_setup!.requests[p.id]![d] == 'off' ? '這天${_planFull(p, _setup) ? '指休' : '不能上'}' : '這天${_planFull(p, _setup) ? '想上班' : '可以上'}',
-                  style: TextStyle(color: AppColors.warn, fontSize: 13)),
+                  style: TextStyle(color: AppColors.warn, fontSize: AppType.small)),
             const SizedBox(height: 12),
             Wrap(spacing: 10, runSpacing: 10, children: [
               for (final m in {
@@ -1104,7 +1104,7 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: bg,
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(AppRadius.xs),
             border: changed ? Border.all(color: AppColors.primary, width: 2) : (bg == null && !header ? Border.all(color: AppColors.cardHigh) : null),
           ),
           child: Stack(children: [
@@ -1154,11 +1154,11 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
       Text(
           '照每天要幾人、每個人的條件、大家填的指休／可以上排出來的草稿，還沒寫進班表。'
           '點格子可以改；小圓點＝有填（橘：指休／不能上，綠：可以上／想上班）。',
-          style: TextStyle(color: AppColors.muted, fontSize: 12)),
+          style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
       SwitchListTile(
         contentPadding: EdgeInsets.zero,
         title: const Text('保留已經排好的格子'),
-        subtitle: Text(_keep ? '只補空白的格子（框起來＝跟目前班表不同）' : '整個月重新排', style: const TextStyle(fontSize: 12)),
+        subtitle: Text(_keep ? '只補空白的格子（框起來＝跟目前班表不同）' : '整個月重新排', style: const TextStyle(fontSize: AppType.small)),
         value: _keep,
         onChanged: (v) {
           _keep = v;
@@ -1171,7 +1171,7 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
             Text(short.isEmpty && warnings.isEmpty ? '說明' : '要注意的地方', style: TextStyle(color: AppColors.warn, fontWeight: FontWeight.w600)),
             const SizedBox(height: 6),
             for (final w in [..._notes, ...warnings])
-              Padding(padding: const EdgeInsets.only(bottom: 4), child: Text('・$w', style: const TextStyle(fontSize: 13))),
+              Padding(padding: const EdgeInsets.only(bottom: 4), child: Text('・$w', style: const TextStyle(fontSize: AppType.small))),
           ]),
         ),
       const SizedBox(height: 10),
@@ -1366,7 +1366,7 @@ class _ShiftMarkOptionsScreenState extends State<ShiftMarkOptionsScreen> {
         padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-          Text(hint, style: TextStyle(color: AppColors.muted, fontSize: 12)),
+          Text(hint, style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
           const SizedBox(height: 4),
           if (items.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text('還沒有', style: TextStyle(color: AppColors.muted))),
           for (final x in items)
@@ -1375,11 +1375,11 @@ class _ShiftMarkOptionsScreenState extends State<ShiftMarkOptionsScreen> {
               leading: Container(
                 constraints: const BoxConstraints(minWidth: 48),
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-                decoration: BoxDecoration(color: widget.markBg(x.mark), borderRadius: BorderRadius.circular(6)),
+                decoration: BoxDecoration(color: widget.markBg(x.mark), borderRadius: BorderRadius.circular(AppRadius.sm)),
                 child: Text(code ? x.mark : '時段', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w600)),
               ),
               title: Text(code ? (x.timeRange ?? '').replaceFirst('-', '～') : x.mark.replaceFirst('-', '～')),
-              subtitle: Text('${_num(ShiftMonth.hoursOf(code ? x.timeRange : x.mark, const {}))} 小時', style: const TextStyle(fontSize: 12)),
+              subtitle: Text('${_num(ShiftMonth.hoursOf(code ? x.timeRange : x.mark, const {}))} 小時', style: const TextStyle(fontSize: AppType.small)),
               onTap: () => _edit(code: code, cur: x),
               trailing: IconButton(tooltip: '刪除', icon: const Icon(Icons.delete_outline), onPressed: () => _delete(x)),
             ),
@@ -1402,7 +1402,7 @@ class _ShiftMarkOptionsScreenState extends State<ShiftMarkOptionsScreen> {
                   ? ErrorView(message: '讀不到班別／時段清單，請稍後再試', onRetry: _load)
                   : ListView(padding: const EdgeInsets.fromLTRB(12, 8, 12, 40), children: [
                       Text('$_storeName 的清單，只影響這家店。點一項可以修改，刪掉不會改到已經排好的班。',
-                          style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                          style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
                       const SizedBox(height: 10),
                       _section('班別', '點格子排班時可以選的班別代碼（例 B＝17:00-00:30）${_storeName == '小城外' ? '；時數照時段算' : ''}', o.codes,
                           code: true),

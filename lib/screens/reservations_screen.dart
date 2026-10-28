@@ -221,28 +221,28 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
             icon: Icon(Icons.chevron_left, color: AppColors.primary, size: 30),
           ),
           Expanded(child: InkWell(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadius.md),
           onTap: () => setState(() => _calOpen = !_calOpen),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
               color: AppColors.card,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(AppRadius.md),
               border: Border.all(color: _calOpen ? AppColors.primary : AppColors.line, width: 1.2),
             ),
             child: Row(children: [
               Expanded(
                 child: Text(
                     '${_day.month}月${_day.day}日 ${DateFormat('E', 'zh_TW').format(_day)}${_day == _today() ? '（今日）' : ''}',
-                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, fontFeatures: tabular)),
+                    style: TextStyle(fontSize: AppType.title, fontWeight: FontWeight.w600, fontFeatures: tabular)),
               ),
               if (_day != _today())
                 InkWell(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
                   onTap: () => _shiftDay(0),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    child: Text('回今天', style: TextStyle(color: AppColors.primary, fontSize: 13)),
+                    child: Text('回今天', style: TextStyle(color: AppColors.primary, fontSize: AppType.small)),
                   ),
                 ),
               Icon(_calOpen ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, color: AppColors.muted),
@@ -270,7 +270,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
         if (!settings.enabled)
           Padding(
             padding: EdgeInsets.only(bottom: 8),
-            child: Text('線上訂位目前暫停中（老闆可在右上角設定開啟）', style: TextStyle(color: AppColors.warn, fontSize: 13)),
+            child: Text('線上訂位目前暫停中（老闆可在右上角設定開啟）', style: TextStyle(color: AppColors.warn, fontSize: AppType.small)),
           ),
         () {
           // 每天名額（0052）：組數、人數、大桌
@@ -282,18 +282,18 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
               Row(children: [
                 Icon(Icons.event_seat_outlined, color: AppColors.primary),
                 const SizedBox(width: 12),
-                Expanded(child: Text('${active.length} 組・$guests 位', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700))),
+                Expanded(child: Text('${active.length} 組・$guests 位', style: const TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w700))),
                 if (!lim.closed)
                   Text('上限 ${lim.maxGroups ?? '不限'} 組／${lim.maxGuests ?? '不限'} 位',
-                      style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                      style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
               ]),
               const SizedBox(height: 6),
               if (lim.closed)
                 Text('這天不開放線上訂位${lim.note == null ? '' : '（${lim.note}）'}',
-                    style: TextStyle(color: AppColors.warn, fontSize: 13))
+                    style: TextStyle(color: AppColors.warn, fontSize: AppType.small))
               else
                 Text('${lim.largeSize} 位以上：${cap(large, lim.maxLarge)} 組${_special != null ? '・今天是特殊日期' : ''}',
-                    style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                    style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
             ]),
           );
         }(),
@@ -343,7 +343,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
               Text(t, style: const TextStyle(fontWeight: FontWeight.w700)),
               const Spacer(),
               Text('${byTime[t]!.where((r) => r.active).fold<int>(0, (s, r) => s + r.party)} 位',
-                  style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                  style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
             ]),
           ),
           SectionCard(
@@ -396,7 +396,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
         if (!_useTimeline && list.any((r) => r.status == 'cancelled' && !isHidden(r)))
           Padding(
             padding: const EdgeInsets.only(top: 8),
-            child: Text('已取消的訂位可以往左滑隱藏', textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted, fontSize: 12)),
+            child: Text('已取消的訂位可以往左滑隱藏', textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
           ),
       ]),
     );
@@ -429,7 +429,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
             if ((r.note ?? '').isNotEmpty) '備註：${r.note}',
             if (r.emailError != null) '確認信寄送失敗',
           ].join('・'),
-          style: const TextStyle(fontSize: 12),
+          style: const TextStyle(fontSize: AppType.small),
         ),
         // 0055 客人申請改人數（待店家確認）
         if (r.partyPending)
@@ -437,9 +437,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
             padding: const EdgeInsets.only(top: 4),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(color: AppColors.warn.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(6)),
+              decoration: BoxDecoration(color: AppColors.warn.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(AppRadius.sm)),
               child: Text('客人申請改為 ${r.requestedParty} 位・點一下處理',
-                  style: TextStyle(fontSize: 12, color: AppColors.warn, fontWeight: FontWeight.w600)),
+                  style: TextStyle(fontSize: AppType.small, color: AppColors.warn, fontWeight: FontWeight.w600)),
             ),
           ),
         // 熟客辨識（0052）：來過幾次、未到幾次、標籤、備註
@@ -451,8 +451,8 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
       ]),
       trailing: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
-        child: Text(reservationStatusLabel[r.status] ?? r.status, style: TextStyle(color: color, fontSize: 12)),
+        decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(AppRadius.sm)),
+        child: Text(reservationStatusLabel[r.status] ?? r.status, style: TextStyle(color: color, fontSize: AppType.small)),
       ),
     );
   }
@@ -465,8 +465,8 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
     if (g == null) return const [];
     Widget badge(String t, Color c) => Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-          decoration: BoxDecoration(color: c.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(6)),
-          child: Text(t, style: TextStyle(fontSize: 11, color: c)),
+          decoration: BoxDecoration(color: c.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(AppRadius.sm)),
+          child: Text(t, style: TextStyle(fontSize: AppType.caption, color: c)),
         );
     return [
       if (g.visits > 0) badge('來過 ${g.visits} 次', AppColors.good),
@@ -493,7 +493,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
           content: SingleChildScrollView(
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('電話 ${r.phone}・來過 ${g?.visits ?? 0} 次・未到 ${g?.noShows ?? 0} 次',
-                  style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                  style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
               const SizedBox(height: 10),
               Wrap(spacing: 6, runSpacing: 6, children: [
                 for (final t in {...guestTagPresets, ...tags})
@@ -527,7 +527,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
                   onChanged: (v) => setD(() => reset = v ?? false),
                   title: const Text('解除未到紀錄'),
                   subtitle: Text('未到 ${s.noshowBlockCount} 次以上目前不能線上訂位；解除後可以再線上訂',
-                      style: const TextStyle(fontSize: 12)),
+                      style: const TextStyle(fontSize: AppType.small)),
                 ),
             ]),
           ),
@@ -571,7 +571,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
                 r.phone.isEmpty ? '沒留電話' : r.phone,
                 if ((r.note ?? '').trim().isNotEmpty) '備註：${r.note!.trim()}',
               ].join('\n'),
-              style: const TextStyle(fontSize: 13),
+              style: const TextStyle(fontSize: AppType.small),
             ),
           ),
           if (r.partyPending) ...[
@@ -797,9 +797,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
               Row(children: [
                 const Text('人數'),
                 const Spacer(),
-                IconButton(onPressed: party > 1 ? () => set(() => party--) : null, icon: const Icon(Icons.remove_circle_outline)),
-                Text('$party', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
-                IconButton(onPressed: party < 999 ? () => set(() => party++) : null, icon: const Icon(Icons.add_circle_outline)),
+                IconButton(tooltip: '減少', onPressed: party > 1 ? () => set(() => party--) : null, icon: const Icon(Icons.remove_circle_outline)),
+                Text('$party', style: const TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w600)),
+                IconButton(tooltip: '增加', onPressed: party < 999 ? () => set(() => party++) : null, icon: const Icon(Icons.add_circle_outline)),
               ]),
               TextField(controller: name, maxLength: 40, decoration: const InputDecoration(labelText: '稱呼（選填，例：王先生）')),
               const SizedBox(height: 4),
@@ -836,9 +836,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
       builder: (c) => AlertDialog(
         title: const Text('客人訂位頁'),
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('把這個網址放在 IG、Google 商家、LINE 官方帳號，客人就能直接訂位：', style: TextStyle(fontSize: 13)),
+          const Text('把這個網址放在 IG、Google 商家、LINE 官方帳號，客人就能直接訂位：', style: TextStyle(fontSize: AppType.small)),
           const SizedBox(height: 8),
-          SelectableText(url, style: TextStyle(fontSize: 13, color: AppColors.primary)),
+          SelectableText(url, style: TextStyle(fontSize: AppType.small, color: AppColors.primary)),
         ]),
         actions: [
           TextButton(onPressed: () => openExternal(url), child: const Text('打開看看')),
@@ -1045,7 +1045,7 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.event),
             title: const Text('日期'),
-            trailing: Text(DateFormat('M/d（E）', 'zh_TW').format(_date), style: const TextStyle(fontSize: 16)),
+            trailing: Text(DateFormat('M/d（E）', 'zh_TW').format(_date), style: const TextStyle(fontSize: AppType.title)),
             onTap: () async {
               final d = await showDatePicker(
                 context: context,
@@ -1076,17 +1076,17 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
           Row(children: [
             Text('人數', style: TextStyle(color: AppColors.muted)),
             const Spacer(),
-            IconButton(onPressed: _party > 1 ? () => setState(() => _party--) : null, icon: const Icon(Icons.remove_circle_outline)),
+            IconButton(tooltip: '減少', onPressed: _party > 1 ? () => setState(() => _party--) : null, icon: const Icon(Icons.remove_circle_outline)),
             // 點數字可以直接輸入（電話訂位人數不設上限，老闆 2026-10-17）
             InkWell(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
               onTap: _typeParty,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                child: Text('$_party', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, decoration: TextDecoration.underline)),
+                child: Text('$_party', style: const TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w700, decoration: TextDecoration.underline)),
               ),
             ),
-            IconButton(onPressed: _party < _maxParty ? () => setState(() => _party++) : null, icon: const Icon(Icons.add_circle_outline)),
+            IconButton(tooltip: '增加', onPressed: _party < _maxParty ? () => setState(() => _party++) : null, icon: const Icon(Icons.add_circle_outline)),
           ]),
           // 位置（選填）：跟排桌同一個選桌畫面，可併桌、可自動選桌
           if (_hasTables) ...[
@@ -1096,7 +1096,7 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
               title: const Text('位置（選填）'),
               trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                 Text(_tableIds.isEmpty ? '不指定' : _tableLabel,
-                    style: TextStyle(fontSize: 16, color: _tableIds.isEmpty ? AppColors.muted : null)),
+                    style: TextStyle(fontSize: AppType.title, color: _tableIds.isEmpty ? AppColors.muted : null)),
                 const Icon(Icons.chevron_right),
               ]),
               onTap: _pickTables,
@@ -1354,7 +1354,7 @@ class _ReservationSettingsScreenState extends State<ReservationSettingsScreen> {
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('開放線上訂位'),
-            subtitle: const Text('關閉後訂位頁會顯示「暫停線上訂位」', style: TextStyle(fontSize: 12)),
+            subtitle: const Text('關閉後訂位頁會顯示「暫停線上訂位」', style: TextStyle(fontSize: AppType.small)),
             value: _enabled,
             onChanged: (v) => setState(() => _enabled = v),
           ),
@@ -1369,7 +1369,7 @@ class _ReservationSettingsScreenState extends State<ReservationSettingsScreen> {
           Row(children: [
             Expanded(
                 child: Text(_wdSlots.isEmpty ? '訂位時段（點 ✕ 刪除）' : '平常的訂位時段（點 ✕ 刪除）',
-                    style: TextStyle(color: AppColors.muted, fontSize: 13))),
+                    style: TextStyle(color: AppColors.muted, fontSize: AppType.small))),
             TextButton.icon(onPressed: _addSlot, icon: const Icon(Icons.add, size: 18), label: const Text('新增時段')),
           ]),
           Wrap(spacing: 6, runSpacing: 6, children: [
@@ -1383,14 +1383,14 @@ class _ReservationSettingsScreenState extends State<ReservationSettingsScreen> {
           if (_slots.isEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 4),
-              child: Text('至少要有一個時段', style: TextStyle(color: AppColors.bad, fontSize: 12)),
+              child: Text('至少要有一個時段', style: TextStyle(color: AppColors.bad, fontSize: AppType.small)),
             ),
           // 0063 依星期另設時段：有設的那天用自己的時段，改這裡不影響平常的時段
           for (final i in (_wdSlots.keys.toList()..sort())) ...[
             const SizedBox(height: 12),
             Row(children: [
               Expanded(
-                  child: Text('週${_wdName[i - 1]}的時段', style: TextStyle(color: AppColors.primary, fontSize: 13, fontWeight: FontWeight.w600))),
+                  child: Text('週${_wdName[i - 1]}的時段', style: TextStyle(color: AppColors.primary, fontSize: AppType.small, fontWeight: FontWeight.w600))),
               TextButton(onPressed: () => _addSlot(_wdSlots[i]), child: const Text('新增')),
               TextButton(
                   onPressed: () => setState(() => _wdSlots.remove(i)),
@@ -1418,11 +1418,11 @@ class _ReservationSettingsScreenState extends State<ReservationSettingsScreen> {
           ListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('當天訂位截止'),
-              subtitle: const Text('這個時間以後不接受當天的線上訂位', style: TextStyle(fontSize: 12)),
-              trailing: Text(_cutoff, style: const TextStyle(fontSize: 16)),
+              subtitle: const Text('這個時間以後不接受當天的線上訂位', style: TextStyle(fontSize: AppType.small)),
+              trailing: Text(_cutoff, style: const TextStyle(fontSize: AppType.title)),
               onTap: () => _pick(_cutoff, (v) => _cutoff = v)),
           const SizedBox(height: 8),
-          Text('每天名額（不限用餐時間；空白＝不限；電話訂位可超收）', style: TextStyle(color: AppColors.muted, fontSize: 13)),
+          Text('每天名額（不限用餐時間；空白＝不限；電話訂位可超收）', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
           const SizedBox(height: 8),
           Row(children: [
             Expanded(child: TextField(controller: _groups, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '每天最多幾組'))),
@@ -1436,7 +1436,7 @@ class _ReservationSettingsScreenState extends State<ReservationSettingsScreen> {
             Expanded(child: TextField(controller: _largeMax, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '大桌每天最多幾組'))),
           ]),
           const SizedBox(height: 16),
-          Text('每週固定公休（不開放線上訂位）', style: TextStyle(color: AppColors.muted, fontSize: 13)),
+          Text('每週固定公休（不開放線上訂位）', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
           const SizedBox(height: 6),
           Wrap(spacing: 6, runSpacing: 6, children: [
             for (var i = 1; i <= 7; i++)
@@ -1557,8 +1557,8 @@ class _ReservationSummaryCardState extends State<ReservationSummaryCard> with Wi
           Container(
             margin: const EdgeInsets.only(left: 6),
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-            decoration: BoxDecoration(color: AppColors.bad, borderRadius: BorderRadius.circular(9)),
-            child: Text('${u.length}', style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.w600)),
+            decoration: BoxDecoration(color: AppColors.bad, borderRadius: BorderRadius.circular(AppRadius.sm)),
+            child: Text('${u.length}', style: const TextStyle(fontSize: AppType.caption, color: Colors.white, fontWeight: FontWeight.w600)),
           ),
       ]),
     );
@@ -1612,28 +1612,28 @@ class _ReservationSummaryCardState extends State<ReservationSummaryCard> with Wi
           if (widget.compact) {
             return Material(
               color: AppColors.card,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(AppRadius.lg),
               child: InkWell(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(AppRadius.lg),
                 onTap: open,
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
-                    Text('今日訂位', style: TextStyle(fontSize: 12, color: AppColors.muted)),
+                    Text('今日訂位', style: TextStyle(fontSize: AppType.small, color: AppColors.muted)),
                     const SizedBox(height: 6),
                     if (ready && list.isNotEmpty)
                       FittedBox(
                         fit: BoxFit.scaleDown,
                         alignment: Alignment.centerLeft,
                         child: Text.rich(TextSpan(children: [
-                          TextSpan(text: '${list.length}', style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w600, fontFeatures: tabular)),
-                          TextSpan(text: ' 組 · $guests 位', style: TextStyle(fontSize: 13, color: AppColors.muted)),
+                          TextSpan(text: '${list.length}', style: const TextStyle(fontSize: AppType.display, fontWeight: FontWeight.w600, fontFeatures: tabular)),
+                          TextSpan(text: ' 組 · $guests 位', style: TextStyle(fontSize: AppType.small, color: AppColors.muted)),
                         ])),
                       )
                     else
-                      Text(ready ? '還沒有訂位' : sub, style: TextStyle(fontSize: 14, color: AppColors.muted)),
+                      Text(ready ? '還沒有訂位' : sub, style: TextStyle(fontSize: AppType.body, color: AppColors.muted)),
                     if (waiting.isNotEmpty)
-                      Text('下一組 ${waiting.first}', style: TextStyle(fontSize: 11, color: AppColors.muted, fontFeatures: tabular)),
+                      Text('下一組 ${waiting.first}', style: TextStyle(fontSize: AppType.caption, color: AppColors.muted, fontFeatures: tabular)),
                     _eventsLine(compact: true),
                   ]),
                 ),
@@ -1643,7 +1643,7 @@ class _ReservationSummaryCardState extends State<ReservationSummaryCard> with Wi
           return SectionCard(
             padding: EdgeInsets.zero,
             child: InkWell(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(AppRadius.lg),
               onTap: open,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -1652,22 +1652,22 @@ class _ReservationSummaryCardState extends State<ReservationSummaryCard> with Wi
                   Container(
                     width: 40,
                     height: 40,
-                    decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
+                    decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(AppRadius.sm)),
                     child: Icon(Icons.event_seat_outlined, size: 20, color: AppColors.primary),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('今日訂位', style: TextStyle(fontSize: 12, color: AppColors.muted)),
+                      Text('今日訂位', style: TextStyle(fontSize: AppType.small, color: AppColors.muted)),
                       const SizedBox(height: 2),
                       Text(ready && list.isNotEmpty ? '${list.length} 組 · $guests 位' : sub,
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, fontFeatures: tabular)),
+                          style: const TextStyle(fontSize: AppType.title, fontWeight: FontWeight.w500, fontFeatures: tabular)),
                     ]),
                   ),
                   if (waiting.isNotEmpty)
                     Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                      Text('下一組', style: TextStyle(fontSize: 11, color: AppColors.muted)),
-                      Text(waiting.first, style: const TextStyle(fontSize: 14, fontFeatures: tabular)),
+                      Text('下一組', style: TextStyle(fontSize: AppType.caption, color: AppColors.muted)),
+                      Text(waiting.first, style: const TextStyle(fontSize: AppType.body, fontFeatures: tabular)),
                     ])
                   else
                     Icon(Icons.chevron_right, color: AppColors.muted),
@@ -1742,17 +1742,17 @@ class _ReservationMonthCalendarState extends State<ReservationMonthCalendar> {
       padding: const EdgeInsets.only(top: 12),
       child: Column(children: [
         Row(children: [
-          IconButton(onPressed: () => _go(-1), icon: Icon(Icons.chevron_left, color: AppColors.primary)),
+          IconButton(tooltip: '上個月', onPressed: () => _go(-1), icon: Icon(Icons.chevron_left, color: AppColors.primary)),
           Expanded(
             child: Text('${_month.year}年${_month.month}月',
-                textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                textAlign: TextAlign.center, style: const TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w700)),
           ),
-          IconButton(onPressed: () => _go(1), icon: Icon(Icons.chevron_right, color: AppColors.primary)),
+          IconButton(tooltip: '下個月', onPressed: () => _go(1), icon: Icon(Icons.chevron_right, color: AppColors.primary)),
         ]),
         const SizedBox(height: 4),
         Row(children: [
           for (final w in const ['日', '一', '二', '三', '四', '五', '六'])
-            Expanded(child: Text(w, textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: AppColors.muted))),
+            Expanded(child: Text(w, textAlign: TextAlign.center, style: TextStyle(fontSize: AppType.small, color: AppColors.muted))),
         ]),
         const SizedBox(height: 6),
         GridView.count(
@@ -1778,12 +1778,12 @@ class _ReservationMonthCalendarState extends State<ReservationMonthCalendar> {
     final n = _groups[d] ?? 0;
     final fg = isSel ? AppColors.onPrimary : (past ? AppColors.muted : AppColors.text);
     return InkWell(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(AppRadius.sm),
       onTap: () => widget.onPick(d),
       child: Container(
         decoration: BoxDecoration(
           color: isSel ? AppColors.primary : AppColors.cardHigh,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(AppRadius.sm),
           border: Border.all(color: isSel ? AppColors.primary : AppColors.line),
         ),
         child: Stack(alignment: Alignment.center, children: [
@@ -1794,10 +1794,10 @@ class _ReservationMonthCalendarState extends State<ReservationMonthCalendar> {
             ),
           Column(mainAxisAlignment: MainAxisAlignment.center, children: [
             Text('${d.day}',
-                style: TextStyle(fontSize: 16, fontWeight: isSel ? FontWeight.w700 : FontWeight.w500, color: fg, fontFeatures: tabular)),
+                style: TextStyle(fontSize: AppType.title, fontWeight: isSel ? FontWeight.w700 : FontWeight.w500, color: fg, fontFeatures: tabular)),
             if (n > 0)
               Text('$n 組',
-                  style: TextStyle(fontSize: 9, height: 1.1, color: isSel ? AppColors.onPrimary : AppColors.primary, fontFeatures: tabular)),
+                  style: TextStyle(fontSize: AppType.micro, height: 1.1, color: isSel ? AppColors.onPrimary : AppColors.primary, fontFeatures: tabular)),
           ]),
         ]),
       ),
@@ -1863,7 +1863,7 @@ class _ReservationCalendarScreenState extends State<ReservationCalendarScreen> {
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('底線＝當天有訂位（數字是組數）', style: TextStyle(fontSize: 12, color: AppColors.muted)),
+          Text('底線＝當天有訂位（數字是組數）', style: TextStyle(fontSize: AppType.small, color: AppColors.muted)),
           const SizedBox(height: 8),
           for (final m in months)
             Container(
@@ -1886,11 +1886,11 @@ class _ReservationCalendarScreenState extends State<ReservationCalendarScreen> {
     ];
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text('${m.year == widget.today.year ? '' : '${m.year} 年 '}${m.month} 月',
-          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: isThisMonth ? AppColors.primary : AppColors.text)),
+          style: TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w700, color: isThisMonth ? AppColors.primary : AppColors.text)),
       const SizedBox(height: 10),
       Row(children: [
         for (final w in const ['一', '二', '三', '四', '五', '六', '日'])
-          Expanded(child: Text(w, textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: AppColors.muted))),
+          Expanded(child: Text(w, textAlign: TextAlign.center, style: TextStyle(fontSize: AppType.small, color: AppColors.muted))),
       ]),
       const SizedBox(height: 6),
       GridView.count(
@@ -1922,7 +1922,7 @@ class _ReservationCalendarScreenState extends State<ReservationCalendarScreen> {
           ),
           child: Text('${d.day}',
               style: TextStyle(
-                fontSize: 16,
+                fontSize: AppType.title,
                 fontWeight: isToday || isSel ? FontWeight.w700 : FontWeight.w500,
                 color: isToday ? AppColors.onPrimary : AppColors.text,
                 fontFeatures: tabular,
@@ -1935,7 +1935,7 @@ class _ReservationCalendarScreenState extends State<ReservationCalendarScreen> {
               ? null
               : Column(children: [
                   Container(width: 18, height: 2, color: AppColors.primary),
-                  Text('$n', style: TextStyle(fontSize: 9, height: 1.2, color: AppColors.primary, fontFeatures: tabular)),
+                  Text('$n', style: TextStyle(fontSize: AppType.micro, height: 1.2, color: AppColors.primary, fontFeatures: tabular)),
                 ]),
         ),
       ]),
@@ -2010,14 +2010,14 @@ class _SpecialDaysScreenState extends State<SpecialDaysScreen> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('整天不開放線上訂位'),
-                subtitle: const Text('公休、包場', style: TextStyle(fontSize: 12)),
+                subtitle: const Text('公休、包場', style: TextStyle(fontSize: AppType.small)),
                 value: closed,
                 onChanged: (v) => setD(() => closed = v),
               ),
               TextField(controller: note, maxLength: 100, decoration: const InputDecoration(labelText: '說明（會顯示在訂位頁，例如：包場）')),
               if (!closed) ...[
                 const SizedBox(height: 8),
-                Text('這天改名額（空白＝照平常）', style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                Text('這天改名額（空白＝照平常）', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
                 TextField(controller: groups, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '最多幾組')),
                 TextField(controller: guests, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '最多幾位')),
                 TextField(controller: large, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '大桌最多幾組')),
@@ -2099,9 +2099,9 @@ class _SpecialDaysScreenState extends State<SpecialDaysScreen> {
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Material(
                     color: AppColors.card,
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
                     child: ListTile(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.lg)),
                       title: Text(DateFormat('M/d（E）', 'zh_TW').format(d.day)),
                       subtitle: Text(
                         d.closed
@@ -2112,7 +2112,7 @@ class _SpecialDaysScreenState extends State<SpecialDaysScreen> {
                                 if (d.maxLarge != null) '大桌 ${d.maxLarge} 組',
                                 if (d.note != null) d.note!,
                               ].join('・'),
-                        style: TextStyle(color: d.closed ? AppColors.warn : AppColors.muted, fontSize: 12),
+                        style: TextStyle(color: d.closed ? AppColors.warn : AppColors.muted, fontSize: AppType.small),
                       ),
                       onTap: () => _edit(d),
                       trailing: IconButton(

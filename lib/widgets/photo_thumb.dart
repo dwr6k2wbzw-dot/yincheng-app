@@ -37,7 +37,7 @@ class _PhotoThumbState extends State<PhotoThumb> {
       child: GestureDetector(
         onTap: () => showStoragePhoto(context, widget.path),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(AppRadius.sm),
           child: FutureBuilder<String>(
             future: _url,
             builder: (context, snap) {
