@@ -120,35 +120,73 @@ s = s.replace("</head>", sw + "\n</head>", 1)
 # 拍照辨識送貨單（免費文字辨識 Tesseract.js，在手機上執行；辨識程式與語言資料第一次使用時才下載）
 s = re.sub(r'<script id="yc-scan">.*?</script>', "", s, flags=re.S)
 scan = r"""<script id="yc-scan">
+// 照片縮小成長邊 2000 的 JPEG（老闆 2026-10-29：安卓手機拍照上傳失敗）
+//   安卓相機原圖動輒 5000 萬～2 億畫素，整張解開再畫到畫布，記憶體不夠就會失敗。
+//   先用 createImageBitmap 直接解成小圖（只指定一邊，比例自動維持），失敗才退回舊做法。
+window.ycShrinkImage = async function (f) {
+  var max = 2000;
+  var url = URL.createObjectURL(f);
+  try {
+    var img = new Image();
+    img.decoding = 'async';
+    await new Promise(function (ok, bad) {
+      img.onload = ok;
+      img.onerror = function () { bad(new Error('照片讀取失敗（格式不支援或檔案太大）')); };
+      img.src = url;
+    });
+    var w = img.naturalWidth, h = img.naturalHeight;
+    var k = Math.min(1, max / Math.max(w, h));
+    var src = img;
+    if (window.createImageBitmap && k < 1) {
+      try {
+        src = await createImageBitmap(f, w >= h
+          ? { resizeWidth: Math.round(w * k), resizeQuality: 'high' }
+          : { resizeHeight: Math.round(h * k), resizeQuality: 'high' });
+      } catch (e) { src = img; }
+    }
+    var cw = src === img ? Math.round(w * k) : src.width;
+    var ch = src === img ? Math.round(h * k) : src.height;
+    var c = document.createElement('canvas');
+    c.width = cw; c.height = ch;
+    c.getContext('2d').drawImage(src, 0, 0, cw, ch);
+    if (src.close) src.close();
+    var out = c.toDataURL('image/jpeg', 0.85);
+    if (!out || out.length < 100) throw new Error('照片讀取失敗（手機記憶體不足，請重拍或從相簿選）');
+    return out;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+};
 window.ycPickImage = function (fromLibrary) {
   return new Promise(function (resolve, reject) {
+    var isAndroid = /Android/i.test(navigator.userAgent || '');
     var input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
-    // fromLibrary：直接開相簿（班表照片，老闆 2026-10-12）；否則直接開相機（送貨單、交接）
-    if (!fromLibrary) input.setAttribute('capture', 'environment');
-    input.style.display = 'none';
+    // fromLibrary：直接開相簿（班表照片，老闆 2026-10-12）；否則 iPhone 直接開相機（送貨單、交接）
+    // 安卓不直接開相機（老闆 2026-10-29）：系統會讓人選「相機」或「相簿」。
+    //   安卓開相機時，瀏覽器可能被系統關掉，回來時 App 重新載入、照片就不見了；能從相簿選才有退路。
+    if (!fromLibrary && !isAndroid) input.setAttribute('capture', 'environment');
+    input.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0';
     document.body.appendChild(input);
-    var finished = false;
-    function finish(v) { if (!finished) { finished = true; input.remove(); resolve(v); } }
-    input.addEventListener('cancel', function () { finish(null); });
+    var finished = false, cancelTimer = null;
+    function finish(v, err) {
+      if (finished) return;
+      finished = true;
+      clearTimeout(cancelTimer);
+      setTimeout(function () { input.remove(); }, 0);
+      if (err) reject(err); else resolve(v);
+    }
+    // 有些安卓手機從相機回來時，會先送「取消」再送「選好了」：取消先等一下，選好了就照常處理
+    input.addEventListener('cancel', function () {
+      clearTimeout(cancelTimer);
+      cancelTimer = setTimeout(function () { finish(null); }, 1500);
+    });
     input.addEventListener('change', function () {
+      clearTimeout(cancelTimer);
       var f = input.files && input.files[0];
       if (!f) { finish(null); return; }
-      var url = URL.createObjectURL(f);
-      var img = new Image();
-      img.onload = function () {
-        try {
-          var max = 2000, k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
-          var c = document.createElement('canvas');
-          c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
-          c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-          URL.revokeObjectURL(url);
-          finish(c.toDataURL('image/jpeg', 0.85));
-        } catch (e) { finished = true; reject(e); }
-      };
-      img.onerror = function () { finished = true; reject(new Error('照片讀取失敗')); };
-      img.src = url;
+      window.ycShrinkImage(f).then(function (v) { finish(v); }, function (e) { finish(null, e); });
     });
     input.click();
   });
