@@ -548,6 +548,11 @@ button.cd:disabled small { font-size:12.5px; } /* 公休字再大兩階（老闆
 .anniv .ann { grid-column:1 / -1; margin:8px 0 0; color:var(--gold); font:600 13px/1.4 "Noto Serif TC", serif; letter-spacing:.5em; text-indent:.5em; text-align:center; }
 html:not([lang^="zh"]) .anniv .ann { letter-spacing:.3em; text-indent:.3em; font-size:12px; }
 .t-anniv10 .card { box-shadow:inset 0 0 0 1px rgba(211,177,110,.22); }
+.anniv .thx { grid-column:1 / -1; margin:6px 0 0; color:var(--muted); font-size:12px; letter-spacing:.18em; text-align:center; }
+.t-anniv10 .fx .foil i { position:absolute; top:-20px; aspect-ratio:1/1.6; border-radius:1px;
+  background:linear-gradient(135deg, #FFF3C8, #D9B36A 45%, #8C6A2A 60%, #F2D594); opacity:.75; animation:foilFall linear infinite; }
+@keyframes foilFall { 0% { transform:translateY(0) rotate(0) rotateY(0); } 100% { transform:translateY(110vh) rotate(260deg) rotateY(720deg); } }
+@media (prefers-reduced-motion: reduce) { .t-anniv10 .fx .foil { display:none; } }
 
 /* ---- 細節修正（2026-10-29）：金額不斷行、鍵盤操作看得到焦點 ---- */
 .nw { white-space:nowrap; }

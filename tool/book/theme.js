@@ -25,13 +25,24 @@
   document.body.classList.add('t-' + theme.id);
 
   if (theme.id === 'anniv10') {
-    // 十週年（2026-10-29 收斂）：只留一個安靜的燙金「10」＋一行字，不放光芒、金箔、星星
+    // 十週年（2026-10-29 收斂；老闆：保留金箔、謝謝你那行）：燙金「10」＋兩行字＋金箔慢慢飄落，不放光芒、星星
+    const fx = document.createElement('div');
+    fx.className = 'fx';
+    fx.setAttribute('aria-hidden', 'true');
+    let foil = '';
+    for (let i = 0; i < 22; i++) {
+      foil += '<i style="left:' + (Math.random() * 100).toFixed(1) + '%;animation-delay:' + (-Math.random() * 14).toFixed(2) +
+        's;animation-duration:' + (9 + Math.random() * 7).toFixed(1) + 's;width:' + (3 + Math.random() * 5).toFixed(1) + 'px"></i>';
+    }
+    fx.innerHTML = '<span class="foil">' + foil + '</span>';
+    document.body.prepend(fx);
     const head = document.querySelector('header.brand');
     if (head) {
       const g = document.createElement('div');
       g.className = 'anniv';
       g.innerHTML = '<span class="rule" aria-hidden="true"></span><b class="ten">10</b><span class="rule" aria-hidden="true"></span>' +
-        '<p class="ann">' + (theme.greet[lang] || theme.greet.zh) + '</p>';
+        '<p class="ann">' + (theme.greet[lang] || theme.greet.zh) + '</p>' +
+        '<p class="thx">' + ({ zh: '謝謝你，陪我們走過十年', en: 'Thank you for ten wonderful years', ja: '十年間、ありがとうございました' }[lang] || '') + '</p>';
       const anchor = head.querySelector('.kicker') || head.querySelector('h1');
       if (anchor) anchor.after(g); else head.append(g);
     }
