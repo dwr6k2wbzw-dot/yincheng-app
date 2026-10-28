@@ -144,6 +144,15 @@
         '<g class="sh"><line x1="100" y1="116" x2="100" y2="22"/></g><circle cx="100" cy="100" r="4" class="pin"/></svg></div>' + line + skip;
     }
     document.body.appendChild(o);
+    // 老爺鐘開場加快（2026-10-29：5 秒 → 約 2.8 秒）：一次性的動畫整體同比例加速，燈光閃爍等循環效果照原速
+    if (pick === 'grand' && o.getAnimations) {
+      const SPEED = 1.8;
+      o.getAnimations({ subtree: true }).forEach((a) => {
+        const it = a.effect && a.effect.getTiming ? a.effect.getTiming().iterations : 1;
+        if (it !== Infinity) a.playbackRate = SPEED;
+      });
+      dur = Math.round(dur / SPEED);
+    }
     const done = () => { o.classList.add('out'); setTimeout(() => o.remove(), 900); clearTimeout(t); };
     const t = setTimeout(done, dur);
     o.addEventListener('click', done);

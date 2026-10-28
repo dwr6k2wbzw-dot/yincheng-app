@@ -25,28 +25,13 @@
   document.body.classList.add('t-' + theme.id);
 
   if (theme.id === 'anniv10') {
-    // 十週年：裝飾藝術（Art Deco）放射光芒、金箔慢慢飄落、燙金「10」
-    const fx = document.createElement('div');
-    fx.className = 'fx';
-    fx.setAttribute('aria-hidden', 'true');
-    let foil = '';
-    for (let i = 0; i < 22; i++) {
-      foil += '<i style="left:' + (Math.random() * 100).toFixed(1) + '%;animation-delay:' + (-Math.random() * 14).toFixed(2) +
-        's;animation-duration:' + (9 + Math.random() * 7).toFixed(1) + 's;width:' + (3 + Math.random() * 5).toFixed(1) + 'px"></i>';
-    }
-    let stars = '';
-    for (let i = 0; i < 7; i++) {
-      stars += '<b style="left:' + (6 + Math.random() * 88).toFixed(1) + '%;top:' + (4 + Math.random() * 30).toFixed(1) + '%;animation-delay:' + (-Math.random() * 3).toFixed(2) + 's"></b>';
-    }
-    fx.innerHTML = '<span class="rays"></span><span class="foil">' + foil + '</span><span class="stars">' + stars + '</span>';
-    document.body.prepend(fx);
+    // 十週年（2026-10-29 收斂）：只留一個安靜的燙金「10」＋一行字，不放光芒、金箔、星星
     const head = document.querySelector('header.brand');
     if (head) {
       const g = document.createElement('div');
       g.className = 'anniv';
-      g.innerHTML = '<span class="fan l"></span><b class="ten">10</b><span class="fan r"></span>' +
-        '<p class="ann">' + (theme.greet[lang] || theme.greet.zh) + '</p>' +
-        '<p class="thx">' + ({ zh: '謝謝你，陪我們走過十年', en: 'Thank you for ten wonderful years', ja: '十年間、ありがとうございました' }[lang] || '') + '</p>';
+      g.innerHTML = '<span class="rule" aria-hidden="true"></span><b class="ten">10</b><span class="rule" aria-hidden="true"></span>' +
+        '<p class="ann">' + (theme.greet[lang] || theme.greet.zh) + '</p>';
       const anchor = head.querySelector('.kicker') || head.querySelector('h1');
       if (anchor) anchor.after(g); else head.append(g);
     }
