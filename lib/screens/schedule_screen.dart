@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../app_state.dart';
-import '../config.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
+import '../data/shift_marks.dart';
 import '../services/slip_scan.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -36,6 +36,8 @@ Color? _markBg(String? m) => switch (m) {
       'B' || 'BP' || 'BP+' || 'BH' || 'BH-' => const Color(0xFF6F9BE0).withValues(alpha: 0.50),
       'BHP' || 'BHP-' => const Color(0xFFF2C94C).withValues(alpha: 0.55),
       _ when m != null && ShiftMonth.isRange(m) => AppColors.primary.withValues(alpha: 0.22),
+      // 自己新增的班別（0075）：跟 B 系同色
+      _ when m != null && m != 'V' && RegExp(r'^[A-Z][A-Z0-9]{0,3}[+-]?$').hasMatch(m) => const Color(0xFF6F9BE0).withValues(alpha: 0.40),
       _ => null,
     };
 
@@ -56,10 +58,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   Repository get _repo => AppScope.of(context).repo;
   String get _store => widget.membership.storeId;
   String get _storeName => widget.membership.storeName;
-  List<String> get _marks => AppConfig.shiftMarks[_storeName] ?? const ['V', '休', '指休', 'O'];
+  ShiftOptions? get _opts => _data?.options;
+  List<String> get _marks => storeMarks(_storeName, _opts);
+  /// 兼職時段選項（0075：兩家店都有，可自己新增刪除）
+  List<String> get _ranges => storeRanges(_storeName, _opts);
   /// 以時數統計（小城外）：null 表示看天數（隱城）
-  Map<String, double>? get _codeHours => AppConfig.shiftHours[_storeName];
-  Map<String, String> get _codeTimes => AppConfig.shiftCodeTimes[_storeName] ?? const {};
+  Map<String, double>? get _codeHours => storeCodeHours(_storeName, _opts);
+  Map<String, String> get _codeTimes => storeCodeTimes(_storeName, _opts);
   /// 班別說明：B → 17:00~00:30（沒有時段的記號用中文說明）
   String _markDesc(String m) => _codeTimes[m]?.replaceFirst('-', '~') ?? _markLabel[m] ?? m;
 
@@ -133,12 +138,12 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 ),
               ActionChip(label: const Text('清除'), onPressed: () => Navigator.pop(c, '')),
             ]),
-            if (_codeHours != null) ...[
+            if (_ranges.isNotEmpty || p.kind == 'part') ...[
               const SizedBox(height: 16),
               Text('兼職時段', style: TextStyle(color: AppColors.muted)),
               const SizedBox(height: 8),
               Wrap(spacing: 8, runSpacing: 8, children: [
-                for (final r in AppConfig.shiftQuickRanges)
+                for (final r in _ranges)
                   ChoiceChip(
                     label: Text(r),
                     selected: r == current,
@@ -459,13 +464,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               const SizedBox(height: 8),
               Wrap(spacing: 12, runSpacing: 4, children: [
                 for (final m in _marks) _legend(m, _markBg(m), _markDesc(m)),
-                if (_codeHours != null) _legend('時段', _markBg('18:00-00:30'), '兼職時段'),
+                if (_ranges.isNotEmpty) _legend('時段', _markBg('18:00-00:30'), '兼職時段'),
               ]),
               if (_codeHours != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
                   child: Text(
-                      '時數：${_codeHours!.entries.map((e) => '${e.key} ${_num(e.value)}').join('、')}（小時）；兼職時段照實際時間算',
+                      '時數：${_codeHours!.entries.where((e) => _marks.contains(e.key)).map((e) => '${e.key} ${_num(e.value)}').join('、')}（小時）；兼職時段照實際時間算',
                       style: TextStyle(color: AppColors.muted, fontSize: 11)),
                 ),
               const SizedBox(height: 16),
@@ -477,19 +482,27 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               _photoRow(d),
               if (_canEdit) ...[
                 const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: OutlinedButton.icon(
+                Wrap(spacing: 8, runSpacing: 8, children: [
+                  OutlinedButton.icon(
                     onPressed: () => _managePeople(d),
                     icon: const Icon(Icons.people_outline),
                     label: const Text('班表人員'),
                   ),
-                ),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      await Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) => ShiftMarkOptionsScreen(membership: widget.membership, markBg: _markBg)));
+                      _reload();
+                    },
+                    icon: const Icon(Icons.schedule_outlined),
+                    label: const Text('班別／時段'),
+                  ),
+                ]),
               ],
               if (_canEdit)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
-                  child: Text(_codeHours != null ? '點格子改班（兼職可選時段）、點日期加備註、點下方統計填未休／補休與特休。' : '點格子改班、點日期加備註、點下方統計填應休與特休。',
+                  child: Text(_codeHours != null ? '點格子改班（兼職可選時段）、點日期加備註、點下方統計填未休／補休與特休。' : '點格子改班（兼職可選時段）、點日期加備註、點下方統計填應休與特休。',
                       style: TextStyle(color: AppColors.muted, fontSize: 12)),
                 ),
             ]),
@@ -592,7 +605,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                         fontSize: ShiftMonth.isRange(d.mark(p.id, day)) ? 9 : 12,
                         height: 1.1,
                         fontWeight: FontWeight.w600)),
-                h: _codeHours != null ? 34 : 30,
+                h: _codeHours != null || _ranges.isNotEmpty ? 34 : 30,
                 bg: _markBg(d.mark(p.id, day)),
                 border: _markBg(d.mark(p.id, day)) == null ? Border.all(color: AppColors.cardHigh) : null,
                 onTap: _canEdit ? () => _editCell(p, day, d.mark(p.id, day)) : null,

@@ -620,6 +620,32 @@ class ShiftPerson {
       );
 }
 
+/// 班別／時段清單的一項（0075）：kind code＝班別（例 B＝17:00-00:30）、range＝兼職時段
+class ShiftMarkOption {
+  final String id;
+  final String kind;
+  final String mark;
+  final String? timeRange;
+  final int sortOrder;
+  const ShiftMarkOption({this.id = '', required this.kind, required this.mark, this.timeRange, this.sortOrder = 0});
+  bool get isCode => kind == 'code';
+  factory ShiftMarkOption.fromRow(Map<String, dynamic> r) => ShiftMarkOption(
+        id: r['id'] as String,
+        kind: r['kind'] as String,
+        mark: r['mark'] as String,
+        timeRange: r['time_range'] as String?,
+        sortOrder: (r['sort_order'] as num?)?.toInt() ?? 0,
+      );
+}
+
+class ShiftOptions {
+  final bool loaded; // false＝讀不到（照 App 內建設定）
+  final List<ShiftMarkOption> items;
+  const ShiftOptions(this.items, {this.loaded = true});
+  List<ShiftMarkOption> get codes => items.where((x) => x.isCode).toList();
+  List<String> get ranges => [for (final x in items) if (!x.isCode) x.mark];
+}
+
 /// 每人每月手動填的數字
 class ShiftStats {
   final double? shouldOff; // 本月應休
@@ -713,7 +739,8 @@ class ShiftMonth {
   final Map<String, ShiftStats> stats; // 人 → 手動填的數字
   final List<ShiftPhoto> photos; // 原始班表照片（0070 起一個月可以多張，依上傳順序）
   final ShiftDraft? draft; // 照片辨識草稿（只有老闆／店長讀得到；沒有或已處理是 null）
-  ShiftMonth(this.month, this.people, this.marks, this.notes, this.stats, this.photos, [this.draft]);
+  final ShiftOptions? options; // 班別／時段清單（0075）
+  ShiftMonth(this.month, this.people, this.marks, this.notes, this.stats, this.photos, [this.draft, this.options]);
 
   int get days => DateTime(month.year, month.month + 1, 0).day;
   String? mark(String personId, int day) => marks[personId]?[day];

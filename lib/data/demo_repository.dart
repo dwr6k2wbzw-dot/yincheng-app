@@ -108,7 +108,21 @@ class DemoRepository implements Repository {
         {3: '月會日'},
         {'p1': const ShiftStats(shouldOff: 8, prevUnused: 3)},
         const [],
+        null,
+        ShiftOptions([..._markOpts]),
       );
+  final _markOpts = <ShiftMarkOption>[
+    const ShiftMarkOption(id: 'r1', kind: 'range', mark: '18:00-00:30'),
+    const ShiftMarkOption(id: 'r2', kind: 'range', mark: '19:00-01:30'),
+  ];
+  @override
+  Future<void> saveShiftMarkOption(String storeId, ShiftMarkOption o) async {
+    _markOpts.removeWhere((x) => x.id == o.id && o.id.isNotEmpty);
+    _markOpts.add(ShiftMarkOption(
+        id: o.id.isEmpty ? '${DateTime.now().microsecondsSinceEpoch}' : o.id, kind: o.kind, mark: o.mark, timeRange: o.timeRange));
+  }
+  @override
+  Future<void> deleteShiftMarkOption(String id) async => _markOpts.removeWhere((x) => x.id == id);
   @override
   Future<void> setShift(String storeId, String personId, DateTime date, String? mark) async {}
   @override
