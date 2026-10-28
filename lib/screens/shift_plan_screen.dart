@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../app_state.dart';
-import '../config.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
+import '../data/shift_marks.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 
@@ -19,16 +19,22 @@ const _wdNames = ['一', '二', '三', '四', '五', '六', '日'];
 String _wdName(int w) => '週${_wdNames[w - 1]}';
 final _md = DateFormat('M/d', 'zh_TW');
 
-List<String> _storeMarks(String storeName) => AppConfig.shiftMarks[storeName] ?? const ['V', '休', '指休', 'O'];
+List<String> _storeMarks(String storeName, ShiftOptions? o) => storeMarks(storeName, o);
 bool _isWork(String? m) => ShiftMonth.isOn(m);
 
 /// 排班時算正職嗎（排班條件設「排班時當兼職」的正職，排班時跟兼職一樣；0074）
 bool _planFull(ShiftPerson p, ShiftPlanSetup? s) => p.isFull && !(s?.rules[p.id]?.planAsPart ?? false);
 
 /// 這家店沒設排班條件時，上班用的記號
-List<String> _defaultMarks(String storeName, bool full) => storeName == '小城外'
-    ? (full ? const ['B', 'BH'] : const ['18:00-00:30'])
-    : const ['V'];
+List<String> _defaultMarks(String storeName, bool full, ShiftOptions? o) {
+  if (storeName != '小城外') return const ['V'];
+  if (full) {
+    final codes = [for (final c in o?.codes ?? const <ShiftMarkOption>[]) c.mark];
+    return codes.isNotEmpty ? codes.take(2).toList() : const ['B', 'BH'];
+  }
+  final rs = storeRanges(storeName, o);
+  return rs.isNotEmpty ? [rs.first] : const ['18:00-00:30'];
+}
 
 // =====================================================================
 // 班表頁上的「排班」卡片
@@ -84,7 +90,7 @@ class ShiftPlanCard extends StatelessWidget {
             () => go(ShiftAutoPlanScreen(membership: membership, month: viewMonth, markBg: markBg))),
       if (manager && !scheduled)
         tile(Icons.tune, '排班條件', '每天要幾人、每個人的條件、填寫截止日',
-            () => go(ShiftRulesScreen(membership: membership, month: viewMonth, people: data.people))),
+            () => go(ShiftRulesScreen(membership: membership, month: viewMonth, people: data.people, options: data.options))),
     ];
     if (tiles.isEmpty) return const SizedBox.shrink();
     return Padding(
@@ -387,10 +393,11 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
 // 排班條件
 // =====================================================================
 class ShiftRulesScreen extends StatefulWidget {
-  const ShiftRulesScreen({super.key, required this.membership, required this.month, required this.people});
+  const ShiftRulesScreen({super.key, required this.membership, required this.month, required this.people, this.options});
   final Membership membership;
   final DateTime month;
   final List<ShiftPerson> people;
+  final ShiftOptions? options;
   @override
   State<ShiftRulesScreen> createState() => _ShiftRulesScreenState();
 }
@@ -494,7 +501,7 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
   Future<void> _editRule(ShiftPerson p) async {
     final r0 = _setup!.rules[p.id] ?? ShiftRule(personId: p.id);
     final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(
-        builder: (_) => _RuleEditor(person: p, rule: r0, storeName: _storeName, storeId: _store, repo: _repo)));
+        builder: (_) => _RuleEditor(person: p, rule: r0, storeName: _storeName, storeId: _store, repo: _repo, options: widget.options)));
     if (saved == true) _load();
   }
 
@@ -738,7 +745,9 @@ class _Stepper extends StatelessWidget {
 
 /// 一個人的排班條件
 class _RuleEditor extends StatefulWidget {
-  const _RuleEditor({required this.person, required this.rule, required this.storeName, required this.storeId, required this.repo});
+  const _RuleEditor(
+      {required this.person, required this.rule, required this.storeName, required this.storeId, required this.repo, this.options});
+  final ShiftOptions? options;
   final ShiftPerson person;
   final ShiftRule rule;
   final String storeName;
@@ -760,11 +769,12 @@ class _RuleEditorState extends State<_RuleEditor> {
   bool _busy = false;
 
   List<String> get _choices {
-    final work = _storeMarks(widget.storeName).where((m) => !ShiftMonth.isAway(m)).toList();
+    final work = _storeMarks(widget.storeName, widget.options).where((m) => !ShiftMonth.isAway(m)).toList();
+    final ranges = storeRanges(widget.storeName, widget.options);
     return [
       ...work,
-      if (widget.storeName == '小城外') ...AppConfig.shiftQuickRanges,
-      for (final m in _marks) if (!work.contains(m) && !AppConfig.shiftQuickRanges.contains(m)) m,
+      ...ranges,
+      for (final m in _marks) if (!work.contains(m) && !ranges.contains(m)) m,
     ];
   }
 
@@ -839,9 +849,9 @@ class _RuleEditorState extends State<_RuleEditor> {
             ),
         ]),
         const SizedBox(height: 16),
-        Text(widget.storeName == '小城外' ? '上班排哪些班別／時段（照點的順序，第一個優先）' : '上班排哪個記號（照點的順序，第一個優先）',
+        Text('上班排哪些班別／時段（照點的順序，第一個優先）',
             style: const TextStyle(fontWeight: FontWeight.w600)),
-        Text('沒選＝${_defaultMarks(widget.storeName, p.isFull && !_asPart).join('、')}（有上個月的班就照上個月最常排的）',
+        Text('沒選＝${_defaultMarks(widget.storeName, p.isFull && !_asPart, widget.options).join('、')}（有上個月的班就照上個月最常排的）',
             style: TextStyle(color: AppColors.muted, fontSize: 12)),
         const SizedBox(height: 6),
         Wrap(spacing: 6, runSpacing: 6, children: [
@@ -963,7 +973,7 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
             maxShifts: r?.maxShifts,
             maxConsecutive: r?.maxConsecutive ?? 6,
             noWeekdays: r?.noWeekdays ?? const {},
-            marks: (r?.marks.isNotEmpty ?? false) ? r!.marks : (usual.isNotEmpty ? usual : _defaultMarks(_storeName, full)),
+            marks: (r?.marks.isNotEmpty ?? false) ? r!.marks : (usual.isNotEmpty ? usual : _defaultMarks(_storeName, full, _cur!.options)),
           );
         }(),
     ];
@@ -1022,7 +1032,11 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
                   style: TextStyle(color: AppColors.warn, fontSize: 13)),
             const SizedBox(height: 12),
             Wrap(spacing: 10, runSpacing: 10, children: [
-              for (final m in {..._storeMarks(_storeName), ..._usualMarks(p)})
+              for (final m in {
+                ..._storeMarks(_storeName, _cur!.options),
+                ...storeRanges(_storeName, _cur!.options),
+                ..._usualMarks(p)
+              })
                 ChoiceChip(
                   label: Text(m),
                   selected: m == cur,
@@ -1214,5 +1228,187 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
         ),
       ]),
     ]);
+  }
+}
+
+// =====================================================================
+// 班別／時段清單（0075，老闆 2026-10-28：兩家店都可以新增、刪除）
+// =====================================================================
+class ShiftMarkOptionsScreen extends StatefulWidget {
+  const ShiftMarkOptionsScreen({super.key, required this.membership, required this.markBg});
+  final Membership membership;
+  final MarkBg markBg;
+  @override
+  State<ShiftMarkOptionsScreen> createState() => _ShiftMarkOptionsScreenState();
+}
+
+class _ShiftMarkOptionsScreenState extends State<ShiftMarkOptionsScreen> {
+  ShiftOptions? _o;
+  Object? _error;
+  bool _started = false;
+
+  Repository get _repo => AppScope.of(context).repo;
+  String get _store => widget.membership.storeId;
+  String get _storeName => widget.membership.storeName;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_started) {
+      _started = true;
+      _load();
+    }
+  }
+
+  Future<void> _load() async {
+    try {
+      final sm = await _repo.shiftMonth(_store, DateTime.now());
+      setState(() {
+        _o = sm.options;
+        _error = null;
+      });
+    } catch (e) {
+      setState(() => _error = e);
+    }
+  }
+
+  static final _rangeRe = RegExp(r'^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$');
+  static final _codeRe = RegExp(r'^[A-Z][A-Z0-9]{0,3}[+-]?$');
+  String _norm(String v) =>
+      v.trim().replaceAll('：', ':').replaceAll(RegExp(r'\s'), '').replaceAll(RegExp('[~～－—–]'), '-');
+
+  Future<void> _edit({required bool code, ShiftMarkOption? cur}) async {
+    final m = TextEditingController(text: cur?.mark ?? '');
+    final t = TextEditingController(text: cur?.timeRange ?? '');
+    String? errM, errT;
+    final saved = await showDialog<ShiftMarkOption>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, set) => AlertDialog(
+          title: Text(cur == null ? (code ? '新增班別' : '新增時段') : (code ? '修改班別' : '修改時段')),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            if (code)
+              TextField(
+                controller: m,
+                autofocus: cur == null,
+                textCapitalization: TextCapitalization.characters,
+                decoration: InputDecoration(labelText: '班別代碼', hintText: '例：B、BH、RBK', errorText: errM),
+              ),
+            TextField(
+              controller: code ? t : m,
+              autofocus: !code && cur == null,
+              decoration: InputDecoration(labelText: '時段', hintText: '例：18:00-00:30（過午夜照寫）', errorText: errT),
+            ),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c), child: const Text('取消')),
+            FilledButton(
+              onPressed: () {
+                final mk = code ? m.text.trim().toUpperCase() : _norm(m.text);
+                final tr = code ? _norm(t.text) : null;
+                errM = null;
+                errT = null;
+                if (code && (!_codeRe.hasMatch(mk) || mk == 'V' || mk == 'O')) errM = '大寫英文開頭、最多 4 碼（可加 + 或 -），不能用 V、O';
+                if (code ? !_rangeRe.hasMatch(tr!) : !_rangeRe.hasMatch(mk)) errT = '格式：開始-結束，例 18:00-00:30';
+                if (errM != null || errT != null) {
+                  set(() {});
+                  return;
+                }
+                Navigator.pop(
+                    c,
+                    ShiftMarkOption(
+                        id: cur?.id ?? '',
+                        kind: code ? 'code' : 'range',
+                        mark: mk,
+                        timeRange: tr,
+                        sortOrder: cur?.sortOrder ?? ((_o?.items.length ?? 0) + 1) * 10));
+              },
+              child: const Text('儲存'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (saved == null) return;
+    try {
+      await _repo.saveShiftMarkOption(_store, saved);
+      _load();
+    } catch (e) {
+      if (mounted) {
+        final msg = friendlyError(e);
+        showMessage(context, msg.contains('duplicate') || msg.contains('23505') ? '已經有一樣的了' : msg, error: true);
+      }
+    }
+  }
+
+  Future<void> _delete(ShiftMarkOption x) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text('刪掉「${x.mark}」？'),
+        content: const Text('只是選單不再出現；已經排進班表的格子不會變。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('刪除')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await _repo.deleteShiftMarkOption(x.id);
+      _load();
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+    }
+  }
+
+  Widget _section(String title, String hint, List<ShiftMarkOption> items, {required bool code}) => SectionCard(
+        padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+          Text(hint, style: TextStyle(color: AppColors.muted, fontSize: 12)),
+          const SizedBox(height: 4),
+          if (items.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Text('還沒有', style: TextStyle(color: AppColors.muted))),
+          for (final x in items)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Container(
+                constraints: const BoxConstraints(minWidth: 48),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                decoration: BoxDecoration(color: widget.markBg(x.mark), borderRadius: BorderRadius.circular(6)),
+                child: Text(code ? x.mark : '時段', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w600)),
+              ),
+              title: Text(code ? (x.timeRange ?? '').replaceFirst('-', '～') : x.mark.replaceFirst('-', '～')),
+              subtitle: Text('${_num(ShiftMonth.hoursOf(code ? x.timeRange : x.mark, const {}))} 小時', style: const TextStyle(fontSize: 12)),
+              onTap: () => _edit(code: code, cur: x),
+              trailing: IconButton(tooltip: '刪除', icon: const Icon(Icons.delete_outline), onPressed: () => _delete(x)),
+            ),
+          TextButton.icon(onPressed: () => _edit(code: code), icon: const Icon(Icons.add), label: Text(code ? '新增班別' : '新增時段')),
+        ]),
+      );
+
+  String _num(double v) => v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
+
+  @override
+  Widget build(BuildContext context) {
+    final o = _o;
+    return Scaffold(
+      appBar: AppBar(title: const Text('班別／時段')),
+      body: _error != null
+          ? ErrorView(message: friendlyError(_error!), onRetry: _load)
+          : o == null
+              ? const Center(child: CircularProgressIndicator())
+              : !o.loaded
+                  ? ErrorView(message: '讀不到班別／時段清單，請稍後再試', onRetry: _load)
+                  : ListView(padding: const EdgeInsets.fromLTRB(12, 8, 12, 40), children: [
+                      Text('$_storeName 的清單，只影響這家店。點一項可以修改，刪掉不會改到已經排好的班。',
+                          style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                      const SizedBox(height: 10),
+                      _section('班別', '點格子排班時可以選的班別代碼（例 B＝17:00-00:30）${_storeName == '小城外' ? '；時數照時段算' : ''}', o.codes,
+                          code: true),
+                      const SizedBox(height: 10),
+                      _section('兼職時段', '兼職排班時可以選的時段', [for (final x in o.items) if (!x.isCode) x], code: false),
+                    ]),
+    );
   }
 }

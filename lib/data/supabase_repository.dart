@@ -425,6 +425,14 @@ class SupabaseRepository implements Repository {
           .order('created_at', ascending: false)
           .limit(1)
           .then((v) => v, onError: (_) => <Map<String, dynamic>>[]),
+      // 班別／時段清單（0075）：讀不到就用 App 內建設定
+      _db
+          .from('shift_mark_options')
+          .select('id, kind, mark, time_range, sort_order')
+          .eq('store_id', storeId)
+          .order('sort_order')
+          .order('mark')
+          .then<Object?>((v) => v, onError: (_) => null),
     ]);
     final people = (r[0] as List).map((x) => ShiftPerson.fromRow(x as Map<String, dynamic>)).toList();
     final marks = <String, Map<int, String>>{};
@@ -449,8 +457,18 @@ class SupabaseRepository implements Repository {
             f['uploaded_at'] == null ? null : DateTime.parse(f['uploaded_at'] as String).toLocal())
     ];
     final drafts = r[5] as List;
-    return ShiftMonth(from, people, marks, notes, stats, photos,
-        drafts.isEmpty ? null : ShiftDraft.fromRow(drafts.first as Map<String, dynamic>));
+    final opts = r[6] as List?;
+    return ShiftMonth(
+        from,
+        people,
+        marks,
+        notes,
+        stats,
+        photos,
+        drafts.isEmpty ? null : ShiftDraft.fromRow(drafts.first as Map<String, dynamic>),
+        opts == null
+            ? const ShiftOptions([], loaded: false)
+            : ShiftOptions([for (final x in opts) ShiftMarkOption.fromRow(x as Map<String, dynamic>)]));
   }
 
   @override
@@ -785,6 +803,23 @@ class SupabaseRepository implements Repository {
       },
     });
     return (n as num?)?.toInt() ?? 0;
+  }
+
+  @override
+  Future<void> saveShiftMarkOption(String storeId, ShiftMarkOption o) async {
+    final v = {'kind': o.kind, 'mark': o.mark, 'time_range': o.timeRange, 'sort_order': o.sortOrder};
+    if (o.id.isEmpty) {
+      await _db.from('shift_mark_options').insert({...v, 'store_id': storeId});
+    } else {
+      final rows = await _db.from('shift_mark_options').update(v).eq('id', o.id).select('id');
+      if (rows.isEmpty) throw Exception('message: 沒有權限修改班別／時段,');
+    }
+  }
+
+  @override
+  Future<void> deleteShiftMarkOption(String id) async {
+    final rows = await _db.from('shift_mark_options').delete().eq('id', id).select('id');
+    if (rows.isEmpty) throw Exception('message: 沒有權限刪除班別／時段,');
   }
 
   @override

@@ -111,6 +111,9 @@ abstract class Repository {
   Future<int> applyShiftDraft(ShiftDraft d);
   Future<void> dismissShiftDraft(String draftId);
   Future<String> shiftPhotoUrl(String path);
+  /// 班別／時段清單（0075）：id 空白＝新增
+  Future<void> saveShiftMarkOption(String storeId, ShiftMarkOption o);
+  Future<void> deleteShiftMarkOption(String id);
 
   // 自動排班（0073）
   /// 這個月的排班設定：每日人力、特別日子、截止日、排班條件（員工只讀得到自己的）、大家填的想休／可上
