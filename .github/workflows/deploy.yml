@@ -55,6 +55,8 @@ jobs:
       - name: 客人訂位頁（純網頁，不用 Flutter；0050）
         run: |
           mkdir -p build/web/book && cp tool/book/* build/web/book/
+          # 小城外十週年電子邀請函（老闆 2026-10-28）：invite/?to=名字；店家用 invite/make.html 產生每個人的連結
+          mkdir -p build/web/invite && cp tool/invite/* build/web/invite/
           # 樣式、程式、logo 加版本號：網頁一換新，客人手機就不會混用舊的樣式
           v=$(echo "${{ github.sha }}" | cut -c1-8)
           sed -i -E "s#(href|src)=\"(style\.css|common\.js|i18n\.js|theme\.js|anim\.js)\"#\1=\"\2?v=$v\"#g; s#'(logo-[a-z]+\.png|hero-[a-z]+\.jpg)'#'\1?v=$v'#g" build/web/book/*.html
