@@ -122,7 +122,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           padding: const EdgeInsets.all(16),
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Text('${p.name}・${DateFormat('M/d（E）', 'zh_TW').format(DateTime(_month.year, _month.month, day))}',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                style: const TextStyle(fontSize: AppType.title, fontWeight: FontWeight.w700)),
             const SizedBox(height: 12),
             Wrap(spacing: 10, runSpacing: 10, children: [
               for (final m in _marks)
@@ -376,7 +376,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(title, style: TextStyle(fontWeight: FontWeight.w600, color: color)),
                 const SizedBox(height: 2),
-                Text(sub, style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                Text(sub, style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
               ]),
             ),
             if (dr.isReady) const Icon(Icons.chevron_right),
@@ -390,7 +390,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     if (d.photos.isEmpty && !_canEdit) return const SizedBox.shrink();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text(d.photos.isEmpty ? '原始班表照片' : '原始班表照片（${d.photos.length} 張）',
-          style: TextStyle(color: AppColors.muted, fontSize: 12)),
+          style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
       const SizedBox(height: 6),
       Wrap(spacing: 8, runSpacing: 8, children: [
         for (final (i, ph) in d.photos.indexed)
@@ -427,12 +427,12 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             onRefresh: () async => _reload(),
             child: ListView(padding: const EdgeInsets.fromLTRB(12, 8, 12, 32), children: [
               Row(children: [
-                IconButton(onPressed: () => _shiftMonth(-1), icon: const Icon(Icons.chevron_left)),
+                IconButton(tooltip: '上個月', onPressed: () => _shiftMonth(-1), icon: const Icon(Icons.chevron_left)),
                 Expanded(
                   child: Text(DateFormat('yyyy 年 M 月', 'zh_TW').format(_month),
-                      textAlign: TextAlign.center, style: const TextStyle(fontSize: 16)),
+                      textAlign: TextAlign.center, style: const TextStyle(fontSize: AppType.title)),
                 ),
-                IconButton(onPressed: () => _shiftMonth(1), icon: const Icon(Icons.chevron_right)),
+                IconButton(tooltip: '下個月', onPressed: () => _shiftMonth(1), icon: const Icon(Icons.chevron_right)),
               ]),
               _todayCard(d),
               _draftCard(d),
@@ -471,7 +471,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   padding: const EdgeInsets.only(top: 6),
                   child: Text(
                       '時數：${_codeHours!.entries.where((e) => _marks.contains(e.key)).map((e) => '${e.key} ${_num(e.value)}').join('、')}（小時）；兼職時段照實際時間算',
-                      style: TextStyle(color: AppColors.muted, fontSize: 11)),
+                      style: TextStyle(color: AppColors.muted, fontSize: AppType.caption)),
                 ),
               const SizedBox(height: 16),
               if (_codeHours != null)
@@ -503,7 +503,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(_codeHours != null ? '點格子改班（兼職可選時段）、點日期加備註、點下方統計填未休／補休與特休。' : '點格子改班（兼職可選時段）、點日期加備註、點下方統計填應休與特休。',
-                      style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                      style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
                 ),
             ]),
           );
@@ -519,11 +519,11 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           decoration: BoxDecoration(
               color: bg ?? Colors.transparent,
               border: bg == null ? Border.all(color: AppColors.cardHigh) : null,
-              borderRadius: BorderRadius.circular(4)),
-          child: Text(m, style: const TextStyle(fontSize: 11)),
+              borderRadius: BorderRadius.circular(AppRadius.xs)),
+          child: Text(m, style: const TextStyle(fontSize: AppType.caption)),
         ),
         const SizedBox(width: 4),
-        Text(label, style: TextStyle(color: AppColors.muted, fontSize: 12)),
+        Text(label, style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
       ]);
 
   Widget _todayCard(ShiftMonth d) {
@@ -539,10 +539,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           const Spacer(),
           Text('人力 ${on.length}', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700)),
         ]),
-        if (note != null) Text(note, style: TextStyle(color: AppColors.warn, fontSize: 12)),
+        if (note != null) Text(note, style: TextStyle(color: AppColors.warn, fontSize: AppType.small)),
         const SizedBox(height: 6),
-        Text('上班：${on.isEmpty ? '—' : on.join('、')}', style: const TextStyle(fontSize: 13)),
-        if (off.isNotEmpty) Text('休：${off.join('、')}', style: TextStyle(color: AppColors.muted, fontSize: 13)),
+        Text('上班：${on.isEmpty ? '—' : on.join('、')}', style: const TextStyle(fontSize: AppType.small)),
+        if (off.isNotEmpty) Text('休：${off.join('、')}', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
       ]),
     );
   }
@@ -566,7 +566,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               height: h,
               margin: const EdgeInsets.all(1),
               alignment: Alignment.center,
-              decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(5), border: border),
+              decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(AppRadius.xs), border: border),
               child: child,
             ),
           );
@@ -575,11 +575,11 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             child: Text(t,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 12, fontWeight: bold ? FontWeight.w700 : FontWeight.w500, color: color)),
+                style: TextStyle(fontSize: AppType.small, fontWeight: bold ? FontWeight.w700 : FontWeight.w500, color: color)),
           );
       Widget sum(String t, {Color? color}) => SizedBox(
             width: sumW,
-            child: Text(t, textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: color ?? AppColors.muted)),
+            child: Text(t, textAlign: TextAlign.center, style: TextStyle(fontSize: AppType.small, color: color ?? AppColors.muted)),
           );
       Widget personRow(ShiftPerson p) {
         final ch = _codeHours;
@@ -623,10 +623,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             for (final (i, day) in cols.indexed)
               cell(
                 Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  Text(wd[i], style: TextStyle(fontSize: 10, color: AppColors.muted)),
+                  Text(wd[i], style: TextStyle(fontSize: AppType.micro, color: AppColors.muted)),
                   Text(day == null ? '' : '$day',
                       style: TextStyle(
-                          fontSize: 13,
+                          fontSize: AppType.small,
                           fontWeight: FontWeight.w700,
                           color: day != null && today.year == _month.year && today.month == _month.month && today.day == day
                               ? AppColors.primary
@@ -646,7 +646,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       maxLines: 2,
                       textAlign: TextAlign.center,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 9, color: Colors.black)),
+                      style: const TextStyle(fontSize: AppType.micro, color: Colors.black)),
                   bg: day != null && d.notes[day] != null ? const Color(0xFF7CC6F2) : null,
                   h: 26,
                   onTap: day != null && _canEdit ? () => _editNote(day, d.notes[day]) : null,
@@ -670,7 +670,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             for (final day in cols)
               cell(
                 Text(day == null ? '' : '${d.staffing(day)}',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: AppColors.primary)),
+                    style: TextStyle(fontSize: AppType.small, fontWeight: FontWeight.w800, color: AppColors.primary)),
               ),
             sum(''),
           ]),
@@ -725,7 +725,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         ),
         const SizedBox(height: 6),
         Text('已休＝休＋指休；剩餘未休特休＝原未休特休 −（已休 − 應休）− 排特休的天數',
-            style: TextStyle(color: AppColors.muted, fontSize: 11)),
+            style: TextStyle(color: AppColors.muted, fontSize: AppType.caption)),
       ]),
     );
   }
@@ -773,7 +773,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         ),
         const SizedBox(height: 6),
         Text('總時數＝整個月（含月底最後一天）；月休＝休＋指休（特休另計、不算月休）；未休／補休、累計特休由老闆或店長填。',
-            style: TextStyle(color: AppColors.muted, fontSize: 11)),
+            style: TextStyle(color: AppColors.muted, fontSize: AppType.caption)),
       ]),
     );
   }
@@ -879,14 +879,14 @@ class _PeopleScreenState extends State<_PeopleScreen> {
             ListTile(
               title: Text(p.name, style: TextStyle(color: p.active ? null : AppColors.muted)),
               subtitle: Text('${p.isFull ? '正職' : '兼職'}${p.roleCode == null ? '' : '・${p.roleCode}'}・排序 ${p.sortOrder}${p.active ? '' : '・已隱藏'}${p.userId == null ? '・還沒對應 App 帳號' : '・已對應 App 帳號'}',
-                  style: const TextStyle(fontSize: 12)),
+                  style: const TextStyle(fontSize: AppType.small)),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => _edit(p),
             ),
           const SizedBox(height: 8),
           Text('人員不會被刪除（避免舊班表對不上）；不用了就關掉「顯示在班表」。'
               '員工第一次填「指休」時會自己選班表上的名字，選錯了在這裡解除。',
-              style: TextStyle(color: AppColors.muted, fontSize: 12)),
+              style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
         ]),
       );
 }
@@ -1000,7 +1000,7 @@ class _DraftScreenState extends State<_DraftScreen> {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: bg,
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: BorderRadius.circular(AppRadius.xs),
           border: changed ? Border.all(color: AppColors.primary, width: 2) : null,
         ),
         child: Text(text ?? '',
@@ -1029,7 +1029,7 @@ class _DraftScreenState extends State<_DraftScreen> {
             '依 ${_d.photoCount ?? widget.current.photos.length} 張照片讀出 ${_d.cellCount} 格。'
             '${widget.current.marks.values.any((m) => m.isNotEmpty) ? '框起來的是跟目前班表不同的格子（$_changed 格）。' : ''}'
             '文字辨識可能讀錯，請對照照片看過再套用。',
-            style: TextStyle(color: AppColors.muted, fontSize: 12)),
+            style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
         if (_d.warnings.isNotEmpty) ...[
           const SizedBox(height: 10),
           SectionCard(
@@ -1037,15 +1037,15 @@ class _DraftScreenState extends State<_DraftScreen> {
               Text('要特別看的地方', style: TextStyle(color: AppColors.warn, fontWeight: FontWeight.w600)),
               const SizedBox(height: 6),
               for (final w in _d.warnings)
-                Padding(padding: const EdgeInsets.only(bottom: 4), child: Text('・$w', style: const TextStyle(fontSize: 13))),
+                Padding(padding: const EdgeInsets.only(bottom: 4), child: Text('・$w', style: const TextStyle(fontSize: AppType.small))),
             ]),
           ),
         ],
         if (_newPeople.isNotEmpty || _dropped.isNotEmpty) ...[
           const SizedBox(height: 10),
-          if (_newPeople.isNotEmpty) Text('新的人（套用時自動加進班表人員）：${_newPeople.join('、')}', style: const TextStyle(fontSize: 13)),
+          if (_newPeople.isNotEmpty) Text('新的人（套用時自動加進班表人員）：${_newPeople.join('、')}', style: const TextStyle(fontSize: AppType.small)),
           if (_dropped.isNotEmpty)
-            Text('照片上沒有、這個月會清空：${_dropped.join('、')}', style: TextStyle(fontSize: 13, color: AppColors.warn)),
+            Text('照片上沒有、這個月會清空：${_dropped.join('、')}', style: TextStyle(fontSize: AppType.small, color: AppColors.warn)),
         ],
         const SizedBox(height: 12),
         SectionCard(

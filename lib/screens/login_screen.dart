@@ -96,7 +96,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ]),
                   const SizedBox(height: 18),
                   const Text('隱城 · 小城外', textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, letterSpacing: 4)),
+                      style: TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w600, letterSpacing: 4)),
                   const SizedBox(height: 4),
                   Text(
                       AppConfig.demo
@@ -142,7 +142,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
                     child: _busy
                         ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
-                        : Text(_signUp ? '建立帳號並加入' : '登入', style: const TextStyle(fontSize: 16)),
+                        : Text(_signUp ? '建立帳號並加入' : '登入', style: const TextStyle(fontSize: AppType.title)),
                   ),
                   if (!AppConfig.demo) ...[
                     const SizedBox(height: 12),

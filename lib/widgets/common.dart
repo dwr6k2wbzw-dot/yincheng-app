@@ -20,7 +20,7 @@ class SectionCard extends StatelessWidget {
         padding: padding,
         decoration: BoxDecoration(
           color: AppColors.card,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
           // 黑金版：卡片加一條細邊框
           border: AppColors.p.style == DashboardStyle.gold ? Border.all(color: AppColors.line) : null,
         ),
@@ -37,16 +37,16 @@ class StatTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SectionCard(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(label, style: TextStyle(color: AppColors.muted, fontSize: 12)),
+          Text(label, style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
           const SizedBox(height: 6),
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
-            child: Text(value, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w500, fontFeatures: tabular)),
+            child: Text(value, style: const TextStyle(fontSize: AppType.display, fontWeight: FontWeight.w500, fontFeatures: tabular)),
           ),
           if (sub != null) ...[
             const SizedBox(height: 4),
-            Text(sub!, style: TextStyle(color: subColor ?? AppColors.muted, fontSize: 12)),
+            Text(sub!, style: TextStyle(color: subColor ?? AppColors.muted, fontSize: AppType.small)),
           ],
         ]),
       );

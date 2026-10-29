@@ -186,10 +186,10 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
             constraints: BoxConstraints(maxHeight: MediaQuery.of(c).size.height * 0.85),
             child: SingleChildScrollView(
               child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Text(editing ? '修改交接' : '寫交接', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                Text(editing ? '修改交接' : '寫交接', style: const TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 4),
                 Text('一項一行，接班的人做完一項勾一項；全部勾完才能按「已處理」。',
-                    style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                    style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
                 const SizedBox(height: 10),
                 for (var i = 0; i < items.length; i++)
                   Padding(
@@ -254,8 +254,8 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
                     if (photo != null) ...[
                       const SizedBox(width: 8),
                       Icon(Icons.check_circle, color: AppColors.good, size: 18),
-                      const Text(' 已附照片', style: TextStyle(fontSize: 13)),
-                      IconButton(onPressed: () => set(() => photo = null), icon: const Icon(Icons.close, size: 18)),
+                      const Text(' 已附照片', style: TextStyle(fontSize: AppType.small)),
+                      IconButton(tooltip: '移除照片', onPressed: () => set(() => photo = null), icon: const Icon(Icons.close, size: 18)),
                     ],
                   ],
                   const Spacer(),
@@ -324,7 +324,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
   Widget _itemRow(HandoverNote n, HandoverItem it) {
     final muted = it.done || n.resolved;
     return InkWell(
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(AppRadius.sm),
       onTap: n.resolved ? null : () => _run(() => _repo.setHandoverItemDone(it.id, !it.done)),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
@@ -336,14 +336,14 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(it.body,
                   style: TextStyle(
-                    fontSize: 15,
+                    fontSize: AppType.body,
                     height: 1.4,
                     color: muted ? AppColors.muted : null,
                     decoration: it.done ? TextDecoration.lineThrough : null,
                     decorationColor: AppColors.muted,
                   )),
               if (it.done)
-                Text('✓ ${it.doneName ?? ''}・${_when(it.doneAt!)}', style: TextStyle(color: AppColors.good, fontSize: 11)),
+                Text('✓ ${it.doneName ?? ''}・${_when(it.doneAt!)}', style: TextStyle(color: AppColors.good, fontSize: AppType.caption)),
             ]),
           ),
         ]),
@@ -363,15 +363,15 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
               Container(
                 margin: const EdgeInsets.only(right: 6),
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                decoration: BoxDecoration(color: AppColors.warn, borderRadius: BorderRadius.circular(6)),
-                child: const Text('新', style: TextStyle(fontSize: 11, color: Colors.black, fontWeight: FontWeight.w700)),
+                decoration: BoxDecoration(color: AppColors.warn, borderRadius: BorderRadius.circular(AppRadius.sm)),
+                child: const Text('新', style: TextStyle(fontSize: AppType.caption, color: Colors.black, fontWeight: FontWeight.w700)),
               ),
             Text(n.authorName.isEmpty ? '—' : n.authorName, style: const TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(width: 8),
-            Expanded(child: Text(_when(n.createdAt), style: TextStyle(color: AppColors.muted, fontSize: 12))),
+            Expanded(child: Text(_when(n.createdAt), style: TextStyle(color: AppColors.muted, fontSize: AppType.small))),
             if (n.items.isNotEmpty)
               Text('${n.items.length - n.itemsLeft}/${n.items.length}',
-                  style: TextStyle(color: n.itemsLeft == 0 ? AppColors.good : AppColors.muted, fontSize: 12, fontWeight: FontWeight.w600)),
+                  style: TextStyle(color: n.itemsLeft == 0 ? AppColors.good : AppColors.muted, fontSize: AppType.small, fontWeight: FontWeight.w600)),
             // 任何成員都能修改、刪除（老闆 2026-10-12，0044）
             PopupMenuButton<String>(
               tooltip: '修改／刪除',
@@ -395,7 +395,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
             Padding(
               padding: const EdgeInsets.only(top: 2),
               child: Text('已修改・${n.editedName ?? ''}・${_when(n.editedAt!)}',
-                  style: TextStyle(color: AppColors.muted, fontSize: 11)),
+                  style: TextStyle(color: AppColors.muted, fontSize: AppType.caption)),
             ),
           if (n.photoPath != null)
             Padding(
@@ -414,7 +414,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
                   if (readers.isNotEmpty) '已讀：${readers.join('、')}',
                   if (n.resolved) '✓ ${n.resolvedName ?? ''} 已處理（${_when(n.resolvedAt!)}）',
                 ].join('\n'),
-                style: TextStyle(color: n.resolved ? AppColors.good : AppColors.muted, fontSize: 12, height: 1.5),
+                style: TextStyle(color: n.resolved ? AppColors.good : AppColors.muted, fontSize: AppType.small, height: 1.5),
               ),
             ),
             n.resolved
@@ -455,7 +455,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
           ),
         const SizedBox(height: 8),
         Text('大家都能寫交接、修改、刪除；做完一項勾一項，全部勾完才能按「已處理」。打開這頁就會記錄你已讀。',
-            style: TextStyle(color: AppColors.muted, fontSize: 11, height: 1.5)),
+            style: TextStyle(color: AppColors.muted, fontSize: AppType.caption, height: 1.5)),
       ]),
     );
   }
@@ -512,9 +512,9 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
         color: overdue ? AppColors.bad.withValues(alpha: 0.16) : AppColors.card,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
         child: InkWell(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
           onTap: () => _toggleDone(r, occ, dn),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(8, 10, 12, 10),
@@ -526,15 +526,15 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(r.title,
                       style: TextStyle(
-                          fontSize: 15,
+                          fontSize: AppType.body,
                           fontWeight: FontWeight.w600,
                           color: dn != null ? AppColors.muted : (overdue ? AppColors.bad : null),
                           decoration: dn != null ? TextDecoration.lineThrough : null)),
                   if (r.detail != null && r.detail!.isNotEmpty)
-                    Text(r.detail!, style: const TextStyle(fontSize: 13, height: 1.4)),
+                    Text(r.detail!, style: const TextStyle(fontSize: AppType.small, height: 1.4)),
                   Text(sub,
                       style: TextStyle(
-                          fontSize: 12, color: overdue ? AppColors.bad : (dn != null ? AppColors.good : AppColors.muted))),
+                          fontSize: AppType.small, color: overdue ? AppColors.bad : (dn != null ? AppColors.good : AppColors.muted))),
                 ]),
               ),
             ]),
@@ -552,7 +552,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
       onRefresh: () async => _reload(),
       child: ListView(padding: const EdgeInsets.fromLTRB(16, 12, 16, 96), children: [
         Text('今天 ${DateFormat('M/d（E）', 'zh_TW').format(today)}',
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            style: const TextStyle(fontSize: AppType.title, fontWeight: FontWeight.w700)),
         const SizedBox(height: 8),
         if (items.isEmpty)
           Padding(
@@ -562,7 +562,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
         for (final (r, occ, dn) in items) _todayTile(b, r, occ, dn, today),
         const SizedBox(height: 4),
         Text('點一下打勾；做完的會記錄是誰、幾點做的。凌晨 6 點前還算前一天。',
-            style: TextStyle(color: AppColors.muted, fontSize: 11)),
+            style: TextStyle(color: AppColors.muted, fontSize: AppType.caption)),
         const SizedBox(height: 20),
         if (all.isNotEmpty) ...[
           Text('全部提醒', style: TextStyle(color: AppColors.muted)),
@@ -581,7 +581,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
                       if (r.active && r.nextOccurrence(today) != null && r.repeat != 'daily')
                         '下次 ${DateFormat('M/d（E）', 'zh_TW').format(r.nextOccurrence(today)!)}',
                     ].join('・'),
-                    style: const TextStyle(fontSize: 12),
+                    style: const TextStyle(fontSize: AppType.small),
                   ),
                   trailing: _canEditReminder(r) ? const Icon(Icons.edit_outlined, size: 18) : null,
                   onTap: _canEditReminder(r) ? () => _editReminder(r, b) : null,
@@ -592,7 +592,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
         if (!_canManage)
           Padding(
             padding: EdgeInsets.only(top: 12),
-            child: Text('每個人都能新增提醒；自己建的可以修改、刪除。', style: TextStyle(color: AppColors.muted, fontSize: 11)),
+            child: Text('每個人都能新增提醒；自己建的可以修改、刪除。', style: TextStyle(color: AppColors.muted, fontSize: AppType.caption)),
           ),
       ]),
     );
@@ -618,7 +618,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
           padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(c).viewInsets.bottom + 16),
           child: SingleChildScrollView(
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Text(r == null ? '新增提醒' : '修改提醒', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              Text(r == null ? '新增提醒' : '修改提醒', style: const TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
               TextField(
                 controller: title,
@@ -674,7 +674,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text('（月份沒有這天就算月底）', style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                    child: Text('（月份沒有這天就算月底）', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
                   ),
                 ]),
               const SizedBox(height: 10),

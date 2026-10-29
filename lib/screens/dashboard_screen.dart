@@ -212,13 +212,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
               if (offline)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
-                  child: Text('連不上資料庫，先顯示上次的資料（下拉可重試）', style: TextStyle(color: AppColors.warn, fontSize: 12)),
+                  child: Text('連不上資料庫，先顯示上次的資料（下拉可重試）', style: TextStyle(color: AppColors.warn, fontSize: AppType.small)),
                 ),
               if (updating)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 6),
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(2),
+                    borderRadius: BorderRadius.circular(AppRadius.xs),
                     child: LinearProgressIndicator(minHeight: 2, color: AppColors.primary, backgroundColor: AppColors.line),
                   ),
                 ),
@@ -227,7 +227,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ReservationSummaryCard(key: ValueKey('rs-${widget.membership.storeId}-$_gen'), membership: widget.membership),
                 const SizedBox(height: 12),
                 Text('兼職帳號：可以看訂位、班表、交接與提醒。點右上角小鈴鐺左邊的「交接・提醒」圖示寫交接、打勾提醒。',
-                    style: TextStyle(color: AppColors.muted, fontSize: 13, height: 1.5)),
+                    style: TextStyle(color: AppColors.muted, fontSize: AppType.small, height: 1.5)),
               ] else if (widget.membership.canSeeRevenue)
                 ..._managerView(d)
               else
@@ -281,7 +281,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           IconButton(tooltip: '上個月', onPressed: () => _shiftMonth(-1), icon: Icon(Icons.chevron_left, color: AppColors.muted)),
           Expanded(
             child: Text('${d.month.year} · ${d.month.month} 月',
-                textAlign: TextAlign.center, style: TextStyle(fontSize: 15, letterSpacing: 3, color: AppColors.text)),
+                textAlign: TextAlign.center, style: TextStyle(fontSize: AppType.body, letterSpacing: 3, color: AppColors.text)),
           ),
           IconButton(tooltip: '下個月', onPressed: () => _shiftMonth(1), icon: Icon(Icons.chevron_right, color: AppColors.muted)),
         ]),
@@ -300,9 +300,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
               child: Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
-                Text('NT\$ ', style: TextStyle(fontSize: 16, color: AppColors.primary)),
+                Text('NT\$ ', style: TextStyle(fontSize: AppType.title, color: AppColors.primary)),
                 Text(money.format(s.revenue),
-                    style: const TextStyle(fontSize: 42, fontWeight: FontWeight.w500, letterSpacing: -1, fontFeatures: tabular)),
+                    style: const TextStyle(fontSize: AppType.hero, fontWeight: FontWeight.w500, letterSpacing: -1, fontFeatures: tabular)),
               ]),
             ),
             if (trend.cumulative.isNotEmpty) ...[
@@ -316,11 +316,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Row(children: [
                 Container(width: 10, height: 2, color: AppColors.primary),
                 const SizedBox(width: 4),
-                Text('本月累計', style: TextStyle(fontSize: 10, color: AppColors.muted)),
+                Text('本月累計', style: TextStyle(fontSize: AppType.caption, color: AppColors.muted)),
                 const SizedBox(width: 12),
                 Container(width: 10, height: 2, color: AppColors.muted.withValues(alpha: 0.45)),
                 const SizedBox(width: 4),
-                Text('上月', style: TextStyle(fontSize: 10, color: AppColors.muted)),
+                Text('上月', style: TextStyle(fontSize: AppType.caption, color: AppColors.muted)),
               ]),
             ],
             const SizedBox(height: 14),
@@ -351,10 +351,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
               Expanded(child: _label('進貨成本率')),
-              if (!noCost) Text(pct(s.totalCostRate), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w500, fontFeatures: tabular)),
+              if (!noCost) Text(pct(s.totalCostRate), style: const TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w500, fontFeatures: tabular)),
             ]),
             if (!noCost) Text('總進貨 ${ntd(s.totalCost.round())}', textAlign: TextAlign.right,
-                style: TextStyle(fontSize: 11, color: AppColors.muted)),
+                style: TextStyle(fontSize: AppType.caption, color: AppColors.muted)),
             const SizedBox(height: 12),
             if (noCost)
               Text('本月尚無進貨資料', style: TextStyle(color: AppColors.warn))
@@ -364,7 +364,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               _rateBar('雜項', miscRate, miscAmt, coffeeColor),
             ],
             const SizedBox(height: 4),
-            Text(costNote, style: TextStyle(color: AppColors.muted, fontSize: 11)),
+            Text(costNote, style: TextStyle(color: AppColors.muted, fontSize: AppType.caption)),
           ]),
         ),
         const SizedBox(height: 14),
@@ -379,10 +379,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       const SizedBox(height: 4),
       Container(
         padding: const EdgeInsets.fromLTRB(20, 18, 16, 20),
-        decoration: BoxDecoration(color: pal.hero, borderRadius: BorderRadius.circular(20)),
+        decoration: BoxDecoration(color: pal.hero, borderRadius: BorderRadius.circular(AppRadius.lg)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
-            Expanded(child: Text('${d.month.year} 年 ${d.month.month} 月營收', style: TextStyle(fontSize: 13, color: pal.heroMuted))),
+            Expanded(child: Text('${d.month.year} 年 ${d.month.month} 月營收', style: TextStyle(fontSize: AppType.small, color: pal.heroMuted))),
             _roundArrow(Icons.chevron_left, '上個月', () => _shiftMonth(-1)),
             const SizedBox(width: 6),
             _roundArrow(Icons.chevron_right, '下個月', () => _shiftMonth(1)),
@@ -392,7 +392,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
             child: Text(ntd(s.revenue),
-                style: TextStyle(fontSize: 42, fontWeight: FontWeight.w600, letterSpacing: -1, color: pal.text, fontFeatures: tabular)),
+                style: TextStyle(fontSize: AppType.hero, fontWeight: FontWeight.w600, letterSpacing: -1, color: pal.text, fontFeatures: tabular)),
           ),
           if (trend.delta != null) _delta(trend.delta!, suffix: ' 較上月同期', muted: pal.heroMuted),
           const SizedBox(height: 16),
@@ -425,8 +425,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
             Expanded(child: _label('進貨成本率')),
             if (!noCost) ...[
-              Text('總計 ', style: TextStyle(fontSize: 12, color: AppColors.muted)),
-              Text(pct(s.totalCostRate), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFeatures: tabular)),
+              Text('總計 ', style: TextStyle(fontSize: AppType.small, color: AppColors.muted)),
+              Text(pct(s.totalCostRate), style: const TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w600, fontFeatures: tabular)),
             ],
           ]),
           const SizedBox(height: 16),
@@ -439,7 +439,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               _ring('雜項', miscRate, miscAmt, AppColors.muted),
             ]),
           const SizedBox(height: 12),
-          Text(costNote, style: TextStyle(color: AppColors.muted, fontSize: 11)),
+          Text(costNote, style: TextStyle(color: AppColors.muted, fontSize: AppType.caption)),
         ]),
       ),
       const SizedBox(height: 12),
@@ -465,7 +465,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   // ── 共用小元件 ──
-  Widget _label(String t) => Text(t, style: TextStyle(fontSize: 12, color: AppColors.muted, letterSpacing: 2));
+  Widget _label(String t) => Text(t, style: TextStyle(fontSize: AppType.small, color: AppColors.muted, letterSpacing: 2));
 
   Widget _delta(double v, {String suffix = '', Color? muted}) {
     final up = v >= 0;
@@ -474,33 +474,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
       TextSpan(text: '${up ? '▲' : '▼'} ${(v.abs() * 100).toStringAsFixed(1)}%',
           style: TextStyle(color: c, fontWeight: FontWeight.w600, fontFeatures: tabular)),
       TextSpan(text: suffix, style: TextStyle(color: muted ?? AppColors.muted)),
-    ]), style: const TextStyle(fontSize: 12));
+    ]), style: const TextStyle(fontSize: AppType.small));
   }
 
   Widget _figure(String label, double v) => Expanded(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(label, style: TextStyle(color: AppColors.muted, fontSize: 11)),
+          Text(label, style: TextStyle(color: AppColors.muted, fontSize: AppType.caption)),
           const SizedBox(height: 3),
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
-            child: Text(money.format(v), style: const TextStyle(fontSize: 15, fontFeatures: tabular)),
+            child: Text(money.format(v), style: const TextStyle(fontSize: AppType.body, fontFeatures: tabular)),
           ),
         ]),
       );
 
   Widget _target(MonthlySummary s, {Color? track, Color? muted}) {
     if (s.targetAmount == null) {
-      return Text('尚未設定本月營收目標', style: TextStyle(color: muted ?? AppColors.muted, fontSize: 12));
+      return Text('尚未設定本月營收目標', style: TextStyle(color: muted ?? AppColors.muted, fontSize: AppType.small));
     }
     return Column(children: [
       Row(children: [
-        Expanded(child: Text('目標 ${money.format(s.targetAmount!)}', style: TextStyle(fontSize: 11, color: muted ?? AppColors.muted))),
-        Text('達成 ${pct(s.targetRate)}', style: TextStyle(fontSize: 11, color: AppColors.primary, fontFeatures: tabular)),
+        Expanded(child: Text('目標 ${money.format(s.targetAmount!)}', style: TextStyle(fontSize: AppType.caption, color: muted ?? AppColors.muted))),
+        Text('達成 ${pct(s.targetRate)}', style: TextStyle(fontSize: AppType.caption, color: AppColors.primary, fontFeatures: tabular)),
       ]),
       const SizedBox(height: 6),
       ClipRRect(
-        borderRadius: BorderRadius.circular(3),
+        borderRadius: BorderRadius.circular(AppRadius.xs),
         child: LinearProgressIndicator(
           value: (s.targetRate ?? 0).clamp(0.0, 1.0),
           minHeight: 5,
@@ -515,14 +515,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
         padding: const EdgeInsets.only(bottom: 12),
         child: Column(children: [
           Row(children: [
-            Text(label, style: const TextStyle(fontSize: 13)),
+            Text(label, style: const TextStyle(fontSize: AppType.small)),
             const SizedBox(width: 8),
-            Expanded(child: Text(ntd(amount.round()), style: TextStyle(fontSize: 11, color: AppColors.muted, fontFeatures: tabular))),
-            Text(pct(rate), style: const TextStyle(fontSize: 14, fontFeatures: tabular)),
+            Expanded(child: Text(ntd(amount.round()), style: TextStyle(fontSize: AppType.caption, color: AppColors.muted, fontFeatures: tabular))),
+            Text(pct(rate), style: const TextStyle(fontSize: AppType.body, fontFeatures: tabular)),
           ]),
           const SizedBox(height: 6),
           ClipRRect(
-            borderRadius: BorderRadius.circular(2),
+            borderRadius: BorderRadius.circular(AppRadius.xs),
             child: LinearProgressIndicator(
               // 50% 畫滿
               value: ((rate ?? 0) / 0.5).clamp(0.0, 1.0),
@@ -552,29 +552,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
               Text(rate == null ? '—' : (rate * 100).toStringAsFixed(1),
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, fontFeatures: tabular)),
+                  style: const TextStyle(fontSize: AppType.title, fontWeight: FontWeight.w600, fontFeatures: tabular)),
             ]),
           ),
           const SizedBox(height: 8),
-          Text(label, style: const TextStyle(fontSize: 12)),
+          Text(label, style: const TextStyle(fontSize: AppType.small)),
           FittedBox(
             fit: BoxFit.scaleDown,
-            child: Text(ntd(amount.round()), style: TextStyle(fontSize: 11, color: AppColors.muted, fontFeatures: tabular)),
+            child: Text(ntd(amount.round()), style: TextStyle(fontSize: AppType.caption, color: AppColors.muted, fontFeatures: tabular)),
           ),
         ]),
       );
 
   Widget _tile(String label, String value, {Color? color, String? sub}) => SectionCard(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
-          Text(label, style: TextStyle(fontSize: 12, color: AppColors.muted)),
+          Text(label, style: TextStyle(fontSize: AppType.small, color: AppColors.muted)),
           const SizedBox(height: 6),
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
-            child: Text(value, style: TextStyle(fontSize: 26, fontWeight: FontWeight.w600, color: color, fontFeatures: tabular)),
+            child: Text(value, style: TextStyle(fontSize: AppType.display, fontWeight: FontWeight.w600, color: color, fontFeatures: tabular)),
           ),
           if (sub != null)
-            Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: AppColors.muted)),
+            Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: AppType.caption, color: AppColors.muted)),
         ]),
       );
 
@@ -582,8 +582,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Row(children: [
           if (dot != null) ...[Icon(Icons.circle, size: 8, color: dot), const SizedBox(width: 8)],
-          Expanded(child: Text(k, style: const TextStyle(fontSize: 14))),
-          Text(money.format(v), style: const TextStyle(fontSize: 14, fontFeatures: tabular)),
+          Expanded(child: Text(k, style: const TextStyle(fontSize: AppType.body))),
+          Text(money.format(v), style: const TextStyle(fontSize: AppType.body, fontFeatures: tabular)),
         ]),
       );
 
@@ -632,13 +632,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Widget line(String k, double v, {bool minus = true}) => Padding(
           padding: const EdgeInsets.symmetric(vertical: 2),
           child: Row(children: [
-            Expanded(child: Text(k, style: TextStyle(color: AppColors.muted, fontSize: 13))),
-            Text('${minus ? '−' : ''}${ntd(v)}', style: const TextStyle(fontSize: 13, fontFeatures: [FontFeature.tabularFigures()])),
+            Expanded(child: Text(k, style: TextStyle(color: AppColors.muted, fontSize: AppType.small))),
+            Text('${minus ? '−' : ''}${ntd(v)}', style: const TextStyle(fontSize: AppType.small, fontFeatures: [FontFeature.tabularFigures()])),
             SizedBox(
               width: 58,
               child: Text(ofRevenue(v),
                   textAlign: TextAlign.right,
-                  style: TextStyle(color: AppColors.muted, fontSize: 12, fontFeatures: [FontFeature.tabularFigures()])),
+                  style: TextStyle(color: AppColors.muted, fontSize: AppType.small, fontFeatures: [FontFeature.tabularFigures()])),
             ),
           ]),
         );
@@ -654,16 +654,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ]),
         Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
           Text(ntd(profit),
-              style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: profit >= 0 ? AppColors.good : AppColors.bad)),
+              style: TextStyle(fontSize: AppType.display, fontWeight: FontWeight.w800, color: profit >= 0 ? AppColors.good : AppColors.bad)),
           const SizedBox(width: 8),
           Text(ofRevenue(profit),
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: profit >= 0 ? AppColors.good : AppColors.bad)),
+              style: TextStyle(fontSize: AppType.title, fontWeight: FontWeight.w600, color: profit >= 0 ? AppColors.good : AppColors.bad)),
         ]),
         if (missing.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 4),
             child: Text('尚未輸入${missing.join('、')}，損益還不完整',
-                style: TextStyle(color: AppColors.warn, fontSize: 12)),
+                style: TextStyle(color: AppColors.warn, fontSize: AppType.small)),
           ),
         const SizedBox(height: 10),
         line('營業收入', s.revenue, minus: false),
@@ -672,7 +672,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         line('租金${rentItems != 0 ? '（含明細 ${ntd(rentItems)}）' : ''}', rent),
         line('人事${payrollItems != 0 ? '（含明細 ${ntd(payrollItems)}）' : ''}', payroll),
         const SizedBox(height: 2),
-        Text('百分比＝占本月營業收入', style: TextStyle(color: AppColors.muted, fontSize: 11)),
+        Text('百分比＝占本月營業收入', style: TextStyle(color: AppColors.muted, fontSize: AppType.caption)),
         const Divider(height: 20),
         Row(children: [
           _fixedItem(d, 'rent', '租金（基底）', d.fixed.rent, s.revenue),
@@ -680,7 +680,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _fixedItem(d, 'payroll', '人事（基底）', d.fixed.payroll, s.revenue),
         ]),
         const SizedBox(height: 4),
-        Text('租金、人事的單一金額當基底；下面的支出明細會另外加上去。', style: TextStyle(color: AppColors.muted, fontSize: 11)),
+        Text('租金、人事的單一金額當基底；下面的支出明細會另外加上去。', style: TextStyle(color: AppColors.muted, fontSize: AppType.caption)),
         const SizedBox(height: 12),
         _expenseItemsSection(d, s),
       ]),
@@ -756,7 +756,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Padding(
           padding: EdgeInsets.symmetric(vertical: 4),
           child: Text('可新增勞保、健保、電費、營業稅…，選租金／人事／雜項、可設每月固定；金額會加進該大項。',
-              style: TextStyle(color: AppColors.muted, fontSize: 12)),
+              style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
         ),
       // 刷卡手續費（自動：當月刷卡金額 × 費率）——一律顯示，讓老闆隨時能改費率（即使本月刷卡 0 或費率設 0）
       _expItemRow('雜項', '刷卡手續費', cardFee,
@@ -784,25 +784,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
         padding: const EdgeInsets.only(bottom: 6),
         child: Material(
           color: AppColors.cardHigh,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(AppRadius.sm),
           child: InkWell(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(AppRadius.sm),
             onTap: onTap,
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Row(children: [
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                  decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.25), borderRadius: BorderRadius.circular(6)),
-                  child: Text(catLabel, style: const TextStyle(fontSize: 11)),
+                  decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.25), borderRadius: BorderRadius.circular(AppRadius.sm)),
+                  child: Text(catLabel, style: const TextStyle(fontSize: AppType.caption)),
                 ),
                 const SizedBox(width: 8),
-                Expanded(child: Text(name, style: const TextStyle(fontSize: 13))),
+                Expanded(child: Text(name, style: const TextStyle(fontSize: AppType.small))),
                 if (tag != null) ...[
-                  Text(tag, style: TextStyle(fontSize: 11, color: AppColors.muted)),
+                  Text(tag, style: TextStyle(fontSize: AppType.caption, color: AppColors.muted)),
                   const SizedBox(width: 8),
                 ],
-                Text(ntd(amount), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                Text(ntd(amount), style: const TextStyle(fontSize: AppType.small, fontWeight: FontWeight.w600)),
                 Icon(Icons.chevron_right, size: 16, color: AppColors.muted),
               ]),
             ),
@@ -824,7 +824,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(c).viewInsets.bottom + 16),
           child: SingleChildScrollView(
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Text(item == null ? '新增支出' : '修改支出', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            Text(item == null ? '新增支出' : '修改支出', style: const TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w700)),
             const SizedBox(height: 12),
             TextField(controller: name, maxLength: 40, decoration: const InputDecoration(labelText: '項目（例：勞保、電費、營業稅）')),
             Wrap(spacing: 8, children: [
@@ -839,7 +839,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               decoration: const InputDecoration(prefixText: '\$ ', labelText: '金額'),
             ),
             const SizedBox(height: 12),
-            Text('算進哪個大項', style: TextStyle(color: AppColors.muted, fontSize: 12)),
+            Text('算進哪個大項', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
             const SizedBox(height: 6),
             SegmentedButton<String>(
               segments: const [
@@ -853,8 +853,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             if (item == null)
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('每月固定', style: TextStyle(fontSize: 14)),
-                subtitle: const Text('設一次，之後每個月自動帶入，不用再輸入', style: TextStyle(fontSize: 12)),
+                title: const Text('每月固定', style: TextStyle(fontSize: AppType.body)),
+                subtitle: const Text('設一次，之後每個月自動帶入，不用再輸入', style: TextStyle(fontSize: AppType.small)),
                 value: recurring,
                 onChanged: (v) => setSheet(() => recurring = v),
               ),
@@ -918,9 +918,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(c).viewInsets.bottom + 16),
           child: SingleChildScrollView(
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              const Text('每月固定支出', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+              const Text('每月固定支出', style: TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w700)),
               const SizedBox(height: 4),
-              Text('改金額會套用到每個月；不要了就刪除。', style: TextStyle(color: AppColors.muted, fontSize: 12)),
+              Text('改金額會套用到每個月；不要了就刪除。', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
               const SizedBox(height: 12),
               TextField(controller: name, maxLength: 40, decoration: const InputDecoration(labelText: '項目')),
               const SizedBox(height: 12),
@@ -931,7 +931,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 decoration: const InputDecoration(prefixText: '\$ ', labelText: '金額'),
               ),
               const SizedBox(height: 12),
-              Text('算進哪個大項', style: TextStyle(color: AppColors.muted, fontSize: 12)),
+              Text('算進哪個大項', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
               const SizedBox(height: 6),
               SegmentedButton<String>(
                 segments: const [
@@ -986,7 +986,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       builder: (c) => AlertDialog(
         title: const Text('刷卡手續費率'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text('刷卡手續費＝當月刷卡金額 × 此比率，自動算進雜項。', style: TextStyle(fontSize: 12, color: AppColors.muted)),
+          Text('刷卡手續費＝當月刷卡金額 × 此比率，自動算進雜項。', style: TextStyle(fontSize: AppType.small, color: AppColors.muted)),
           const SizedBox(height: 12),
           TextField(
             controller: ctrl,
@@ -1018,14 +1018,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _fixedItem(_DashboardData d, String category, String label, double? v, double revenue) => Expanded(
         child: InkWell(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadius.md),
           onTap: () => _editFixed(d.month, category, label, v),
           child: Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: AppColors.cardHigh, borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(color: AppColors.cardHigh, borderRadius: BorderRadius.circular(AppRadius.md)),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
-                Text(label, style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                Text(label, style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
                 const Spacer(),
                 Icon(Icons.edit_outlined, size: 14, color: AppColors.muted),
               ]),
@@ -1035,7 +1035,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       color: v == null ? AppColors.warn : null)),
               const SizedBox(height: 2),
               Text(v == null ? '' : '占營收 ${revenue > 0 ? pct(v / revenue) : '—'}',
-                  style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                  style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
             ]),
           ),
         ),
@@ -1046,13 +1046,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Row(children: [
             Icon(Icons.circle, size: 8, color: dot),
             const SizedBox(width: 6),
-            Text(label, style: TextStyle(color: AppColors.muted, fontSize: 12)),
+            Text(label, style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
           ]),
           const SizedBox(height: 2),
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
-            child: Text(ntd(v), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            child: Text(ntd(v), style: const TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w700)),
           ),
         ]),
       );

@@ -131,13 +131,13 @@ class _ChangeRequestsScreenState extends State<ChangeRequestsScreen> {
                           widget.membership.role == Role.owner
                               ? '看過預覽沒問題，按「上線」大家的 App 才會換成新版。'
                               : '看過預覽沒問題就「送審」，老闆按「上線」大家的 App 才會換成新版。',
-                          style: TextStyle(color: AppColors.muted, fontSize: 12, height: 1.5),
+                          style: TextStyle(color: AppColors.muted, fontSize: AppType.small, height: 1.5),
                         ),
                         if (q != null) ...[
                           const SizedBox(height: 8),
                           Text(
                             q.limit == null ? '本月已用 ${q.used} 次（老闆不限次數）' : '本月已用 ${q.used}／${q.limit} 次（新需求、再改一次都算）',
-                            style: TextStyle(color: q.exhausted ? AppColors.bad : AppColors.primary, fontSize: 12),
+                            style: TextStyle(color: q.exhausted ? AppColors.bad : AppColors.primary, fontSize: AppType.small),
                           ),
                         ],
                       ]),
@@ -161,7 +161,7 @@ class _ChangeRequestsScreenState extends State<ChangeRequestsScreen> {
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text('${c.requesterName}・${DateFormat('M/d HH:mm').format(c.createdAt)}',
-                                    overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: AppColors.muted)),
+                                    overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: AppType.small, color: AppColors.muted)),
                               ),
                             ]),
                           ),
@@ -191,8 +191,8 @@ class ChangeStatusChip extends StatelessWidget {
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
-      child: Text(changeStatusLabel(status), style: TextStyle(fontSize: 12, color: color)),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(AppRadius.sm)),
+      child: Text(changeStatusLabel(status), style: TextStyle(fontSize: AppType.small, color: color)),
     );
   }
 }
@@ -218,10 +218,10 @@ Future<ChangeInput?> showChangeComposer(BuildContext context,
       builder: (s, setS) => Padding(
         padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.of(s).viewInsets.bottom),
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+          Text(title, style: const TextStyle(fontSize: AppType.title, fontWeight: FontWeight.w600)),
           const SizedBox(height: 4),
           Text(note ?? '第一行當標題。寫清楚在哪個畫面、想看到什麼，越具體越準。',
-              style: TextStyle(color: AppColors.muted, fontSize: 12, height: 1.5)),
+              style: TextStyle(color: AppColors.muted, fontSize: AppType.small, height: 1.5)),
           const SizedBox(height: 12),
           TextField(
             controller: c,
@@ -241,7 +241,7 @@ Future<ChangeInput?> showChangeComposer(BuildContext context,
                     padding: const EdgeInsets.only(right: 8),
                     child: Stack(children: [
                       ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(AppRadius.sm),
                         child: Image.memory(dataUrlBytes(photos[i]), width: 72, height: 72, fit: BoxFit.cover),
                       ),
                       Positioned(
@@ -260,7 +260,7 @@ Future<ChangeInput?> showChangeComposer(BuildContext context,
                   ),
                 if (photos.length < 5)
                   InkWell(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
                     onTap: picking
                         ? null
                         : () async {
@@ -279,14 +279,14 @@ Future<ChangeInput?> showChangeComposer(BuildContext context,
                       height: 72,
                       decoration: BoxDecoration(
                         border: Border.all(color: AppColors.line),
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(AppRadius.sm),
                       ),
                       child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                         picking
                             ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                             : Icon(Icons.add_photo_alternate_outlined, color: AppColors.primary),
                         const SizedBox(height: 2),
-                        Text('加照片', style: TextStyle(fontSize: 11, color: AppColors.muted)),
+                        Text('加照片', style: TextStyle(fontSize: AppType.caption, color: AppColors.muted)),
                       ]),
                     ),
                   ),
@@ -294,7 +294,7 @@ Future<ChangeInput?> showChangeComposer(BuildContext context,
             ),
             const SizedBox(height: 4),
             Text('可以附截圖或照片（最多 5 張），在上面圈出想改的地方更準。',
-                style: TextStyle(color: AppColors.muted, fontSize: 11)),
+                style: TextStyle(color: AppColors.muted, fontSize: AppType.caption)),
           ],
           const SizedBox(height: 8),
           Row(children: [
@@ -450,13 +450,13 @@ class _ChangeRequestDetailScreenState extends State<ChangeRequestDetailScreen> {
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [
-          Text(_c.title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+          Text(_c.title, style: const TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w600)),
           const SizedBox(height: 8),
           Row(children: [
             ChangeStatusChip(status: _c.status),
             const SizedBox(width: 8),
             Text('${_c.requesterName}・${DateFormat('M/d HH:mm').format(_c.createdAt)}',
-                style: TextStyle(fontSize: 12, color: AppColors.muted)),
+                style: TextStyle(fontSize: AppType.small, color: AppColors.muted)),
           ]),
           const SizedBox(height: 12),
           _statusCard(),
@@ -556,7 +556,7 @@ class _ChangeRequestDetailScreenState extends State<ChangeRequestDetailScreen> {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 6),
         child: Text('— ${m.body}・${DateFormat('M/d HH:mm').format(m.createdAt)} —',
-            textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: AppColors.muted)),
+            textAlign: TextAlign.center, style: TextStyle(fontSize: AppType.small, color: AppColors.muted)),
       );
     }
     return Align(
@@ -567,12 +567,12 @@ class _ChangeRequestDetailScreenState extends State<ChangeRequestDetailScreen> {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: claude ? AppColors.card : AppColors.cardHigh,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
           border: claude ? Border.all(color: AppColors.primary.withValues(alpha: 0.4)) : null,
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('$label・${DateFormat('M/d HH:mm').format(m.createdAt)}',
-              style: TextStyle(fontSize: 11, color: claude ? AppColors.primary : AppColors.muted)),
+              style: TextStyle(fontSize: AppType.caption, color: claude ? AppColors.primary : AppColors.muted)),
           const SizedBox(height: 4),
           SelectableText(m.body, style: const TextStyle(height: 1.5)),
           if (m.photoIds.isNotEmpty) ...[
@@ -609,7 +609,7 @@ class _ChangePhotoThumbState extends State<_ChangePhotoThumb> {
   Widget build(BuildContext context) => FutureBuilder<Uint8List>(
         future: _f,
         builder: (context, snap) {
-          final box = BoxDecoration(color: AppColors.bg, borderRadius: BorderRadius.circular(8));
+          final box = BoxDecoration(color: AppColors.bg, borderRadius: BorderRadius.circular(AppRadius.sm));
           if (snap.hasError) {
             return Container(width: 72, height: 72, decoration: box, child: Icon(Icons.broken_image_outlined, color: AppColors.muted));
           }
@@ -626,7 +626,7 @@ class _ChangePhotoThumbState extends State<_ChangePhotoThumb> {
               ),
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
               child: Image.memory(bytes, width: 72, height: 72, fit: BoxFit.cover),
             ),
           );

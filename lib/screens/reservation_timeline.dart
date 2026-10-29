@@ -232,7 +232,7 @@ class _ReservationTimelineState extends State<ReservationTimeline> {
           decoration: BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.line, width: 0.6))),
           child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(a, style: TextStyle(fontWeight: FontWeight.w700, color: color), overflow: TextOverflow.ellipsis),
-            if (b.isNotEmpty) Text(b, style: TextStyle(fontSize: 10, color: AppColors.muted), overflow: TextOverflow.ellipsis),
+            if (b.isNotEmpty) Text(b, style: TextStyle(fontSize: AppType.micro, color: AppColors.muted), overflow: TextOverflow.ellipsis),
           ]),
         );
 
@@ -273,12 +273,12 @@ class _ReservationTimelineState extends State<ReservationTimeline> {
       if (tables.isEmpty)
         Padding(
           padding: const EdgeInsets.only(bottom: 8),
-          child: Text('還沒有設定桌位：老闆或店長按右上角「桌位設定」新增桌子。', style: TextStyle(color: AppColors.warn, fontSize: 13)),
+          child: Text('還沒有設定桌位：老闆或店長按右上角「桌位設定」新增桌子。', style: TextStyle(color: AppColors.warn, fontSize: AppType.small)),
         ),
       Container(
         decoration: BoxDecoration(
           color: AppColors.card,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadius.md),
           border: Border.all(color: AppColors.line),
         ),
         clipBehavior: Clip.antiAlias,
@@ -306,7 +306,7 @@ class _ReservationTimelineState extends State<ReservationTimeline> {
                               Text(minuteLabel(h * 60), style: const TextStyle(fontWeight: FontWeight.w700, fontFeatures: tabular)),
                               const SizedBox(width: 6),
                               Icon(Icons.person, size: 12, color: AppColors.muted),
-                              Text('${guestsAt(h * 60)}', style: TextStyle(fontSize: 11, color: AppColors.muted, fontFeatures: tabular)),
+                              Text('${guestsAt(h * 60)}', style: TextStyle(fontSize: AppType.caption, color: AppColors.muted, fontFeatures: tabular)),
                             ]),
                           ),
                       ]),
@@ -331,7 +331,7 @@ class _ReservationTimelineState extends State<ReservationTimeline> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 3),
                             color: AppColors.bad,
-                            child: Text(minuteLabel(_now), style: const TextStyle(fontSize: 10, color: Colors.white)),
+                            child: Text(minuteLabel(_now), style: const TextStyle(fontSize: AppType.micro, color: Colors.white)),
                           ),
                           Expanded(child: Container(width: 2, color: AppColors.bad)),
                         ]),
@@ -345,7 +345,7 @@ class _ReservationTimelineState extends State<ReservationTimeline> {
       ),
       const SizedBox(height: 8),
       Text('點色塊：入座、清桌、排桌等；點空白處：登記現場客。沒入座的訂位佔到入座為止，入座後佔到清桌為止。紅框＝前一組還沒清桌。',
-          style: TextStyle(color: AppColors.muted, fontSize: 11, height: 1.5)),
+          style: TextStyle(color: AppColors.muted, fontSize: AppType.caption, height: 1.5)),
     ]);
   }
 
@@ -361,7 +361,7 @@ class _ReservationTimelineState extends State<ReservationTimeline> {
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
         decoration: BoxDecoration(
           color: base.withValues(alpha: cleared ? 0.12 : 0.22),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(AppRadius.sm),
           border: Border.all(color: b.conflict ? AppColors.bad : base.withValues(alpha: 0.7), width: b.conflict ? 2 : 1),
         ),
         child: Row(children: [
@@ -371,20 +371,20 @@ class _ReservationTimelineState extends State<ReservationTimeline> {
                 '$tag ${r.time}${seatedOn(r) != null ? '・${minuteLabel(_minuteOf(seatedOn(r)!))}入座' : ''}${cleared ? '・已清桌' : ''}',
                 maxLines: 1,
                 overflow: TextOverflow.clip,
-                style: TextStyle(fontSize: 10, color: base, fontWeight: FontWeight.w600),
+                style: TextStyle(fontSize: AppType.micro, color: base, fontWeight: FontWeight.w600),
               ),
               Text(b.secondary ? '併桌・${r.name}' : r.name,
-                  maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, height: 1.15, color: cleared || b.secondary ? AppColors.muted : null)),
+                  maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: AppType.small, height: 1.15, color: cleared || b.secondary ? AppColors.muted : null)),
               // 備註（老闆 2026-10-23：時間軸也要看得到）；太長的點色塊看完整內容
               if (!b.secondary && (r.note ?? '').trim().isNotEmpty)
                 Text('📝 ${r.note!.trim().replaceAll('\n', ' ')}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 10, height: 1.15, color: cleared ? AppColors.muted : AppColors.warn)),
+                    style: TextStyle(fontSize: AppType.micro, height: 1.15, color: cleared ? AppColors.muted : AppColors.warn)),
             ]),
           ),
           if (!b.secondary)
-            Text('${r.party}', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: cleared ? AppColors.muted : null)),
+            Text('${r.party}', style: TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w600, color: cleared ? AppColors.muted : null)),
         ]),
       ),
     );
@@ -464,7 +464,7 @@ Future<List<String>?> pickTables(BuildContext context,
                             if (busy.contains(t.id)) '這時段有人',
                             if (!t.active) '已停用',
                           ].join('・'),
-                              style: TextStyle(fontSize: 12, color: busy.contains(t.id) ? AppColors.warn : AppColors.muted)),
+                              style: TextStyle(fontSize: AppType.small, color: busy.contains(t.id) ? AppColors.warn : AppColors.muted)),
                         ),
                     ]),
             ),
@@ -563,7 +563,7 @@ class _ReservationTablesScreenState extends State<ReservationTablesScreen> {
                   value: active,
                   onChanged: (v) => set(() => active = v),
                   title: const Text('使用中'),
-                  subtitle: const Text('關掉＝停用（不會出現在時間軸，舊的訂位紀錄保留）', style: TextStyle(fontSize: 12)),
+                  subtitle: const Text('關掉＝停用（不會出現在時間軸，舊的訂位紀錄保留）', style: TextStyle(fontSize: AppType.small)),
                 ),
             ]),
           ),
@@ -615,7 +615,7 @@ class _ReservationTablesScreenState extends State<ReservationTablesScreen> {
                 ),
                 body: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 96), children: [
                   Text('時間軸照這裡的順序排。停用的桌子不會出現在時間軸，舊訂位紀錄保留。',
-                      style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                      style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
                   const SizedBox(height: 8),
                   SectionCard(
                     padding: EdgeInsets.zero,
@@ -626,7 +626,7 @@ class _ReservationTablesScreenState extends State<ReservationTablesScreen> {
                           title: Text(t.name,
                               style: TextStyle(fontWeight: FontWeight.w700, color: t.active ? null : AppColors.muted)),
                           subtitle: Text(['${t.seats} 人', if (t.combinable) '可併桌', if (!t.active) '已停用', '排序 ${t.sort}'].join('・'),
-                              style: const TextStyle(fontSize: 12)),
+                              style: const TextStyle(fontSize: AppType.small)),
                           trailing: const Icon(Icons.chevron_right),
                         ),
                     ]),

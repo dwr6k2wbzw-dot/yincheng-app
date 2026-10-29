@@ -86,7 +86,7 @@ class _MembersScreenState extends State<MembersScreen> {
               const SizedBox(height: 16),
               Text(
                 '邀請方式：按「邀請成員」產生邀請碼，用 LINE 傳給對方。對方打開 App 網址 → 「第一次使用？用邀請碼建立帳號」→ 輸入 Email、密碼和邀請碼就能加入。邀請碼 14 天內有效、只能用一次。',
-                style: TextStyle(color: AppColors.muted, fontSize: 12, height: 1.6),
+                style: TextStyle(color: AppColors.muted, fontSize: AppType.small, height: 1.6),
               ),
             ]),
           );
@@ -97,7 +97,7 @@ class _MembersScreenState extends State<MembersScreen> {
 
   Widget _header(String t) => Padding(
         padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
-        child: Text(t, style: TextStyle(color: AppColors.muted, fontSize: 13)),
+        child: Text(t, style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
       );
 
   Widget _memberTile(MemberInfo m, {required bool isMe}) {
@@ -115,7 +115,7 @@ class _MembersScreenState extends State<MembersScreen> {
           ),
           title: Text('${m.displayName}${isMe ? '（你）' : ''}',
               style: TextStyle(color: m.active ? null : AppColors.muted)),
-          subtitle: Text(m.email, style: TextStyle(color: AppColors.muted, fontSize: 12)),
+          subtitle: Text(m.email, style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
           trailing: Row(mainAxisSize: MainAxisSize.min, children: [
             _roleChip(m.role, muted: !m.active),
             if (editable) Icon(Icons.chevron_right, color: AppColors.muted),
@@ -127,9 +127,9 @@ class _MembersScreenState extends State<MembersScreen> {
 
   Widget _roleChip(Role r, {bool muted = false}) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(color: AppColors.cardHigh, borderRadius: BorderRadius.circular(8)),
+        decoration: BoxDecoration(color: AppColors.cardHigh, borderRadius: BorderRadius.circular(AppRadius.sm)),
         child: Text(roleLabel(r),
-            style: TextStyle(fontSize: 12, color: muted ? AppColors.muted : (r == Role.owner ? AppColors.warn : null))),
+            style: TextStyle(fontSize: AppType.small, color: muted ? AppColors.muted : (r == Role.owner ? AppColors.warn : null))),
       );
 
   Widget _inviteTile(MemberInvite i, {required bool canRevoke}) => Padding(
@@ -141,7 +141,7 @@ class _MembersScreenState extends State<MembersScreen> {
             title: Text(i.displayName),
             subtitle: Text(
               i.expired ? '已過期' : '${DateFormat('M/d').format(i.expiresAt)} 前有效',
-              style: TextStyle(color: i.expired ? AppColors.bad : AppColors.muted, fontSize: 12),
+              style: TextStyle(color: i.expired ? AppColors.bad : AppColors.muted, fontSize: AppType.small),
             ),
             trailing: Row(mainAxisSize: MainAxisSize.min, children: [
               _roleChip(i.role),
@@ -187,8 +187,8 @@ class _MembersScreenState extends State<MembersScreen> {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
               child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Text(m.displayName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-                Text(m.email, style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                Text(m.displayName, style: const TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w700)),
+                Text(m.email, style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
                 const SizedBox(height: 12),
                 if (m.active) ...[
                   for (final r in _invitableRoles)
@@ -197,7 +197,7 @@ class _MembersScreenState extends State<MembersScreen> {
                       groupValue: role,
                       onChanged: (v) => setSheet(() => role = v!),
                       title: Text(roleLabel(r)),
-                      subtitle: Text(_roleHints[r]!, style: const TextStyle(fontSize: 12)),
+                      subtitle: Text(_roleHints[r]!, style: const TextStyle(fontSize: AppType.small)),
                       contentPadding: EdgeInsets.zero,
                     ),
                   const SizedBox(height: 8),
@@ -313,10 +313,10 @@ class _InviteScreenState extends State<_InviteScreen> {
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           SelectableText(code,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: 2)),
+              style: const TextStyle(fontSize: AppType.display, fontWeight: FontWeight.w800, letterSpacing: 2)),
           const SizedBox(height: 12),
           Text('這組邀請碼只會顯示這一次。按下面的按鈕複製邀請訊息，貼到 LINE 傳給對方。',
-              style: TextStyle(color: AppColors.muted, fontSize: 13)),
+              style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
         ]),
         actions: [
           TextButton(onPressed: () => Navigator.pop(c), child: const Text('完成')),
@@ -350,7 +350,7 @@ class _InviteScreenState extends State<_InviteScreen> {
               groupValue: _role,
               onChanged: (v) => setState(() => _role = v!),
               title: Text(roleLabel(r)),
-              subtitle: Text(_roleHints[r]!, style: const TextStyle(fontSize: 12)),
+              subtitle: Text(_roleHints[r]!, style: const TextStyle(fontSize: AppType.small)),
               contentPadding: EdgeInsets.zero,
             ),
           if (widget.ownerStores.length > 1) ...[
@@ -371,10 +371,10 @@ class _InviteScreenState extends State<_InviteScreen> {
             style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
             child: _busy
                 ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text('產生邀請碼', style: TextStyle(fontSize: 16)),
+                : const Text('產生邀請碼', style: TextStyle(fontSize: AppType.title)),
           ),
           const SizedBox(height: 12),
-          Text('不能用邀請碼給「老闆」身分。', style: TextStyle(color: AppColors.muted, fontSize: 12)),
+          Text('不能用邀請碼給「老闆」身分。', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
         ]),
       );
 }

@@ -116,12 +116,12 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
               onRefresh: () async => _reload(),
               child: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 96), children: [
                 Row(children: [
-                  IconButton(onPressed: () => _shiftMonth(-1), icon: const Icon(Icons.chevron_left)),
+                  IconButton(tooltip: '上個月', onPressed: () => _shiftMonth(-1), icon: const Icon(Icons.chevron_left)),
                   Expanded(
                     child: Text(DateFormat('yyyy 年 M 月', 'zh_TW').format(_month),
-                        textAlign: TextAlign.center, style: const TextStyle(fontSize: 16)),
+                        textAlign: TextAlign.center, style: const TextStyle(fontSize: AppType.title)),
                   ),
-                  IconButton(onPressed: () => _shiftMonth(1), icon: const Icon(Icons.chevron_right)),
+                  IconButton(tooltip: '下個月', onPressed: () => _shiftMonth(1), icon: const Icon(Icons.chevron_right)),
                 ]),
                 const SizedBox(height: 4),
                 if (_synced) ...[
@@ -136,7 +136,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                           '按右下角「新增進貨」手動輸入的會先計入；之後日報表有同一筆，就改以日報表為準、不重複計算。'
                           '自己新增的可以點進去修改或刪除。'
                           '${last == null ? '' : '\n日報表最後一次匯入進貨：${DateFormat('M/d HH:mm').format(last)}'}',
-                          style: TextStyle(color: AppColors.muted, fontSize: 12, height: 1.5),
+                          style: TextStyle(color: AppColors.muted, fontSize: AppType.small, height: 1.5),
                         ),
                       ),
                     ]),
@@ -148,7 +148,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                 _group('petty', '零用金支出', '零用金付款', Icons.payments_outlined, petty, cats),
                 const SizedBox(height: 12),
                 Text('本月進貨合計 ${ntd(list.fold<double>(0, (t, p) => t + p.amount))}，共 ${list.length} 筆',
-                    textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                    textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
                 if (_synced && (replaced > 0 || covered.isNotEmpty))
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
@@ -158,7 +158,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                         if (covered.isNotEmpty) '${covered.length} 筆 10/12 以前的 App 進貨以日報表為準、不計入（點下方查看）',
                       ].join('；'),
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: AppColors.warn, fontSize: 12),
+                      style: TextStyle(color: AppColors.warn, fontSize: AppType.small),
                     ),
                   ),
                 if (covered.isNotEmpty)
@@ -197,7 +197,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
       padding: EdgeInsets.zero,
       child: Column(children: [
         InkWell(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
           onTap: () => setState(() => open ? _open.remove(key) : _open.add(key)),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 12, 16),
@@ -206,12 +206,12 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
               const SizedBox(width: 12),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+                  Text(title, style: const TextStyle(fontSize: AppType.title, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 2),
-                  Text('$sub・${items.length} 筆', style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                  Text('$sub・${items.length} 筆', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
                 ]),
               ),
-              Text(ntd(total), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+              Text(ntd(total), style: const TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w800)),
               const SizedBox(width: 4),
               Icon(open ? Icons.expand_less : Icons.expand_more, color: AppColors.muted),
             ]),
@@ -228,16 +228,16 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
             ListTile(
               contentPadding: const EdgeInsets.fromLTRB(20, 0, 12, 0),
               title: Text(cats[c] ?? c),
-              subtitle: Text('${byCat[c]!.length} 筆', style: const TextStyle(fontSize: 12)),
+              subtitle: Text('${byCat[c]!.length} 筆', style: const TextStyle(fontSize: AppType.small)),
               trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                 // 當日新增金額（例：10/12 新增 $886）
                 if (_todayAmount(byCat[c]!) != 0) ...[
                   Text('${DateFormat('M/d').format(_today!)} 新增${ntd(_todayAmount(byCat[c]!))}',
-                      style: TextStyle(color: AppColors.warn, fontSize: 12, fontWeight: FontWeight.w600)),
+                      style: TextStyle(color: AppColors.warn, fontSize: AppType.small, fontWeight: FontWeight.w600)),
                   const SizedBox(width: 10),
                 ],
                 Text(ntd(byCat[c]!.fold<double>(0, (t, p) => t + p.amount)),
-                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                    style: const TextStyle(fontSize: AppType.body, fontWeight: FontWeight.w600)),
                 Icon(Icons.chevron_right, color: AppColors.muted),
               ]),
               onTap: () => _openCategory('$title・${cats[c] ?? c}', byCat[c]!, cats),
@@ -376,13 +376,13 @@ class _CategoryPurchasesScreenState extends State<_CategoryPurchasesScreen> {
       ..sort((a, b) => groups[b]!.first.purchaseDate.compareTo(groups[a]!.first.purchaseDate));
     final total = _items.fold<double>(0, (t, p) => t + p.amount);
     return Scaffold(
-      appBar: AppBar(title: Text(widget.title, style: const TextStyle(fontSize: 16))),
+      appBar: AppBar(title: Text(widget.title, style: const TextStyle(fontSize: AppType.title))),
       body: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 24), children: [
         SectionCard(
           child: Row(children: [
             Text(DateFormat('M 月合計', 'zh_TW').format(widget.month), style: TextStyle(color: AppColors.muted)),
             const Spacer(),
-            Text(ntd(total), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+            Text(ntd(total), style: const TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w800)),
           ]),
         ),
         for (final n in names) ...[
@@ -447,7 +447,7 @@ class _PurchaseTile extends StatelessWidget {
               Text(
                 '${DateFormat('M/d').format(p.purchaseDate)}・$categoryName'
                 '${p.paidBy == 'petty_cash' ? '・零用金' : ''}${p.noReceipt ? '・缺憑' : ''}${p.source == 'import' ? '・日報表' : (p.counted ? '・App（點一下可改）' : '・以日報表為準，不計入')}',
-                style: TextStyle(color: AppColors.muted, fontSize: 12),
+                style: TextStyle(color: AppColors.muted, fontSize: AppType.small),
               ),
             ]),
           ),
@@ -606,18 +606,18 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
           Padding(
             padding: EdgeInsets.only(top: 6),
             child: Text('照片只用來存單據，金額、廠商、日期請自己填寫。',
-                style: TextStyle(color: AppColors.muted, fontSize: 12)),
+                style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
           ),
           if (_photo != null && AppConfig.vendorSlipStores.contains(widget.membership.storeName) && !_isReturn)
             Padding(
               padding: EdgeInsets.only(top: 6),
               child: Text('儲存後，照片會顯示在這筆進貨上，點縮圖可以看大圖。',
-                  style: TextStyle(color: AppColors.muted, fontSize: 12, height: 1.4)),
+                  style: TextStyle(color: AppColors.muted, fontSize: AppType.small, height: 1.4)),
             ),
           if (_photo != null) ...[
             const SizedBox(height: 8),
             ClipRRect(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
               child: Image.memory(dataUrlBytes(_photo!), height: 220, fit: BoxFit.contain),
             ),
             TextButton(
@@ -632,7 +632,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
               value: _noReceipt,
               onChanged: (v) => setState(() => _noReceipt = v ?? false),
               title: const Text('缺憑（沒有單據可拍）'),
-              subtitle: const Text('沒有照片時一定要勾選才能儲存', style: TextStyle(fontSize: 12)),
+              subtitle: const Text('沒有照片時一定要勾選才能儲存', style: TextStyle(fontSize: AppType.small)),
             ),
         ]),
       );
@@ -747,8 +747,8 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                 contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.event),
                 title: const Text('進貨日期'),
-                subtitle: const Text('凌晨 6 點前算前一個營業日', style: TextStyle(fontSize: 12)),
-                trailing: Text(DateFormat('yyyy/M/d').format(_date!), style: const TextStyle(fontSize: 16)),
+                subtitle: const Text('凌晨 6 點前算前一個營業日', style: TextStyle(fontSize: AppType.small)),
+                trailing: Text(DateFormat('yyyy/M/d').format(_date!), style: const TextStyle(fontSize: AppType.title)),
                 onTap: () async {
                   final d = await showDatePicker(
                     context: context,
@@ -821,7 +821,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                   alignment: Alignment.topLeft,
                   child: Material(
                     color: AppColors.cardHigh,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(AppRadius.md),
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxHeight: 240, maxWidth: 360),
                       child: ListView(padding: EdgeInsets.zero, shrinkWrap: true, children: [
@@ -842,7 +842,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('這是退貨／退單'),
-                subtitle: const Text('會以負數記錄，沖減當月成本', style: TextStyle(fontSize: 12)),
+                subtitle: const Text('會以負數記錄，沖減當月成本', style: TextStyle(fontSize: AppType.small)),
                 value: _isReturn,
                 onChanged: (v) => setState(() => _isReturn = v),
               ),
@@ -869,7 +869,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                 style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
                 child: _saving
                     ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Text('儲存', style: TextStyle(fontSize: 16)),
+                    : const Text('儲存', style: TextStyle(fontSize: AppType.title)),
               ),
             ]);
           },
@@ -921,9 +921,9 @@ class _NamePickerState extends State<_NamePicker> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(widget.title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+              Text(widget.title, style: const TextStyle(fontSize: AppType.title, fontWeight: FontWeight.w700)),
               const SizedBox(height: 2),
-              Text(widget.note, style: TextStyle(fontSize: 12, color: AppColors.muted)),
+              Text(widget.note, style: TextStyle(fontSize: AppType.small, color: AppColors.muted)),
               const SizedBox(height: 8),
               TextField(
                 decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: '搜尋', isDense: true),

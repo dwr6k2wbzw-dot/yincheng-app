@@ -23,8 +23,23 @@ class HomeShell extends StatefulWidget {
   State<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends State<HomeShell> {
+class _HomeShellState extends State<HomeShell> with SingleTickerProviderStateMixin {
   int _tab = 0;
+  // 切換分頁時整頁淡入（不重建頁面，各頁的捲動位置、輸入都保留）
+  late final AnimationController _fade = AnimationController(vsync: this, duration: AppMotion.fast, value: 1);
+  late final Animation<double> _fadeCurve = CurvedAnimation(parent: _fade, curve: AppMotion.curve);
+
+  void _go(int i) {
+    if (i == _tab) return;
+    setState(() => _tab = i);
+    _fade.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    _fade.dispose();
+    super.dispose();
+  }
 
   @override
   void didChangeDependencies() {
@@ -129,7 +144,7 @@ class _HomeShellState extends State<HomeShell> {
           NotificationBell(
             key: ValueKey('bell-${m.storeId}'),
             membership: m,
-            onOpenSchedule: scheduleTab == null ? null : () => setState(() => _tab = scheduleTab!),
+            onOpenSchedule: scheduleTab == null ? null : () => _go(scheduleTab!),
           ),
           PopupMenuButton<String>(
             tooltip: '更多',
@@ -152,7 +167,7 @@ class _HomeShellState extends State<HomeShell> {
                   builder: (c) => AlertDialog(
                     title: const Text('載入速度'),
                     content: SingleChildScrollView(
-                      child: SelectableText(loadReport(), style: const TextStyle(fontSize: 13, height: 1.5)),
+                      child: SelectableText(loadReport(), style: const TextStyle(fontSize: AppType.small, height: 1.5)),
                     ),
                     actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('關閉'))],
                   ),
@@ -186,10 +201,13 @@ class _HomeShellState extends State<HomeShell> {
           ),
         ],
       ),
-      body: IndexedStack(index: tab, children: [for (final t in tabs) t.$1]),
+      body: FadeTransition(
+        opacity: _fadeCurve,
+        child: IndexedStack(index: tab, children: [for (final t in tabs) t.$1]),
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: tab,
-        onDestinationSelected: (i) => setState(() => _tab = i),
+        onDestinationSelected: _go,
         destinations: [for (final t in tabs) t.$2],
       ),
     );
@@ -210,24 +228,24 @@ class _StoreSwitcher extends StatelessWidget {
         Image.asset(logo, height: 34, filterQuality: FilterQuality.medium),
         const SizedBox(width: 10),
       ],
-      Text(m.storeName, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
+      Text(m.storeName, style: const TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w700)),
       if (state.memberships.length > 1) const Icon(Icons.arrow_drop_down),
       const SizedBox(width: 8),
       Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(color: AppColors.cardHigh, borderRadius: BorderRadius.circular(8)),
-        child: Text(roleLabel(m.role), style: TextStyle(fontSize: 12, color: AppColors.muted)),
+        decoration: BoxDecoration(color: AppColors.cardHigh, borderRadius: BorderRadius.circular(AppRadius.sm)),
+        child: Text(roleLabel(m.role), style: TextStyle(fontSize: AppType.small, color: AppColors.muted)),
       ),
     ]);
     if (state.memberships.length <= 1) return title;
     return InkWell(
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(AppRadius.sm),
       onTap: () => showModalBottomSheet(
         context: context,
         backgroundColor: AppColors.card,
         builder: (c) => SafeArea(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Padding(padding: EdgeInsets.all(16), child: Text('切換店家', style: TextStyle(fontSize: 16))),
+            const Padding(padding: EdgeInsets.all(16), child: Text('切換店家', style: TextStyle(fontSize: AppType.title))),
             for (final x in state.memberships)
               ListTile(
                 leading: storeLogo(x.storeName) != null

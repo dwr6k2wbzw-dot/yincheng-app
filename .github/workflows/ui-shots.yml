@@ -1,0 +1,56 @@
+# 畫面截圖檢查（2026-10-29）：推到 ui/ 開頭的分支時，示範版（假資料）新舊各建一份，
+# 用 Playwright 截圖後放到 ui-shots 分支（<分支>/old、<分支>/new），給老闆先看再決定要不要上線。
+# 不發佈、不碰 GitHub Pages、不碰正式資料庫（DEMO=true 用假資料）。
+name: 畫面截圖檢查（示範版，不發佈）
+on:
+  push:
+    branches: ['ui/**']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: ui-shots-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  shots:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: new
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          path: old
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: 建置示範版（新、舊）
+        run: |
+          # 舊版（main）沒有 ?auto=1，先補上同一行再建置，才能自動登入
+          sed -i "s/  bool _signedIn = false;/  bool _signedIn = Uri.base.queryParameters.containsKey('auto');/" old/lib/data/demo_repository.dart
+          for d in new old; do
+            (cd $d
+             if [ ! -d web ]; then flutter create --platforms web --project-name yincheng_ops --org tw.yincheng . ; fi
+             rm -f test/widget_test.dart
+             python3 tool/patch_index.py
+             flutter pub get
+             flutter build web --release --pwa-strategy=none --dart-define=DEMO=true --base-href "/$d/" > build.txt 2>&1 || { cat build.txt; grep -iE "error" build.txt | head -40 | sed 's/^/::error::/'; exit 1; })
+            mkdir -p site/$d && cp -a $d/build/web/. site/$d/
+          done
+      - name: 截圖
+        run: |
+          (cd site && python3 -m http.server 8080 >/dev/null 2>&1 &)
+          mkdir -p shots && cd shots && npm init -y >/dev/null && npm i playwright@1.48.2 >/dev/null && npx playwright install --with-deps chromium >/dev/null
+          cp ../new/tool/ui_shots/shoot.mjs .
+          for d in new old; do node shoot.mjs "http://localhost:8080/$d/?auto=1" "out/$d"; done
+          ls out/*
+      - name: 放到 ui-shots 分支
+        run: |
+          br="${GITHUB_REF_NAME//\//_}"
+          git clone -q --depth 1 --branch ui-shots "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" store 2>/dev/null || { mkdir store && cd store && git init -q -b ui-shots && git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" && cd ..; }
+          rm -rf "store/$br" && mkdir -p "store/$br" && cp -a shots/out/. "store/$br/"
+          echo "${{ github.sha }}" > "store/$br/sha.txt"
+          cd store && git -c user.email=ci@noreply -c user.name=ci add -A && git -c user.email=ci@noreply -c user.name=ci commit -qm "shots $br ${{ github.sha }}" && git push -q origin ui-shots
+          echo "::notice title=ui-shots::ui-shots/$br 已更新"
