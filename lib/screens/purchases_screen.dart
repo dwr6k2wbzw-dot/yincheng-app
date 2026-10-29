@@ -70,7 +70,8 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     _reload();
   }
 
-  Future<void> _openCategory(String title, List<Purchase> items, Map<String, String> cats) async {
+  Future<void> _openCategory(String title, List<Purchase> items, Map<String, String> cats,
+      {bool Function(Purchase)? reloadFilter}) async {
     await Navigator.push(
       context,
       MaterialPageRoute(
@@ -82,6 +83,9 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           today: _today,
           canReconcile: widget.membership.isManager && !_synced,
           membership: widget.membership,
+          // 月結廠商的類別：先顯示廠商區塊（老闆 2026-10-29），點區塊才看每筆
+          vendorBlocks: reloadFilter != null,
+          reloadFilter: reloadFilter,
         ),
       ),
     );
@@ -244,7 +248,10 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                     style: const TextStyle(fontSize: AppType.body, fontWeight: FontWeight.w600)),
                 Icon(Icons.chevron_right, color: AppColors.muted),
               ]),
-              onTap: () => _openCategory('$title・${cats[c] ?? c}', byCat[c]!, cats),
+              onTap: () => _openCategory('$title・${cats[c] ?? c}', byCat[c]!, cats,
+                  reloadFilter: key == 'vendor'
+                      ? (p) => p.counted && p.paidBy != 'petty_cash' && (_displayAs[p.categoryCode] ?? p.categoryCode) == c
+                      : null),
             ),
           const SizedBox(height: 4),
         ],
@@ -263,8 +270,14 @@ class _CategoryPurchasesScreen extends StatefulWidget {
     required this.canReconcile,
     required this.membership,
     this.today,
+    this.vendorBlocks = false,
+    this.reloadFilter,
   });
   final Membership membership;
+  /// 先顯示廠商區塊（一行兩格：廠商名稱＋總金額），點區塊才看那家的每一筆（月結廠商用，老闆 2026-10-29）
+  final bool vendorBlocks;
+  /// 從廠商明細回來時重新讀這個月的進貨，用這個條件挑出這個類別的（核銷、刪除後金額才會對）
+  final bool Function(Purchase)? reloadFilter;
   final DateTime? today; // 今天的營業日：當日新增的品項用橘色
   final String title;
   final DateTime month;
@@ -277,6 +290,99 @@ class _CategoryPurchasesScreen extends StatefulWidget {
 
 class _CategoryPurchasesScreenState extends State<_CategoryPurchasesScreen> {
   late List<Purchase> _items = List.of(widget.items);
+
+  static String _vendorOf(Purchase p) {
+    final n = (p.supplierName ?? '').trim();
+    if (n.isNotEmpty) return n;
+    final m = (p.memo ?? '').trim();
+    return m.isNotEmpty ? m : '未填廠商';
+  }
+
+  Future<void> _openVendor(String vendor) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _CategoryPurchasesScreen(
+          title: '${widget.title}・$vendor',
+          month: widget.month,
+          items: _items.where((p) => _vendorOf(p) == vendor).toList(),
+          categoryNames: widget.categoryNames,
+          canReconcile: widget.canReconcile,
+          membership: widget.membership,
+          today: widget.today,
+        ),
+      ),
+    );
+    // 回來時重讀：在明細裡核銷、刪除、修改過，區塊的金額才會對
+    final f = widget.reloadFilter;
+    if (f == null || !mounted) return;
+    try {
+      final all = await AppScope.of(context).repo.monthPurchases(widget.membership.storeId, widget.month);
+      if (mounted) setState(() => _items = all.where(f).toList());
+    } catch (_) {}
+  }
+
+  /// 廠商區塊：一行兩格，金額大的在前面
+  Widget _blocks(double total) {
+    final groups = <String, List<Purchase>>{};
+    for (final p in _items) {
+      groups.putIfAbsent(_vendorOf(p), () => []).add(p);
+    }
+    double sum(List<Purchase> l) => l.fold<double>(0, (t, p) => t + p.amount);
+    final names = groups.keys.toList()..sort((a, b) => sum(groups[b]!).compareTo(sum(groups[a]!)));
+    final today = widget.today;
+    Widget block(String n) {
+      final l = groups[n]!;
+      final todayAmt = today == null ? 0.0 : l.where((p) => isSameDay(p.purchaseDate, today)).fold(0.0, (t, p) => t + p.amount);
+      final open = l.where((p) => !p.reconciled).length;
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          onTap: () => _openVendor(n),
+          child: SectionCard(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(n, maxLines: 2, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: AppType.body, fontWeight: AppFont.heading, height: 1.3)),
+              const SizedBox(height: 10),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(ntd(sum(l)),
+                    style: const TextStyle(fontSize: AppType.heading, fontWeight: AppFont.figure, fontFeatures: tabular)),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${l.length} 筆${open > 0 ? '・未核銷 $open' : ''}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: AppColors.muted, fontSize: AppType.caption),
+              ),
+              if (todayAmt != 0)
+                Text('${DateFormat('M/d').format(today!)} 新增${ntd(todayAmt)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: AppColors.warn, fontSize: AppType.caption, fontWeight: FontWeight.w600)),
+            ]),
+          ),
+        ),
+      );
+    }
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      for (var i = 0; i < names.length; i += 2) ...[
+        IntrinsicHeight(
+          child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Expanded(child: block(names[i])),
+            const SizedBox(width: 10),
+            Expanded(child: i + 1 < names.length ? block(names[i + 1]) : const SizedBox()),
+          ]),
+        ),
+        const SizedBox(height: 10),
+      ],
+    ]);
+  }
 
   Future<void> _toggle(Purchase p) async {
     try {
@@ -389,9 +495,19 @@ class _CategoryPurchasesScreenState extends State<_CategoryPurchasesScreen> {
             Text(ntd(total), style: const TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w800)),
           ]),
         ),
+        if (widget.vendorBlocks) ...[
+          const SizedBox(height: 16),
+          if (_items.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 24),
+              child: Text('本月沒有資料', textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted)),
+            )
+          else
+            _blocks(total),
+        ] else
         for (final n in names) ...[
           const SizedBox(height: 16),
-          Padding(
+          if (names.length > 1) Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
             child: Row(children: [
               Expanded(child: Text(n, style: const TextStyle(fontWeight: FontWeight.w700))),
