@@ -620,7 +620,6 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   DateTime? _date;
   String? _category;
   final _vendor = TextEditingController(); // 廠商名稱：自行輸入（和既有廠商同名就自動對應）
-  List<String> _excelVendors = []; // 日報表的月結廠商名稱（舊清單，月結清單讀不到時備用）
   // 月結廠商清單（老闆 2026-10-29：廠商名稱改成從清單選）：本月＋前兩個月出現過的月結廠商，依筆數多到少
   List<String> _monthlyVendors = [];
   List<String> _members = []; // 成員名字（填表人／請款人可從清單選）
@@ -682,14 +681,11 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
     };
     // 常用廠商提示已移除（老闆 2026-10-13）；改成月結廠商可從日報表廠商名單選、填表人可從成員名單選
     try {
-      final lists = await Future.wait([repo.excelVendorNames(id), repo.memberNames(id)]);
-      _excelVendors = lists[0];
-      _members = lists[1];
+      _members = await repo.memberNames(id);
     } catch (_) {} // 名單讀不到不影響新增
     try {
       _monthlyVendors = await _recentMonthlyVendors(repo, id, r[2] as DateTime);
-    } catch (_) {} // 讀不到就用日報表名單
-    if (_monthlyVendors.isEmpty) _monthlyVendors = List.of(_excelVendors);
+    } catch (_) {} // 讀不到時清單只剩「手動新增廠商」
     _sups = r[1] as List<Supplier>;
     // 填表人預設帶入自己的名字（可以改成請款人）
     if (_memo.text.isEmpty && e == null) _memo.text = widget.membership.displayName;
@@ -698,19 +694,45 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
 
   final _vendorFocus = FocusNode();
 
-  /// 本月＋前兩個月的月結廠商（名稱照進貨區塊的合併規則），依出現筆數多到少
+  /// 本月＋前兩個月的月結廠商（名稱照進貨區塊的合併規則），依出現筆數多到少。
+  /// 老闆 2026-10-29：只列月結廠商，零用金的店家不要列入：
+  /// - 只算付款方式＝月結廠商的進貨
+  /// - 日報表 8 月以前是舊格式（零用金買的東西也記在月結那幾欄，例：上白糖、咖啡豆、花），匯入的舊月份不算
+  /// - 同一段時間在零用金出現得比月結多（或一樣多）的名字（例：全聯）也排除；兩邊都有、月結比較多的（例：小郭）保留
+  /// - 「廠商資料」裡的月結廠商一律列入（只有老闆、店長讀得到；讀不到就略過）
+  static final _newReportFormatFrom = DateTime(2026, 9, 1);
   static Future<List<String>> _recentMonthlyVendors(Repository repo, String storeId, DateTime today) async {
     final months = [for (var i = 0; i < 3; i++) DateTime(today.year, today.month - i, 1)];
     final lists = await Future.wait(months.map((m) => repo.monthPurchases(storeId, m)));
     final counts = <String, int>{};
+    final petty = <String, int>{};
     for (final p in lists.expand((l) => l)) {
-      if (p.paidBy != 'vendor') continue;
       final n = vendorGroupName(p);
       if (n == '未填廠商') continue;
+      if (p.paidBy == 'petty_cash') {
+        petty[n] = (petty[n] ?? 0) + 1;
+        continue;
+      }
+      if (p.paidBy != 'vendor') continue;
+      if (p.source == 'import' && p.purchaseDate.isBefore(_newReportFormatFrom)) continue;
       counts[n] = (counts[n] ?? 0) + 1;
     }
+    counts.removeWhere((v, c) {
+      final inPetty = petty.entries
+          .where((x) => x.key == v || x.key.startsWith('$v ') || x.key.startsWith('$v.'))
+          .fold<int>(0, (a, x) => a + x.value);
+      return inPetty > 0 && inPetty >= c;
+    });
     final e = counts.entries.toList()..sort((a, b) => b.value != a.value ? b.value.compareTo(a.value) : a.key.compareTo(b.key));
-    return [for (final x in e) x.key];
+    final out = [for (final x in e) x.key];
+    try {
+      for (final c in await repo.vendorContacts(storeId)) {
+        if (c.kind != 'monthly') continue;
+        final n = normalizeVendorName(c.name);
+        if (n != null && !out.contains(n)) out.add(n);
+      }
+    } catch (_) {} // 正職、兼職讀不到廠商資料
+    return out;
   }
 
   /// 月結廠商：從清單選；清單最下面「手動新增廠商」可以自己輸入（老闆 2026-10-29）
@@ -722,7 +744,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
       showDragHandle: true,
       builder: (ctx) => _NamePicker(
         title: '選擇廠商',
-        note: '本月與前兩個月的月結廠商，常用的在前面',
+        note: '本月與前兩個月的月結廠商（不含零用金店家），常用的在前面',
         names: _monthlyVendors,
         addLabel: '手動新增廠商',
       ),
