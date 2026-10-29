@@ -48,6 +48,7 @@ class DemoRepository implements Repository {
     Purchase(id: 'x4', purchaseDate: DateTime(2026, 9, 12), categoryCode: 'food', supplierName: '示範水果行', amount: 1200, paidBy: 'vendor', reconciled: true, source: 'import'),
     Purchase(id: 'x5', purchaseDate: DateTime(2026, 9, 26), categoryCode: 'food', supplierName: '示範水果行', amount: 800, paidBy: 'vendor', reconciled: false, source: 'import'),
     Purchase(id: 'x6', purchaseDate: DateTime(2026, 9, 18), categoryCode: 'liquor_monthly', supplierName: '示範酒商', amount: 5400, paidBy: 'vendor', reconciled: false, source: 'import'),
+    Purchase(id: 'x8', purchaseDate: DateTime(2026, 9, 20), categoryCode: 'liquor_monthly', supplierName: '示範酒商(退酒)', amount: -580, paidBy: 'vendor', reconciled: true, source: 'import'),
     Purchase(id: 'x7', purchaseDate: DateTime(2026, 9, 20), categoryCode: 'food', supplierName: '示範肉品行', amount: 4600, paidBy: 'vendor', reconciled: false, source: 'import'),
   ];
   final _counts = <StockCount>[];

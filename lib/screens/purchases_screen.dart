@@ -291,11 +291,17 @@ class _CategoryPurchasesScreen extends StatefulWidget {
 class _CategoryPurchasesScreenState extends State<_CategoryPurchasesScreen> {
   late List<Purchase> _items = List.of(widget.items);
 
+  static final _paren = RegExp(r'\s*[(（][^()（）]*[)）]\s*$');
+
+  /// 區塊用的廠商名稱：去掉名稱最後的括號說明（大倉捷(退酒) → 大倉捷），
+  /// 再照 AppConfig.vendorGroupAlias 合併別名（德哥 → 阿德水果）。只影響畫面分組。
   static String _vendorOf(Purchase p) {
-    final n = (p.supplierName ?? '').trim();
-    if (n.isNotEmpty) return n;
-    final m = (p.memo ?? '').trim();
-    return m.isNotEmpty ? m : '未填廠商';
+    var n = (p.supplierName ?? '').trim();
+    if (n.isEmpty) n = (p.memo ?? '').trim();
+    if (n.isEmpty) return '未填廠商';
+    final base = n.replaceFirst(_paren, '').trim();
+    if (base.isNotEmpty) n = base;
+    return AppConfig.vendorGroupAlias[n] ?? n;
   }
 
   Future<void> _openVendor(String vendor) async {
