@@ -37,6 +37,8 @@ jobs:
             echo "::error title=shift-plan::${msg}"
           fi
           exit $rc
+      - name: 上個月／近 3 個月平均計算檢查
+        run: dart run tool/month_compare_check.dart
       - name: 靜態檢查（只擋錯誤）
         run: |
           set +e

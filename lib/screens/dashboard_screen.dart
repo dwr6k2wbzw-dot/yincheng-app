@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../app_state.dart';
 import '../services/load_timing.dart';
+import '../data/month_compare.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
 import '../theme.dart';
@@ -30,6 +31,8 @@ class _DashboardData {
   double cardFeeRate = 0.02; // 刷卡手續費率（0039）
   DateTime month = DateTime.now();
   List<DailyRevenue> days = const []; // 本月與上個月每日營收（趨勢線、較上月同期）
+  /// 前 3 個月的月彙總（[0]＝上個月；上個月／近 3 個月平均的來客與客單，老闆 2026-10-29）；讀不到的月份＝null
+  List<MonthlySummary?> prev = const [];
 
   /// 本月累計 vs 上月累計；較上月同期＝本月 1～N 日 ÷ 上月 1～N 日（N＝本月最後有資料的那天）
   _Trend trend() {
@@ -102,6 +105,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     d.summary = s;
     d.days = repo.peekDailyRevenueBetween(id, DateTime(_month.year, _month.month - 1, 1), DateTime(_month.year, _month.month + 1, 0)) ??
         const <DailyRevenue>[];
+    d.prev = [for (var i = 1; i <= 3; i++) repo.peekMonthlySummary(id, DateTime(_month.year, _month.month - i))];
     if (_isOwner) {
       final fixed = repo.peekFixedCosts(id, _month);
       final items = repo.peekExpenseItems(id, _month);
@@ -130,6 +134,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         repo
             .dailyRevenueBetween(id, DateTime(_month.year, _month.month - 1, 1), DateTime(_month.year, _month.month + 1, 0))
             .then<List<DailyRevenue>>((v) => v, onError: (_) => const <DailyRevenue>[]),
+        // 上個月／近 3 個月平均用；讀不到不影響總覽
+        Future.wait([
+          for (var i = 1; i <= 3; i++)
+            repo
+                .monthlySummary(id, DateTime(_month.year, _month.month - i))
+                .then<MonthlySummary?>((v) => v, onError: (_) => null),
+        ]),
         if (_isOwner) ...[
           repo.fixedCosts(id, _month),
           repo.expenseItems(id, _month),
@@ -139,11 +150,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ]);
       d.summary = r[0] as MonthlySummary;
       d.days = r[1] as List<DailyRevenue>;
+      d.prev = r[2] as List<MonthlySummary?>;
       if (_isOwner) {
-        d.fixed = r[2] as FixedCosts;
-        d.items = r[3] as List<ExpenseItem>;
-        d.recurring = r[4] as List<RecurringExpenseItem>;
-        d.cardFeeRate = r[5] as double;
+        d.fixed = r[3] as FixedCosts;
+        d.items = r[4] as List<ExpenseItem>;
+        d.recurring = r[5] as List<RecurringExpenseItem>;
+        d.cardFeeRate = r[6] as double;
       }
     }
     markLoad('總覽資料');
@@ -345,6 +357,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(width: 14),
           Expanded(child: StatTile(label: '客單價', value: avgText, sub: avgSub)),
         ]),
+        if (d.prev.any((e) => e != null)) ...[
+          const SizedBox(height: 14),
+          _compareCard(d, s, multi),
+        ],
         const SizedBox(height: 14),
         SectionCard(
           padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
@@ -418,6 +434,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _tile('客單價', avgText, sub: avgSub),
         ],
       ),
+      if (d.prev.any((e) => e != null)) ...[
+        const SizedBox(height: 12),
+        _compareCard(d, s, multi),
+      ],
       const SizedBox(height: 12),
       SectionCard(
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
@@ -462,6 +482,92 @@ class _DashboardScreenState extends State<DashboardScreen> {
       const SizedBox(height: 12),
       if (_isOwner) _profitCard(d, s),
     ];
+  }
+
+  /// 上個月、近 3 個月平均的來客數與客單價（老闆 2026-10-29），跟著上方選的月份走。
+  /// ▲▼＝本月比這一列；本月還沒過完時來客數不比（只比客單）。
+  Widget _compareCard(_DashboardData d, MonthlySummary s, bool multi) {
+    final cur = monthFigure(s, multi: multi);
+    final figs = [for (final p in d.prev) if (p != null) monthFigure(p, multi: multi)];
+    final last = d.prev.first == null ? null : monthFigure(d.prev.first!, multi: multi);
+    final avg = monthAverage(figs);
+    final now = DateTime.now();
+    final ongoing = d.month.year == now.year && d.month.month == now.month;
+    final head = TextStyle(fontSize: AppType.caption, color: AppColors.muted);
+    const numStyle = TextStyle(fontSize: AppType.body, fontFeatures: tabular);
+    final prevMonth = DateTime(d.month.year, d.month.month - 1);
+    final firstMonth = DateTime(d.month.year, d.month.month - 3);
+
+    Widget cell(String v, double? change) => Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerRight, child: Text(v, style: numStyle)),
+            if (change != null && change.abs() < 0.005)
+              Text('本月持平', style: head)
+            else if (change != null)
+              Text.rich(
+                TextSpan(children: [
+                  const TextSpan(text: '本月 '),
+                  TextSpan(
+                      text: '${change > 0 ? '▲' : '▼'} ${(change.abs() * 100).toStringAsFixed(0)}%',
+                      style: TextStyle(color: change > 0 ? AppColors.good : AppColors.bad)),
+                ]),
+                style: head.copyWith(fontFeatures: tabular),
+              ),
+          ]),
+        );
+    Widget row(String title, String sub, String guests, double? gChange, String ticket, double? tChange) =>
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          SizedBox(
+            width: 104,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(title, style: const TextStyle(fontSize: AppType.small)),
+              Text(sub, style: head),
+            ]),
+          ),
+          cell(guests, gChange),
+          cell(ticket, tChange),
+        ]);
+    String t(double? v) => v == null ? '—' : money.format(v.round());
+
+    return SectionCard(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _label('來客・客單比較'),
+        const SizedBox(height: 14),
+        Row(children: [
+          const SizedBox(width: 104),
+          Expanded(child: Text('來客數', textAlign: TextAlign.right, style: head)),
+          Expanded(child: Text(multi ? '客單（調酒）' : '客單價', textAlign: TextAlign.right, style: head)),
+        ]),
+        Divider(height: 18, color: AppColors.line),
+        row(
+          '上個月',
+          '${prevMonth.month} 月',
+          last == null || last.guests == 0 ? '—' : money.format(last.guests),
+          ongoing || last == null ? null : changeOf(cur.guests.toDouble(), last.guests.toDouble()),
+          t(last?.avgTicket),
+          changeOf(cur.avgTicket, last?.avgTicket),
+        ),
+        Divider(height: 18, color: AppColors.line),
+        row(
+          '近 3 個月平均',
+          avg.months == 0
+              ? '${firstMonth.month}～${prevMonth.month} 月'
+              : avg.months < 3
+                  ? '只有 ${avg.months} 個月有資料'
+                  : '${firstMonth.month}～${prevMonth.month} 月',
+          avg.guests == null ? '—' : money.format(avg.guests!.round()),
+          ongoing ? null : changeOf(cur.guests.toDouble(), avg.guests),
+          t(avg.avgTicket),
+          changeOf(cur.avgTicket, avg.avgTicket),
+        ),
+        const SizedBox(height: 12),
+        Text(
+            '近 3 個月＝${firstMonth.month}～${prevMonth.month} 月（不含本月），來客是每月平均，客單依來客加權。'
+            '${ongoing ? '本月還沒過完，來客數先不比。' : ''}',
+            style: TextStyle(color: AppColors.muted, fontSize: AppType.caption, height: 1.5)),
+      ]),
+    );
   }
 
   // ── 共用小元件 ──
