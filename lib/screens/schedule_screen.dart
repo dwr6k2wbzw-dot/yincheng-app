@@ -25,9 +25,9 @@ const _offColor = Color(0xFFE0A34A);
 const _assignedColor = Color(0xFFE5735F);
 
 Color? _markBg(String? m) => switch (m) {
-      '休' => _offColor.withValues(alpha: 0.85),
-      '指休' => _assignedColor.withValues(alpha: 0.85),
-      '特休' => const Color(0xFFC0392B).withValues(alpha: 0.85), // 照老闆紙本班表的紅色（0072）
+      '休' => _offColor.withValues(alpha: 0.40), // 2026-10-29：降低飽和度，保留紙本班表的顏色辨識
+      '指休' => _assignedColor.withValues(alpha: 0.40),
+      '特休' => const Color(0xFFC0392B).withValues(alpha: 0.50), // 照老闆紙本班表的紅色（0072）
       'O' => AppColors.primary.withValues(alpha: 0.35),
       // 顏色照老闆班別表：R 白、R1 灰、RBK 粉紫、B 系藍、BHP 系黃
       'R' => const Color(0xFFE8E8E8).withValues(alpha: 0.30),
@@ -126,7 +126,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             const SizedBox(height: 12),
             Wrap(spacing: 10, runSpacing: 10, children: [
               for (final m in _marks)
-                ChoiceChip(
+                SelectChip(
                   label: Text(m == 'V'
                       ? 'V 上班'
                       : _codeTimes.containsKey(m)
@@ -144,7 +144,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               const SizedBox(height: 8),
               Wrap(spacing: 8, runSpacing: 8, children: [
                 for (final r in _ranges)
-                  ChoiceChip(
+                  SelectChip(
                     label: Text(r),
                     selected: r == current,
                     onSelected: (_) => Navigator.pop(c, r),
@@ -445,7 +445,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   for (final (i, w) in weeks.indexed)
                     Padding(
                       padding: const EdgeInsets.only(right: 6),
-                      child: ChoiceChip(
+                      child: SelectChip(
                         label: Text(w.$1 == w.$2 ? '${_month.month}/${w.$1}' : '${_month.month}/${w.$1}–${w.$2}'),
                         selected: i == _week,
                         onSelected: (_) => setState(() => _week = i),
@@ -501,9 +501,15 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               ],
               if (_canEdit)
                 Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(_codeHours != null ? '點格子改班（兼職可選時段）、點日期加備註、點下方統計填未休／補休與特休。' : '點格子改班（兼職可選時段）、點日期加備註、點下方統計填應休與特休。',
-                      style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+                  padding: const EdgeInsets.only(top: 6),
+                  child: InfoLine(
+                    icon: Icons.touch_app_outlined,
+                    padding: EdgeInsets.zero,
+                    text: '點格子改班、點日期加備註',
+                    detail: _codeHours != null
+                        ? '點格子改班（兼職可選時段）、點日期加備註、點下方統計填未休／補休與特休。'
+                        : '點格子改班（兼職可選時段）、點日期加備註、點下方統計填應休與特休。',
+                  ),
                 ),
             ]),
           );
@@ -557,8 +563,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     const wd = ['日', '一', '二', '三', '四', '五', '六'];
     final today = DateTime.now();
     return LayoutBuilder(builder: (context, box) {
-      const nameW = 48.0, sumW = 30.0;
-      final cellW = ((box.maxWidth - nameW - sumW) / 7).clamp(34.0, 60.0);
+      // 每格左右各有 1px 間距，要先扣掉，不然最右邊一欄會被裁掉（2026-10-29）
+      const nameW = 52.0, sumW = 28.0;
+      final cellW = ((box.maxWidth - nameW - sumW) / 7 - 2).clamp(30.0, 60.0);
       Widget cell(Widget child, {Color? bg, VoidCallback? onTap, double h = 30, Border? border}) => GestureDetector(
             onTap: onTap,
             child: Container(
@@ -570,12 +577,16 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               child: child,
             ),
           );
+      // 名字不斷行：太長就整個等比例縮小（老闆 2026-10-29）
       Widget name(String t, {bool bold = false, Color? color}) => SizedBox(
             width: nameW,
-            child: Text(t,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: AppType.small, fontWeight: bold ? FontWeight.w700 : FontWeight.w500, color: color)),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(t,
+                  maxLines: 2,
+                  style: TextStyle(fontSize: AppType.small, height: 1.2, fontWeight: bold ? FontWeight.w700 : FontWeight.w500, color: color)),
+            ),
           );
       Widget sum(String t, {Color? color}) => SizedBox(
             width: sumW,
@@ -723,9 +734,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               }(),
           ],
         ),
-        const SizedBox(height: 6),
-        Text('已休＝休＋指休；剩餘未休特休＝原未休特休 −（已休 − 應休）− 排特休的天數',
-            style: TextStyle(color: AppColors.muted, fontSize: AppType.caption)),
+        const SizedBox(height: 4),
+        const InfoLine(
+          icon: null,
+          padding: EdgeInsets.zero,
+          text: '怎麼算的',
+          detail: '已休＝休＋指休；剩餘未休特休＝原未休特休 −（已休 − 應休）− 排特休的天數',
+        ),
       ]),
     );
   }
@@ -771,9 +786,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               }(),
           ],
         ),
-        const SizedBox(height: 6),
-        Text('總時數＝整個月（含月底最後一天）；月休＝休＋指休（特休另計、不算月休）；未休／補休、累計特休由老闆或店長填。',
-            style: TextStyle(color: AppColors.muted, fontSize: AppType.caption)),
+        const SizedBox(height: 4),
+        const InfoLine(
+          icon: null,
+          padding: EdgeInsets.zero,
+          text: '怎麼算的',
+          detail: '總時數＝整個月（含月底最後一天）；月休＝休＋指休（特休另計、不算月休）；未休／補休、累計特休由老闆或店長填。',
+        ),
       ]),
     );
   }

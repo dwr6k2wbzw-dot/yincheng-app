@@ -842,7 +842,7 @@ class _RuleEditorState extends State<_RuleEditor> {
         const SizedBox(height: 6),
         Wrap(spacing: 6, runSpacing: 6, children: [
           for (var w = 1; w <= 7; w++)
-            FilterChip(
+            SelectChip(
               label: Text(_wdName(w)),
               selected: _noWd.contains(w),
               onSelected: (v) => setState(() => v ? _noWd.add(w) : _noWd.remove(w)),
@@ -856,7 +856,7 @@ class _RuleEditorState extends State<_RuleEditor> {
         const SizedBox(height: 6),
         Wrap(spacing: 6, runSpacing: 6, children: [
           for (final m in _choices)
-            FilterChip(
+            SelectChip(
               label: Text(_marks.contains(m) ? '${_marks.indexOf(m) + 1}. $m' : m),
               selected: _marks.contains(m),
               onSelected: (v) => setState(() {
@@ -1037,7 +1037,7 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
                 ...storeRanges(_storeName, _cur!.options),
                 ..._usualMarks(p)
               })
-                ChoiceChip(
+                SelectChip(
                   label: Text(m),
                   selected: m == cur,
                   selectedColor: widget.markBg(m) ?? AppColors.cardHigh,

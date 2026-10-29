@@ -106,7 +106,18 @@ class AppType {
   static const double title = 17; // 卡片標題、按鈕
   static const double heading = 20; // 區塊大標、重要數字
   static const double display = 26; // 統計數字
-  static const double hero = 42; // 總覽最大的營收數字
+  static const double hero = 44; // 總覽最大的營收數字
+}
+
+/// 字體（老闆 2026-10-29：現代黑體、粗細對比）：英數用 Geist，中文用內建思源黑體（Noto Sans TC）。
+/// 大數字用細體、標籤用中等粗細，靠粗細差拉出層次，不靠拉字距或加顏色。
+class AppFont {
+  static const family = 'Geist';
+  static const cjk = 'NotoSansTC'; // 內建中文黑體（只含介面用字）
+  static const hero = FontWeight.w300; // 營收大數字
+  static const figure = FontWeight.w400; // 統計數字
+  static const label = FontWeight.w500; // 小標籤、按鈕
+  static const heading = FontWeight.w600; // 卡片標題
 }
 
 /// 圓角（2026-10-29 統一）：xs 小色塊／進度條、sm 標籤／小按鈕、md 輸入框／按鈕、lg 卡片／面板
@@ -129,6 +140,8 @@ const tabular = [FontFeature.tabularFigures()];
 ThemeData buildTheme(StorePalette p) {
   final base = ThemeData(
     useMaterial3: true,
+    fontFamily: AppFont.family,
+    fontFamilyFallback: const [AppFont.cjk],
     brightness: Brightness.dark,
     colorScheme: ColorScheme.fromSeed(seedColor: p.primary, brightness: Brightness.dark).copyWith(
       primary: p.primary,
@@ -165,6 +178,27 @@ ThemeData buildTheme(StorePalette p) {
           fontSize: AppType.caption,
           color: s.contains(WidgetState.selected) ? p.primary : p.muted,
           fontWeight: s.contains(WidgetState.selected) ? FontWeight.w700 : FontWeight.w400)),
+    ),
+    // 篩選按鈕不顯示打勾（選到的靠底色區分），寬度才不會被勾勾吃掉
+    chipTheme: ChipThemeData(
+      showCheckmark: false,
+      backgroundColor: p.card,
+      selectedColor: p.primary.withValues(alpha: 0.18),
+      side: BorderSide(color: p.line),
+      labelStyle: TextStyle(fontSize: AppType.small, color: p.text, fontWeight: AppFont.label),
+      secondaryLabelStyle: TextStyle(fontSize: AppType.small, color: p.primary, fontWeight: AppFont.label),
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.sm)),
+    ),
+    floatingActionButtonTheme: FloatingActionButtonThemeData(
+      backgroundColor: p.primary,
+      foregroundColor: p.onPrimary,
+      elevation: 2,
+      highlightElevation: 4,
+      extendedTextStyle: const TextStyle(fontSize: AppType.body, fontWeight: AppFont.heading),
+      extendedPadding: const EdgeInsets.symmetric(horizontal: 18),
+      extendedSizeConstraints: const BoxConstraints.tightFor(height: 48),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
     ),
     dialogTheme: DialogThemeData(backgroundColor: p.card, surfaceTintColor: Colors.transparent),
     bottomSheetTheme: BottomSheetThemeData(backgroundColor: p.card, surfaceTintColor: Colors.transparent),

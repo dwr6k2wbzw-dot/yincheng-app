@@ -26,3 +26,27 @@ flutter:
   uses-material-design: true
   assets:
     - assets/logos/
+  # 數字與英文字體（老闆 2026-10-29：現代黑體、粗細對比）。Geist，SIL OFL 授權（assets/fonts/Geist-OFL.txt）；
+  # 只留英數與常用符號（約 43KB／粗細）
+  fonts:
+    - family: Geist
+      fonts:
+        - asset: assets/fonts/Geist-Light.ttf
+          weight: 300
+        - asset: assets/fonts/Geist-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Geist-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Geist-SemiBold.ttf
+          weight: 600
+    # 中文黑體（思源黑體 Noto Sans TC，SIL OFL）：只留 App 介面用到的字（tool/subset_cjk_font.py 產生）。
+    # 內建才能量對寬度：從網路補下載的中文字，按鈕會量錯寬度把字切掉（2026-10-29 測試確認）。
+    # 資料裡的其他字（品名、備註）照舊由瀏覽器補下載。
+    - family: NotoSansTC
+      fonts:
+        - asset: assets/fonts/NotoSansTC-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/NotoSansTC-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/NotoSansTC-Bold.ttf
+          weight: 700

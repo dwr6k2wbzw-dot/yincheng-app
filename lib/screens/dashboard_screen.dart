@@ -315,7 +315,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
                 Text('NT\$ ', style: TextStyle(fontSize: AppType.title, color: AppColors.primary)),
                 Text(money.format(s.revenue),
-                    style: const TextStyle(fontSize: AppType.hero, fontWeight: FontWeight.w500, letterSpacing: -1, fontFeatures: tabular)),
+                    style: const TextStyle(fontSize: AppType.hero, fontWeight: AppFont.hero, letterSpacing: -1.5, fontFeatures: tabular)),
               ]),
             ),
             if (trend.cumulative.isNotEmpty) ...[
@@ -377,7 +377,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               _rateBar('雜項', miscRate, miscAmt, coffeeColor),
             ],
             const SizedBox(height: 4),
-            Text(costNote, style: TextStyle(color: AppColors.muted, fontSize: AppType.caption)),
+            InfoLine(icon: null, padding: EdgeInsets.zero, text: '怎麼算的', detail: costNote),
           ]),
         ),
         const SizedBox(height: 14),
@@ -405,7 +405,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
             child: Text(ntd(s.revenue),
-                style: TextStyle(fontSize: AppType.hero, fontWeight: FontWeight.w600, letterSpacing: -1, color: pal.text, fontFeatures: tabular)),
+                style: TextStyle(fontSize: AppType.hero, fontWeight: AppFont.hero, letterSpacing: -1.5, color: pal.text, fontFeatures: tabular)),
           ),
           if (trend.delta != null) _delta(trend.delta!, suffix: ' 較上月同期', muted: pal.heroMuted),
           const SizedBox(height: 16),
@@ -452,7 +452,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               _ring('雜項', miscRate, miscAmt, AppColors.muted),
             ]),
           const SizedBox(height: 12),
-          Text(costNote, style: TextStyle(color: AppColors.muted, fontSize: AppType.caption)),
+          InfoLine(icon: null, padding: EdgeInsets.zero, text: '怎麼算的', detail: costNote),
         ]),
       ),
       const SizedBox(height: 12),
@@ -498,9 +498,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   // ── 共用小元件 ──
-  Widget _label(String t) => Text(t, style: TextStyle(fontSize: AppType.small, color: AppColors.muted, letterSpacing: 2));
+  Widget _label(String t) => Text(t, style: TextStyle(fontSize: AppType.small, color: AppColors.muted, fontWeight: AppFont.label));
 
   Widget _delta(double v, {String suffix = '', Color? muted}) {
+    // 沒變化不顯示紅綠箭頭（2026-10-29）
+    if (v.abs() < 0.0005) {
+      return Text('持平$suffix', style: TextStyle(fontSize: AppType.small, color: muted ?? AppColors.muted));
+    }
     final up = v >= 0;
     final c = up ? AppColors.good : AppColors.bad;
     return Text.rich(TextSpan(children: [
@@ -610,7 +614,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   TextSpan(text: value),
                   if (unit != null)
                     TextSpan(text: ' $unit', style: TextStyle(fontSize: AppType.small, fontWeight: FontWeight.w400, color: AppColors.muted)),
-                ]), style: TextStyle(fontSize: AppType.display, fontWeight: FontWeight.w600, color: color, fontFeatures: tabular)),
+                ]), style: TextStyle(fontSize: AppType.display, fontWeight: AppFont.figure, color: color, fontFeatures: tabular)),
               ),
             ),
             if (trailing != null) ...[const SizedBox(width: 6), Flexible(child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerRight, child: trailing))],
@@ -696,7 +700,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ]),
         Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
           Text(ntd(profit),
-              style: TextStyle(fontSize: AppType.display, fontWeight: FontWeight.w800, color: profit >= 0 ? AppColors.good : AppColors.bad)),
+              style: TextStyle(fontSize: AppType.display, fontWeight: AppFont.heading, color: profit >= 0 ? AppColors.good : AppColors.bad)),
           const SizedBox(width: 8),
           Text(ofRevenue(profit),
               style: TextStyle(fontSize: AppType.title, fontWeight: FontWeight.w600, color: profit >= 0 ? AppColors.good : AppColors.bad)),

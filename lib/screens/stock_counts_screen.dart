@@ -156,7 +156,7 @@ class _StockCountsScreenState extends State<StockCountsScreen> {
             for (final c in cats)
               Padding(
                 padding: const EdgeInsets.only(right: 8),
-                child: ChoiceChip(label: Text(c), selected: _cat == c, onSelected: (_) => setState(() => _cat = c)),
+                child: SelectChip(label: Text(c), selected: _cat == c, onSelected: (_) => setState(() => _cat = c)),
               ),
           ]),
         ),
@@ -176,18 +176,22 @@ class _StockCountsScreenState extends State<StockCountsScreen> {
             Text(p.name, style: const TextStyle(fontWeight: FontWeight.w600)),
             const SizedBox(height: 2),
             Text(
-              '${p.category}・${s == null ? '還沒盤過' : '${DateFormat('M/d').format(s.date)} 盤'}'
+              '${p.category}${s == null ? '' : '・${DateFormat('M/d').format(s.date)} 盤'}'
               '${p.parLevel == null ? '' : '・安全量 ${fmtQty(p.parLevel!)}'}',
               style: TextStyle(color: AppColors.muted, fontSize: AppType.small),
             ),
           ]),
         ),
-        Text.rich(TextSpan(children: [
-          TextSpan(
-              text: s == null ? '—' : fmtQty(s.qty),
-              style: TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w600, color: low ? AppColors.bad : null, fontFeatures: tabular)),
-          TextSpan(text: ' ${p.unit}', style: TextStyle(fontSize: AppType.small, color: AppColors.muted)),
-        ])),
+        // 沒盤過：淡色「尚未盤點」，不顯示「— 瓶」（2026-10-29）
+        if (s == null)
+          Text('尚未盤點', style: TextStyle(fontSize: AppType.small, color: AppColors.muted))
+        else
+          Text.rich(TextSpan(children: [
+            TextSpan(
+                text: fmtQty(s.qty),
+                style: TextStyle(fontSize: AppType.heading, fontWeight: AppFont.figure, color: low ? AppColors.bad : null, fontFeatures: tabular)),
+            TextSpan(text: ' ${p.unit}', style: TextStyle(fontSize: AppType.small, color: AppColors.muted)),
+          ])),
       ]),
     );
   }
@@ -322,7 +326,7 @@ class _StockCountScreenState extends State<StockCountScreen> {
               for (final c in cats)
                 Padding(
                   padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(label: Text(chipLabel(c)), selected: _cat == c, onSelected: (_) => setState(() => _cat = c)),
+                  child: SelectChip(label: Text(chipLabel(c)), selected: _cat == c, onSelected: (_) => setState(() => _cat = c)),
                 ),
             ]),
           ),
@@ -444,7 +448,7 @@ Future<CategoryDeleteResult?> deleteStockCategory(
                 const SizedBox(height: 8),
                 Wrap(spacing: 8, runSpacing: 8, children: [
                   for (final o in others)
-                    ChoiceChip(label: Text(o), selected: target == o, onSelected: (_) => setD(() => target = o)),
+                    SelectChip(label: Text(o), selected: target == o, onSelected: (_) => setD(() => target = o)),
                 ]),
                 const SizedBox(height: 12),
                 Text('或是把這些品項一起停用（以前的盤點紀錄會保留）。', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
@@ -755,7 +759,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                   onDeleted: _saving ? null : () => _removeCategory(c),
                 )
               else
-                ChoiceChip(label: Text(c), selected: _cat == c, onSelected: (_) => setState(() => _cat = c)),
+                SelectChip(label: Text(c), selected: _cat == c, onSelected: (_) => setState(() => _cat = c)),
             ActionChip(avatar: Icon(Icons.add, size: 18, color: AppColors.primary), label: const Text('新增類別'), onPressed: _newCategory),
           ]),
           const SizedBox(height: 14),

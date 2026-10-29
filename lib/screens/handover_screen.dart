@@ -657,7 +657,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
               if (repeat == 'weekly')
                 Wrap(spacing: 6, children: [
                   for (var i = 0; i < 7; i++)
-                    ChoiceChip(
+                    SelectChip(
                       label: Text('週${WorkReminder.weekdayNames[i]}'),
                       selected: weekday == i,
                       onSelected: (_) => set(() => weekday = i),
