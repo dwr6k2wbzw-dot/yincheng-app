@@ -44,6 +44,10 @@ class DemoRepository implements Repository {
     Purchase(id: 'x1', purchaseDate: DateTime(2026, 9, 25), categoryCode: 'liquor_monthly', supplierName: '示範酒商', amount: 2000, paidBy: 'vendor', reconciled: true, source: 'import'),
     Purchase(id: 'x2', purchaseDate: DateTime(2026, 9, 24), categoryCode: 'food', supplierName: null, memo: '示範食材', amount: 3000, paidBy: 'vendor', reconciled: true, source: 'import'),
     Purchase(id: 'x3', purchaseDate: DateTime(2026, 9, 30), categoryCode: 'petty_misc', memo: '運費', amount: 300, paidBy: 'petty_cash', reconciled: false, source: 'import'),
+    // 月結廠商分區塊的示範（同一家廠商多筆）
+    Purchase(id: 'x4', purchaseDate: DateTime(2026, 9, 12), categoryCode: 'food', supplierName: '示範水果行', amount: 1200, paidBy: 'vendor', reconciled: true, source: 'import'),
+    Purchase(id: 'x5', purchaseDate: DateTime(2026, 9, 26), categoryCode: 'food', supplierName: '示範水果行', amount: 800, paidBy: 'vendor', reconciled: false, source: 'import'),
+    Purchase(id: 'x6', purchaseDate: DateTime(2026, 9, 18), categoryCode: 'liquor_monthly', supplierName: '示範酒商', amount: 5400, paidBy: 'vendor', reconciled: false, source: 'import'),
   ];
   final _counts = <StockCount>[];
   final _lines = <String, Map<String, double>>{};

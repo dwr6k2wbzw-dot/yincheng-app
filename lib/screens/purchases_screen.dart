@@ -147,7 +147,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                   ),
                   const SizedBox(height: 4),
                 ],
-                _group('vendor', '月結廠商', '月結付款', Icons.storefront_outlined, vendor, cats),
+                _group('vendor', '月結廠商', '月結付款', Icons.storefront_outlined, vendor, cats, byVendor: true),
                 const SizedBox(height: 12),
                 _group('petty', '零用金支出', '零用金付款', Icons.payments_outlined, petty, cats),
                 const SizedBox(height: 12),
@@ -178,24 +178,53 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
         ),
       );
 
+  /// 月結廠商分區塊用的廠商名稱：沒填廠商的歸到摘要，再沒有就是「未填廠商」
+  String _vendorKey(Purchase p) {
+    final n = (p.supplierName ?? '').trim();
+    if (n.isNotEmpty) return n;
+    final m = (p.memo ?? '').trim();
+    return m.isNotEmpty ? m : '未填廠商';
+  }
+
+  /// 這家廠商這個月進了哪些類別（例「酒水、雜項」）
+  String _catSummary(List<Purchase> items, Map<String, String> cats) {
+    final names = <String>[];
+    for (final p in items) {
+      final c = _displayAs[p.categoryCode] ?? p.categoryCode;
+      final n = cats[c] ?? c;
+      if (!names.contains(n)) names.add(n);
+    }
+    return names.join('、');
+  }
+
   /// 這些進貨裡，進貨日期是今天（營業日）的合計
   double _todayAmount(List<Purchase> items) =>
       _today == null ? 0 : items.where((p) => isSameDay(p.purchaseDate, _today!)).fold(0.0, (t, p) => t + p.amount);
 
-  /// 一個大類：標題列（總金額）＋展開後各進貨類別小計
-  Widget _group(String key, String title, String sub, IconData icon, List<Purchase> items, Map<String, String> cats) {
+  /// 一個大類：標題列（總金額）＋展開後的小計。
+  /// 月結廠商依廠商分區塊（老闆 2026-10-29：例「阿德水果 $10,000」，點進去才是每筆）；零用金照進貨類別分。
+  Widget _group(String key, String title, String sub, IconData icon, List<Purchase> items, Map<String, String> cats,
+      {bool byVendor = false}) {
     final total = items.fold<double>(0, (t, p) => t + p.amount);
     final byCat = <String, List<Purchase>>{};
     for (final p in items) {
-      byCat.putIfAbsent(_displayAs[p.categoryCode] ?? p.categoryCode, () => []).add(p);
+      final k = byVendor ? _vendorKey(p) : (_displayAs[p.categoryCode] ?? p.categoryCode);
+      byCat.putIfAbsent(k, () => []).add(p);
     }
-    // 依類別在設定中的順序排列
-    final order = cats.keys.toList();
-    final codes = byCat.keys.toList()
-      ..sort((a, b) {
-        final ia = order.indexOf(a), ib = order.indexOf(b);
-        return (ia < 0 ? 999 : ia).compareTo(ib < 0 ? 999 : ib);
-      });
+    double sum(List<Purchase> l) => l.fold<double>(0, (t, p) => t + p.amount);
+    final List<String> codes;
+    if (byVendor) {
+      // 金額大的廠商在上面
+      codes = byCat.keys.toList()..sort((a, b) => sum(byCat[b]!).compareTo(sum(byCat[a]!)));
+    } else {
+      // 依類別在設定中的順序排列
+      final order = cats.keys.toList();
+      codes = byCat.keys.toList()
+        ..sort((a, b) {
+          final ia = order.indexOf(a), ib = order.indexOf(b);
+          return (ia < 0 ? 999 : ia).compareTo(ib < 0 ? 999 : ib);
+        });
+    }
     final open = _open.contains(key);
     return SectionCard(
       padding: EdgeInsets.zero,
@@ -231,8 +260,12 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
           for (final c in codes)
             ListTile(
               contentPadding: const EdgeInsets.fromLTRB(20, 0, 12, 0),
-              title: Text(cats[c] ?? c),
-              subtitle: Text('${byCat[c]!.length} 筆', style: const TextStyle(fontSize: AppType.small)),
+              title: Text(byVendor ? c : (cats[c] ?? c)),
+              subtitle: Text(
+                  byVendor ? '${byCat[c]!.length} 筆・${_catSummary(byCat[c]!, cats)}' : '${byCat[c]!.length} 筆',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: AppType.small)),
               trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                 // 當日新增金額（例：10/12 新增 $886）
                 if (_todayAmount(byCat[c]!) != 0) ...[
@@ -240,11 +273,10 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                       style: TextStyle(color: AppColors.warn, fontSize: AppType.small, fontWeight: FontWeight.w600)),
                   const SizedBox(width: 10),
                 ],
-                Text(ntd(byCat[c]!.fold<double>(0, (t, p) => t + p.amount)),
-                    style: const TextStyle(fontSize: AppType.body, fontWeight: FontWeight.w600)),
+                Text(ntd(sum(byCat[c]!)), style: const TextStyle(fontSize: AppType.body, fontWeight: FontWeight.w600)),
                 Icon(Icons.chevron_right, color: AppColors.muted),
               ]),
-              onTap: () => _openCategory('$title・${cats[c] ?? c}', byCat[c]!, cats),
+              onTap: () => _openCategory(byVendor ? c : '$title・${cats[c] ?? c}', byCat[c]!, cats),
             ),
           const SizedBox(height: 4),
         ],
@@ -391,7 +423,7 @@ class _CategoryPurchasesScreenState extends State<_CategoryPurchasesScreen> {
         ),
         for (final n in names) ...[
           const SizedBox(height: 16),
-          Padding(
+          if (names.length > 1) Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
             child: Row(children: [
               Expanded(child: Text(n, style: const TextStyle(fontWeight: FontWeight.w700))),
