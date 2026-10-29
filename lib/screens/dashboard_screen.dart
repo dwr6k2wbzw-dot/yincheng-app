@@ -281,6 +281,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final reservation =
         ReservationSummaryCard(key: ValueKey('rs-${widget.membership.storeId}-$_gen'), membership: widget.membership, compact: !gold);
     final trend = d.trend();
+    final cmp = _compareSides(d, multi);
     final avgText = avgTicket == null ? '—' : money.format(avgTicket.round());
     final avgSub = multi
         ? '調酒收入 ÷ 來客數'
@@ -353,14 +354,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         const SizedBox(height: 14),
         Row(children: [
-          Expanded(child: StatTile(label: '來客數', value: money.format(s.guests))),
+          Expanded(child: StatTile(label: '來客數', value: money.format(s.guests), trailing: cmp.guests)),
           const SizedBox(width: 14),
-          Expanded(child: StatTile(label: '客單價', value: avgText, sub: avgSub)),
+          Expanded(child: StatTile(label: '客單價', value: avgText, sub: avgSub, trailing: cmp.ticket)),
         ]),
-        if (d.prev.any((e) => e != null)) ...[
-          const SizedBox(height: 14),
-          _compareCard(d, s, multi),
-        ],
         const SizedBox(height: 14),
         SectionCard(
           padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
@@ -430,14 +427,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 sub: s.revenue > 0 ? '占營收 ${pct(profit / s.revenue)}' : null)
           else
             _tile('目標達成', s.targetRate == null ? '—' : pct(s.targetRate), sub: s.targetAmount == null ? '尚未設定目標' : null),
-          _tile('來客數', money.format(s.guests)),
-          _tile('客單價', avgText, sub: avgSub),
+          _tile('來客數', money.format(s.guests), trailing: cmp.guests),
+          _tile('客單價', avgText, sub: avgSub, trailing: cmp.ticket),
         ],
       ),
-      if (d.prev.any((e) => e != null)) ...[
-        const SizedBox(height: 12),
-        _compareCard(d, s, multi),
-      ],
       const SizedBox(height: 12),
       SectionCard(
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
@@ -484,89 +477,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
     ];
   }
 
-  /// 上個月、近 3 個月平均的來客數與客單價（老闆 2026-10-29），跟著上方選的月份走。
-  /// ▲▼＝本月比這一列；本月還沒過完時來客數不比（只比客單）。
-  Widget _compareCard(_DashboardData d, MonthlySummary s, bool multi) {
-    final cur = monthFigure(s, multi: multi);
-    final figs = [for (final p in d.prev) if (p != null) monthFigure(p, multi: multi)];
+  /// 來客數／客單價框右邊的小字：上月、近 3 個月平均（老闆 2026-10-29）。跟著上方月份走；
+  /// 近 3 月＝前 3 個完整月份（不含本月），來客取每月平均、客單依來客加權，沒資料的月份不算。
+  ({Widget? guests, Widget? ticket}) _compareSides(_DashboardData d, bool multi) {
+    if (d.prev.every((e) => e == null)) return (guests: null, ticket: null);
     final last = d.prev.first == null ? null : monthFigure(d.prev.first!, multi: multi);
-    final avg = monthAverage(figs);
-    final now = DateTime.now();
-    final ongoing = d.month.year == now.year && d.month.month == now.month;
-    final head = TextStyle(fontSize: AppType.caption, color: AppColors.muted);
-    const numStyle = TextStyle(fontSize: AppType.body, fontFeatures: tabular);
-    final prevMonth = DateTime(d.month.year, d.month.month - 1);
-    final firstMonth = DateTime(d.month.year, d.month.month - 3);
-
-    Widget cell(String v, double? change) => Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerRight, child: Text(v, style: numStyle)),
-            if (change != null && change.abs() < 0.005)
-              Text('本月持平', style: head)
-            else if (change != null)
-              Text.rich(
-                TextSpan(children: [
-                  const TextSpan(text: '本月 '),
-                  TextSpan(
-                      text: '${change > 0 ? '▲' : '▼'} ${(change.abs() * 100).toStringAsFixed(0)}%',
-                      style: TextStyle(color: change > 0 ? AppColors.good : AppColors.bad)),
-                ]),
-                style: head.copyWith(fontFeatures: tabular),
-              ),
-          ]),
-        );
-    Widget row(String title, String sub, String guests, double? gChange, String ticket, double? tChange) =>
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          SizedBox(
-            width: 104,
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(title, style: const TextStyle(fontSize: AppType.small)),
-              Text(sub, style: head),
-            ]),
-          ),
-          cell(guests, gChange),
-          cell(ticket, tChange),
-        ]);
-    String t(double? v) => v == null ? '—' : money.format(v.round());
-
-    return SectionCard(
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _label('來客・客單比較'),
-        const SizedBox(height: 14),
-        Row(children: [
-          const SizedBox(width: 104),
-          Expanded(child: Text('來客數', textAlign: TextAlign.right, style: head)),
-          Expanded(child: Text(multi ? '客單（調酒）' : '客單價', textAlign: TextAlign.right, style: head)),
-        ]),
-        Divider(height: 18, color: AppColors.line),
-        row(
-          '上個月',
-          '${prevMonth.month} 月',
-          last == null || last.guests == 0 ? '—' : money.format(last.guests),
-          ongoing || last == null ? null : changeOf(cur.guests.toDouble(), last.guests.toDouble()),
-          t(last?.avgTicket),
-          changeOf(cur.avgTicket, last?.avgTicket),
-        ),
-        Divider(height: 18, color: AppColors.line),
-        row(
-          '近 3 個月平均',
-          avg.months == 0
-              ? '${firstMonth.month}～${prevMonth.month} 月'
-              : avg.months < 3
-                  ? '只有 ${avg.months} 個月有資料'
-                  : '${firstMonth.month}～${prevMonth.month} 月',
-          avg.guests == null ? '—' : money.format(avg.guests!.round()),
-          ongoing ? null : changeOf(cur.guests.toDouble(), avg.guests),
-          t(avg.avgTicket),
-          changeOf(cur.avgTicket, avg.avgTicket),
-        ),
-        const SizedBox(height: 12),
-        Text(
-            '近 3 個月＝${firstMonth.month}～${prevMonth.month} 月（不含本月），來客是每月平均，客單依來客加權。'
-            '${ongoing ? '本月還沒過完，來客數先不比。' : ''}',
-            style: TextStyle(color: AppColors.muted, fontSize: AppType.caption, height: 1.5)),
-      ]),
+    final avg = monthAverage([for (final p in d.prev) if (p != null) monthFigure(p, multi: multi)]);
+    String n(num? v) => v == null || v == 0 ? '—' : money.format(v.round());
+    Widget side(String a, String b) {
+      final st = TextStyle(fontSize: AppType.caption, color: AppColors.muted, fontFeatures: tabular, height: 1.5);
+      return Column(crossAxisAlignment: CrossAxisAlignment.end, mainAxisSize: MainAxisSize.min, children: [
+        Text('上月 $a', style: st),
+        Text('近3月 $b', style: st),
+      ]);
+    }
+    return (
+      guests: side(n(last?.guests), n(avg.guests)),
+      ticket: side(n(last?.avgTicket), n(avg.avgTicket)),
     );
   }
 
@@ -670,15 +597,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ]),
       );
 
-  Widget _tile(String label, String value, {Color? color, String? sub}) => SectionCard(
+  Widget _tile(String label, String value, {Color? color, String? sub, Widget? trailing}) => SectionCard(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
           Text(label, style: TextStyle(fontSize: AppType.small, color: AppColors.muted)),
           const SizedBox(height: 6),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(value, style: TextStyle(fontSize: AppType.display, fontWeight: FontWeight.w600, color: color, fontFeatures: tabular)),
-          ),
+          Row(children: [
+            Expanded(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(value, style: TextStyle(fontSize: AppType.display, fontWeight: FontWeight.w600, color: color, fontFeatures: tabular)),
+              ),
+            ),
+            if (trailing != null) ...[const SizedBox(width: 6), trailing],
+          ]),
           if (sub != null)
             Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: AppType.caption, color: AppColors.muted)),
         ]),
