@@ -28,6 +28,116 @@ class SectionCard extends StatelessWidget {
       );
 }
 
+/// 一行狀態＋ⓘ（老闆 2026-10-29：說明文字不要每次佔半個畫面）。
+/// 平常只顯示一行（例：「每小時從日報表同步・最後 10/29 11:25」），點 ⓘ 才展開完整說明。
+class InfoLine extends StatefulWidget {
+  const InfoLine({super.key, required this.text, this.detail, this.icon = Icons.sync, this.padding = const EdgeInsets.fromLTRB(4, 2, 0, 6)});
+  final String text;
+  final String? detail;
+  final IconData? icon;
+  final EdgeInsets padding;
+  @override
+  State<InfoLine> createState() => _InfoLineState();
+}
+
+class _InfoLineState extends State<InfoLine> {
+  bool _open = false;
+  @override
+  Widget build(BuildContext context) {
+    final st = TextStyle(color: AppColors.muted, fontSize: AppType.caption, height: 1.5);
+    final hasDetail = widget.detail != null && widget.detail!.isNotEmpty;
+    return Padding(
+      padding: widget.padding,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          onTap: hasDetail ? () => setState(() => _open = !_open) : null,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(children: [
+              if (widget.icon != null) ...[Icon(widget.icon, size: 14, color: AppColors.muted), const SizedBox(width: 6)],
+              Expanded(child: Text(widget.text, style: st, maxLines: 1, overflow: TextOverflow.ellipsis)),
+              if (hasDetail)
+                Icon(_open ? Icons.expand_less : Icons.info_outline, size: 16, color: AppColors.muted),
+            ]),
+          ),
+        ),
+        AnimatedSize(
+          duration: AppMotion.fast,
+          curve: AppMotion.curve,
+          alignment: Alignment.topLeft,
+          child: _open && hasDetail
+              ? Padding(padding: const EdgeInsets.only(top: 2, right: 8), child: Text(widget.detail!, style: st))
+              : const SizedBox(width: double.infinity),
+        ),
+      ]),
+    );
+  }
+}
+
+/// 篩選／選擇用的小按鈕（2026-10-29 取代 Flutter 內建 ChoiceChip／FilterChip）。
+/// 內建元件在網頁版會把中文字寬量錯、字被切掉，所以自己畫；參數名稱跟內建的一樣，方便替換。
+class SelectChip extends StatelessWidget {
+  const SelectChip({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onSelected,
+    this.avatar,
+    this.tooltip,
+    this.selectedColor,
+    this.visualDensity,
+    this.showCheckmark,
+  });
+  final Widget label;
+  final bool selected;
+  final ValueChanged<bool>? onSelected;
+  final Widget? avatar;
+  final String? tooltip;
+  final Color? selectedColor;
+  final VisualDensity? visualDensity; // 保留參數相容，不影響外觀
+  final bool? showCheckmark; // 同上：選到的一律靠底色與金色字區分
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onSelected != null;
+    final accent = AppColors.primary;
+    final fill = selected ? (selectedColor ?? accent.withValues(alpha: 0.16)) : Colors.transparent;
+    final fg = selected ? accent : AppColors.text;
+    Widget chip = Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: enabled ? () => onSelected!(!selected) : null,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        child: AnimatedContainer(
+          duration: AppMotion.fast,
+          curve: AppMotion.curve,
+          constraints: const BoxConstraints(minHeight: 34),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: fill,
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+            border: Border.all(color: selected ? accent.withValues(alpha: 0.55) : AppColors.line),
+          ),
+          child: IconTheme.merge(
+            data: IconThemeData(size: 16, color: fg),
+            child: DefaultTextStyle.merge(
+              style: TextStyle(fontSize: AppType.small, color: fg, fontWeight: selected ? AppFont.label : FontWeight.w400, height: 1.2),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                if (avatar != null) ...[avatar!, const SizedBox(width: 6)],
+                label,
+              ]),
+            ),
+          ),
+        ),
+      ),
+    );
+    if (!enabled) chip = Opacity(opacity: 0.45, child: chip);
+    if (tooltip != null) chip = Tooltip(message: tooltip!, child: chip);
+    return Semantics(button: true, selected: selected, enabled: enabled, child: chip);
+  }
+}
+
 class StatTile extends StatelessWidget {
   const StatTile({super.key, required this.label, required this.value, this.sub, this.subColor, this.trailing, this.unit});
   final String label;
@@ -52,7 +162,7 @@ class StatTile extends StatelessWidget {
                   TextSpan(text: value),
                   if (unit != null)
                     TextSpan(text: ' $unit', style: TextStyle(fontSize: AppType.small, fontWeight: FontWeight.w400, color: AppColors.muted)),
-                ]), style: const TextStyle(fontSize: AppType.display, fontWeight: FontWeight.w500, fontFeatures: tabular)),
+                ]), style: const TextStyle(fontSize: AppType.display, fontWeight: AppFont.figure, fontFeatures: tabular)),
               ),
             ),
             if (trailing != null) ...[const SizedBox(width: 8), Flexible(child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerRight, child: trailing!))],

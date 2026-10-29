@@ -234,7 +234,7 @@ class _WeekdayStatsState extends State<_WeekdayStats> {
           for (final k in _ranges.keys)
             Padding(
               padding: const EdgeInsets.only(left: 6),
-              child: ChoiceChip(
+              child: SelectChip(
                 label: Text(_ranges[k]!, style: const TextStyle(fontSize: AppType.small)),
                 selected: _range == k,
                 visualDensity: VisualDensity.compact,
@@ -268,12 +268,12 @@ class _WeekdayStatsState extends State<_WeekdayStats> {
                 SizedBox(
                   width: 44,
                   child: Text('週${_names[i]}',
-                      style: cell.copyWith(fontWeight: top ? FontWeight.w700 : null, color: top ? AppColors.good : null)),
+                      style: cell.copyWith(fontWeight: top ? FontWeight.w700 : null, color: top ? AppColors.primary : null)),
                 ),
                 Expanded(
                   child: Text('${ntd(avg[i]!.round())}（${r.length}天）',
                       textAlign: TextAlign.right,
-                      style: cell.copyWith(fontWeight: top ? FontWeight.w700 : null, color: top ? AppColors.good : null)),
+                      style: cell.copyWith(fontWeight: top ? FontWeight.w700 : null, color: top ? AppColors.primary : null)),
                 ),
                 SizedBox(width: 64, child: Text('${(guests / r.length).toStringAsFixed(1)} 位', textAlign: TextAlign.right, style: cell)),
                 SizedBox(
@@ -283,42 +283,29 @@ class _WeekdayStatsState extends State<_WeekdayStats> {
               ]);
             }(),
           ),
-        const SizedBox(height: 6),
-        Text(
-          '平均營業額、來客＝該星期幾每天的平均；客單＝${widget.multi ? '調酒收入' : '營業額'}合計÷來客合計。綠色是平均最高的那天。',
-          style: TextStyle(color: AppColors.muted, fontSize: AppType.caption, height: 1.4),
+        const SizedBox(height: 4),
+        InfoLine(
+          icon: null,
+          padding: EdgeInsets.zero,
+          text: '粗體是平均最高的那天',
+          detail: '平均營業額、來客＝該星期幾每天的平均；客單＝${widget.multi ? '調酒收入' : '營業額'}合計 ÷ 來客合計。',
         ),
       ]),
     );
   }
 }
 
-/// 營收由 Dropbox 同步時，列表上方的說明
+/// 營收由 Dropbox 同步時，列表上方的一行狀態（點 ⓘ 看完整說明）
 class _SyncBanner extends StatelessWidget {
   const _SyncBanner({required this.last, required this.canWrite});
   final DateTime? last;
   final bool canWrite;
   @override
-  Widget build(BuildContext context) => SectionCard(
-        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Icon(Icons.sync, color: AppColors.primary),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('營收以 Dropbox 日報表為準', style: TextStyle(fontWeight: FontWeight.w600)),
-              const SizedBox(height: 4),
-              Text(
-                canWrite
-                    ? '每小時自動同步日報表。還沒進日報表的日子可以先手動登記（暫記）；'
-                        '之後 Excel 匯入同一天時，會自動以日報表為準覆蓋暫記。\n'
-                        '最後一次同步：${last == null ? '尚無紀錄' : DateFormat('M/d HH:mm').format(last!)}'
-                    : '每小時檢查一次 Excel，有變動就更新。\n'
-                        '最後一次同步：${last == null ? '尚無紀錄' : DateFormat('M/d HH:mm').format(last!)}',
-                style: TextStyle(color: AppColors.muted, fontSize: AppType.small, height: 1.5),
-              ),
-            ]),
-          ),
-        ]),
+  Widget build(BuildContext context) => InfoLine(
+        text: '每小時從日報表同步・最後 ${last == null ? '尚無紀錄' : DateFormat('M/d HH:mm').format(last!)}',
+        detail: canWrite
+            ? '營收以 Dropbox 日報表為準。還沒進日報表的日子可以先手動登記（暫記）；之後日報表匯入同一天時，會自動以日報表為準覆蓋暫記。'
+            : '營收以 Dropbox 日報表為準，每小時檢查一次，有變動就更新。',
       );
 }
 

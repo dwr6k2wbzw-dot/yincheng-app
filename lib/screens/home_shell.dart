@@ -94,35 +94,35 @@ class _HomeShellState extends State<HomeShell> with SingleTickerProviderStateMix
       if (m.isPartTime) ...[
         (
           DashboardScreen(key: ValueKey('d-${m.storeId}'), membership: m),
-          const NavigationDestination(icon: Icon(Icons.checklist_outlined), selectedIcon: Icon(Icons.checklist), label: '交接'),
+          const NavigationDestination(icon: Icon(Icons.checklist_outlined), selectedIcon: Icon(Icons.checklist_outlined), label: '交接'),
         ),
         // 兼職也看得到、也能操作庫存（0067，老闆 2026-10-26）
         (
           StockCountsScreen(key: ValueKey('s-${m.storeId}'), membership: m),
           const NavigationDestination(
-              icon: Icon(Icons.inventory_2_outlined), selectedIcon: Icon(Icons.inventory_2), label: '庫存'),
+              icon: Icon(Icons.inventory_2_outlined), selectedIcon: Icon(Icons.inventory_2_outlined), label: '庫存'),
         ),
       ] else ...[
       (
         DashboardScreen(key: ValueKey('d-${m.storeId}'), membership: m),
-        const NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: '總覽'),
+        const NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home_outlined), label: '總覽'),
       ),
       if (m.canSeeRevenue)
         (
           RevenueScreen(key: ValueKey('r-${m.storeId}'), membership: m),
           const NavigationDestination(
-              icon: Icon(Icons.point_of_sale_outlined), selectedIcon: Icon(Icons.point_of_sale), label: '營收'),
+              icon: Icon(Icons.point_of_sale_outlined), selectedIcon: Icon(Icons.point_of_sale_outlined), label: '營收'),
         ),
       (
         PurchasesScreen(key: ValueKey('p-${m.storeId}'), membership: m),
         const NavigationDestination(
-            icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long), label: '進貨'),
+            icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long_outlined), label: '進貨'),
       ),
       // 庫存（老闆 2026-10-16：銷貨單分頁改回盤點、分頁名稱叫「庫存」；銷貨單照片已併到進貨）
       (
         StockCountsScreen(key: ValueKey('s-${m.storeId}'), membership: m),
         const NavigationDestination(
-            icon: Icon(Icons.inventory_2_outlined), selectedIcon: Icon(Icons.inventory_2), label: '庫存'),
+            icon: Icon(Icons.inventory_2_outlined), selectedIcon: Icon(Icons.inventory_2_outlined), label: '庫存'),
       ),
       ],
     ];
@@ -132,7 +132,7 @@ class _HomeShellState extends State<HomeShell> with SingleTickerProviderStateMix
       tabs.add((
         ScheduleScreen(key: ValueKey('sc-${m.storeId}'), membership: m),
         const NavigationDestination(
-            icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month), label: '班表'),
+            icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month_outlined), label: '班表'),
       ));
     }
     final tab = _tab.clamp(0, tabs.length - 1);
@@ -225,16 +225,18 @@ class _StoreSwitcher extends StatelessWidget {
     final logo = storeLogo(m.storeName);
     final title = Row(mainAxisSize: MainAxisSize.min, children: [
       if (logo != null) ...[
-        Image.asset(logo, height: 34, filterQuality: FilterQuality.medium),
+        Image.asset(logo, height: 40, filterQuality: FilterQuality.medium),
         const SizedBox(width: 10),
       ],
-      Text(m.storeName, style: const TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w700)),
-      if (state.memberships.length > 1) const Icon(Icons.arrow_drop_down),
+      Text(m.storeName, style: const TextStyle(fontSize: AppType.heading, fontWeight: AppFont.heading)),
+      if (state.memberships.length > 1) Icon(Icons.expand_more, size: 20, color: AppColors.muted),
       const SizedBox(width: 8),
+      // 身分：細框小字，不像系統標籤（2026-10-29）
       Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(color: AppColors.cardHigh, borderRadius: BorderRadius.circular(AppRadius.sm)),
-        child: Text(roleLabel(m.role), style: TextStyle(fontSize: AppType.small, color: AppColors.muted)),
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+        decoration: BoxDecoration(
+            border: Border.all(color: AppColors.primary.withValues(alpha: 0.45)), borderRadius: BorderRadius.circular(AppRadius.xs)),
+        child: Text(roleLabel(m.role), style: TextStyle(fontSize: AppType.caption, color: AppColors.primary, fontWeight: AppFont.label)),
       ),
     ]);
     if (state.memberships.length <= 1) return title;

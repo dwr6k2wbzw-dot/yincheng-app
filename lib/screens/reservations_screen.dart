@@ -497,7 +497,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
               const SizedBox(height: 10),
               Wrap(spacing: 6, runSpacing: 6, children: [
                 for (final t in {...guestTagPresets, ...tags})
-                  FilterChip(
+                  SelectChip(
                     label: Text(t),
                     selected: tags.contains(t),
                     onSelected: (v) => setD(() => v ? tags.add(t) : tags.remove(t)),
@@ -1061,10 +1061,10 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
           const SizedBox(height: 6),
           Wrap(spacing: 8, runSpacing: 8, children: [
             for (final t in widget.settings.slotsFor(_date))
-              ChoiceChip(label: Text(t), selected: _time == t, onSelected: (_) => setState(() => _time = t)),
+              SelectChip(label: Text(t), selected: _time == t, onSelected: (_) => setState(() => _time = t)),
             // 自己選的時間（不在固定時段裡）
             if (_time != null && !widget.settings.slotsFor(_date).contains(_time))
-              ChoiceChip(label: Text(_time!), selected: true, onSelected: (_) => _pickCustomTime()),
+              SelectChip(label: Text(_time!), selected: true, onSelected: (_) => _pickCustomTime()),
             // 電話訂位可訂任何時間（老闆 2026-10-15）
             ActionChip(
               avatar: Icon(Icons.add, size: 18, color: AppColors.primary),
@@ -1117,7 +1117,7 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
                   for (final t in const ['先生', '小姐'])
                     Padding(
                       padding: const EdgeInsets.only(left: 6),
-                      child: ChoiceChip(
+                      child: SelectChip(
                         label: Text(t),
                         selected: _title == t,
                         showCheckmark: false,
@@ -1131,7 +1131,7 @@ class _AddReservationScreenState extends State<_AddReservationScreen> {
                   // 現場客快選：名字直接填「現場客」（老闆 2026-10-20）
                   Padding(
                     padding: const EdgeInsets.only(left: 6),
-                    child: ChoiceChip(
+                    child: SelectChip(
                       label: const Text(_walkInName),
                       selected: _name.text.trim() == _walkInName,
                       showCheckmark: false,
@@ -1240,7 +1240,7 @@ class _ReservationSettingsScreenState extends State<ReservationSettingsScreen> {
             title: const Text('哪幾天要另設時段？'),
             content: Wrap(spacing: 6, runSpacing: 6, children: [
               for (final i in free)
-                FilterChip(
+                SelectChip(
                   label: Text('週${_wdName[i - 1]}'),
                   selected: sel.contains(i),
                   onSelected: (v) => setD(() => v ? sel.add(i) : sel.remove(i)),
@@ -1440,7 +1440,7 @@ class _ReservationSettingsScreenState extends State<ReservationSettingsScreen> {
           const SizedBox(height: 6),
           Wrap(spacing: 6, runSpacing: 6, children: [
             for (var i = 1; i <= 7; i++)
-              FilterChip(
+              SelectChip(
                 label: Text('週${const ['一', '二', '三', '四', '五', '六', '日'][i - 1]}'),
                 selected: _closedDays.contains(i),
                 onSelected: (v) => setState(() => v ? _closedDays.add(i) : _closedDays.remove(i)),

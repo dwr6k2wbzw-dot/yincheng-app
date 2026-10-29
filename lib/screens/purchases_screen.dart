@@ -125,23 +125,13 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                 ]),
                 const SizedBox(height: 4),
                 if (_synced) ...[
-                  SectionCard(
-                    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Icon(Icons.sync, color: AppColors.primary),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          // 進貨以日報表為準（老闆 2026-10-13 晚上，0049）；App 手動輸入的先計入，日報表有同一筆就以日報表為準
-                          '進貨每小時從日報表帶入，來自日報表的不能在 App 修改。'
-                          '按右下角「新增進貨」手動輸入的會先計入；之後日報表有同一筆，就改以日報表為準、不重複計算。'
-                          '自己新增的可以點進去修改或刪除。'
-                          '${last == null ? '' : '\n日報表最後一次匯入進貨：${DateFormat('M/d HH:mm').format(last)}'}',
-                          style: TextStyle(color: AppColors.muted, fontSize: AppType.small, height: 1.5),
-                        ),
-                      ),
-                    ]),
+                  // 進貨以日報表為準（老闆 2026-10-13 晚上，0049）；說明收成一行＋ⓘ（老闆 2026-10-29）
+                  InfoLine(
+                    text: '每小時從日報表帶入・最後 ${last == null ? '尚無紀錄' : DateFormat('M/d HH:mm').format(last)}',
+                    detail: '來自日報表的進貨不能在 App 修改。按「新增進貨」手動輸入的會先計入；'
+                        '之後日報表有同一筆，就改以日報表為準、不重複計算。自己新增的可以點進去修改或刪除。',
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 4),
                 ],
                 _group('vendor', '月結廠商', '月結付款', Icons.storefront_outlined, vendor, cats),
                 const SizedBox(height: 12),
