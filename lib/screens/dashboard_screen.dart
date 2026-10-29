@@ -354,9 +354,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         const SizedBox(height: 14),
         Row(children: [
-          Expanded(child: StatTile(label: '來客數', value: money.format(s.guests), trailing: cmp.guests)),
+          Expanded(child: StatTile(label: '來客數', value: money.format(s.guests), unit: '人', trailing: cmp.guests)),
           const SizedBox(width: 14),
-          Expanded(child: StatTile(label: '客單價', value: avgText, sub: avgSub, trailing: cmp.ticket)),
+          Expanded(child: StatTile(label: '客單價', value: avgText, unit: avgTicket == null ? null : '元', sub: avgSub, trailing: cmp.ticket)),
         ]),
         const SizedBox(height: 14),
         SectionCard(
@@ -427,8 +427,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 sub: s.revenue > 0 ? '占營收 ${pct(profit / s.revenue)}' : null)
           else
             _tile('目標達成', s.targetRate == null ? '—' : pct(s.targetRate), sub: s.targetAmount == null ? '尚未設定目標' : null),
-          _tile('來客數', money.format(s.guests), trailing: cmp.guests),
-          _tile('客單價', avgText, sub: avgSub, trailing: cmp.ticket),
+          _tile('來客數', money.format(s.guests), unit: '人', trailing: cmp.guests),
+          _tile('客單價', avgText, unit: avgTicket == null ? null : '元', sub: avgSub, trailing: cmp.ticket),
         ],
       ),
       const SizedBox(height: 12),
@@ -484,16 +484,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final last = d.prev.first == null ? null : monthFigure(d.prev.first!, multi: multi);
     final avg = monthAverage([for (final p in d.prev) if (p != null) monthFigure(p, multi: multi)]);
     String n(num? v) => v == null || v == 0 ? '—' : money.format(v.round());
-    Widget side(String a, String b) {
+    Widget side(String a, String b, String unit) {
       final st = TextStyle(fontSize: AppType.caption, color: AppColors.muted, fontFeatures: tabular, height: 1.5);
       return Column(crossAxisAlignment: CrossAxisAlignment.end, mainAxisSize: MainAxisSize.min, children: [
-        Text('上月 $a', style: st),
-        Text('近3月 $b', style: st),
+        Text('上月 $a${a == '—' ? '' : unit}', style: st),
+        Text('近3月 $b${b == '—' ? '' : unit}', style: st),
       ]);
     }
     return (
-      guests: side(n(last?.guests), n(avg.guests)),
-      ticket: side(n(last?.avgTicket), n(avg.avgTicket)),
+      guests: side(n(last?.guests), n(avg.guests), '人'),
+      ticket: side(n(last?.avgTicket), n(avg.avgTicket), '元'),
     );
   }
 
@@ -597,19 +597,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ]),
       );
 
-  Widget _tile(String label, String value, {Color? color, String? sub, Widget? trailing}) => SectionCard(
+  Widget _tile(String label, String value, {Color? color, String? sub, Widget? trailing, String? unit}) => SectionCard(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
           Text(label, style: TextStyle(fontSize: AppType.small, color: AppColors.muted)),
           const SizedBox(height: 6),
-          Row(children: [
-            Expanded(
-              child: FittedBox(
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            (trailing == null ? (Widget c) => Expanded(child: c) : (Widget c) => Flexible(child: c))(
+              FittedBox(
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerLeft,
-                child: Text(value, style: TextStyle(fontSize: AppType.display, fontWeight: FontWeight.w600, color: color, fontFeatures: tabular)),
+                child: Text.rich(TextSpan(children: [
+                  TextSpan(text: value),
+                  if (unit != null)
+                    TextSpan(text: ' $unit', style: TextStyle(fontSize: AppType.small, fontWeight: FontWeight.w400, color: AppColors.muted)),
+                ]), style: TextStyle(fontSize: AppType.display, fontWeight: FontWeight.w600, color: color, fontFeatures: tabular)),
               ),
             ),
-            if (trailing != null) ...[const SizedBox(width: 6), trailing],
+            if (trailing != null) ...[const SizedBox(width: 6), Flexible(child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerRight, child: trailing))],
           ]),
           if (sub != null)
             Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: AppType.caption, color: AppColors.muted)),

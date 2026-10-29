@@ -29,27 +29,33 @@ class SectionCard extends StatelessWidget {
 }
 
 class StatTile extends StatelessWidget {
-  const StatTile({super.key, required this.label, required this.value, this.sub, this.subColor, this.trailing});
+  const StatTile({super.key, required this.label, required this.value, this.sub, this.subColor, this.trailing, this.unit});
   final String label;
   final String value;
   final String? sub;
   final Color? subColor;
   /// 大數字右邊的小字（例：總覽來客數旁的上月／近 3 月平均）
   final Widget? trailing;
+  /// 大數字後面的小字單位（例：人、元）
+  final String? unit;
   @override
   Widget build(BuildContext context) => SectionCard(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(label, style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
           const SizedBox(height: 6),
-          Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
-            Expanded(
-              child: FittedBox(
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            (trailing == null ? (Widget c) => Expanded(child: c) : (Widget c) => Flexible(child: c))(
+              FittedBox(
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerLeft,
-                child: Text(value, style: const TextStyle(fontSize: AppType.display, fontWeight: FontWeight.w500, fontFeatures: tabular)),
+                child: Text.rich(TextSpan(children: [
+                  TextSpan(text: value),
+                  if (unit != null)
+                    TextSpan(text: ' $unit', style: TextStyle(fontSize: AppType.small, fontWeight: FontWeight.w400, color: AppColors.muted)),
+                ]), style: const TextStyle(fontSize: AppType.display, fontWeight: FontWeight.w500, fontFeatures: tabular)),
               ),
             ),
-            if (trailing != null) ...[const SizedBox(width: 8), trailing!],
+            if (trailing != null) ...[const SizedBox(width: 8), Flexible(child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerRight, child: trailing!))],
           ]),
           if (sub != null) ...[
             const SizedBox(height: 4),
