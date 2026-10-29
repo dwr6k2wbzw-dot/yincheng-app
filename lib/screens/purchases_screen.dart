@@ -707,6 +707,8 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
     final counts = <String, int>{};
     final petty = <String, int>{};
     for (final p in lists.expand((l) => l)) {
+      // 已被日報表取代、不計入的 App 暫記不算（2026-10-29：隱城的小郭食材、薯條、布布拉麵就是這樣混進來的）
+      if (!p.counted) continue;
       final n = vendorGroupName(p);
       if (n == '未填廠商') continue;
       if (p.paidBy == 'petty_cash') {
