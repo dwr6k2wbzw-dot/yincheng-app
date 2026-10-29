@@ -68,7 +68,7 @@ jobs:
           done
           rm -f photo.json
           echo "照片：$(ls photos | wc -l) 張"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: request
           path: |
@@ -85,12 +85,12 @@ jobs:
     env:
       BRANCH: ${{ needs.prepare.outputs.branch }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: main
           fetch-depth: 50
           persist-credentials: false
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: request
           path: ${{ runner.temp }}/req
@@ -144,11 +144,15 @@ jobs:
             echo "$msg" > "$RUNNER_TEMP/out/error.txt"
             tail -c 1500 "$RUNNER_TEMP/out/claude.err" || true
           fi
+          # 工具自己動到的設定檔（例如 flutter analyze 會改 analysis_options.yaml、pub get 會改 pubspec.lock）
+          # 不屬於這次需求，打包前先還原，免得整筆被安全檢查擋掉（2026-10-29 健檢發現）
+          git diff --name-only | grep -vE '^(lib/|assets/|tool/book/)' | while read -r f; do echo "還原：$f"; git checkout -- "$f"; done
+          git ls-files --others --exclude-standard | grep -vE '^(lib/|assets/|tool/book/)' | while read -r f; do echo "略過新檔案：$f"; rm -f -- "$f"; done
           # 不論成敗都把修改打包（相對最新版 main 的完整差異）
           git add -A
           git diff --cached --binary "$(cat "$RUNNER_TEMP/base_sha")" > "$RUNNER_TEMP/out/change.patch"
           echo "差異大小：$(wc -c < "$RUNNER_TEMP/out/change.patch") bytes"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: claude-out
@@ -172,10 +176,10 @@ jobs:
       BRANCH: ${{ needs.prepare.outputs.branch }}
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: main
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         continue-on-error: true
         with:
           name: claude-out
@@ -248,7 +252,7 @@ jobs:
           git push -q origin HEAD:previews
       - id: done
         run: echo "ok=true" >> "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         if: failure()
         with:
           name: publish-error
@@ -270,7 +274,7 @@ jobs:
     environment:
       name: github-pages
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: main
           fetch-depth: 1
@@ -279,11 +283,11 @@ jobs:
           git fetch -q --depth 1 origin web-build
           mkdir -p "$RUNNER_TEMP/main" && git archive FETCH_HEAD | tar -x -C "$RUNNER_TEMP/main"
           bash tool/change_request/assemble_site.sh "$RUNNER_TEMP/main" "$RUNNER_TEMP/site"
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: ${{ runner.temp }}/site
-      - uses: actions/deploy-pages@v4
+      - uses: actions/deploy-pages@v5
 
   report:
     needs: [prepare, claude, publish, pages]
@@ -294,12 +298,12 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         continue-on-error: true
         with:
           name: claude-out
           path: out
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         continue-on-error: true
         with:
           name: publish-error
