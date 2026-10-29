@@ -11,6 +11,7 @@ import '../theme.dart';
 import '../services/slip_scan.dart';
 import '../widgets/common.dart';
 import '../widgets/photo_thumb.dart';
+import 'vendor_contacts_screen.dart';
 
 /// 進貨管理：本月進貨分成「月結廠商」與「零用金支出」兩大類，
 /// 點大類展開各進貨類別的小計，點類別看該類別依廠商分組的明細（老闆／店長可在明細核銷）
@@ -123,6 +124,19 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                   ),
                   IconButton(tooltip: '下個月', onPressed: () => _shiftMonth(1), icon: const Icon(Icons.chevron_right)),
                 ]),
+                // 廠商資料（0076，老闆 2026-10-29）：只有老闆、店長看得到
+                if (widget.membership.isManager)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => VendorContactsScreen(membership: widget.membership)),
+                      ),
+                      icon: const Icon(Icons.contacts_outlined, size: 18),
+                      label: const Text('廠商資料'),
+                    ),
+                  ),
                 const SizedBox(height: 4),
                 if (_synced) ...[
                   // 進貨以日報表為準（老闆 2026-10-13 晚上，0049）；說明收成一行＋ⓘ（老闆 2026-10-29）

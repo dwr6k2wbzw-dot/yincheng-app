@@ -327,6 +327,35 @@ class SupabaseRepository implements Repository {
     if (r.isEmpty) throw Exception('message: 沒有權限刪除（只有老闆可以）,');
   }
 
+  // ---------------- 0076 廠商資料 ----------------
+  @override
+  Future<List<VendorContact>> vendorContacts(String storeId) async {
+    final rows = await _db
+        .from('vendor_contacts')
+        .select('id, kind, name, items, contact, bank, account, note, billing_day')
+        .eq('store_id', storeId)
+        .order('kind')
+        .order('sort_order')
+        .order('name');
+    return rows.map(VendorContact.fromRow).toList();
+  }
+
+  @override
+  Future<void> saveVendorContact(String storeId, VendorContact v) async {
+    if (v.id == null) {
+      await _db.from('vendor_contacts').insert({...v.toRow(), 'store_id': storeId});
+    } else {
+      final r = await _db.from('vendor_contacts').update(v.toRow()).eq('id', v.id!).select('id');
+      if (r.isEmpty) throw Exception('message: 沒有權限修改（只有老闆、店長可以）,');
+    }
+  }
+
+  @override
+  Future<void> deleteVendorContact(String id) async {
+    final r = await _db.from('vendor_contacts').delete().eq('id', id).select('id');
+    if (r.isEmpty) throw Exception('message: 沒有權限刪除（只有老闆、店長可以）,');
+  }
+
   // ---------------- 0039 刷卡手續費率 ----------------
   @override
   Future<double> cardFeeRate(String storeId) async {

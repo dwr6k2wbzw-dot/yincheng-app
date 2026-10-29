@@ -72,6 +72,11 @@ abstract class Repository {
   Future<void> saveRecurringExpenseItem(String storeId, RecurringExpenseItem item, {bool isNew = false});
   Future<void> deleteRecurringExpenseItem(String itemId);
 
+  // 廠商資料（0076：只有老闆、店長；資料庫 RLS 也只允許這兩種角色）
+  Future<List<VendorContact>> vendorContacts(String storeId);
+  Future<void> saveVendorContact(String storeId, VendorContact v);
+  Future<void> deleteVendorContact(String id);
+
   // 進貨
   Future<DateTime> businessDate(String storeId);
   Future<List<CostCategory>> costCategories();

@@ -1044,3 +1044,62 @@ class HandoverBoard {
   int pendingCount(DateTime today) => todayItems(today).where((x) => x.$3 == null).length;
   int unreadCount(String? me) => notes.where((n) => n.unreadFor(me)).length;
 }
+
+
+/// 廠商資料（0076，老闆 2026-10-29）：進貨分頁的廠商通訊錄，只有老闆、店長看得到、能改。
+/// kind：monthly＝月結廠商、other＝其他廠商
+class VendorContact {
+  final String? id; // null：新的一筆
+  final String kind;
+  final String name;
+  final String items; // 品項
+  final String contact; // 聯絡方式
+  final String bank; // 匯款銀行
+  final String account; // 匯款帳號
+  final String note; // 備註
+  final String billingDay; // 結帳日（自由填寫，例「每月 25 日」）
+  const VendorContact({
+    this.id,
+    required this.kind,
+    required this.name,
+    this.items = '',
+    this.contact = '',
+    this.bank = '',
+    this.account = '',
+    this.note = '',
+    this.billingDay = '',
+  });
+
+  static const kinds = {'monthly': '月結廠商', 'other': '其他廠商'};
+  String get kindLabel => kinds[kind] ?? kind;
+
+  factory VendorContact.fromRow(Map<String, dynamic> r) {
+    String s(String k) => (r[k] as String?) ?? '';
+    return VendorContact(
+      id: r['id'] as String,
+      kind: r['kind'] as String,
+      name: s('name'),
+      items: s('items'),
+      contact: s('contact'),
+      bank: s('bank'),
+      account: s('account'),
+      note: s('note'),
+      billingDay: s('billing_day'),
+    );
+  }
+
+  /// 寫回資料庫的欄位（空字串存成 null）
+  Map<String, dynamic> toRow() {
+    String? n(String v) => v.trim().isEmpty ? null : v.trim();
+    return {
+      'kind': kind,
+      'name': name.trim(),
+      'items': n(items),
+      'contact': n(contact),
+      'bank': n(bank),
+      'account': n(account),
+      'note': n(note),
+      'billing_day': n(billingDay),
+    };
+  }
+}

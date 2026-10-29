@@ -406,6 +406,44 @@ class DemoRepository implements Repository {
 
   final _expItems = <String, List<ExpenseItem>>{};  // 店家-年月 → 明細
   String _ek(String s, DateTime m) => '$s-${m.year}-${m.month}';
+  // 0076 廠商資料（示範資料，只有老闆、店長看得到）
+  final _vendors = <String, List<VendorContact>>{
+    'yc': [
+      const VendorContact(id: 'v1', kind: 'monthly', name: '示範酒商', items: '琴酒、伏特加、蘭姆酒',
+          contact: '02-0000-0000 業務 王先生', bank: '示範銀行 000', account: '000-000-000000', note: '週三送貨', billingDay: '每月 25 日'),
+      const VendorContact(id: 'v2', kind: 'monthly', name: '示範水果行', items: '檸檬、萊姆、柳橙',
+          contact: 'LINE：demo-fruit', bank: '示範銀行 000', account: '000-000-111111', billingDay: '月底'),
+      const VendorContact(id: 'v3', kind: 'other', name: '示範冰塊', items: '方冰、碎冰', contact: '0900-000-000'),
+    ],
+  };
+
+  @override
+  Future<List<VendorContact>> vendorContacts(String storeId) async {
+    if (_isStaff) return [];
+    return List.of(_vendors[storeId] ?? const <VendorContact>[]);
+  }
+
+  @override
+  Future<void> saveVendorContact(String storeId, VendorContact v) async {
+    if (_isStaff) throw Exception('message: 沒有權限修改（只有老闆、店長可以）,');
+    final list = _vendors[storeId] ??= [];
+    if (list.any((x) => x.name == v.name.trim() && x.id != v.id)) throw Exception('message: 已經有同名的廠商,');
+    final saved = VendorContact(
+      id: v.id ?? 'v${++_seq}', kind: v.kind, name: v.name.trim(), items: v.items, contact: v.contact,
+      bank: v.bank, account: v.account, note: v.note, billingDay: v.billingDay,
+    );
+    list.removeWhere((x) => x.id == saved.id);
+    list.add(saved);
+  }
+
+  @override
+  Future<void> deleteVendorContact(String id) async {
+    if (_isStaff) throw Exception('message: 沒有權限刪除（只有老闆、店長可以）,');
+    for (final l in _vendors.values) {
+      l.removeWhere((x) => x.id == id);
+    }
+  }
+
   @override
   Future<List<ExpenseItem>> expenseItems(String storeId, DateTime month) async =>
       _isStaff ? [] : [...?_expItems[_ek(storeId, month)]];
