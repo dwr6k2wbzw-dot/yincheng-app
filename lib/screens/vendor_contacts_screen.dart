@@ -131,12 +131,11 @@ class _VendorCard extends StatelessWidget {
     Widget fact(String k, String val, {Widget? trailing}) => Padding(
           padding: const EdgeInsets.only(top: 6),
           child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            SizedBox(width: 64, child: Text(k, style: label)),
+            SizedBox(width: 72, child: Text(k, style: label)),
             Expanded(child: Text(val, style: const TextStyle(fontSize: AppType.small, height: 1.45))),
             if (trailing != null) trailing,
           ]),
         );
-    final pay = [v.bank, v.account].where((t) => t.trim().isNotEmpty).join('  ');
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -144,37 +143,40 @@ class _VendorCard extends StatelessWidget {
         onTap: onTap,
         child: SectionCard(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Expanded(
-                child: Text(v.name, style: const TextStyle(fontSize: AppType.title, fontWeight: AppFont.heading)),
-              ),
-              if (v.billingDay.trim().isNotEmpty)
-                Text('結帳 ${v.billingDay.trim()}', style: TextStyle(color: AppColors.primary, fontSize: AppType.small)),
-            ]),
-            if (v.items.trim().isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(v.items.trim(),
-                    maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
-              ),
+            // 廠商名稱後面接品項，品項用金色、字大一點（老闆 2026-10-29）；結帳日移到下面一行
+            Text.rich(
+              TextSpan(children: [
+                TextSpan(text: v.name, style: const TextStyle(fontSize: AppType.title, fontWeight: AppFont.heading)),
+                if (v.items.trim().isNotEmpty) ...[
+                  const TextSpan(text: '   '),
+                  TextSpan(
+                    text: v.items.trim(),
+                    style: TextStyle(fontSize: AppType.body, fontWeight: AppFont.label, color: AppColors.primary),
+                  ),
+                ],
+              ]),
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
+            if (v.billingDay.trim().isNotEmpty) fact('結帳', v.billingDay.trim()),
             if (v.contact.trim().isNotEmpty) fact('聯絡', v.contact.trim()),
-            if (pay.isNotEmpty)
+            // 匯款：銀行、帳號分兩行（老闆 2026-10-29），帳號那行可以複製
+            if (v.bank.trim().isNotEmpty) fact('匯款銀行', v.bank.trim()),
+            if (v.account.trim().isNotEmpty)
               fact(
-                '匯款',
-                pay,
-                trailing: v.account.trim().isEmpty
-                    ? null
-                    : SizedBox(
-                        height: 28,
-                        child: IconButton(
-                          tooltip: '複製帳號',
-                          padding: EdgeInsets.zero,
-                          visualDensity: VisualDensity.compact,
-                          iconSize: 18,
-                          icon: Icon(Icons.copy_outlined, color: AppColors.muted),
-                          onPressed: () => _copy(context, v.account.trim(), '帳號'),
-                        ),
-                      ),
+                '匯款帳號',
+                v.account.trim(),
+                trailing: SizedBox(
+                  height: 28,
+                  child: IconButton(
+                    tooltip: '複製帳號',
+                    padding: EdgeInsets.zero,
+                    visualDensity: VisualDensity.compact,
+                    iconSize: 18,
+                    icon: Icon(Icons.copy_outlined, color: AppColors.muted),
+                    onPressed: () => _copy(context, v.account.trim(), '帳號'),
+                  ),
+                ),
               ),
             if (v.note.trim().isNotEmpty) fact('備註', v.note.trim()),
           ]),
