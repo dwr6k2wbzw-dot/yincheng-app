@@ -291,19 +291,6 @@ class _CategoryPurchasesScreen extends StatefulWidget {
 class _CategoryPurchasesScreenState extends State<_CategoryPurchasesScreen> {
   late List<Purchase> _items = List.of(widget.items);
 
-  static final _paren = RegExp(r'\s*[(（][^()（）]*[)）]\s*$');
-
-  /// 區塊用的廠商名稱：去掉名稱最後的括號說明（大倉捷(退酒) → 大倉捷），
-  /// 再照 AppConfig.vendorGroupAlias 合併別名（德哥 → 阿德水果）。只影響畫面分組。
-  static String _vendorOf(Purchase p) {
-    var n = (p.supplierName ?? '').trim();
-    if (n.isEmpty) n = (p.memo ?? '').trim();
-    if (n.isEmpty) return '未填廠商';
-    final base = n.replaceFirst(_paren, '').trim();
-    if (base.isNotEmpty) n = base;
-    return AppConfig.vendorGroupAlias[n] ?? n;
-  }
-
   Future<void> _openVendor(String vendor) async {
     await Navigator.push(
       context,
@@ -311,7 +298,7 @@ class _CategoryPurchasesScreenState extends State<_CategoryPurchasesScreen> {
         builder: (_) => _CategoryPurchasesScreen(
           title: '${widget.title}・$vendor',
           month: widget.month,
-          items: _items.where((p) => _vendorOf(p) == vendor).toList(),
+          items: _items.where((p) => vendorGroupName(p) == vendor).toList(),
           categoryNames: widget.categoryNames,
           canReconcile: widget.canReconcile,
           membership: widget.membership,
@@ -332,7 +319,7 @@ class _CategoryPurchasesScreenState extends State<_CategoryPurchasesScreen> {
   Widget _blocks(double total) {
     final groups = <String, List<Purchase>>{};
     for (final p in _items) {
-      groups.putIfAbsent(_vendorOf(p), () => []).add(p);
+      groups.putIfAbsent(vendorGroupName(p), () => []).add(p);
     }
     double sum(List<Purchase> l) => l.fold<double>(0, (t, p) => t + p.amount);
     final names = groups.keys.toList()..sort((a, b) => sum(groups[b]!).compareTo(sum(groups[a]!)));
@@ -594,6 +581,20 @@ class _PurchaseTile extends StatelessWidget {
 }
 
 /// 新增進貨（PRD 畫面 04）
+final _vendorParen = RegExp(r'\s*[(（][^()（）]*[)）]\s*$');
+
+/// 廠商的統一名稱（區塊分組、新增進貨的廠商清單共用）：去掉名稱最後的括號說明（大倉捷(退酒) → 大倉捷），
+/// 再照 AppConfig.vendorGroupAlias 合併別名（德哥 → 阿德水果）。只影響畫面，資料不改。
+String vendorGroupName(Purchase p) => normalizeVendorName((p.supplierName ?? '').trim().isNotEmpty ? p.supplierName! : (p.memo ?? '')) ?? '未填廠商';
+
+String? normalizeVendorName(String raw) {
+  var n = raw.trim();
+  if (n.isEmpty) return null;
+  final base = n.replaceFirst(_vendorParen, '').trim();
+  if (base.isNotEmpty) n = base;
+  return AppConfig.vendorGroupAlias[n] ?? n;
+}
+
 class PurchaseFormScreen extends StatefulWidget {
   const PurchaseFormScreen({super.key, required this.membership, this.editing});
   final Membership membership;
@@ -619,7 +620,9 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   DateTime? _date;
   String? _category;
   final _vendor = TextEditingController(); // 廠商名稱：自行輸入（和既有廠商同名就自動對應）
-  List<String> _excelVendors = []; // 日報表的月結廠商名稱（月結廠商可從清單選）
+  List<String> _excelVendors = []; // 日報表的月結廠商名稱（舊清單，月結清單讀不到時備用）
+  // 月結廠商清單（老闆 2026-10-29：廠商名稱改成從清單選）：本月＋前兩個月出現過的月結廠商，依筆數多到少
+  List<String> _monthlyVendors = [];
   List<String> _members = []; // 成員名字（填表人／請款人可從清單選）
   String? _photo; // 送貨單照片（JPEG data URL）
   List<Supplier> _sups = [];
@@ -683,6 +686,10 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
       _excelVendors = lists[0];
       _members = lists[1];
     } catch (_) {} // 名單讀不到不影響新增
+    try {
+      _monthlyVendors = await _recentMonthlyVendors(repo, id, r[2] as DateTime);
+    } catch (_) {} // 讀不到就用日報表名單
+    if (_monthlyVendors.isEmpty) _monthlyVendors = List.of(_excelVendors);
     _sups = r[1] as List<Supplier>;
     // 填表人預設帶入自己的名字（可以改成請款人）
     if (_memo.text.isEmpty && e == null) _memo.text = widget.membership.displayName;
@@ -690,6 +697,89 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   }
 
   final _vendorFocus = FocusNode();
+
+  /// 本月＋前兩個月的月結廠商（名稱照進貨區塊的合併規則），依出現筆數多到少
+  static Future<List<String>> _recentMonthlyVendors(Repository repo, String storeId, DateTime today) async {
+    final months = [for (var i = 0; i < 3; i++) DateTime(today.year, today.month - i, 1)];
+    final lists = await Future.wait(months.map((m) => repo.monthPurchases(storeId, m)));
+    final counts = <String, int>{};
+    for (final p in lists.expand((l) => l)) {
+      if (p.paidBy != 'vendor') continue;
+      final n = vendorGroupName(p);
+      if (n == '未填廠商') continue;
+      counts[n] = (counts[n] ?? 0) + 1;
+    }
+    final e = counts.entries.toList()..sort((a, b) => b.value != a.value ? b.value.compareTo(a.value) : a.key.compareTo(b.key));
+    return [for (final x in e) x.key];
+  }
+
+  /// 月結廠商：從清單選；清單最下面「手動新增廠商」可以自己輸入（老闆 2026-10-29）
+  Future<void> _pickMonthlyVendor() async {
+    FocusScope.of(context).unfocus();
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (ctx) => _NamePicker(
+        title: '選擇廠商',
+        note: '本月與前兩個月的月結廠商，常用的在前面',
+        names: _monthlyVendors,
+        addLabel: '手動新增廠商',
+      ),
+    );
+    if (picked == null || !mounted) return;
+    if (picked.startsWith(_NamePicker.addSentinel)) {
+      final name = await _askVendorName(picked.substring(_NamePicker.addSentinel.length));
+      if (name != null && mounted) setState(() => _vendor.text = name);
+      return;
+    }
+    setState(() => _vendor.text = picked);
+  }
+
+  Future<String?> _askVendorName(String initial) async {
+    final ctrl = TextEditingController(text: initial);
+    final r = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('手動新增廠商'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          maxLength: 60,
+          decoration: const InputDecoration(labelText: '廠商名稱'),
+          onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: const Text('確定')),
+        ],
+      ),
+    );
+    return (r == null || r.isEmpty) ? null : r;
+  }
+
+  Widget _monthlyVendorField() {
+    final name = _vendor.text.trim();
+    return InkWell(
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      onTap: _saving ? null : _pickMonthlyVendor,
+      child: InputDecorator(
+        isEmpty: name.isEmpty,
+        decoration: InputDecoration(
+          labelText: '廠商名稱',
+          hintText: '點這裡選擇廠商',
+          suffixIcon: name.isEmpty
+              ? const Icon(Icons.arrow_drop_down)
+              : IconButton(
+                  tooltip: '清除',
+                  icon: const Icon(Icons.close),
+                  onPressed: () => setState(() => _vendor.clear()),
+                ),
+        ),
+        child: Text(name, style: const TextStyle(fontSize: AppType.body)),
+      ),
+    );
+  }
 
   /// 從清單選一個名字填進欄位（可搜尋）
   Future<void> _pick(String title, String note, List<String> names, TextEditingController target) async {
@@ -920,7 +1010,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                 }),
               ),
               const SizedBox(height: 12),
-              RawAutocomplete<String>(
+              if (_paidBy == 'vendor') _monthlyVendorField() else RawAutocomplete<String>(
                 textEditingController: _vendor,
                 focusNode: _vendorFocus,
                 optionsBuilder: (v) {
@@ -933,15 +1023,8 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                   focusNode: focus,
                   maxLength: 60,
                   decoration: InputDecoration(
-                    labelText: _paidBy == 'vendor' ? '廠商名稱（可從清單選或自行輸入）' : '廠商名稱／品項（選填，自行輸入）',
+                    labelText: '廠商名稱／品項（選填，自行輸入）',
                     counterText: '',
-                    suffixIcon: _paidBy == 'vendor' && _excelVendors.isNotEmpty
-                        ? IconButton(
-                            tooltip: '選擇廠商',
-                            icon: const Icon(Icons.storefront_outlined),
-                            onPressed: () => _pick('選擇月結廠商', '名單來自日報表的月結廠商', _excelVendors, _vendor),
-                          )
-                        : null,
                   ),
                 ),
                 optionsViewBuilder: (context, onSelected, options) => Align(
@@ -1027,10 +1110,13 @@ bool isSameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month
 
 /// 名字選單（月結廠商、填表人／請款人）：上方搜尋、下方清單
 class _NamePicker extends StatefulWidget {
-  const _NamePicker({required this.title, required this.note, required this.names});
+  const _NamePicker({required this.title, required this.note, required this.names, this.addLabel});
   final String title;
   final String note;
   final List<String> names;
+  /// 有設定時，清單最下面多一列（例：「手動新增廠商」），點了回傳 addSentinel
+  final String? addLabel;
+  static const addSentinel = '\u0000add';
   @override
   State<_NamePicker> createState() => _NamePickerState();
 }
@@ -1059,11 +1145,20 @@ class _NamePickerState extends State<_NamePicker> {
             ]),
           ),
           Expanded(
-            child: list.isEmpty
+            child: list.isEmpty && widget.addLabel == null
                 ? Center(child: Text('沒有符合的名字', style: TextStyle(color: AppColors.muted)))
                 : ListView.builder(
-                    itemCount: list.length,
-                    itemBuilder: (_, i) => ListTile(title: Text(list[i]), onTap: () => Navigator.of(context).pop(list[i])),
+                    itemCount: list.length + (widget.addLabel == null ? 0 : 1),
+                    itemBuilder: (_, i) => i < list.length
+                        ? ListTile(title: Text(list[i]), onTap: () => Navigator.of(context).pop(list[i]))
+                        : Column(mainAxisSize: MainAxisSize.min, children: [
+                            if (list.isNotEmpty) const Divider(height: 1),
+                            ListTile(
+                              leading: Icon(Icons.add, color: AppColors.primary),
+                              title: Text(widget.addLabel!, style: TextStyle(color: AppColors.primary)),
+                              onTap: () => Navigator.of(context).pop('${_NamePicker.addSentinel}$_q'), // 帶上搜尋字，當作預設名稱
+                            ),
+                          ]),
                   ),
           ),
         ]),
