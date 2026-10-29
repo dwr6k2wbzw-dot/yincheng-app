@@ -754,7 +754,8 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                     context: context,
                     initialDate: _date!,
                     firstDate: DateTime(2025),
-                    lastDate: DateTime.now().add(const Duration(days: 1)),
+                    // 老闆 2026-10-29：可以登記到下個月底（先記下個月的進貨）
+                    lastDate: DateTime(DateTime.now().year, DateTime.now().month + 2, 0),
                   );
                   if (d != null) setState(() => _date = d);
                 },
