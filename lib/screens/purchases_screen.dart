@@ -684,7 +684,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
       _members = await repo.memberNames(id);
     } catch (_) {} // 名單讀不到不影響新增
     try {
-      _monthlyVendors = await _recentMonthlyVendors(repo, id, r[2] as DateTime);
+      _monthlyVendors = await _recentMonthlyVendors(repo, id, widget.membership.storeName, r[2] as DateTime);
     } catch (_) {} // 讀不到時清單只剩「手動新增廠商」
     _sups = r[1] as List<Supplier>;
     // 填表人預設帶入自己的名字（可以改成請款人）
@@ -701,7 +701,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   /// - 同一段時間在零用金出現得比月結多（或一樣多）的名字（例：全聯）也排除；兩邊都有、月結比較多的（例：小郭）保留
   /// - 「廠商資料」裡的月結廠商一律列入（只有老闆、店長讀得到；讀不到就略過）
   static final _newReportFormatFrom = DateTime(2026, 9, 1);
-  static Future<List<String>> _recentMonthlyVendors(Repository repo, String storeId, DateTime today) async {
+  static Future<List<String>> _recentMonthlyVendors(Repository repo, String storeId, String storeName, DateTime today) async {
     final months = [for (var i = 0; i < 3; i++) DateTime(today.year, today.month - i, 1)];
     final lists = await Future.wait(months.map((m) => repo.monthPurchases(storeId, m)));
     final counts = <String, int>{};
@@ -715,7 +715,8 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
       }
       if (p.paidBy != 'vendor') continue;
       if (p.source == 'import' && p.purchaseDate.isBefore(_newReportFormatFrom)) continue;
-      counts[n] = (counts[n] ?? 0) + 1;
+      final m = AppConfig.vendorListRename[storeName]?[n] ?? n;
+      counts[m] = (counts[m] ?? 0) + 1;
     }
     counts.removeWhere((v, c) {
       final inPetty = petty.entries
@@ -732,6 +733,12 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
         if (n != null && !out.contains(n)) out.add(n);
       }
     } catch (_) {} // 正職、兼職讀不到廠商資料
+    // 老闆指定的調整（AppConfig.vendorListRemove／vendorListAdd）
+    final remove = AppConfig.vendorListRemove[storeName] ?? const <String>{};
+    out.removeWhere(remove.contains);
+    for (final n in AppConfig.vendorListAdd[storeName] ?? const <String>[]) {
+      if (!out.contains(n)) out.add(n);
+    }
     return out;
   }
 

@@ -85,6 +85,17 @@ class AppConfig {
   /// 進貨「月結廠商」區塊：同一家廠商的不同寫法併成一塊（老闆 2026-10-29）。
   /// 名稱最後的括號會先去掉，所以這裡寫去掉括號後的名字。
   static const vendorGroupAlias = <String, String>{'德哥': '阿德水果'};
+  /// 新增進貨「選擇廠商」清單的手動調整（老闆 2026-10-29），依店名：改名 → 移除 → 補上
+  static const vendorListRename = <String, Map<String, String>>{
+    '小城外': {'小郭食材': '小郭', 'yoyo': 'YOYO'},
+  };
+  static const vendorListRemove = <String, Set<String>>{
+    '小城外': {'布布拉麵', '二店拉麵食材', '小郭抽成', '廣泰', '瑪格莉特比薩', '瑪格麗特披薩'},
+  };
+  static const vendorListAdd = <String, List<String>>{
+    '隱城': ['喝酒生活'],
+    '小城外': ['花都'],
+  };
   static const vendorHintAdd = {
     'xc_bar_food': ['小郭'], // 酒吧-食材
   };
