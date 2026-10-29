@@ -456,14 +456,20 @@ class DemoRepository implements Repository {
     if (_isStaff || storeId != 'yc') {
       return MonthlySummary(month: month, revenue: 0, guests: 0, drinksRevenue: 0, foodRevenue: 0);
     }
+    // 示範：每個月來客、客單略有不同，總覽「上個月／近 3 個月平均」才看得出差異
+    final now = DateTime.now();
+    final cur = month.year == now.year && month.month == now.month;
+    final guests = cur ? 723 : 640 + (month.month * 47) % 150;
+    final ticket = cur ? 1000.0 : 930.0 + (month.month * 53) % 130;
+    final revenue = (guests * ticket).roundToDouble();
     return MonthlySummary(
       month: month,
-      revenue: 500000,
-      guests: 723,
-      avgTicket: 1000,
-      dailyAvgTicket: 1000,
-      drinksRevenue: 420000,
-      foodRevenue: 80000,
+      revenue: revenue,
+      guests: guests,
+      avgTicket: ticket,
+      dailyAvgTicket: ticket,
+      drinksRevenue: (revenue * 0.84).roundToDouble(),
+      foodRevenue: revenue - (revenue * 0.84).roundToDouble(),
       targetAmount: 600000,
       targetRate: 0.8333,
       drinkCostRate: 0.2200,
