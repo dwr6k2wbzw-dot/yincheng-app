@@ -82,6 +82,9 @@ class AppConfig {
     'xc_cafe_food': {'柳橙汁'}, // 咖啡吧-餐食（老闆 2026-10-13 移除）
   };
   static const vendorHintRename = {'二店拉麵食材': '立成'}; // 布布拉麵-食材
+  /// 進貨「月結廠商」區塊：同一家廠商的不同寫法併成一塊（老闆 2026-10-29）。
+  /// 名稱最後的括號會先去掉，所以這裡寫去掉括號後的名字。
+  static const vendorGroupAlias = <String, String>{'德哥': '阿德水果'};
   static const vendorHintAdd = {
     'xc_bar_food': ['小郭'], // 酒吧-食材
   };
