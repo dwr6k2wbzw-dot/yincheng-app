@@ -216,6 +216,16 @@ class DemoRepository implements Repository {
       id: 'n${_seq++}', body: body, authorId: 'demo-user', authorName: '示範老闆', createdAt: DateTime.now(), important: important,
       items: [for (var i = 0; i < items.length; i++) HandoverItem(id: 'i${_seq++}', position: i + 1, body: items[i])]));
   final _lineOn = <String, bool>{};
+  var _lineLinks = 0;
+  @override
+  Future<int> lineOwnerLinks() async => _lineLinks;
+  @override
+  Future<void> linkLineOwner(String code) async {
+    if (code.trim().length != 6) throw Exception('message: 代碼不對或已過期，請在 LINE 私訊機器人重新打「綁定」,');
+    _lineLinks = 1;
+  }
+  @override
+  Future<void> unlinkLineOwner() async => _lineLinks = 0;
   @override
   Future<bool> lineNotifyEnabled(String storeId) async => _lineOn[storeId] ?? true;
   @override

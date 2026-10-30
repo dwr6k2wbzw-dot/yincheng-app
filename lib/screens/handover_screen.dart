@@ -189,8 +189,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
               child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 Text(editing ? '修改交接' : '寫交接', style: const TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 4),
-                Text('一項一行，接班的人做完一項勾一項；全部勾完才能按「已處理」。',
-                    style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+                Text('一項一行，接班的人做完一項勾一項；全部勾完才能按「已處理」。', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
                 const SizedBox(height: 10),
                 for (var i = 0; i < items.length; i++)
                   Padding(
@@ -228,7 +227,8 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
                   ),
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: TextButton.icon(onPressed: items.length >= 50 ? null : addItem, icon: const Icon(Icons.add), label: const Text('新增一項')),
+                  child: TextButton.icon(
+                      onPressed: items.length >= 50 ? null : addItem, icon: const Icon(Icons.add), label: const Text('新增一項')),
                 ),
                 const SizedBox(height: 4),
                 TextField(
@@ -252,10 +252,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
                     controlAffinity: ListTileControlAffinity.leading,
                     dense: true,
                     title: const Text('⚠ 重要，發到 LINE 群組', style: TextStyle(fontWeight: FontWeight.w700)),
-                    subtitle: Text(
-                        editing && (n.important)
-                            ? '已經發過；取消勾選不會收回 LINE 訊息'
-                            : '一般交接只在 App 裡看；真的要大家馬上知道的才勾',
+                    subtitle: Text(editing && (n.important) ? '已經發過；取消勾選不會收回 LINE 訊息' : '一般交接只在 App 裡看；真的要大家馬上知道的才勾',
                         style: TextStyle(fontSize: AppType.caption, color: AppColors.muted)),
                   ),
                 ),
@@ -403,7 +400,8 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
             Expanded(child: Text(_when(n.createdAt), style: TextStyle(color: AppColors.muted, fontSize: AppType.small))),
             if (n.items.isNotEmpty)
               Text('${n.items.length - n.itemsLeft}/${n.items.length}',
-                  style: TextStyle(color: n.itemsLeft == 0 ? AppColors.good : AppColors.muted, fontSize: AppType.small, fontWeight: FontWeight.w600)),
+                  style: TextStyle(
+                      color: n.itemsLeft == 0 ? AppColors.good : AppColors.muted, fontSize: AppType.small, fontWeight: FontWeight.w600)),
             // 任何成員都能修改、刪除（老闆 2026-10-12，0044）
             PopupMenuButton<String>(
               tooltip: '修改／刪除',
@@ -421,7 +419,8 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
             Padding(
               padding: EdgeInsets.only(top: n.items.isEmpty ? 0 : 4),
               child: SelectableText(n.body,
-                  style: TextStyle(fontSize: n.items.isEmpty ? 15 : 13, height: 1.5, color: n.resolved || n.items.isNotEmpty ? AppColors.muted : null)),
+                  style: TextStyle(
+                      fontSize: n.items.isEmpty ? 15 : 13, height: 1.5, color: n.resolved || n.items.isNotEmpty ? AppColors.muted : null)),
             ),
           if (n.editedAt != null)
             Padding(
@@ -468,10 +467,62 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
   bool get _isOwner => widget.membership.role == Role.owner;
   bool? _lineOn;
   bool _lineLoading = false;
+  int? _lineLinks; // 0081：我綁了 LINE 私訊沒
+
+  Future<void> _linkLine() async {
+    final ctrl = TextEditingController();
+    final code = await showDialog<String>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('綁定我的 LINE 私訊'),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('1. 在 LINE 私訊店裡的機器人，打「綁定」\n2. 把它回的 6 位數代碼填在這裡（10 分鐘內）',
+              style: TextStyle(color: AppColors.muted, fontSize: AppType.small, height: 1.6)),
+          const SizedBox(height: 12),
+          TextField(
+            controller: ctrl,
+            autofocus: true,
+            keyboardType: TextInputType.number,
+            maxLength: 6,
+            decoration: const InputDecoration(labelText: '代碼', counterText: '', border: OutlineInputBorder()),
+          ),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(c, ctrl.text), child: const Text('綁定')),
+        ],
+      ),
+    );
+    if (code == null || code.trim().isEmpty) return;
+    try {
+      await _repo.linkLineOwner(code);
+      if (mounted) {
+        setState(() => _lineLinks = 1);
+        showMessage(context, '綁定好了！之後私訊機器人不用 @ 就能問');
+      }
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+    }
+  }
+
+  Future<void> _unlinkLine() async {
+    try {
+      await _repo.unlinkLineOwner();
+      if (mounted) {
+        setState(() => _lineLinks = 0);
+        showMessage(context, '已解除，私訊機器人不會再回答');
+      }
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+    }
+  }
 
   Widget _lineSwitch() {
     if (_lineOn == null && !_lineLoading) {
       _lineLoading = true;
+      _repo.lineOwnerLinks().then((v) {
+        if (mounted) setState(() => _lineLinks = v);
+      }).catchError((_) {});
       _repo.lineNotifyEnabled(_store).then((v) {
         if (mounted) setState(() => _lineOn = v);
       }).catchError((_) {
@@ -482,27 +533,40 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: SectionCard(
-        child: SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          value: on,
-          onChanged: _lineOn == null
-              ? null
-              : (v) async {
-                  setState(() => _lineOn = v);
-                  try {
-                    await _repo.saveLineNotifyEnabled(_store, v);
-                    if (mounted) showMessage(context, v ? '已打開：重要交接會發到 LINE 群組' : '已關掉：交接只在 App 裡看');
-                  } catch (e) {
-                    if (mounted) {
-                      setState(() => _lineOn = !v);
-                      showMessage(context, friendlyError(e), error: true);
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            value: on,
+            onChanged: _lineOn == null
+                ? null
+                : (v) async {
+                    setState(() => _lineOn = v);
+                    try {
+                      await _repo.saveLineNotifyEnabled(_store, v);
+                      if (mounted) showMessage(context, v ? '已打開：重要交接會發到 LINE 群組' : '已關掉：交接只在 App 裡看');
+                    } catch (e) {
+                      if (mounted) {
+                        setState(() => _lineOn = !v);
+                        showMessage(context, friendlyError(e), error: true);
+                      }
                     }
-                  }
-                },
-          title: const Text('LINE 群組通知', style: TextStyle(fontWeight: FontWeight.w700)),
-          subtitle: Text(on ? '勾「⚠ 重要」的交接會發到這家店的 LINE 群組' : '已關掉，交接只在 App 裡看',
-              style: TextStyle(fontSize: AppType.small, color: AppColors.muted)),
-        ),
+                  },
+            title: const Text('LINE 群組通知', style: TextStyle(fontWeight: FontWeight.w700)),
+            subtitle: Text(on ? '勾「⚠ 重要」的交接會發到這家店的 LINE 群組' : '已關掉，交接只在 App 裡看',
+                style: TextStyle(fontSize: AppType.small, color: AppColors.muted)),
+          ),
+          const Divider(height: 1),
+          // 0081：老闆私訊 AI 助理
+          Row(children: [
+            Expanded(
+              child: Text((_lineLinks ?? 0) > 0 ? 'LINE 私訊助理：已綁定，私訊機器人不用 @ 就能問兩家店的事' : 'LINE 私訊助理：綁定後可以私訊機器人問店裡的事',
+                  style: TextStyle(fontSize: AppType.small, color: AppColors.muted, height: 1.5)),
+            ),
+            (_lineLinks ?? 0) > 0
+                ? TextButton(onPressed: _unlinkLine, child: const Text('解除'))
+                : TextButton(onPressed: _linkLine, child: const Text('綁定我的 LINE 私訊')),
+          ]),
+        ]),
       ),
     );
   }
@@ -637,8 +701,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
           ),
         for (final (r, occ, dn) in items) _todayTile(b, r, occ, dn, today),
         const SizedBox(height: 4),
-        Text('點一下打勾；做完的會記錄是誰、幾點做的。凌晨 6 點前還算前一天。',
-            style: TextStyle(color: AppColors.muted, fontSize: AppType.caption)),
+        Text('點一下打勾；做完的會記錄是誰、幾點做的。凌晨 6 點前還算前一天。', style: TextStyle(color: AppColors.muted, fontSize: AppType.caption)),
         const SizedBox(height: 20),
         if (all.isNotEmpty) ...[
           Text('全部提醒', style: TextStyle(color: AppColors.muted)),
@@ -723,8 +786,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
               if (repeat == 'once')
                 OutlinedButton.icon(
                   onPressed: () async {
-                    final x = await showDatePicker(
-                        context: c, initialDate: due, firstDate: DateTime(2025), lastDate: DateTime(2035));
+                    final x = await showDatePicker(context: c, initialDate: due, firstDate: DateTime(2025), lastDate: DateTime(2035));
                     if (x != null) set(() => due = x);
                   },
                   icon: const Icon(Icons.event),
@@ -846,8 +908,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
               ? FloatingActionButton.extended(
                   onPressed: () => _editReminder(null, b), icon: const Icon(Icons.add_alarm), label: const Text('新增提醒'))
               : null)
-          : FloatingActionButton.extended(
-              onPressed: _writeHandover, icon: const Icon(Icons.edit_note), label: const Text('寫交接')),
+          : FloatingActionButton.extended(onPressed: _writeHandover, icon: const Icon(Icons.edit_note), label: const Text('寫交接')),
       body: FutureBuilder<HandoverBoard>(
         future: _future,
         builder: (context, snap) {

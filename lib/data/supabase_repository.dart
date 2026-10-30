@@ -648,6 +648,20 @@ class SupabaseRepository implements Repository {
     await _db.from('store_settings').upsert({'store_id': storeId, 'line_notify_enabled': on}, onConflict: 'store_id');
   }
 
+  // 0081：老闆 LINE 私訊綁定（只看得到自己的）
+  @override
+  Future<int> lineOwnerLinks() async => (await _db.from('line_owner_links').select('line_user_id')).length;
+
+  @override
+  Future<void> linkLineOwner(String code) => _db.rpc('line_owner_link', params: {'p_code': code.trim()});
+
+  @override
+  Future<void> unlinkLineOwner() async {
+    final me = currentUserId;
+    if (me == null) return;
+    await _db.from('line_owner_links').delete().eq('user_id', me);
+  }
+
   @override
   Future<void> setHandoverItemDone(String itemId, bool done) async {
     final rows = await _db
