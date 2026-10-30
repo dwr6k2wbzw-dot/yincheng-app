@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>我的訂位</title>
+<meta name="theme-color" content="#0A0A09">
+<link rel="icon" id="fav" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=3f575c19">
+</head>
+<body>
+<main>
+  <header class="brand">
+    <img id="logo" alt="" hidden>
+    <h1 data-i18n="myBooking">我的訂位</h1>
+  </header>
+  <div class="card" id="box"><p data-i18n="loading">載入中…</p></div>
+</main>
+<script src="common.js?v=3f575c19"></script>
+<script src="i18n.js?v=3f575c19"></script>
+<script>
+(async function () {
+  const t = new URLSearchParams(location.search).get('t') || '';
+  const box = document.getElementById('box');
+  const T = (k, ...a) => YCI.t(k, ...a);
+  const status = T('status');
+  YCI.apply(); YCI.mountSwitcher(); document.title = T('myBooking');
+  let want = null; // 想改成幾位
+  function show(r, msg) {
+    const lg = document.getElementById('logo');
+    const lf = r.slug === 'yincheng' ? 'logo-yincheng.png?v=3f575c19' : r.slug === 'xcw' ? 'logo-xcw.png?v=3f575c19' : '';
+    if (lf) { lg.src = lf; lg.hidden = false; document.getElementById('fav').href = lf; }
+    if (want == null) want = r.requested_party && r.party_request_status === 'pending' ? r.requested_party : r.party;
+    const pending = r.party_request_status === 'pending';
+    let h = '<p class="big">' + YC.esc(r.display_name) + '</p><p>' + YC.dateLabel(r.date) + ' ' + r.time + '　' + T('guests', r.party) + '<br>' +
+      YC.esc(YCI.name(r.name)) + '<br>' + T('statusLabel') + (status[r.status] || r.status) + '</p>' + (msg ? '<p class="ok">' + msg + '</p>' : '');
+    if (pending) h += '<p class="ok">' + T('pending', r.requested_party) + '</p>';
+    else if (r.party_request_status === 'approved' && r.requested_party === r.party) h += '<p class="note">' + T('approved', r.party) + '</p>';
+    else if (r.party_request_status === 'rejected') h += '<p class="note">' + T('rejected', r.requested_party, r.party) + '</p>';
+    // 更改人數（0055，老闆 2026-10-16：需店家確認）
+    if (r.can_change) {
+      h += '<div class="sep"></div><p class="label">' + T('changeParty') + '</p>' +
+        '<div class="stepper"><button type="button" id="pm" aria-label="' + T('less') + '">−</button><b id="pv">' + want + '</b><button type="button" id="pp" aria-label="' + T('more') + '">＋</button></div>' +
+        '<p class="note">' + T('changeNote', r.party) + '</p>' +
+        '<p class="err" id="perr" hidden></p><button class="primary ghost" id="pgo">' + (pending ? T('editChange') : T('sendChange')) + '</button>';
+    }
+    if (r.can_cancel) h += '<div class="sep"></div><p class="err" id="err" hidden></p><button class="primary danger" id="go">' + T('cancelBtn') + '</button>';
+    const rows = [];
+    if (r.address) {
+      const q = encodeURIComponent(r.address.replace(/[（(].*?[）)]/g, '').trim());
+      rows.push('<div class="irow"><span class="ik">' + T('address') + '</span><span><a href="https://www.google.com/maps/search/?api=1&amp;query=' + q + '" target="_blank" rel="noopener">' + YC.esc(r.address) + '</a></span></div>');
+    }
+    if (r.phone) rows.push('<div class="irow"><span class="ik">' + T('tel') + '</span><span><a href="tel:' + YC.esc(r.phone.replace(/[^0-9+]/g, '')) + '">' + YC.esc(r.phone) + '</a></span></div>');
+    if (rows.length) h += '<div class="sep"></div>' + rows.join('');
+    if (r.contact_note) h += '<p class="note" style="white-space:pre-wrap">' + YC.esc(r.contact_note) + '</p>';
+    box.innerHTML = h;
+    const pm = document.getElementById('pm'), pp = document.getElementById('pp'), pgo = document.getElementById('pgo');
+    if (pm) {
+      const upd = () => { document.getElementById('pv').textContent = want; pgo.disabled = want === r.party && !pending; };
+      pm.onclick = () => { if (want > 1) { want--; upd(); } };
+      pp.onclick = () => { if (want < 30) { want++; upd(); } };
+      upd();
+      pgo.onclick = async () => {
+        pgo.disabled = true; pgo.textContent = T('sending');
+        try {
+          const r2 = await YC.rpc('request_party_change', { p_token: t, p_party: want });
+          want = null;
+          show(r2, r2.party_request_status === 'pending' ? '' : T('withdrawn'));
+          if (r2.party_request_status === 'pending') YC.mail(t, 'party');
+        } catch (ex) {
+          const e = document.getElementById('perr'); e.textContent = YCI.err(ex.message); e.hidden = false;
+          pgo.disabled = false; pgo.textContent = T('sendChange');
+        }
+      };
+    }
+    const go = document.getElementById('go');
+    if (go) go.onclick = async () => {
+      if (!confirm(T('cancelConfirm'))) return;
+      go.disabled = true; go.textContent = T('cancelling');
+      try {
+        const r2 = await YC.rpc('cancel_reservation', { p_token: t });
+        show(r2, T('cancelled'));
+        YC.mail(t, 'cancel');
+      } catch (ex) {
+        const e = document.getElementById('err'); e.textContent = YCI.err(ex.message); e.hidden = false;
+        go.disabled = false; go.textContent = T('cancelBtn');
+      }
+    };
+  }
+  try {
+    if (!/^[0-9a-f-]{36}$/i.test(t)) throw new Error(T('badLink'));
+    const r = await YC.rpc('reservation_by_token', { p_token: t });
+    if (!r) throw new Error(T('notFound'));
+    show(r);
+  } catch (ex) { box.innerHTML = '<p class="err">' + YC.esc(YCI.err(ex.message)) + '</p>'; }
+})();
+</script>
+<script src="theme.js?v=3f575c19"></script>
+</body>
+</html>
