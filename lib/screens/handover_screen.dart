@@ -167,6 +167,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
     final note = TextEditingController(text: n?.body ?? '');
     final focus = <FocusNode>[for (final _ in items) FocusNode()];
     String? photo;
+    var important = n?.important ?? false;
     return showModalBottomSheet<_HandoverDraft>(
       context: context,
       isScrollControlled: true,
@@ -237,6 +238,28 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
                   maxLength: 1000,
                   decoration: const InputDecoration(labelText: '補充說明（選填）', border: OutlineInputBorder()),
                 ),
+                // 0079：只有勾「重要」的交接才會發到 LINE 群組（LINE 照群組人數計費）
+                Material(
+                  color: important ? AppColors.bad.withValues(alpha: 0.10) : Colors.transparent,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                    side: BorderSide(color: important ? AppColors.bad : AppColors.muted.withValues(alpha: 0.35)),
+                  ),
+                  child: CheckboxListTile(
+                    value: important,
+                    onChanged: (v) => set(() => important = v ?? false),
+                    activeColor: AppColors.bad,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    dense: true,
+                    title: const Text('⚠ 重要，發到 LINE 群組', style: TextStyle(fontWeight: FontWeight.w700)),
+                    subtitle: Text(
+                        editing && (n.important)
+                            ? '已經發過；取消勾選不會收回 LINE 訊息'
+                            : '一般交接只在 App 裡看；真的要大家馬上知道的才勾',
+                        style: TextStyle(fontSize: AppType.caption, color: AppColors.muted)),
+                  ),
+                ),
+                const SizedBox(height: 12),
                 Row(children: [
                   if (!editing) ...[
                     OutlinedButton.icon(
@@ -266,7 +289,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
                         showMessage(c, '請至少寫一項交接', error: true);
                         return;
                       }
-                      Navigator.pop(c, _HandoverDraft(note.text.trim(), list, photo));
+                      Navigator.pop(c, _HandoverDraft(note.text.trim(), list, photo, important));
                     },
                     child: Text(editing ? '儲存' : '送出'),
                   ),
@@ -282,8 +305,8 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
   Future<void> _writeHandover() async {
     final d = await _handoverSheet();
     if (d == null) return;
-    await _run(() => _repo.addHandover(_store, d.body, d.items, d.photo == null ? null : dataUrlBytes(d.photo!)),
-        ok: '已送出交接');
+    await _run(() => _repo.addHandover(_store, d.body, d.items, d.photo == null ? null : dataUrlBytes(d.photo!), important: d.important),
+        ok: d.important ? '已送出，也會發到 LINE 群組' : '已送出交接');
   }
 
   Future<void> _showPhoto(String path) => showStoragePhoto(context, path);
@@ -310,8 +333,10 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
     }
     final d = await _handoverSheet(n: n);
     if (d == null) return;
-    if (d.body == n.body.trim() && listEquals(d.items, [for (final i in n.items) i.body])) return;
-    await _run(() => _repo.updateHandover(n.id, d.body, d.items), ok: '已修改');
+    if (d.body == n.body.trim() && listEquals(d.items, [for (final i in n.items) i.body]) && d.important == n.important) return;
+    final nowImportant = d.important && !n.important;
+    await _run(() => _repo.updateHandover(n.id, d.body, d.items, important: d.important == n.important ? null : d.important),
+        ok: nowImportant ? '已修改，並發到 LINE 群組' : '已修改');
   }
 
   static String _when(DateTime t) {
@@ -365,6 +390,13 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                 decoration: BoxDecoration(color: AppColors.warn, borderRadius: BorderRadius.circular(AppRadius.sm)),
                 child: const Text('新', style: TextStyle(fontSize: AppType.caption, color: Colors.black, fontWeight: FontWeight.w700)),
+              ),
+            if (n.important)
+              Container(
+                margin: const EdgeInsets.only(right: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(color: AppColors.bad, borderRadius: BorderRadius.circular(AppRadius.sm)),
+                child: const Text('⚠ 重要', style: TextStyle(fontSize: AppType.caption, color: Colors.white, fontWeight: FontWeight.w700)),
               ),
             Text(n.authorName.isEmpty ? '—' : n.authorName, style: const TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(width: 8),
@@ -432,12 +464,56 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
     );
   }
 
+  // 0079：老闆可以關掉這家店的 LINE 群組通知（只有老闆看得到這個開關）
+  bool get _isOwner => widget.membership.role == Role.owner;
+  bool? _lineOn;
+  bool _lineLoading = false;
+
+  Widget _lineSwitch() {
+    if (_lineOn == null && !_lineLoading) {
+      _lineLoading = true;
+      _repo.lineNotifyEnabled(_store).then((v) {
+        if (mounted) setState(() => _lineOn = v);
+      }).catchError((_) {
+        if (mounted) setState(() => _lineOn = true);
+      });
+    }
+    final on = _lineOn ?? true;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: SectionCard(
+        child: SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          value: on,
+          onChanged: _lineOn == null
+              ? null
+              : (v) async {
+                  setState(() => _lineOn = v);
+                  try {
+                    await _repo.saveLineNotifyEnabled(_store, v);
+                    if (mounted) showMessage(context, v ? '已打開：重要交接會發到 LINE 群組' : '已關掉：交接只在 App 裡看');
+                  } catch (e) {
+                    if (mounted) {
+                      setState(() => _lineOn = !v);
+                      showMessage(context, friendlyError(e), error: true);
+                    }
+                  }
+                },
+          title: const Text('LINE 群組通知', style: TextStyle(fontWeight: FontWeight.w700)),
+          subtitle: Text(on ? '勾「⚠ 重要」的交接會發到這家店的 LINE 群組' : '已關掉，交接只在 App 裡看',
+              style: TextStyle(fontSize: AppType.small, color: AppColors.muted)),
+        ),
+      ),
+    );
+  }
+
   Widget _handoverTab(HandoverBoard b) {
     final open = b.notes.where((n) => !n.resolved).toList();
     final done = b.notes.where((n) => n.resolved).toList();
     return RefreshIndicator(
       onRefresh: () async => _reload(),
       child: ListView(padding: const EdgeInsets.fromLTRB(16, 12, 16, 96), children: [
+        if (_isOwner) _lineSwitch(),
         if (open.isEmpty)
           Padding(
             padding: EdgeInsets.symmetric(vertical: 32),
@@ -454,7 +530,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
             ),
           ),
         const SizedBox(height: 8),
-        Text('大家都能寫交接、修改、刪除；做完一項勾一項，全部勾完才能按「已處理」。打開這頁就會記錄你已讀。',
+        Text('大家都能寫交接、修改、刪除；做完一項勾一項，全部勾完才能按「已處理」。勾「⚠ 重要」的才會發到 LINE 群組。打開這頁就會記錄你已讀。',
             style: TextStyle(color: AppColors.muted, fontSize: AppType.caption, height: 1.5)),
       ]),
     );
@@ -790,5 +866,6 @@ class _HandoverDraft {
   final String body;
   final List<String> items;
   final String? photo;
-  const _HandoverDraft(this.body, this.items, this.photo);
+  final bool important; // 0079：發到 LINE 群組
+  const _HandoverDraft(this.body, this.items, this.photo, [this.important = false]);
 }

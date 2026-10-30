@@ -142,11 +142,13 @@ abstract class Repository {
 
   // 交接事項與工作提醒（同店成員可看、可寫交接、可打勾；提醒只有老闆／店長能建立）
   Future<HandoverBoard> handoverBoard(String storeId, {bool withSchedule = false});
-  Future<void> addHandover(String storeId, String body, List<String> items, Uint8List? jpeg); // 0060：可帶打勾清單
+  Future<void> addHandover(String storeId, String body, List<String> items, Uint8List? jpeg, {bool important = false}); // 0060：可帶打勾清單；0079：重要→發 LINE
   Future<void> setHandoverResolved(String noteId, bool resolved);
   Future<void> markHandoverRead(String storeId, List<String> noteIds);
   Future<void> deleteHandover(String noteId);
-  Future<void> updateHandover(String noteId, String body, List<String> items); // 0044／0060：任何成員都能改內容與清單
+  Future<void> updateHandover(String noteId, String body, List<String> items, {bool? important}); // 0044／0060：任何成員都能改內容與清單；0079：null＝不改重要
+  Future<bool> lineNotifyEnabled(String storeId); // 0079：這家店重要交接發不發 LINE（只有老闆讀得到，其他人回 true）
+  Future<void> saveLineNotifyEnabled(String storeId, bool on); // 0079：只有老闆
   Future<void> setHandoverItemDone(String itemId, bool done); // 0060：清單打勾
   Future<void> saveReminder(String storeId, WorkReminder r, {bool isNew = false});
   Future<void> deleteReminder(String reminderId);

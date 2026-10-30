@@ -802,6 +802,7 @@ class HandoverNote {
   final DateTime? editedAt; // 內容最後修改時間（0044：任何成員都能改）
   final String? editedName;
   final List<HandoverItem> items; // 打勾清單（0060）；舊的交接沒有清單
+  final bool important; // ⚠ 重要：會發到 LINE 群組（0079）
   HandoverNote({
     required this.id,
     required this.body,
@@ -815,6 +816,7 @@ class HandoverNote {
     this.editedAt,
     this.editedName,
     this.items = const [],
+    this.important = false,
   });
   bool get resolved => resolvedAt != null;
   int get itemsLeft => items.where((i) => !i.done).length;
@@ -832,6 +834,7 @@ class HandoverNote {
         resolvedName: r['resolved_name'] as String?,
         editedAt: r['edited_at'] == null ? null : DateTime.parse(r['edited_at'] as String).toLocal(),
         editedName: r['edited_name'] as String?,
+        important: r['important'] as bool? ?? false,
         items: ([for (final x in (r['handover_items'] as List? ?? const [])) HandoverItem.fromRow(x as Map<String, dynamic>)]
           ..sort((a, b) => a.position.compareTo(b.position))),
         readers: {
