@@ -149,6 +149,9 @@ abstract class Repository {
   Future<void> updateHandover(String noteId, String body, List<String> items, {bool? important}); // 0044／0060：任何成員都能改內容與清單；0079：null＝不改重要
   Future<bool> lineNotifyEnabled(String storeId); // 0079：這家店重要交接發不發 LINE（只有老闆讀得到，其他人回 true）
   Future<void> saveLineNotifyEnabled(String storeId, bool on); // 0079：只有老闆
+  Future<int> lineOwnerLinks(); // 0081：我綁了幾個 LINE 私訊
+  Future<void> linkLineOwner(String code); // 0081：老闆輸入 LINE 私訊給的代碼
+  Future<void> unlinkLineOwner(); // 0081：解除自己的 LINE 私訊綁定
   Future<void> setHandoverItemDone(String itemId, bool done); // 0060：清單打勾
   Future<void> saveReminder(String storeId, WorkReminder r, {bool isNew = false});
   Future<void> deleteReminder(String reminderId);
