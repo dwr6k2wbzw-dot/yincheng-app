@@ -523,43 +523,47 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
       _repo.lineOwnerLinks().then((v) {
         if (mounted) setState(() => _lineLinks = v);
       }).catchError((_) {});
-      _repo.lineNotifyEnabled(_store).then((v) {
-        if (mounted) setState(() => _lineOn = v);
-      }).catchError((_) {
-        if (mounted) setState(() => _lineOn = true);
-      });
+      if (_isOwner) {
+        _repo.lineNotifyEnabled(_store).then((v) {
+          if (mounted) setState(() => _lineOn = v);
+        }).catchError((_) {
+          if (mounted) setState(() => _lineOn = true);
+        });
+      }
     }
     final on = _lineOn ?? true;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: SectionCard(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            value: on,
-            onChanged: _lineOn == null
-                ? null
-                : (v) async {
-                    setState(() => _lineOn = v);
-                    try {
-                      await _repo.saveLineNotifyEnabled(_store, v);
-                      if (mounted) showMessage(context, v ? '已打開：重要交接會發到 LINE 群組' : '已關掉：交接只在 App 裡看');
-                    } catch (e) {
-                      if (mounted) {
-                        setState(() => _lineOn = !v);
-                        showMessage(context, friendlyError(e), error: true);
+          if (_isOwner) ...[
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              value: on,
+              onChanged: _lineOn == null
+                  ? null
+                  : (v) async {
+                      setState(() => _lineOn = v);
+                      try {
+                        await _repo.saveLineNotifyEnabled(_store, v);
+                        if (mounted) showMessage(context, v ? '已打開：重要交接會發到 LINE 群組' : '已關掉：交接只在 App 裡看');
+                      } catch (e) {
+                        if (mounted) {
+                          setState(() => _lineOn = !v);
+                          showMessage(context, friendlyError(e), error: true);
+                        }
                       }
-                    }
-                  },
-            title: const Text('LINE 群組通知', style: TextStyle(fontWeight: FontWeight.w700)),
-            subtitle: Text(on ? '勾「⚠ 重要」的交接會發到這家店的 LINE 群組' : '已關掉，交接只在 App 裡看',
-                style: TextStyle(fontSize: AppType.small, color: AppColors.muted)),
-          ),
-          const Divider(height: 1),
-          // 0081：老闆私訊 AI 助理
+                    },
+              title: const Text('LINE 群組通知', style: TextStyle(fontWeight: FontWeight.w700)),
+              subtitle: Text(on ? '勾「⚠ 重要」的交接會發到這家店的 LINE 群組' : '已關掉，交接只在 App 裡看',
+                  style: TextStyle(fontSize: AppType.small, color: AppColors.muted)),
+            ),
+            const Divider(height: 1),
+          ],
+          // 0081／0084：老闆、店長私訊 AI 助理（也能許願改 App）
           Row(children: [
             Expanded(
-              child: Text((_lineLinks ?? 0) > 0 ? 'LINE 私訊助理：已綁定，私訊機器人不用 @ 就能問兩家店的事' : 'LINE 私訊助理：綁定後可以私訊機器人問店裡的事',
+              child: Text((_lineLinks ?? 0) > 0 ? 'LINE 私訊助理：已綁定，私訊機器人不用 @ 就能問店裡的事、許願改 App' : 'LINE 私訊助理：綁定後可以私訊機器人問店裡的事、在 LINE 許願改 App',
                   style: TextStyle(fontSize: AppType.small, color: AppColors.muted, height: 1.5)),
             ),
             (_lineLinks ?? 0) > 0
@@ -577,7 +581,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
     return RefreshIndicator(
       onRefresh: () async => _reload(),
       child: ListView(padding: const EdgeInsets.fromLTRB(16, 12, 16, 96), children: [
-        if (_isOwner) _lineSwitch(),
+        if (_canManage) _lineSwitch(), // 0084：店長也能綁定 LINE（許願改 App）；開關只有老闆
         if (open.isEmpty)
           Padding(
             padding: EdgeInsets.symmetric(vertical: 32),
