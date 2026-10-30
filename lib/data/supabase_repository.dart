@@ -596,7 +596,7 @@ class SupabaseRepository implements Repository {
     final r = await Future.wait(<Future<dynamic>>[
       _db
           .from('handover_notes')
-          .select('id, body, photo_path, author_id, author_name, created_at, resolved_at, resolved_name, edited_at, edited_name, handover_reads(user_id, user_name), handover_items(id, position, body, done_at, done_name)')
+          .select('id, body, photo_path, author_id, author_name, created_at, resolved_at, resolved_name, edited_at, edited_name, important, handover_reads(user_id, user_name), handover_items(id, position, body, done_at, done_name)')
           .eq('store_id', storeId)
           .order('created_at', ascending: false)
           .limit(80),
@@ -615,7 +615,7 @@ class SupabaseRepository implements Repository {
   }
 
   @override
-  Future<void> addHandover(String storeId, String body, List<String> items, Uint8List? jpeg) async {
+  Future<void> addHandover(String storeId, String body, List<String> items, Uint8List? jpeg, {bool important = false}) async {
     String? path;
     if (jpeg != null) {
       path = '$storeId/handover/${DateTime.now().millisecondsSinceEpoch}.jpg';
@@ -624,12 +624,29 @@ class SupabaseRepository implements Repository {
     }
     // 0060：交接與清單一次寫入
     await _db.rpc('create_handover',
-        params: {'p_store': storeId, 'p_body': body, 'p_photo_path': path, 'p_items': items});
+        params: {'p_store': storeId, 'p_body': body, 'p_photo_path': path, 'p_items': items, 'p_important': important});
   }
 
   @override
-  Future<void> updateHandover(String noteId, String body, List<String> items) =>
-      _db.rpc('update_handover', params: {'p_note': noteId, 'p_body': body.trim(), 'p_items': items});
+  Future<void> updateHandover(String noteId, String body, List<String> items, {bool? important}) =>
+      _db.rpc('update_handover', params: {
+        'p_note': noteId,
+        'p_body': body.trim(),
+        'p_items': items,
+        if (important != null) 'p_important': important,
+      });
+
+  // 0079：每家店的 LINE 通知開關（store_settings 只有老闆讀寫得到；讀不到就當作開著）
+  @override
+  Future<bool> lineNotifyEnabled(String storeId) async {
+    final r = await _db.from('store_settings').select('line_notify_enabled').eq('store_id', storeId).maybeSingle();
+    return r == null ? true : (r['line_notify_enabled'] as bool? ?? true);
+  }
+
+  @override
+  Future<void> saveLineNotifyEnabled(String storeId, bool on) async {
+    await _db.from('store_settings').upsert({'store_id': storeId, 'line_notify_enabled': on}, onConflict: 'store_id');
+  }
 
   @override
   Future<void> setHandoverItemDone(String itemId, bool done) async {

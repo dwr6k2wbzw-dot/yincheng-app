@@ -205,18 +205,23 @@ class DemoRepository implements Repository {
     return HandoverBoard([..._notes.reversed], [..._reminders], {..._done}, sm?.people ?? const [],
         {for (final p in sm?.people ?? const <ShiftPerson>[]) p.id: sm!.mark(p.id, bizToday().day)});
   }
-  HandoverNote _copyNote(HandoverNote n, {String? body, List<HandoverItem>? items, DateTime? resolvedAt, bool setResolved = false, bool edited = false}) =>
+  HandoverNote _copyNote(HandoverNote n, {String? body, List<HandoverItem>? items, DateTime? resolvedAt, bool setResolved = false, bool edited = false, bool? important}) =>
       HandoverNote(
           id: n.id, body: body ?? n.body, photoPath: n.photoPath, authorId: n.authorId, authorName: n.authorName,
           createdAt: n.createdAt, resolvedAt: setResolved ? resolvedAt : n.resolvedAt,
           resolvedName: setResolved ? (resolvedAt == null ? null : '示範老闆') : n.resolvedName, readers: n.readers,
-          editedAt: edited ? DateTime.now() : n.editedAt, editedName: edited ? '示範老闆' : n.editedName, items: items ?? n.items);
+          editedAt: edited ? DateTime.now() : n.editedAt, editedName: edited ? '示範老闆' : n.editedName, items: items ?? n.items, important: important ?? n.important);
   @override
-  Future<void> addHandover(String storeId, String body, List<String> items, Uint8List? jpeg) async => _notes.add(HandoverNote(
-      id: 'n${_seq++}', body: body, authorId: 'demo-user', authorName: '示範老闆', createdAt: DateTime.now(),
+  Future<void> addHandover(String storeId, String body, List<String> items, Uint8List? jpeg, {bool important = false}) async => _notes.add(HandoverNote(
+      id: 'n${_seq++}', body: body, authorId: 'demo-user', authorName: '示範老闆', createdAt: DateTime.now(), important: important,
       items: [for (var i = 0; i < items.length; i++) HandoverItem(id: 'i${_seq++}', position: i + 1, body: items[i])]));
+  final _lineOn = <String, bool>{};
   @override
-  Future<void> updateHandover(String noteId, String body, List<String> items) async {
+  Future<bool> lineNotifyEnabled(String storeId) async => _lineOn[storeId] ?? true;
+  @override
+  Future<void> saveLineNotifyEnabled(String storeId, bool on) async => _lineOn[storeId] = on;
+  @override
+  Future<void> updateHandover(String noteId, String body, List<String> items, {bool? important}) async {
     final i = _notes.indexWhere((n) => n.id == noteId);
     final n = _notes[i];
     final left = [...n.items];
@@ -226,7 +231,7 @@ class DemoRepository implements Repository {
       final old = j < 0 ? null : left.removeAt(j);
       next.add(HandoverItem(id: old?.id ?? 'i${_seq++}', position: k + 1, body: items[k], doneAt: old?.doneAt, doneName: old?.doneName));
     }
-    _notes[i] = _copyNote(n, body: body, items: next, edited: body != n.body);
+    _notes[i] = _copyNote(n, body: body, items: next, edited: body != n.body, important: important);
   }
   @override
   Future<void> setHandoverItemDone(String itemId, bool done) async {
