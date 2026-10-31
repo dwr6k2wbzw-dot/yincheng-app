@@ -39,6 +39,8 @@ jobs:
           exit $rc
       - name: 上個月／近 3 個月平均計算檢查
         run: dart run tool/month_compare_check.dart
+      - name: 單元測試（訂位名額、台北時間；健檢 2026-11-01 起）
+        run: flutter test
       - name: 靜態檢查（只擋錯誤）
         run: |
           set +e

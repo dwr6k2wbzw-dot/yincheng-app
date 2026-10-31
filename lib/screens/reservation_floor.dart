@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../app_state.dart';
+import '../services/clock.dart';
 import '../data/repository.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -104,7 +105,7 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
   Repository get _repo => AppScope.of(context).repo;
 
   int get _nowMinute {
-    final n = DateTime.now();
+    final n = taipeiNow();
     return bizMinute(n.hour * 60 + n.minute);
   }
 
@@ -117,7 +118,7 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
   }
 
   int _minuteOf(DateTime t) {
-    final l = t.toLocal();
+    final l = toTaipei(t);
     final d = DateTime(l.year, l.month, l.day);
     final m = l.hour * 60 + l.minute;
     if (d.isAfter(widget.day)) return m + 1440 * d.difference(widget.day).inDays;
@@ -344,6 +345,9 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
           }
         }
       }
+      // 那層找不到空位：不要退回舊樓層的座標找（會跟舊樓層的桌重疊；健檢 2026-11-01 Bug 6）
+      if (mounted) showMessage(context, '$floor 放不下這張桌，先把那層的桌子移一移', error: true);
+      return;
     }
     final x = t.posX!, y = t.posY!;
     // 放不下就往左上找最近的空位

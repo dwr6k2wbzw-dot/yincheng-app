@@ -7,6 +7,7 @@ import '../app_state.dart';
 import '../config.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
+import '../services/clock.dart';
 import '../services/open_external.dart';
 import '../theme.dart';
 import '../widgets/auto_refresh.dart';
@@ -36,7 +37,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
 
   static DateTime _today() {
     // 營業日：凌晨 6 點前算前一天
-    final n = DateTime.now().subtract(const Duration(hours: 6));
+    final n = taipeiNow().subtract(const Duration(hours: 6)); // 台北時間（健檢 2026-11-01）
     return DateTime(n.year, n.month, n.day);
   }
 
@@ -278,7 +279,11 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
         () {
           // 每天名額（0052）：組數、人數、大桌
           final lim = settings.limitsFor(_day, _special);
-          final large = active.where((r) => r.party >= lim.largeSize).length;
+          // 名額只算訂位，不算現場客（跟資料庫口徑一致；健檢 2026-11-01 Bug 2）
+          final booked = active.where((r) => !r.walkIn).toList();
+          final walkIns = active.length - booked.length;
+          final bookedGuests = booked.fold<int>(0, (t, r) => t + r.party);
+          final large = booked.where((r) => r.party >= lim.largeSize).length;
           String cap(int used, int? max) => max == null ? '$used' : '$used/$max';
           return SectionCard(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -287,7 +292,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
                 const SizedBox(width: 12),
                 Expanded(child: Text('${active.length} 組・$guests 位', style: const TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w700))),
                 if (!lim.closed)
-                  Text('上限 ${lim.maxGroups ?? '不限'} 組／${lim.maxGuests ?? '不限'} 位',
+                  Text('訂位 ${cap(booked.length, lim.maxGroups)} 組／${cap(bookedGuests, lim.maxGuests)} 位${walkIns > 0 ? '・現場 $walkIns 組' : ''}',
                       style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
               ]),
               const SizedBox(height: 6),
@@ -335,7 +340,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
             tables: _tables,
             slots: settings.slotsFor(_day),
             onTapReservation: _actions,
-            onTapEmpty: (t, m) => _walkIn(t, m),
+            onTapEmpty: (t, m) => _tapEmpty(settings, t, m),
           ),
         if (_useFloor)
           ReservationFloorPlan(
@@ -348,7 +353,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
             slots: settings.slotsFor(_day),
             canArrange: widget.membership.isManager,
             onTapReservation: _actions,
-            onTapEmpty: (t, m) => _walkIn(t, m),
+            onTapEmpty: (t, m) => _tapEmpty(settings, t, m),
             onLayoutSaved: _reload,
           ),
         if (_useList && times.isEmpty)
@@ -791,7 +796,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
     if (!mounted) return;
     // 用重新讀到的這筆（剛入座的話才有入座時間；Codex 審查）
     final r = all.where((x) => x.id == r0.id).firstOrNull ?? r0;
-    final seat = seatedOn(r)?.toLocal();
+    final seat = seatedOn(r);
     final minute = seat != null ? bizMinute(seat.hour * 60 + seat.minute) : bizMinute(minutesOf(r.time));
     final ids = await pickTables(context,
         tables: _tables, selected: r.tableIds, party: r.party, busy: busyTables(all, r, minute));
@@ -806,7 +811,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
       showMessage(context, '現場客只能登記今天；其他天請用「電話訂位」', error: true);
       return;
     }
-    final now = DateTime.now();
+    final now = taipeiNow();
     final m = bizMinute(now.hour * 60 + now.minute);
     var party = 2;
     final name = TextEditingController();
@@ -881,19 +886,36 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
     );
   }
 
-  Future<void> _add(ReservationSettings s) async {
+  Future<void> _add(ReservationSettings s, {String? time, List<String> tableIds = const []}) async {
     final added = await Navigator.of(context).push<bool>(MaterialPageRoute(
-      builder: (_) => _AddReservationScreen(membership: widget.membership, settings: s, day: _day, tables: _tables),
+      builder: (_) => _AddReservationScreen(
+          membership: widget.membership, settings: s, day: _day, tables: _tables, initialTime: time, initialTableIds: tableIds),
     ));
     if (added == true) _reload();
+  }
+
+  /// 座位圖／時間軸點空桌：看的是「現在」就登記現場客；看的是別的時段（或別天）就開電話訂位、帶入時段與桌號
+  /// （健檢 2026-11-01 Bug 5：以前選 21:00 點空桌，會被當成現在入座）
+  Future<void> _tapEmpty(ReservationSettings s, ReservationTable? table, int minute) async {
+    final nowMin = () {
+      final n = taipeiNow();
+      return bizMinute(n.hour * 60 + n.minute);
+    }();
+    final isNow = _day == _today() && (minute - nowMin).abs() <= 15;
+    if (isNow) return _walkIn(table, minute);
+    final m = minute % 1440;
+    final time = '${(m ~/ 60).toString().padLeft(2, '0')}:${(m % 60).toString().padLeft(2, '0')}';
+    await _add(s, time: time, tableIds: [if (table != null && table.active) table.id]);
   }
 }
 
 /// 電話訂位（員工代客人輸入；不受線上訂位的天數、截止時間、每組人數限制，但會提醒超過這天的名額）
 class _AddReservationScreen extends StatefulWidget {
   const _AddReservationScreen(
-      {required this.membership, required this.settings, required this.day, this.existing, this.tables = const []});
+      {required this.membership, required this.settings, required this.day, this.existing, this.tables = const [], this.initialTime, this.initialTableIds = const []});
   final List<ReservationTable> tables; // 0061 桌位；沒設定桌位的店不顯示「位置」
+  final String? initialTime; // 從座位圖／時間軸的某個時段點進來
+  final List<String> initialTableIds;
   final Membership membership;
   final ReservationSettings settings;
   final DateTime day;
@@ -904,10 +926,10 @@ class _AddReservationScreen extends StatefulWidget {
 
 class _AddReservationScreenState extends State<_AddReservationScreen> {
   late DateTime _date = widget.existing?.date ?? widget.day;
-  late String? _time = widget.existing?.time;
+  late String? _time = widget.existing?.time ?? widget.initialTime;
   late int _party = widget.existing?.party ?? 1; // 預設 1 人（老闆 2026-11-01；吧台單人座多）
   // 位置（老闆 2026-10-22：電話訂位可以選位置）
-  late List<String> _tableIds = [...?widget.existing?.tableIds];
+  late List<String> _tableIds = widget.existing != null ? [...widget.existing!.tableIds] : [...widget.initialTableIds];
   bool get _hasTables => widget.tables.any((t) => t.active) || _tableIds.isNotEmpty;
   String get _tableLabel =>
       [for (final id in _tableIds) widget.tables.where((t) => t.id == id).firstOrNull?.name].whereType<String>().join('、');

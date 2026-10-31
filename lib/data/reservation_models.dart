@@ -1,3 +1,4 @@
+import '../services/clock.dart';
 /// 訂位（0050）：客人在公開訂位頁訂、員工在 App 管理
 class ReservationSettings {
   final String storeId;
@@ -162,15 +163,15 @@ class Reservation {
         status: r['status'] as String,
         source: r['source'] as String,
         emailError: r['email_error'] as String?,
-        createdAt: DateTime.parse(r['created_at'] as String).toLocal(),
+        createdAt: toTaipei(DateTime.parse(r['created_at'] as String)),
         requestedParty: (r['requested_party'] as num?)?.toInt(),
         partyRequestStatus: r['party_request_status'] as String?,
         lang: r['lang'] as String? ?? 'zh',
         tableIds: [for (final x in (r['table_ids'] as List? ?? const [])) x as String],
-        seatedAt: r['seated_at'] == null ? null : DateTime.parse(r['seated_at'] as String).toLocal(),
-        clearedAt: r['cleared_at'] == null ? null : DateTime.parse(r['cleared_at'] as String).toLocal(),
+        seatedAt: r['seated_at'] == null ? null : toTaipei(DateTime.parse(r['seated_at'] as String)),
+        clearedAt: r['cleared_at'] == null ? null : toTaipei(DateTime.parse(r['cleared_at'] as String)),
         walkIn: r['walk_in'] as bool? ?? false,
-        hiddenAt: r['hidden_at'] == null ? null : DateTime.parse(r['hidden_at'] as String).toLocal(),
+        hiddenAt: r['hidden_at'] == null ? null : toTaipei(DateTime.parse(r['hidden_at'] as String)),
       );
 
   /// 示範模式用：改幾個欄位
@@ -277,8 +278,9 @@ class DayLimits {
   const DayLimits({required this.closed, this.note, this.maxGroups, this.maxGuests, this.maxLarge, required this.largeSize});
 
   /// 加上這一組後會超過哪些上限（空的＝沒超過）
+  /// 現場客不算進名額（跟資料庫 reservation_day_usage 一樣；健檢 2026-11-01 Bug 2：以前算進去，有現場客的晚上電話訂位會被誤擋）
   List<String> overBy(List<Reservation> others, int party) {
-    final act = others.where((r) => r.active).toList();
+    final act = others.where((r) => r.active && !r.walkIn).toList();
     final groups = act.length + 1;
     final guests = act.fold<int>(0, (t, r) => t + r.party) + party;
     final large = act.where((r) => r.party >= largeSize).length + (party >= largeSize ? 1 : 0);
@@ -319,7 +321,7 @@ class GuestProfile {
         phoneDigits: r['phone_digits'] as String,
         tags: [for (final t in (r['tags'] as List? ?? const [])) t as String],
         note: r['note'] as String?,
-        noshowResetAt: r['noshow_reset_at'] == null ? null : DateTime.parse(r['noshow_reset_at'] as String).toLocal(),
+        noshowResetAt: r['noshow_reset_at'] == null ? null : toTaipei(DateTime.parse(r['noshow_reset_at'] as String)),
       );
 }
 

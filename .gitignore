@@ -9,3 +9,4 @@ web/
 .metadata
 build/
 .dart_tool/
+__pycache__/
