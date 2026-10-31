@@ -12,6 +12,17 @@ import sys
 ALLOWED = ("lib/", "assets/", "tool/book/")
 # 連線設定（Supabase 網址、金鑰、訂位頁的 API 位址）：只有老闆直接改，功能許願不能動
 PROTECTED = ("lib/config.dart", "tool/book/common.js", "tool/book/theme.js")
+# 金鑰（Codex 審查 PR #137：上一版改網址檢查時不小心刪掉了，會讓每一則功能許願都在檢查這步出錯）
+SECRET = [
+    (re.compile(r"service_role", re.I), "service_role"),
+    (re.compile(r"sk-ant-[A-Za-z0-9_-]{10,}"), "Anthropic 金鑰"),
+    (re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}"), "GitHub token"),
+    (re.compile(r"github_pat_[A-Za-z0-9_]{20,}"), "GitHub token"),
+    (re.compile(r"eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\."), "JWT"),
+    (re.compile(r"sb_secret_[A-Za-z0-9_-]{10,}"), "Supabase 秘密金鑰"),
+    (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"), "私鑰"),
+]
+
 # 新增的程式裡出現網址時，只接受這些網域（App 自己的後端、GitHub Pages、字型、CDN、地圖、LINE）
 # Supabase 只允許我們自己的專案：寫成「任何 .supabase.co」的話，別人開一個 Supabase 專案就能收資料（健檢 2026-11-01）
 ALLOWED_HOSTS = {
