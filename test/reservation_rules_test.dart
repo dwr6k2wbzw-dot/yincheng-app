@@ -31,7 +31,7 @@ void main() {
     test('UTC 轉台北 +8', () {
       final t = toTaipei(DateTime.utc(2026, 10, 31, 18, 30));
       expect([t.year, t.month, t.day, t.hour, t.minute], [2026, 11, 1, 2, 30]);
-      expect(t.isUtc, isFalse);
+      expect(t.isUtc, isTrue); // 用 UTC 裝台北牆上時鐘，加減時間不受日光節約影響
     });
     test('同一個時間點，不管手機在哪個時區、資料是 UTC 還是本地，換出來的台北時間都一樣（Codex 審查 PR #137）', () {
       final instant = DateTime.utc(2026, 11, 1, 12, 0); // 台北 20:00
@@ -61,6 +61,26 @@ void main() {
     test('入座的台北時間是 04:00', () {
       final t = toTaipei(r.seatedAt!);
       expect([t.day, t.hour], [2, 4]);
+    });
+  });
+
+  group('日光節約換季（Codex 審查 PR #137；手機在紐約等時區時才會出錯，CI 會用紐約時區跑）', () {
+    // 2026-03-08 美東換夏令時間
+    test('台北 3/8 06:30 是 3/8 營業日', () {
+      final now = toTaipei(DateTime.utc(2026, 3, 7, 22, 30));
+      expect(bizToday(now), DateTime(2026, 3, 8));
+    });
+    test('台北 3/9 05:00 往回推是 3/8 營業日（以前減 24 小時會變 3/7）', () {
+      final now = toTaipei(DateTime.utc(2026, 3, 8, 21, 0));
+      expect(bizToday(now), DateTime(2026, 3, 8));
+    });
+    test('換季那晚的入座紀錄仍屬當天營業日', () {
+      expect(onBizDay(DateTime.utc(2026, 3, 7, 22, 30), DateTime(2026, 3, 8)), isTrue);
+      expect(onBizDay(DateTime.utc(2026, 3, 8, 21, 0), DateTime(2026, 3, 8)), isTrue);
+    });
+    test('跨日天數只看年月日', () {
+      expect(calendarDaysBetween(DateTime(2026, 3, 8), DateTime(2026, 3, 9)), 1);
+      expect(calendarDaysBetween(DateTime(2026, 11, 1), DateTime(2026, 11, 1)), 0);
     });
   });
 }

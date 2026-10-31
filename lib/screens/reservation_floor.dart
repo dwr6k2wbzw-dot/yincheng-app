@@ -121,7 +121,7 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
     final l = toTaipei(t);
     final d = DateTime(l.year, l.month, l.day);
     final m = l.hour * 60 + l.minute;
-    if (d.isAfter(widget.day)) return m + 1440 * d.difference(widget.day).inDays;
+    if (d.isAfter(widget.day)) return m + 1440 * calendarDaysBetween(widget.day, d);
     return bizMinute(m);
   }
 

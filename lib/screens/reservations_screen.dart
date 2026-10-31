@@ -37,8 +37,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
 
   static DateTime _today() {
     // 營業日：凌晨 6 點前算前一天
-    final n = taipeiNow().subtract(const Duration(hours: 6)); // 台北時間（健檢 2026-11-01）
-    return DateTime(n.year, n.month, n.day);
+    return bizToday(); // 台北時間、凌晨 6 點前算前一天（跟全 App 同一個算法；健檢 2026-11-01）
   }
 
   Repository get _repo => AppScope.of(context).repo;
