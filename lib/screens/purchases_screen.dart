@@ -825,10 +825,11 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   }
 
   /// 拍照／選照片：只存單據照片，不做任何辨識、不自動填任何欄位（老闆 2026-10-14：金額一律手動輸入）
-  Future<void> _pickPhoto() async {
+  /// fromLibrary＝true 從手機相簿選已拍好的照片（老闆 2026-11-01）
+  Future<void> _pickPhoto({bool fromLibrary = false}) async {
     String? photo;
     try {
-      photo = await pickSlipImage();
+      photo = await pickSlipImage(fromLibrary: fromLibrary);
     } catch (e) {
       if (mounted) showMessage(context, '照片讀取失敗：$e', error: true);
       return;
@@ -845,9 +846,24 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
             const Expanded(
               child: Text('送貨單／發票照片（必附）', style: TextStyle(fontWeight: FontWeight.w600)),
             ),
-            TextButton(
-              onPressed: _saving ? null : _pickPhoto,
-              child: Text(_photo == null ? '拍照／選照片' : '重拍'),
+          ]),
+          const SizedBox(height: 10),
+          // 拍照／從相簿選（老闆 2026-11-01）
+          Row(children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _saving ? null : () => _pickPhoto(),
+                icon: const Icon(Icons.photo_camera_outlined, size: 18),
+                label: Text(_photo == null ? '拍照' : '重拍'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _saving ? null : () => _pickPhoto(fromLibrary: true),
+                icon: const Icon(Icons.photo_library_outlined, size: 18),
+                label: Text(_photo == null ? '從相簿選擇' : '改選相簿照片'),
+              ),
             ),
           ]),
           Padding(

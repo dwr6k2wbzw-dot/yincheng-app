@@ -203,6 +203,8 @@ abstract class Repository {
   // 0061 時間軸：桌位、現場客
   Future<List<ReservationTable>> reservationTables(String storeId);
   Future<void> saveReservationTable(String storeId, ReservationTable t);
+  /// 座位圖排版（老闆 2026-11-01）：只存每張桌的位置與大小
+  Future<void> saveTableLayout(String storeId, List<ReservationTable> tables);
   Future<void> addWalkIn(String storeId,
       {required DateTime date, required String time, required int party, required String name, required List<String> tableIds});
   /// 0055 客人申請改人數：同意（人數改成申請的）或不同意

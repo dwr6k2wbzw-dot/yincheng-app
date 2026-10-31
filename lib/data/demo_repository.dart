@@ -732,7 +732,28 @@ class DemoRepository implements Repository {
   }
   @override
   Future<List<Reservation>> reservations(String storeId, DateTime from, DateTime to) async =>
-      (_demoRes[storeId] ?? []).where((r) => !r.date.isBefore(from) && !r.date.isAfter(to)).toList();
+      (_demoRes[storeId] ??= _seedReservations(storeId)).where((r) => !r.date.isBefore(from) && !r.date.isAfter(to)).toList();
+
+  /// 示範用的今天訂位（時間軸、座位圖看得到東西；2026-11-01）
+  List<Reservation> _seedReservations(String storeId) {
+    final n = DateTime.now().subtract(const Duration(hours: 6));
+    final day = DateTime(n.year, n.month, n.day);
+    final now = DateTime.now();
+    Reservation mk(int i, String time, int party, String name, List<String> tables, {DateTime? seated, bool walkIn = false, String? note}) =>
+        Reservation(
+          id: '$storeId-seed$i', date: day, time: time, party: party, name: name, phone: '0912-000-00$i',
+          status: seated != null ? 'arrived' : 'confirmed', source: walkIn ? 'app' : 'web', createdAt: now,
+          tableIds: tables, seatedAt: seated, walkIn: walkIn, note: note,
+        );
+    return [
+      mk(1, '19:00', 2, '林小姐', ['A1', 'A2'], seated: now.subtract(const Duration(minutes: 40))),
+      mk(2, '19:30', 4, '陳先生', ['S1'], seated: now.subtract(const Duration(minutes: 15)), note: '慶生，要蛋糕盤'),
+      mk(3, '20:00', 2, '王先生', ['A5']),
+      mk(4, '20:30', 3, 'Kenji', ['S3']),
+      mk(5, '21:00', 1, '現場', ['A8'], walkIn: true),
+      mk(6, '21:30', 2, '張小姐', const []),
+    ];
+  }
   @override
   Future<void> addReservation(String storeId,
       {required DateTime date, required String time, required int party, required String name, required String phone, String? email, String? note, List<String> tableIds = const []}) async {
@@ -822,20 +843,49 @@ class DemoRepository implements Repository {
   @override
   Future<List<ReservationTable>> reservationTables(String storeId) async => [
         ...(_demoTables[storeId] ??= [
-          for (var i = 1; i <= 8; i++) ReservationTable(id: 'A$i', name: 'A$i', seats: 1, combinable: true, sort: i),
-          for (var i = 1; i <= 4; i++) ReservationTable(id: 'S$i', name: 'S$i', seats: 4, sort: 20 + i),
+          // 照隱城 iCHEF 座位表的樣子排（2026-11-01）：吧台 A1～A8 一排、A9～A12 方桌一直排、B／C／D／E 小圓桌
+          for (var i = 1; i <= 8; i++) ReservationTable(id: 'A$i', name: 'A$i', seats: 1, combinable: true, sort: i, posX: 8 - i, posY: 2, floor: '2F'),
+          for (var i = 9; i <= 12; i++) ReservationTable(id: 'A$i', name: 'A$i', seats: 2, sort: i, posX: 4, posY: i - 6, shape: 'square', floor: '2F'),
+          const ReservationTable(id: 'F1', name: 'F1', seats: 2, sort: 71, posX: 1, posY: 0, shape: 'square', floor: '2F'),
+          for (var i = 1; i <= 4; i++) ReservationTable(id: 'B$i', name: 'B$i', seats: 1, combinable: true, sort: 20 + i, posX: 5 + i, posY: 0, floor: '2F'),
+          const ReservationTable(id: 'B5', name: 'B5', seats: 1, combinable: true, sort: 25, posX: 8, posY: 1, floor: '2F'),
+          const ReservationTable(id: 'B6', name: 'B6', seats: 1, combinable: true, sort: 26, posX: 9, posY: 1, floor: '2F'),
+          const ReservationTable(id: 'C1', name: 'C1', seats: 1, combinable: true, sort: 31, posX: 8, posY: 4, floor: '2F'),
+          const ReservationTable(id: 'C2', name: 'C2', seats: 1, combinable: true, sort: 32, posX: 9, posY: 3, floor: '2F'),
+          const ReservationTable(id: 'C3', name: 'C3', seats: 1, combinable: true, sort: 33, posX: 9, posY: 4, floor: '2F'),
+          const ReservationTable(id: 'D1', name: 'D1', seats: 1, combinable: true, sort: 41, posX: 8, posY: 5, floor: '2F'),
+          const ReservationTable(id: 'D2', name: 'D2', seats: 1, combinable: true, sort: 42, posX: 9, posY: 5, floor: '2F'),
+          const ReservationTable(id: 'D3', name: 'D3', seats: 1, combinable: true, sort: 43, posX: 8, posY: 6, floor: '2F'),
+          const ReservationTable(id: 'D4', name: 'D4', seats: 1, combinable: true, sort: 44, posX: 9, posY: 6, floor: '2F'),
+          const ReservationTable(id: 'E1', name: 'E1', seats: 1, combinable: true, sort: 51, posX: 6, posY: 5, floor: '2F'),
+          const ReservationTable(id: 'E2', name: 'E2', seats: 1, combinable: true, sort: 52, posX: 6, posY: 6, floor: '2F'),
+          // 一樓：沙發區 S1～S4、小圓桌 S5～S7（照 iCHEF 一樓座位表）
+          const ReservationTable(id: 'S1', name: 'S1', seats: 10, combinable: true, sort: 61, posX: 3, posY: 3, floor: '1F'),
+          const ReservationTable(id: 'S2', name: 'S2', seats: 10, combinable: true, sort: 62, posX: 5, posY: 3, floor: '1F'),
+          const ReservationTable(id: 'S3', name: 'S3', seats: 10, combinable: true, sort: 63, posX: 3, posY: 5, floor: '1F'),
+          const ReservationTable(id: 'S4', name: 'S4', seats: 10, combinable: true, sort: 64, posX: 5, posY: 5, floor: '1F'),
+          for (var i = 5; i <= 7; i++) ReservationTable(id: 'S$i', name: 'S$i', seats: 1, combinable: true, sort: 60 + i, posX: i - 2, posY: 0, floor: '1F'),
         ])
       ]..sort((a, b) => a.sort != b.sort ? a.sort.compareTo(b.sort) : a.name.compareTo(b.name));
   @override
   Future<void> saveReservationTable(String storeId, ReservationTable t) async {
     final list = _demoTables[storeId] ??= [];
     final i = list.indexWhere((x) => x.id == t.id);
+    final old = i >= 0 ? list[i] : null;
     final v = ReservationTable(id: t.id.isEmpty ? 'T${list.length + 1}' : t.id, name: t.name, seats: t.seats,
-        combinable: t.combinable, sort: t.sort, active: t.active);
+        combinable: t.combinable, sort: t.sort, active: t.active, posX: old?.posX, posY: old?.posY, w: old?.w ?? 1, h: old?.h ?? 1, shape: old?.shape ?? 'round', floor: old?.floor ?? '1F');
     if (i < 0) {
       list.add(v);
     } else {
       list[i] = v;
+    }
+  }
+  @override
+  Future<void> saveTableLayout(String storeId, List<ReservationTable> tables) async {
+    final list = _demoTables[storeId] ??= [];
+    for (final t in tables) {
+      final i = list.indexWhere((x) => x.id == t.id);
+      if (i >= 0) list[i] = list[i].copyWith(posX: t.posX, posY: t.posY, w: t.w, h: t.h, shape: t.shape, floor: t.floor, clearPos: !t.placed);
     }
   }
   @override

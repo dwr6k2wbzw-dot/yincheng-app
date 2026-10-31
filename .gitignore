@@ -5,3 +5,7 @@ build/
 pubspec.lock
 .idea/
 *.iml
+web/
+.metadata
+build/
+.dart_tool/
