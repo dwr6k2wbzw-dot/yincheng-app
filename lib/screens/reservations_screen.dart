@@ -900,7 +900,7 @@ class _AddReservationScreen extends StatefulWidget {
 class _AddReservationScreenState extends State<_AddReservationScreen> {
   late DateTime _date = widget.existing?.date ?? widget.day;
   late String? _time = widget.existing?.time;
-  late int _party = widget.existing?.party ?? 2;
+  late int _party = widget.existing?.party ?? 1; // 預設 1 人（老闆 2026-11-01；吧台單人座多）
   // 位置（老闆 2026-10-22：電話訂位可以選位置）
   late List<String> _tableIds = [...?widget.existing?.tableIds];
   bool get _hasTables => widget.tables.any((t) => t.active) || _tableIds.isNotEmpty;
