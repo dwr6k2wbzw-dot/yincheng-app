@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -8,9 +9,9 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import 'reservation_timeline.dart' show bizMinute, minuteLabel, seatedOn, clearedOn;
 
-/// 訂位座位圖（老闆 2026-11-01）：把每張桌畫在平面圖上，一眼看出哪桌空、哪桌有人、哪桌等著清。
-/// 上方選時間（今天預設「現在」），每張桌顯示那個時間的狀態；點桌子＝訂位動作或登記現場客。
-/// 老闆／店長可按「排版」拖桌子到想要的位置、調大小，排好的位置存在資料庫，全店共用。
+/// 訂位座位圖（老闆 2026-11-01，照 iCHEF 座位表的樣子）：平面圖 10 格寬，每張桌一個圓（吧台、小圓桌）或方塊（方桌），
+/// 整張圖一次看完，兩指可以放大看人名；上方選時間（今天預設「現在」），每張桌顯示那個時間的狀態。
+/// 點桌子＝訂位動作或登記現場客。老闆／店長可按「排版」長按拖曳桌子、點一下改桌形與大小，存在資料庫全店共用。
 class ReservationFloorPlan extends StatefulWidget {
   const ReservationFloorPlan({
     super.key,
@@ -40,9 +41,11 @@ class ReservationFloorPlan extends StatefulWidget {
   State<ReservationFloorPlan> createState() => _ReservationFloorPlanState();
 }
 
-/// 平面圖的格子數：手機直立 4 格剛好一格放桌號＋人名；排版時可以往下多加列
-const _cols = 4;
-const _gap = 8.0;
+/// 平面圖的格子：10 格寬（隱城吧台 A1～A8 一排 8 張、右邊還放得下 B／C／D 桌）；一格 64 邏輯像素，縮到手機寬度剛好整張看完
+const _cols = 10;
+const _cell = 64.0;
+const _gap = 6.0;
+const _minRows = 7;
 
 /// 一張桌在某個時間的狀態
 enum _Seat { free, upcoming, seated, cleared }
@@ -61,12 +64,19 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
   bool _arranging = false;
   bool _saving = false;
   late List<ReservationTable> _draft; // 排版中的位置
+  final _tc = TransformationController();
+  double _fit = 1; // 整張圖剛好塞進寬度的縮放
+  Size _viewSize = const Size(360, 300); // 平面圖可視範圍（放大時以中央為準）
+  double _scale = 1; // 目前縮放（決定桌子上顯示多少字）
+  bool _zoomed = false;
+  static String? _floorPick; // 記住上次看的樓層（換天、重開頁面都一樣）
 
   @override
   void initState() {
     super.initState();
     if (widget.isToday) _tick = Timer.periodic(const Duration(minutes: 1), (_) => mounted ? setState(() {}) : null);
     _draft = _autoPlace(widget.tables);
+    _tc.addListener(_onTransform);
   }
 
   @override
@@ -78,8 +88,18 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
   @override
   void dispose() {
     _tick?.cancel();
+    _tc.removeListener(_onTransform);
+    _tc.dispose();
     super.dispose();
   }
+
+  bool _shownDetailed = false; // 上次畫的時候是不是「放大版」（跨過門檻才重畫，手指動不重畫整張圖）
+  void _onTransform() {
+    _scale = _tc.value.getMaxScaleOnAxis();
+    if (_detailed != _shownDetailed) setState(() {});
+  }
+
+  bool get _detailed => _tc.value.getMaxScaleOnAxis() >= _fit * 1.6;
 
   Repository get _repo => AppScope.of(context).repo;
 
@@ -92,7 +112,7 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
   int get _viewMinute {
     if (_minute != null) return _minute!;
     if (widget.isToday) return _nowMinute;
-    final s = widget.slots.isEmpty ? const <int>[] : [for (final s in widget.slots) bizMinute(minutesOf(s))];
+    final s = [for (final s in widget.slots) bizMinute(minutesOf(s))];
     return s.isEmpty ? 19 * 60 : s.reduce((a, b) => a < b ? a : b);
   }
 
@@ -106,9 +126,15 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
 
   /// 沒排過位置的桌子：照 sort 由左到右、由上到下排在已排的桌子下面
   static List<ReservationTable> _autoPlace(List<ReservationTable> tables) {
-    final act = tables.where((t) => t.active).toList();
-    final placed = act.where((t) => t.placed).toList();
-    final loose = act.where((t) => !t.placed).toList()..sort((a, b) => a.sort != b.sort ? a.sort.compareTo(b.sort) : a.name.compareTo(b.name));
+    // 每個樓層各自排（位置是每層自己的座標）
+    final floors = {for (final t in tables.where((t) => t.active)) t.floor};
+    return [for (final f in floors) ..._autoPlaceFloor(tables.where((t) => t.active && t.floor == f).toList())];
+  }
+
+  static List<ReservationTable> _autoPlaceFloor(List<ReservationTable> act) {
+    final placed = act.where((t) => t.placed && t.posX! + t.w <= _cols).toList();
+    final loose = act.where((t) => !placed.contains(t)).toList()
+      ..sort((a, b) => a.sort != b.sort ? a.sort.compareTo(b.sort) : a.name.compareTo(b.name));
     final taken = <(int, int)>{};
     for (final t in placed) {
       for (var x = 0; x < t.w; x++) {
@@ -117,9 +143,8 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
         }
       }
     }
-    var startY = placed.isEmpty ? 0 : placed.map((t) => t.posY! + t.h).reduce((a, b) => a > b ? a : b);
     final out = [...placed];
-    var x = 0, y = startY;
+    var x = 0, y = placed.isEmpty ? 0 : placed.map((t) => t.posY! + t.h).reduce(math.max);
     for (final t in loose) {
       while (taken.contains((x, y))) {
         x++;
@@ -146,7 +171,7 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
     final out = <String, _TableState>{};
     for (final t in tables) {
       Reservation? occ;
-      _Seat seat = _Seat.free;
+      var seat = _Seat.free;
       Reservation? next;
       var bestNext = 1 << 30;
       for (final r in shown.where((r) => r.tableIds.contains(t.id))) {
@@ -195,6 +220,25 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
     return out;
   }
 
+  // ---------------- 縮放 ----------------
+
+  void _setZoom(bool zoomIn, Size viewport) {
+    final target = zoomIn ? math.min(_fit * 1.8, 1.0) : _fit;
+    final cur = _tc.value;
+    // 放大：以目前畫面中心為準；縮小：回到左上整張圖
+    if (!zoomIn) {
+      _tc.value = Matrix4.identity()..scaleByDouble(target, target, target, 1);
+    } else {
+      final curS = cur.getMaxScaleOnAxis();
+      final center = Offset(viewport.width / 2, viewport.height / 2);
+      final scene = Offset((center.dx - cur.getTranslation().x) / curS, (center.dy - cur.getTranslation().y) / curS);
+      _tc.value = Matrix4.identity()
+        ..translateByDouble(center.dx - scene.dx * target, center.dy - scene.dy * target, 0, 1)
+        ..scaleByDouble(target, target, target, 1);
+    }
+    setState(() => _zoomed = zoomIn);
+  }
+
   // ---------------- 排版 ----------------
 
   void _startArrange() => setState(() {
@@ -216,18 +260,16 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _saving = false);
-      final msg = '$e';
-      showMessage(context, msg.contains('pos_x') || msg.contains('column') ? '資料庫還沒開放存座位圖位置，請請後臺處理' : friendlyError(e), error: true);
+      showMessage(context, friendlyError(e), error: true);
     }
   }
 
   bool _fits(ReservationTable t, int x, int y, int w, int h) {
     if (x < 0 || y < 0 || x + w > _cols) return false;
     for (final o in _draft) {
-      if (o.id == t.id) continue;
+      if (o.id == t.id || o.floor != t.floor) continue;
       final ox = o.posX!, oy = o.posY!;
-      final overlap = x < ox + o.w && ox < x + w && y < oy + o.h && oy < y + h;
-      if (overlap) return false;
+      if (x < ox + o.w && ox < x + w && y < oy + o.h && oy < y + h) return false;
     }
     return true;
   }
@@ -237,8 +279,9 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
     setState(() => _draft = [for (final o in _draft) o.id == t.id ? o.copyWith(posX: x, posY: y) : o]);
   }
 
-  Future<void> _resize(ReservationTable t) async {
-    var w = t.w, h = t.h;
+  Future<void> _editTable(ReservationTable t) async {
+    var w = t.w, h = t.h, round = t.isRound, floor = t.floor;
+    const floorOptions = ['1F', '2F', '3F'];
     final ok = await showModalBottomSheet<bool>(
       context: context,
       showDragHandle: true,
@@ -248,14 +291,35 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Text('${t.name}・大小', style: const TextStyle(fontSize: AppType.title, fontWeight: AppFont.heading)),
+              Text('${t.name}・桌形與大小', style: const TextStyle(fontSize: AppType.title, fontWeight: AppFont.heading)),
               const SizedBox(height: 4),
-              Text('以格子為單位。長桌、沙發區可以拉成 2 格寬或 2 格高。', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
-              const SizedBox(height: 16),
+              Text('圓＝吧台、小圓桌；方＝方桌、沙發區。長桌可以拉成 2～3 格寬。', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+              const SizedBox(height: 14),
+              SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(value: true, icon: Icon(Icons.circle_outlined), label: Text('圓桌')),
+                  ButtonSegment(value: false, icon: Icon(Icons.crop_square), label: Text('方桌')),
+                ],
+                selected: {round},
+                showSelectedIcon: false,
+                onSelectionChanged: (v) => set(() => round = v.first),
+              ),
+              const SizedBox(height: 10),
+              Row(children: [
+                const Text('樓層', style: TextStyle(fontSize: AppType.body)),
+                const Spacer(),
+                SegmentedButton<String>(
+                  segments: [for (final f in floorOptions) ButtonSegment(value: f, label: Text(f))],
+                  selected: {floorOptions.contains(floor) ? floor : floorOptions.first},
+                  showSelectedIcon: false,
+                  style: const ButtonStyle(visualDensity: VisualDensity.compact),
+                  onSelectionChanged: (v) => set(() => floor = v.first),
+                ),
+              ]),
+              const SizedBox(height: 4),
               _stepper('寬', w, (v) => set(() => w = v)),
-              const SizedBox(height: 8),
               _stepper('高', h, (v) => set(() => h = v)),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('確定')),
             ]),
           ),
@@ -263,13 +327,31 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
       ),
     );
     if (ok != true) return;
+    final shape = round ? 'round' : 'square';
+    final moved = t.copyWith(floor: floor);
+    if (floor != t.floor) {
+      // 換樓層：放到那層最下面的空位，順便切過去看
+      final onFloor = _draft.where((o) => o.floor == floor && o.id != t.id).toList();
+      final startY = onFloor.isEmpty ? 0 : onFloor.map((o) => o.posY! + o.h).reduce(math.max);
+      for (var y = startY; y < startY + 20; y++) {
+        for (var x = 0; x <= _cols - w; x++) {
+          if (_fits(moved, x, y, w, h)) {
+            setState(() {
+              _draft = [for (final o in _draft) o.id == t.id ? o.copyWith(posX: x, posY: y, w: w, h: h, shape: shape, floor: floor) : o];
+              _floorPick = floor;
+            });
+            return;
+          }
+        }
+      }
+    }
     final x = t.posX!, y = t.posY!;
     // 放不下就往左上找最近的空位
     for (var dy = 0; dy < 12; dy++) {
       for (var dx = 0; dx < _cols; dx++) {
         final nx = x - dx, ny = y - dy;
-        if (_fits(t, nx, ny, w, h)) {
-          setState(() => _draft = [for (final o in _draft) o.id == t.id ? o.copyWith(posX: nx, posY: ny, w: w, h: h) : o]);
+        if (_fits(moved, nx, ny, w, h)) {
+          setState(() => _draft = [for (final o in _draft) o.id == t.id ? o.copyWith(posX: nx, posY: ny, w: w, h: h, shape: shape) : o]);
           return;
         }
       }
@@ -287,10 +369,34 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
 
   // ---------------- 畫面 ----------------
 
+  List<String> get _floors {
+    final f = {for (final t in widget.tables.where((t) => t.active)) t.floor, for (final t in _draft) t.floor}.toList()..sort();
+    return f.isEmpty ? const ['1F'] : f;
+  }
+
+  String get _floor {
+    final fs = _floors;
+    if (_floorPick != null && fs.contains(_floorPick)) return _floorPick!;
+    // 預設看桌子最多的那層（隱城主要座位在二樓）
+    final all = _arranging ? _draft : widget.tables.where((t) => t.active).toList();
+    String best = fs.first;
+    var bestN = -1;
+    for (final f in fs) {
+      final n = all.where((t) => t.floor == f).length;
+      if (n > bestN) {
+        bestN = n;
+        best = f;
+      }
+    }
+    return best;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final tables = _arranging ? _draft : _autoPlace(widget.tables);
-    final states = _arranging ? const <String, _TableState>{} : _states(tables);
+    final allTables = _arranging ? _draft : _autoPlace(widget.tables);
+    final floor = _floor;
+    final tables = allTables.where((t) => t.floor == floor).toList();
+    final states = _arranging ? const <String, _TableState>{} : _states(allTables);
     final shown = widget.list.where((r) => r.active).toList();
     final known = {for (final t in widget.tables) t.id};
     final unassigned = shown.where((r) => !r.tableIds.any(known.contains)).toList()..sort((a, b) => a.time.compareTo(b.time));
@@ -298,16 +404,18 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
     // 這個時間店裡（或預計）的人數、空桌數
     final seenRes = <String>{};
     var guests = 0, freeTables = 0;
-    for (final t in tables) {
+    for (final t in allTables) {
       final s = states[t.id];
       if (s == null) continue;
       if (s.r != null && (s.seat == _Seat.seated || s.seat == _Seat.upcoming)) {
         if (seenRes.add(s.r!.id)) guests += s.r!.party;
-      } else {
+      } else if (t.floor == floor) {
         freeTables++;
       }
     }
-    final rowsNeeded = tables.isEmpty ? 2 : tables.map((t) => t.posY! + t.h).reduce((a, b) => a > b ? a : b) + (_arranging ? 2 : 0);
+    final rows = math.max(_minRows, tables.isEmpty ? 0 : tables.map((t) => t.posY! + t.h).reduce(math.max)) + (_arranging ? 2 : 0);
+    const canvasW = _cols * _cell + (_cols - 1) * _gap;
+    final canvasH = rows * _cell + (rows - 1) * _gap;
 
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       if (widget.tables.where((t) => t.active).isEmpty)
@@ -325,13 +433,36 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
         ),
         clipBehavior: Clip.antiAlias,
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          // 標題列：時間、人數、空桌；排版時換成說明
+          // 樓層分頁（照 iCHEF：1F／2F…；只有一層就不顯示）
+          if (_floors.length > 1)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
+              child: Row(children: [
+                for (final f in _floors) ...[
+                  ChoiceChip(
+                    selected: f == floor,
+                    showCheckmark: false,
+                    label: Text(f, style: TextStyle(fontFeatures: tabular, fontWeight: f == floor ? FontWeight.w700 : FontWeight.w500)),
+                    onSelected: (_) => setState(() {
+                      _floorPick = f;
+                      _zoomed = false;
+                      _tc.value = Matrix4.identity()..scaleByDouble(_fit, _fit, _fit, 1);
+                    }),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  const SizedBox(width: 6),
+                ],
+                const Spacer(),
+                Text('${tables.length} 桌', style: TextStyle(fontSize: AppType.caption, color: AppColors.muted, fontFeatures: tabular)),
+              ]),
+            ),
+          // 標題列：時間、人數、空桌、放大；排版時換成說明＋取消／儲存
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 10, 8, 0),
+            padding: const EdgeInsets.fromLTRB(14, 8, 6, 0),
             child: Row(children: [
               Expanded(
                 child: _arranging
-                    ? Text('長按拖曳桌子到想要的位置，點一下調大小', style: TextStyle(color: AppColors.muted, fontSize: AppType.small))
+                    ? Text('長按桌子拖到想要的位置；點一下改圓／方、大小、樓層', style: TextStyle(color: AppColors.muted, fontSize: AppType.small))
                     : Row(children: [
                         Text(_minute == null && widget.isToday ? '現在 ${minuteLabel(m)}' : minuteLabel(m),
                             style: const TextStyle(fontWeight: FontWeight.w700, fontFeatures: tabular)),
@@ -343,6 +474,13 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
                         Text('空 $freeTables 桌', style: TextStyle(fontSize: AppType.small, color: AppColors.muted, fontFeatures: tabular)),
                       ]),
               ),
+              if (!_arranging)
+                IconButton(
+                  tooltip: _zoomed ? '看整張圖' : '放大看人名',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => _setZoom(!_zoomed, _viewSize),
+                  icon: Icon(_zoomed ? Icons.zoom_out_map : Icons.zoom_in, size: 20),
+                ),
               if (widget.canArrange && !_arranging)
                 TextButton.icon(
                   onPressed: _startArrange,
@@ -353,60 +491,43 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
                 TextButton(onPressed: _saving ? null : () => setState(() => _arranging = false), child: const Text('取消')),
                 FilledButton(
                   onPressed: _saving ? null : _saveArrange,
-                  child: _saving
-                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Text('儲存'),
+                  child: _saving ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('儲存'),
                 ),
               ],
             ]),
           ),
           Padding(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
             child: LayoutBuilder(builder: (c, box) {
-              final cell = (box.maxWidth - _gap * (_cols - 1)) / _cols;
-              double px(int v) => v * (cell + _gap);
-              final height = rowsNeeded * (cell + _gap) - _gap;
+              final fit = math.min(1.0, box.maxWidth / canvasW);
+              if (fit != _fit) {
+                _fit = fit;
+                if (!_zoomed) {
+                  // 第一次（或寬度變了）：整張圖剛好塞進寬度
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted && !_zoomed) _tc.value = Matrix4.identity()..scaleByDouble(fit, fit, fit, 1);
+                  });
+                }
+              }
+              // 排版時用 1:1 的格子（手指才抓得到），畫面高度固定、可以拖著看
+              final arrangeScale = math.max(fit, 0.85);
+              final viewH = _arranging ? math.min(canvasH * arrangeScale, 460.0) : canvasH * fit;
+              _viewSize = Size(box.maxWidth, viewH);
               return SizedBox(
-                height: height,
-                child: Stack(children: [
-                  // 排版時：每一格都是放置區
-                  if (_arranging)
-                    for (var y = 0; y < rowsNeeded; y++)
-                      for (var x = 0; x < _cols; x++)
-                        Positioned(
-                          left: px(x),
-                          top: px(y),
-                          width: cell,
-                          height: cell,
-                          child: DragTarget<ReservationTable>(
-                            onWillAcceptWithDetails: (d) => _fits(d.data, x, y, d.data.w, d.data.h),
-                            onAcceptWithDetails: (d) => _move(d.data, x, y),
-                            builder: (c, cand, rej) => Container(
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(AppRadius.sm),
-                                border: Border.all(color: cand.isNotEmpty ? AppColors.primary : AppColors.line.withValues(alpha: 0.7), width: cand.isNotEmpty ? 2 : 0.6),
-                                color: cand.isNotEmpty ? AppColors.primary.withValues(alpha: 0.12) : null,
-                              ),
-                            ),
-                          ),
-                        ),
-                  for (final t in tables)
-                    Positioned(
-                      left: px(t.posX!),
-                      top: px(t.posY!),
-                      width: px(t.w) - _gap,
-                      height: px(t.h) - _gap,
-                      child: _arranging
-                          ? LongPressDraggable<ReservationTable>(
-                              data: t,
-                              delay: const Duration(milliseconds: 150),
-                              feedback: SizedBox(width: px(t.w) - _gap, height: px(t.h) - _gap, child: _tableCard(t, null, lifted: true)),
-                              childWhenDragging: Opacity(opacity: 0.25, child: _tableCard(t, null)),
-                              child: GestureDetector(onTap: () => _resize(t), child: _tableCard(t, null)),
-                            )
-                          : _tableCard(t, states[t.id]),
-                    ),
-                ]),
+                height: viewH,
+                child: InteractiveViewer(
+                  transformationController: _tc,
+                  constrained: false,
+                  minScale: fit,
+                  maxScale: 2.5,
+                  boundaryMargin: const EdgeInsets.all(8),
+                  panEnabled: true,
+                  child: SizedBox(
+                    width: canvasW,
+                    height: canvasH,
+                    child: _canvas(tables, states, rows),
+                  ),
+                ),
               );
             }),
           ),
@@ -436,9 +557,58 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
           ]),
         ],
         const SizedBox(height: 8),
-        Text('點桌子：有客人＝入座、清桌、換桌等；空桌＝登記現場客坐這桌。上方切換時間可以看之後哪幾桌有訂位。',
+        Text('點桌子：有客人＝入座、清桌、換桌等；空桌＝登記現場客坐這桌。兩指放大可以看到人名；上方切換時間看之後哪幾桌有訂位。',
             style: TextStyle(color: AppColors.muted, fontSize: AppType.caption, height: 1.5)),
       ],
+    ]);
+  }
+
+  Widget _canvas(List<ReservationTable> tables, Map<String, _TableState> states, int rows) {
+    // 這裡在 LayoutBuilder 裡面建，_fit 已經算好；記下這次畫的是哪一版，縮放跨過門檻才重畫
+    _shownDetailed = _detailed;
+    double px(int v) => v * (_cell + _gap);
+    return Stack(children: [
+      // 排版時：每一格都是放置區
+      if (_arranging)
+        for (var y = 0; y < rows; y++)
+          for (var x = 0; x < _cols; x++)
+            Positioned(
+              left: px(x),
+              top: px(y),
+              width: _cell,
+              height: _cell,
+              child: DragTarget<ReservationTable>(
+                onWillAcceptWithDetails: (d) => _fits(d.data, x, y, d.data.w, d.data.h),
+                onAcceptWithDetails: (d) => _move(d.data, x, y),
+                builder: (c, cand, rej) => Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                    border: Border.all(color: cand.isNotEmpty ? AppColors.primary : AppColors.line.withValues(alpha: 0.7), width: cand.isNotEmpty ? 2 : 0.6),
+                    color: cand.isNotEmpty ? AppColors.primary.withValues(alpha: 0.12) : null,
+                  ),
+                ),
+              ),
+            ),
+      for (final t in tables)
+        Positioned(
+          left: px(t.posX!),
+          top: px(t.posY!),
+          width: px(t.w) - _gap,
+          height: px(t.h) - _gap,
+          child: _arranging
+              ? LongPressDraggable<ReservationTable>(
+                  data: t,
+                  delay: const Duration(milliseconds: 200),
+                  feedback: Transform.scale(
+                    scale: math.max(_scale, 0.85),
+                    alignment: Alignment.topLeft,
+                    child: SizedBox(width: px(t.w) - _gap, height: px(t.h) - _gap, child: _tableCard(t, null, lifted: true)),
+                  ),
+                  childWhenDragging: Opacity(opacity: 0.25, child: _tableCard(t, null)),
+                  child: GestureDetector(onTap: () => _editTable(t), child: _tableCard(t, null)),
+                )
+              : _tableCard(t, states[t.id]),
+        ),
     ]);
   }
 
@@ -480,7 +650,7 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
             decoration: BoxDecoration(
               color: outline ? null : c.withValues(alpha: 0.35),
               border: Border.all(color: c.withValues(alpha: outline ? 0.6 : 0.9)),
-              borderRadius: BorderRadius.circular(3),
+              shape: BoxShape.circle,
             ),
           ),
           const SizedBox(width: 5),
@@ -494,6 +664,7 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
     ]);
   }
 
+  /// 一張桌：圓（吧台、小圓桌）或方；縮小時只放桌號＋人數（像 iCHEF），放大才放人名、時間
   Widget _tableCard(ReservationTable t, _TableState? s, {bool lifted = false}) {
     final seat = s?.seat ?? _Seat.free;
     final r = s?.r;
@@ -504,67 +675,75 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
       _Seat.cleared => AppColors.muted,
     };
     final filled = seat == _Seat.upcoming || seat == _Seat.seated;
-    final bg = filled ? accent.withValues(alpha: 0.2) : (seat == _Seat.cleared ? AppColors.muted.withValues(alpha: 0.1) : AppColors.cardHigh);
-    final border = filled ? accent.withValues(alpha: 0.75) : AppColors.line;
+    final bg = filled ? accent.withValues(alpha: 0.24) : (seat == _Seat.cleared ? AppColors.muted.withValues(alpha: 0.12) : AppColors.cardHigh);
+    final border = _arranging ? AppColors.primary.withValues(alpha: 0.5) : (filled ? accent.withValues(alpha: 0.85) : AppColors.line);
     final secondary = s != null && !s.primary; // 併桌的第二張以後
-    final tall = t.h > 1 || t.w > 1;
+    final round = t.isRound && t.w == t.h;
+    final detailed = _detailed && !_arranging;
+    final nameColor = filled ? accent : AppColors.text;
 
-    final content = Padding(
-      padding: const EdgeInsets.fromLTRB(8, 7, 8, 7),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Expanded(
-            child: Text(t.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: AppType.small, color: filled ? accent : AppColors.text)),
-          ),
-          if (r != null && !secondary && filled)
-            Text('${r.party}', style: TextStyle(fontSize: AppType.title, fontWeight: AppFont.figure, height: 1, color: accent, fontFeatures: tabular))
-          else if (r == null || !filled)
-            Text('${t.seats}', style: TextStyle(fontSize: AppType.caption, color: AppColors.muted.withValues(alpha: 0.8), fontFeatures: tabular)),
-        ]),
-        const Spacer(),
-        if (_arranging)
-          Text('${t.seats} 人${t.combinable ? '・可併' : ''}', style: TextStyle(fontSize: AppType.micro, color: AppColors.muted))
-        else if (r != null && filled) ...[
-          Text(secondary ? '併桌' : r.name,
-              maxLines: tall ? 2 : 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: AppType.caption, height: 1.2, color: secondary ? AppColors.muted : AppColors.text)),
-          Text(
-            seat == _Seat.seated
-                ? '${seatedOn(r) != null ? minuteLabel(_minuteOf(seatedOn(r)!)) : r.time} 入座'
-                : '${r.time}${r.walkIn ? '・現場' : ''}',
+    // 桌號 + 人數（永遠有）
+    final head = Row(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
+      Flexible(
+        child: Text(t.name,
             maxLines: 1,
-            overflow: TextOverflow.clip,
-            style: TextStyle(fontSize: AppType.micro, color: accent, fontWeight: FontWeight.w600, fontFeatures: tabular),
-          ),
-        ] else if (r != null && seat == _Seat.cleared)
-          Text('剛清桌', style: TextStyle(fontSize: AppType.micro, color: AppColors.muted))
-        else if (s?.next != null)
-          Text('${s!.next!.time} ${s.next!.name}',
-              maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: AppType.micro, color: AppColors.muted, fontFeatures: tabular))
-        else
-          Text('空', style: TextStyle(fontSize: AppType.micro, color: AppColors.muted.withValues(alpha: 0.7))),
-      ]),
-    );
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: detailed ? 15 : 19, height: 1, color: nameColor)),
+      ),
+      const SizedBox(width: 3),
+      if (r != null && filled && !secondary)
+        Text('${r.party}', style: TextStyle(fontSize: detailed ? 15 : 17, fontWeight: FontWeight.w600, height: 1, color: accent, fontFeatures: tabular))
+      else if (secondary)
+        Text('併', style: TextStyle(fontSize: 11, height: 1.1, color: accent))
+      else
+        Text('${t.seats}', style: TextStyle(fontSize: 11, height: 1.1, color: AppColors.muted.withValues(alpha: 0.9), fontFeatures: tabular)),
+    ]);
+
+    Widget? sub;
+    if (_arranging) {
+      sub = Text('${t.seats} 人', style: TextStyle(fontSize: 11, color: AppColors.muted));
+    } else if (detailed && r != null && filled) {
+      sub = Column(mainAxisSize: MainAxisSize.min, children: [
+        Text(secondary ? '併桌' : r.name,
+            maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 11, height: 1.2, color: secondary ? AppColors.muted : AppColors.text)),
+        Text(
+          seat == _Seat.seated ? '${seatedOn(r) != null ? minuteLabel(_minuteOf(seatedOn(r)!)) : r.time} 入座' : '${r.time}${r.walkIn ? ' 現場' : ''}',
+          maxLines: 1,
+          style: TextStyle(fontSize: 9.5, height: 1.2, color: accent, fontWeight: FontWeight.w600, fontFeatures: tabular),
+        ),
+      ]);
+    } else if (detailed && r != null && seat == _Seat.cleared) {
+      sub = Text('剛清桌', style: TextStyle(fontSize: 10, color: AppColors.muted));
+    } else if (detailed && s?.next != null) {
+      sub = Text('${s!.next!.time} ${s.next!.name}',
+          maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 9.5, color: AppColors.muted, fontFeatures: tabular));
+    } else if (!detailed && r != null && filled && !secondary) {
+      // 縮小時：人名縮成兩個字，看得出是誰
+      final n = r.name.trim();
+      sub = Text(n.length > 3 ? n.substring(0, 3) : n, maxLines: 1, overflow: TextOverflow.clip,
+          style: TextStyle(fontSize: 10.5, height: 1.1, color: AppColors.text.withValues(alpha: 0.85)));
+    } else if (!detailed && seat == _Seat.cleared) {
+      sub = Icon(Icons.cleaning_services_outlined, size: 11, color: AppColors.muted);
+    }
 
     final card = Material(
       color: Colors.transparent,
       child: Container(
         decoration: BoxDecoration(
           color: bg,
-          borderRadius: BorderRadius.circular(AppRadius.sm),
-          border: Border.all(color: _arranging ? AppColors.primary.withValues(alpha: 0.5) : border, width: filled ? 1.2 : 1),
-          boxShadow: lifted ? [BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 16, offset: const Offset(0, 6))] : null,
+          shape: round ? BoxShape.circle : BoxShape.rectangle,
+          borderRadius: round ? null : BorderRadius.circular(AppRadius.sm + 2),
+          border: Border.all(color: border, width: filled ? 1.5 : 1),
+          boxShadow: lifted ? [BoxShadow(color: Colors.black.withValues(alpha: 0.45), blurRadius: 14, offset: const Offset(0, 6))] : null,
         ),
-        child: content,
+        padding: EdgeInsets.symmetric(horizontal: round ? 6 : 5, vertical: 4),
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [head, if (sub != null) ...[const SizedBox(height: 3), sub]]),
       ),
     );
     if (_arranging) return card;
-    return InkWell(
-      borderRadius: BorderRadius.circular(AppRadius.sm),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: () {
         if (r != null && filled) {
           widget.onTapReservation(r);

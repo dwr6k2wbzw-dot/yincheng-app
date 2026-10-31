@@ -203,6 +203,11 @@ class ReservationTable {
   final int? posY;
   final int w;
   final int h;
+  /// 桌形：round 圓桌（吧台單人座、小圓桌）／square 方桌（照 iCHEF 座位表）
+  final String shape;
+  bool get isRound => shape != 'square';
+  /// 樓層（座位圖分頁，照 iCHEF：1F／2F／3F）
+  final String floor;
   const ReservationTable({
     this.id = '',
     required this.name,
@@ -214,9 +219,11 @@ class ReservationTable {
     this.posY,
     this.w = 1,
     this.h = 1,
+    this.shape = 'round',
+    this.floor = '1F',
   });
   bool get placed => posX != null && posY != null;
-  ReservationTable copyWith({int? posX, int? posY, int? w, int? h, bool clearPos = false}) => ReservationTable(
+  ReservationTable copyWith({int? posX, int? posY, int? w, int? h, String? shape, String? floor, bool clearPos = false}) => ReservationTable(
         id: id,
         name: name,
         seats: seats,
@@ -227,6 +234,8 @@ class ReservationTable {
         posY: clearPos ? null : (posY ?? this.posY),
         w: w ?? this.w,
         h: h ?? this.h,
+        shape: shape ?? this.shape,
+        floor: floor ?? this.floor,
       );
   factory ReservationTable.fromRow(Map<String, dynamic> r) => ReservationTable(
         id: r['id'] as String,
@@ -239,6 +248,8 @@ class ReservationTable {
         posY: (r['pos_y'] as num?)?.toInt(),
         w: ((r['w'] as num?)?.toInt() ?? 1).clamp(1, 4),
         h: ((r['h'] as num?)?.toInt() ?? 1).clamp(1, 4),
+        shape: (r['shape'] as String?) ?? 'round',
+        floor: (r['floor'] as String?) ?? '1F',
       );
 }
 

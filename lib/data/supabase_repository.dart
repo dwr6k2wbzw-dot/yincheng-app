@@ -1338,12 +1338,18 @@ class SupabaseRepository implements Repository {
   Future<void> saveTableLayout(String storeId, List<ReservationTable> tables) async {
     for (final t in tables) {
       if (t.id.isEmpty) continue;
-      final rows = await _db
-          .from('reservation_tables')
-          .update({'pos_x': t.posX, 'pos_y': t.posY, 'w': t.w, 'h': t.h})
-          .eq('id', t.id)
-          .eq('store_id', storeId)
-          .select('id');
+      final v = <String, dynamic>{'pos_x': t.posX, 'pos_y': t.posY, 'w': t.w, 'h': t.h, 'shape': t.shape, 'floor': t.floor};
+      List rows;
+      try {
+        rows = await _db.from('reservation_tables').update(v).eq('id', t.id).eq('store_id', storeId).select('id');
+      } catch (e) {
+        // 資料庫還沒加 shape／floor 欄位時，先只存位置（桌形、樓層之後再補）
+        final msg = '$e';
+        final missing = ['shape', 'floor'].where((k) => msg.contains(k)).toList();
+        if (missing.isEmpty) rethrow;
+        v.removeWhere((k, _) => missing.contains(k));
+        rows = await _db.from('reservation_tables').update(v).eq('id', t.id).eq('store_id', storeId).select('id');
+      }
       if (rows.isEmpty) throw Exception('message: 沒有權限修改桌位,');
     }
   }

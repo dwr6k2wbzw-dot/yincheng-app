@@ -843,8 +843,28 @@ class DemoRepository implements Repository {
   @override
   Future<List<ReservationTable>> reservationTables(String storeId) async => [
         ...(_demoTables[storeId] ??= [
-          for (var i = 1; i <= 8; i++) ReservationTable(id: 'A$i', name: 'A$i', seats: 1, combinable: true, sort: i),
-          for (var i = 1; i <= 4; i++) ReservationTable(id: 'S$i', name: 'S$i', seats: 4, sort: 20 + i),
+          // 照隱城 iCHEF 座位表的樣子排（2026-11-01）：吧台 A1～A8 一排、A9～A12 方桌一直排、B／C／D／E 小圓桌
+          for (var i = 1; i <= 8; i++) ReservationTable(id: 'A$i', name: 'A$i', seats: 1, combinable: true, sort: i, posX: 8 - i, posY: 2, floor: '2F'),
+          for (var i = 9; i <= 12; i++) ReservationTable(id: 'A$i', name: 'A$i', seats: 2, sort: i, posX: 4, posY: i - 6, shape: 'square', floor: '2F'),
+          const ReservationTable(id: 'F1', name: 'F1', seats: 2, sort: 71, posX: 1, posY: 0, shape: 'square', floor: '2F'),
+          for (var i = 1; i <= 4; i++) ReservationTable(id: 'B$i', name: 'B$i', seats: 1, combinable: true, sort: 20 + i, posX: 5 + i, posY: 0, floor: '2F'),
+          const ReservationTable(id: 'B5', name: 'B5', seats: 1, combinable: true, sort: 25, posX: 8, posY: 1, floor: '2F'),
+          const ReservationTable(id: 'B6', name: 'B6', seats: 1, combinable: true, sort: 26, posX: 9, posY: 1, floor: '2F'),
+          const ReservationTable(id: 'C1', name: 'C1', seats: 1, combinable: true, sort: 31, posX: 8, posY: 4, floor: '2F'),
+          const ReservationTable(id: 'C2', name: 'C2', seats: 1, combinable: true, sort: 32, posX: 9, posY: 3, floor: '2F'),
+          const ReservationTable(id: 'C3', name: 'C3', seats: 1, combinable: true, sort: 33, posX: 9, posY: 4, floor: '2F'),
+          const ReservationTable(id: 'D1', name: 'D1', seats: 1, combinable: true, sort: 41, posX: 8, posY: 5, floor: '2F'),
+          const ReservationTable(id: 'D2', name: 'D2', seats: 1, combinable: true, sort: 42, posX: 9, posY: 5, floor: '2F'),
+          const ReservationTable(id: 'D3', name: 'D3', seats: 1, combinable: true, sort: 43, posX: 8, posY: 6, floor: '2F'),
+          const ReservationTable(id: 'D4', name: 'D4', seats: 1, combinable: true, sort: 44, posX: 9, posY: 6, floor: '2F'),
+          const ReservationTable(id: 'E1', name: 'E1', seats: 1, combinable: true, sort: 51, posX: 6, posY: 5, floor: '2F'),
+          const ReservationTable(id: 'E2', name: 'E2', seats: 1, combinable: true, sort: 52, posX: 6, posY: 6, floor: '2F'),
+          // 一樓：沙發區 S1～S4、小圓桌 S5～S7（照 iCHEF 一樓座位表）
+          const ReservationTable(id: 'S1', name: 'S1', seats: 10, combinable: true, sort: 61, posX: 3, posY: 3, floor: '1F'),
+          const ReservationTable(id: 'S2', name: 'S2', seats: 10, combinable: true, sort: 62, posX: 5, posY: 3, floor: '1F'),
+          const ReservationTable(id: 'S3', name: 'S3', seats: 10, combinable: true, sort: 63, posX: 3, posY: 5, floor: '1F'),
+          const ReservationTable(id: 'S4', name: 'S4', seats: 10, combinable: true, sort: 64, posX: 5, posY: 5, floor: '1F'),
+          for (var i = 5; i <= 7; i++) ReservationTable(id: 'S$i', name: 'S$i', seats: 1, combinable: true, sort: 60 + i, posX: i - 2, posY: 0, floor: '1F'),
         ])
       ]..sort((a, b) => a.sort != b.sort ? a.sort.compareTo(b.sort) : a.name.compareTo(b.name));
   @override
@@ -853,7 +873,7 @@ class DemoRepository implements Repository {
     final i = list.indexWhere((x) => x.id == t.id);
     final old = i >= 0 ? list[i] : null;
     final v = ReservationTable(id: t.id.isEmpty ? 'T${list.length + 1}' : t.id, name: t.name, seats: t.seats,
-        combinable: t.combinable, sort: t.sort, active: t.active, posX: old?.posX, posY: old?.posY, w: old?.w ?? 1, h: old?.h ?? 1);
+        combinable: t.combinable, sort: t.sort, active: t.active, posX: old?.posX, posY: old?.posY, w: old?.w ?? 1, h: old?.h ?? 1, shape: old?.shape ?? 'round', floor: old?.floor ?? '1F');
     if (i < 0) {
       list.add(v);
     } else {
@@ -865,7 +885,7 @@ class DemoRepository implements Repository {
     final list = _demoTables[storeId] ??= [];
     for (final t in tables) {
       final i = list.indexWhere((x) => x.id == t.id);
-      if (i >= 0) list[i] = list[i].copyWith(posX: t.posX, posY: t.posY, w: t.w, h: t.h, clearPos: !t.placed);
+      if (i >= 0) list[i] = list[i].copyWith(posX: t.posX, posY: t.posY, w: t.w, h: t.h, shape: t.shape, floor: t.floor, clearPos: !t.placed);
     }
   }
   @override
