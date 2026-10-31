@@ -1,4 +1,3 @@
-import '../services/clock.dart';
 /// 訂位（0050）：客人在公開訂位頁訂、員工在 App 管理
 class ReservationSettings {
   final String storeId;
@@ -163,15 +162,15 @@ class Reservation {
         status: r['status'] as String,
         source: r['source'] as String,
         emailError: r['email_error'] as String?,
-        createdAt: toTaipei(DateTime.parse(r['created_at'] as String)),
+        createdAt: DateTime.parse(r['created_at'] as String).toLocal(),
         requestedParty: (r['requested_party'] as num?)?.toInt(),
         partyRequestStatus: r['party_request_status'] as String?,
         lang: r['lang'] as String? ?? 'zh',
         tableIds: [for (final x in (r['table_ids'] as List? ?? const [])) x as String],
-        seatedAt: r['seated_at'] == null ? null : toTaipei(DateTime.parse(r['seated_at'] as String)),
-        clearedAt: r['cleared_at'] == null ? null : toTaipei(DateTime.parse(r['cleared_at'] as String)),
+        seatedAt: r['seated_at'] == null ? null : DateTime.parse(r['seated_at'] as String).toLocal(),
+        clearedAt: r['cleared_at'] == null ? null : DateTime.parse(r['cleared_at'] as String).toLocal(),
         walkIn: r['walk_in'] as bool? ?? false,
-        hiddenAt: r['hidden_at'] == null ? null : toTaipei(DateTime.parse(r['hidden_at'] as String)),
+        hiddenAt: r['hidden_at'] == null ? null : DateTime.parse(r['hidden_at'] as String).toLocal(),
       );
 
   /// 示範模式用：改幾個欄位
@@ -321,7 +320,7 @@ class GuestProfile {
         phoneDigits: r['phone_digits'] as String,
         tags: [for (final t in (r['tags'] as List? ?? const [])) t as String],
         note: r['note'] as String?,
-        noshowResetAt: r['noshow_reset_at'] == null ? null : toTaipei(DateTime.parse(r['noshow_reset_at'] as String)),
+        noshowResetAt: r['noshow_reset_at'] == null ? null : DateTime.parse(r['noshow_reset_at'] as String).toLocal(),
       );
 }
 

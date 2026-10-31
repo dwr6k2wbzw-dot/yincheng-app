@@ -796,7 +796,8 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
     if (!mounted) return;
     // 用重新讀到的這筆（剛入座的話才有入座時間；Codex 審查）
     final r = all.where((x) => x.id == r0.id).firstOrNull ?? r0;
-    final seat = seatedOn(r);
+    // 資料裡是真實時間點，要讀「幾點幾分」才轉台北時間（只轉一次；Codex 審查 PR #137）
+    final seat = seatedOn(r) == null ? null : toTaipei(seatedOn(r)!);
     final minute = seat != null ? bizMinute(seat.hour * 60 + seat.minute) : bizMinute(minutesOf(r.time));
     final ids = await pickTables(context,
         tables: _tables, selected: r.tableIds, party: r.party, busy: busyTables(all, r, minute));

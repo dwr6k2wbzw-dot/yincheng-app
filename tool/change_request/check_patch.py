@@ -12,28 +12,41 @@ import sys
 ALLOWED = ("lib/", "assets/", "tool/book/")
 # 連線設定（Supabase 網址、金鑰、訂位頁的 API 位址）：只有老闆直接改，功能許願不能動
 PROTECTED = ("lib/config.dart", "tool/book/common.js", "tool/book/theme.js")
-# 新增的程式裡出現網址時，只接受這些網域（App 自己的後端、GitHub Pages、字型、CDN）
-URL_RE = re.compile(r"https?://([A-Za-z0-9.-]+)", re.I)
-ALLOWED_HOSTS = (
-    ".supabase.co", ".supabase.in", "dwr6k2wbzw-dot.github.io", "github.com",
-    "fonts.googleapis.com", "fonts.gstatic.com", "cdn.jsdelivr.net", "unpkg.com", "cdnjs.cloudflare.com",
+# 新增的程式裡出現網址時，只接受這些網域（App 自己的後端、GitHub Pages、字型、CDN、地圖、LINE）
+# Supabase 只允許我們自己的專案：寫成「任何 .supabase.co」的話，別人開一個 Supabase 專案就能收資料（健檢 2026-11-01）
+ALLOWED_HOSTS = {
+    "yfulcyeoqavqarpfnznw.supabase.co", "dwr6k2wbzw-dot.github.io", "github.com",
+    "fonts.googleapis.com", "fonts.gstatic.com", "www.gstatic.com",
+    "cdn.jsdelivr.net", "unpkg.com", "cdnjs.cloudflare.com",
     "maps.google.com", "www.google.com", "goo.gl", "maps.app.goo.gl", "line.me", "lin.ee", "liff.line.me",
     "www.w3.org", "schema.org", "ogp.me",
-)
+}
+# 任何 「//主機」：含 https:// ws:// 等所有 scheme、沒有 scheme 的 //evil.com、JS 跳脫的 \/\/evil.com（先還原再比）
+AUTH_RE = re.compile(r"//([^/\s'\"`?#\\<>()\[\]{},;]+)")
+
+
+def normalize(line: str) -> str:
+    """把常見的跳脫寫法還原成 /（\\/、\\x2f、\\u002f、%2f），避免用跳脫繞過網址檢查"""
+    t = line.replace("\\/", "/")
+    t = re.sub(r"\\x2f|\\u002f|\\u\{2f\}|%2f", "/", t, flags=re.I)
+    return t
+
+
+def hosts_in(line: str) -> list[str]:
+    """抓出一行裡所有網址的真正主機名（去掉帳密 user@、連接埠、結尾的點）"""
+    out = []
+    for m in AUTH_RE.finditer(normalize(line)):
+        auth = m.group(1)
+        host = auth.rsplit("@", 1)[-1]          # https://github.com@evil.com → evil.com
+        host = host.split(":", 1)[0].strip(".").lower()
+        # 只看像網域或 IP 的（含點）；Dart 的 //註解、//TODO 不算
+        if "." in host:
+            out.append(host)
+    return out
 
 
 def host_ok(host: str) -> bool:
-    h = host.lower()
-    return any(h == a.lstrip(".") or h.endswith(a) if a.startswith(".") else h == a for a in ALLOWED_HOSTS)
-SECRET = [
-    (re.compile(r"service_role", re.I), "service_role"),
-    (re.compile(r"sk-ant-[A-Za-z0-9_-]{10,}"), "Anthropic 金鑰"),
-    (re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}"), "GitHub token"),
-    (re.compile(r"github_pat_[A-Za-z0-9_]{20,}"), "GitHub token"),
-    (re.compile(r"eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\."), "JWT"),
-    (re.compile(r"sb_secret_[A-Za-z0-9_-]{10,}"), "Supabase 秘密金鑰"),
-    (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"), "私鑰"),
-]
+    return host.lower().strip(".") in ALLOWED_HOSTS
 
 
 def git(*args: str) -> str:
@@ -60,9 +73,9 @@ def main() -> int:
             if pat.search(line):
                 print(f"修改內容疑似含有{name}，已擋下")
                 return 1
-        for m in URL_RE.finditer(line):
-            if not host_ok(m.group(1)):
-                print(f"修改內容出現不在白名單的網址（{m.group(1)}），已擋下；需要新網域請老闆直接改")
+        for host in hosts_in(line):
+            if not host_ok(host):
+                print(f"修改內容出現不在白名單的網址（{host}），已擋下；需要新網域請老闆直接改")
                 return 1
     print(f"檢查通過：{len(files)} 個檔案")
     return 0

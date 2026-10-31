@@ -39,8 +39,14 @@ jobs:
           exit $rc
       - name: 上個月／近 3 個月平均計算檢查
         run: dart run tool/month_compare_check.dart
+      - name: 功能許願網址白名單檢查
+        run: python3 tool/change_request/check_patch_test.py
       - name: 單元測試（訂位名額、台北時間；健檢 2026-11-01 起）
-        run: flutter test
+        # 手機在台北時，時間換算錯兩次會剛好抵銷而測不出來，所以另外用 UTC、紐約時區各跑一次
+        run: |
+          TZ=Asia/Taipei flutter test
+          TZ=UTC flutter test
+          TZ=America/New_York flutter test
       - name: 靜態檢查（只擋錯誤）
         run: |
           set +e
