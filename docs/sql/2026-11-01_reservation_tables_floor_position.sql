@@ -22,3 +22,7 @@ where s.name = '隱城' and not exists (select 1 from public.reservation_tables 
 with pos(name, x, y) as (values ('S1', 3, 3), ('S2', 5, 3), ('S3', 3, 5), ('S4', 5, 5))
 update public.reservation_tables t set pos_x = p.x, pos_y = p.y, floor = '1F'
 from pos p, public.stores s where s.id = t.store_id and s.name = '隱城' and t.name = p.name;
+
+-- ④ 授權（重要）：reservation_tables 是逐欄授權，新欄位要開給登入使用者寫入，排版才存得了（誰能改仍由 RLS 決定：老闆／店長）
+--    漏掉會出現「permission denied for table reservation_tables」（2026-11-01 已執行）
+grant update (pos_x, pos_y, w, h, shape, floor), insert (pos_x, pos_y, w, h, shape, floor) on public.reservation_tables to authenticated;
