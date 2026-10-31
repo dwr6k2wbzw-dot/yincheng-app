@@ -579,11 +579,15 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
   }
 
   Future<void> _actions(Reservation r) async {
+    // 選項多（排桌、打電話、入座、未到、取消、修改、熟客）會超過半個螢幕：可以捲動、最高到 9 成（老闆 2026-11-01：最下面被切掉）
     final v = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
+      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.9),
       builder: (c) => SafeArea(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
+        child: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
           ListTile(
             title: Text('${r.name}・${r.party} 位・${r.time}', style: const TextStyle(fontWeight: FontWeight.w700)),
             // 時間軸點進來也看得到電話與完整備註（老闆 2026-10-23）
@@ -643,7 +647,8 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
               title: const Text('熟客資料'),
               subtitle: const Text('標籤、備註、解除未到紀錄'),
               onTap: () => Navigator.pop(c, 'guest')),
-        ]),
+          ]),
+        ),
       ),
     );
     if (v == null || !mounted) return;
