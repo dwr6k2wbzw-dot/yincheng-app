@@ -1335,6 +1335,20 @@ class SupabaseRepository implements Repository {
   }
 
   @override
+  Future<void> saveTableLayout(String storeId, List<ReservationTable> tables) async {
+    for (final t in tables) {
+      if (t.id.isEmpty) continue;
+      final rows = await _db
+          .from('reservation_tables')
+          .update({'pos_x': t.posX, 'pos_y': t.posY, 'w': t.w, 'h': t.h})
+          .eq('id', t.id)
+          .eq('store_id', storeId)
+          .select('id');
+      if (rows.isEmpty) throw Exception('message: 沒有權限修改桌位,');
+    }
+  }
+
+  @override
   Future<void> addWalkIn(String storeId,
       {required DateTime date, required String time, required int party, required String name, required List<String> tableIds}) async {
     await _db.from('reservations').insert({

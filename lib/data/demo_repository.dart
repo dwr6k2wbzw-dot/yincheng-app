@@ -732,7 +732,28 @@ class DemoRepository implements Repository {
   }
   @override
   Future<List<Reservation>> reservations(String storeId, DateTime from, DateTime to) async =>
-      (_demoRes[storeId] ?? []).where((r) => !r.date.isBefore(from) && !r.date.isAfter(to)).toList();
+      (_demoRes[storeId] ??= _seedReservations(storeId)).where((r) => !r.date.isBefore(from) && !r.date.isAfter(to)).toList();
+
+  /// 示範用的今天訂位（時間軸、座位圖看得到東西；2026-11-01）
+  List<Reservation> _seedReservations(String storeId) {
+    final n = DateTime.now().subtract(const Duration(hours: 6));
+    final day = DateTime(n.year, n.month, n.day);
+    final now = DateTime.now();
+    Reservation mk(int i, String time, int party, String name, List<String> tables, {DateTime? seated, bool walkIn = false, String? note}) =>
+        Reservation(
+          id: '$storeId-seed$i', date: day, time: time, party: party, name: name, phone: '0912-000-00$i',
+          status: seated != null ? 'arrived' : 'confirmed', source: walkIn ? 'app' : 'web', createdAt: now,
+          tableIds: tables, seatedAt: seated, walkIn: walkIn, note: note,
+        );
+    return [
+      mk(1, '19:00', 2, '林小姐', ['A1', 'A2'], seated: now.subtract(const Duration(minutes: 40))),
+      mk(2, '19:30', 4, '陳先生', ['S1'], seated: now.subtract(const Duration(minutes: 15)), note: '慶生，要蛋糕盤'),
+      mk(3, '20:00', 2, '王先生', ['A5']),
+      mk(4, '20:30', 3, 'Kenji', ['S3']),
+      mk(5, '21:00', 1, '現場', ['A8'], walkIn: true),
+      mk(6, '21:30', 2, '張小姐', const []),
+    ];
+  }
   @override
   Future<void> addReservation(String storeId,
       {required DateTime date, required String time, required int party, required String name, required String phone, String? email, String? note, List<String> tableIds = const []}) async {
@@ -830,12 +851,21 @@ class DemoRepository implements Repository {
   Future<void> saveReservationTable(String storeId, ReservationTable t) async {
     final list = _demoTables[storeId] ??= [];
     final i = list.indexWhere((x) => x.id == t.id);
+    final old = i >= 0 ? list[i] : null;
     final v = ReservationTable(id: t.id.isEmpty ? 'T${list.length + 1}' : t.id, name: t.name, seats: t.seats,
-        combinable: t.combinable, sort: t.sort, active: t.active);
+        combinable: t.combinable, sort: t.sort, active: t.active, posX: old?.posX, posY: old?.posY, w: old?.w ?? 1, h: old?.h ?? 1);
     if (i < 0) {
       list.add(v);
     } else {
       list[i] = v;
+    }
+  }
+  @override
+  Future<void> saveTableLayout(String storeId, List<ReservationTable> tables) async {
+    final list = _demoTables[storeId] ??= [];
+    for (final t in tables) {
+      final i = list.indexWhere((x) => x.id == t.id);
+      if (i >= 0) list[i] = list[i].copyWith(posX: t.posX, posY: t.posY, w: t.w, h: t.h, clearPos: !t.placed);
     }
   }
   @override

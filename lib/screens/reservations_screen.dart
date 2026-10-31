@@ -11,6 +11,7 @@ import '../services/open_external.dart';
 import '../theme.dart';
 import '../widgets/auto_refresh.dart';
 import '../widgets/common.dart';
+import 'reservation_floor.dart';
 import 'reservation_timeline.dart';
 
 /// 訂位管理（0050，老闆 2026-10-14）：老闆、店長、正職。客人在公開訂位頁訂位，這裡看清單、標到店／未到／取消、新增電話訂位。
@@ -25,9 +26,11 @@ class ReservationsScreen extends StatefulWidget {
 class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBindingObserver, AutoRefresh {
   late DateTime _day = widget.initialDay ?? _today();
   bool _calOpen = false;
-  static bool _timelineView = true; // 0061：列表／時間軸（記住上次選的）
+  static _ResView _view = _ResView.timeline; // 0061：列表／時間軸／座位圖（記住上次選的；座位圖 2026-11-01）
   List<ReservationTable> _tables = const [];
-  bool get _useTimeline => _timelineView && _tables.isNotEmpty; // 沒設定桌位的店只有列表
+  bool get _useTimeline => _view == _ResView.timeline && _tables.isNotEmpty; // 沒設定桌位的店只有列表
+  bool get _useFloor => _view == _ResView.floor && _tables.isNotEmpty;
+  bool get _useList => !_useTimeline && !_useFloor;
   late Future<(ReservationSettings?, List<Reservation>)> _future;
   bool _started = false;
 
@@ -175,7 +178,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
             ),
             floatingActionButton: settings == null
                 ? null
-                : _useTimeline
+                : _useTimeline || _useFloor
                     ? FloatingActionButton.extended(
                         heroTag: 'walkin',
                         onPressed: () => _walkIn(null, null),
@@ -301,21 +304,25 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
         // 0061：列表／時間軸（這家店有設定桌位才有時間軸）
         if (_tables.isNotEmpty)
         Row(children: [
-          SegmentedButton<bool>(
+          SegmentedButton<_ResView>(
             segments: const [
-              ButtonSegment(value: false, icon: Icon(Icons.view_list_outlined), label: Text('列表')),
-              ButtonSegment(value: true, icon: Icon(Icons.view_timeline_outlined), label: Text('時間軸')),
+              ButtonSegment(value: _ResView.list, icon: Icon(Icons.view_list_outlined), label: Text('列表')),
+              ButtonSegment(value: _ResView.timeline, icon: Icon(Icons.view_timeline_outlined), label: Text('時間軸')),
+              ButtonSegment(value: _ResView.floor, icon: Icon(Icons.grid_view_outlined), label: Text('座位圖')),
             ],
-            selected: {_timelineView},
+            selected: {_view},
             showSelectedIcon: false,
-            onSelectionChanged: (v) => setState(() => _timelineView = v.first),
+            style: const ButtonStyle(visualDensity: VisualDensity.compact),
+            onSelectionChanged: (v) => setState(() => _view = v.first),
           ),
           const Spacer(),
-          if (_useTimeline)
-            TextButton.icon(
+          if (_useTimeline || _useFloor)
+            // 三個分頁後放不下文字按鈕，改成圖示（長按有說明）；列表模式的右下角大按鈕才是電話訂位
+            IconButton.outlined(
+              tooltip: '電話訂位',
               onPressed: () => _add(settings),
-              icon: const Icon(Icons.add_call, size: 18),
-              label: const Text('電話訂位'),
+              icon: const Icon(Icons.add_call, size: 20),
+              visualDensity: VisualDensity.compact,
             ),
         ]),
         if (_tables.isNotEmpty) const SizedBox(height: 12),
@@ -330,12 +337,26 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
             onTapReservation: _actions,
             onTapEmpty: (t, m) => _walkIn(t, m),
           ),
-        if (!_useTimeline && times.isEmpty)
+        if (_useFloor)
+          ReservationFloorPlan(
+            key: ValueKey('floor-$_day'),
+            storeId: _store,
+            day: _day,
+            isToday: _day == _today(),
+            list: list,
+            tables: _tables,
+            slots: settings.slotsFor(_day),
+            canArrange: widget.membership.isManager,
+            onTapReservation: _actions,
+            onTapEmpty: (t, m) => _walkIn(t, m),
+            onLayoutSaved: _reload,
+          ),
+        if (_useList && times.isEmpty)
           Padding(
             padding: EdgeInsets.only(top: 48),
             child: Text(list.isEmpty ? '這天還沒有訂位' : '這天沒有有效的訂位（已取消的都隱藏了）', textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted)),
           ),
-        if (!_useTimeline)
+        if (_useList)
         for (final t in times) ...[
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 8, 4, 6),
@@ -385,7 +406,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
             ]),
           ),
         ],
-        if (!_useTimeline && hiddenCount > 0)
+        if (_useList && hiddenCount > 0)
           Center(
             child: TextButton.icon(
               onPressed: () => setState(() => _showHidden = !_showHidden),
@@ -393,7 +414,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
               label: Text(_showHidden ? '收起已隱藏的取消訂位' : '已隱藏 $hiddenCount 筆取消的訂位・顯示'),
             ),
           ),
-        if (!_useTimeline && list.any((r) => r.status == 'cancelled' && !isHidden(r)))
+        if (_useList && list.any((r) => r.status == 'cancelled' && !isHidden(r)))
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: Text('已取消的訂位可以往左滑隱藏', textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
@@ -2128,3 +2149,6 @@ class _SpecialDaysScreenState extends State<SpecialDaysScreen> {
         ),
       );
 }
+
+/// 訂位頁的三種看法
+enum _ResView { list, timeline, floor }

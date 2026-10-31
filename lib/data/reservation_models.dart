@@ -198,7 +198,36 @@ class ReservationTable {
   final bool combinable;
   final int sort;
   final bool active;
-  const ReservationTable({this.id = '', required this.name, this.seats = 2, this.combinable = false, this.sort = 0, this.active = true});
+  /// 座位圖（老闆 2026-11-01）：在平面圖上的格子位置與大小（格子為單位）；posX／posY 是 null＝還沒排，照 sort 自動排
+  final int? posX;
+  final int? posY;
+  final int w;
+  final int h;
+  const ReservationTable({
+    this.id = '',
+    required this.name,
+    this.seats = 2,
+    this.combinable = false,
+    this.sort = 0,
+    this.active = true,
+    this.posX,
+    this.posY,
+    this.w = 1,
+    this.h = 1,
+  });
+  bool get placed => posX != null && posY != null;
+  ReservationTable copyWith({int? posX, int? posY, int? w, int? h, bool clearPos = false}) => ReservationTable(
+        id: id,
+        name: name,
+        seats: seats,
+        combinable: combinable,
+        sort: sort,
+        active: active,
+        posX: clearPos ? null : (posX ?? this.posX),
+        posY: clearPos ? null : (posY ?? this.posY),
+        w: w ?? this.w,
+        h: h ?? this.h,
+      );
   factory ReservationTable.fromRow(Map<String, dynamic> r) => ReservationTable(
         id: r['id'] as String,
         name: r['name'] as String,
@@ -206,6 +235,10 @@ class ReservationTable {
         combinable: r['combinable'] as bool? ?? false,
         sort: (r['sort'] as num?)?.toInt() ?? 0,
         active: r['active'] as bool? ?? true,
+        posX: (r['pos_x'] as num?)?.toInt(),
+        posY: (r['pos_y'] as num?)?.toInt(),
+        w: ((r['w'] as num?)?.toInt() ?? 1).clamp(1, 4),
+        h: ((r['h'] as num?)?.toInt() ?? 1).clamp(1, 4),
       );
 }
 
