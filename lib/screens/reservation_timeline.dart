@@ -3,6 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../app_state.dart';
+import '../data/biz_time.dart';
+import '../services/clock.dart';
+
+export '../data/biz_time.dart';
 import '../data/repository.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -57,24 +61,6 @@ const _rowH = 58.0;
 const _labelW = 74.0;
 const _headH = 44.0;
 
-/// 營業日的分鐘數：凌晨 6 點前算前一天（加 24 小時）
-int bizMinute(int m) => m < 360 ? m + 1440 : m;
-
-/// 這個時間是不是在這個營業日（凌晨 6 點前算前一天）
-bool onBizDay(DateTime t, DateTime day) {
-  final s = t.toLocal().subtract(const Duration(hours: 6));
-  return s.year == day.year && s.month == day.month && s.day == day.day;
-}
-
-/// 入座／清桌時間只在同一個營業日才拿來畫（補登別天的到店，時間是補登當下，不能拿來畫；Codex 審查）
-DateTime? seatedOn(Reservation r) => r.seatedAt != null && onBizDay(r.seatedAt!, r.date) ? r.seatedAt : null;
-DateTime? clearedOn(Reservation r) => r.clearedAt != null && onBizDay(r.clearedAt!, r.date) ? r.clearedAt : null;
-
-String minuteLabel(int m) {
-  final x = m % 1440;
-  return '${(x ~/ 60).toString().padLeft(2, '0')}:${(x % 60).toString().padLeft(2, '0')}';
-}
-
 class _ReservationTimelineState extends State<ReservationTimeline> {
   ScrollController? _h;
   Timer? _tick;
@@ -94,16 +80,16 @@ class _ReservationTimelineState extends State<ReservationTimeline> {
   }
 
   int get _now {
-    final n = DateTime.now();
+    final n = taipeiNow();
     return bizMinute(n.hour * 60 + n.minute);
   }
 
   int _minuteOf(DateTime t) {
-    final l = t.toLocal();
+    final l = toTaipei(t);
     // 跟營業日比：隔天凌晨的時間算 24 點以後
     final d = DateTime(l.year, l.month, l.day);
     final m = l.hour * 60 + l.minute;
-    if (d.isAfter(widget.day)) return m + 1440 * d.difference(widget.day).inDays;
+    if (d.isAfter(widget.day)) return m + 1440 * calendarDaysBetween(widget.day, d);
     return bizMinute(m);
   }
 
@@ -400,16 +386,47 @@ Future<List<String>?> pickTables(BuildContext context,
     final free = act.where((t) => t.active && !busy.contains(t.id)).toList();
     final single = free.where((t) => t.seats >= party).toList()..sort((a, b) => a.seats.compareTo(b.seats));
     if (single.isNotEmpty) return [single.first.id];
-    // 可併的桌照順序併到夠坐
+    // 可併的桌：同一層樓、而且在座位圖上相鄰的才併（健檢 2026-11-01 Bug 4：以前會把 1F 的 S1 跟 2F 的 A1 併成一組）
+    // 沒排過座位圖位置的桌，退回照排序相鄰（sort 連號）
     final comb = free.where((t) => t.combinable).toList();
-    final out = <String>[];
-    var seats = 0;
-    for (final t in comb) {
-      out.add(t.id);
-      seats += t.seats;
-      if (seats >= party) return out;
+    bool adjacent(ReservationTable a, ReservationTable b) {
+      if (a.floor != b.floor) return false;
+      if (a.placed && b.placed) {
+        // 兩張桌在座位圖上有共用的邊（上下或左右貼著）才算相鄰
+        final ax = a.posX!, ay = a.posY!, bx = b.posX!, by = b.posY!;
+        final overlapX = ax < bx + b.w && bx < ax + a.w;
+        final overlapY = ay < by + b.h && by < ay + a.h;
+        final touchX = ax + a.w == bx || bx + b.w == ax;
+        final touchY = ay + a.h == by || by + b.h == ay;
+        return (touchX && overlapY) || (touchY && overlapX);
+      }
+      return (a.sort - b.sort).abs() == 1;
     }
-    return const [];
+    // 從每張可併的桌開始往外長，長到夠坐為止；取總座位最接近人數的那組
+    List<String> best = const [];
+    var bestSeats = 1 << 30;
+    for (final start in comb) {
+      final group = [start];
+      var seats = start.seats;
+      var grown = true;
+      while (seats < party && grown) {
+        grown = false;
+        for (final t in comb) {
+          if (group.contains(t)) continue;
+          if (group.any((g) => adjacent(g, t))) {
+            group.add(t);
+            seats += t.seats;
+            grown = true;
+            if (seats >= party) break;
+          }
+        }
+      }
+      if (seats >= party && seats < bestSeats) {
+        bestSeats = seats;
+        best = [for (final t in group) t.id];
+      }
+    }
+    return best;
   }
 
   return showModalBottomSheet<List<String>>(
@@ -504,7 +521,7 @@ Set<String> busyTables(List<Reservation> all, Reservation? me, int minute) {
     if (me != null && r.id == me.id) continue;
     if (!r.active || r.clearedAt != null) continue;
     final seat = seatedOn(r);
-    final s = seat != null ? bizMinute(seat.toLocal().hour * 60 + seat.toLocal().minute) : bizMinute(minutesOf(r.time));
+    final s = seat != null ? bizMinute(toTaipei(seat).hour * 60 + toTaipei(seat).minute) : bizMinute(minutesOf(r.time));
     // 已入座：從入座到清桌都算忙；還沒入座：前後 2 小時內算忙
     final busy = r.seatedAt != null ? s <= minute + 120 : (s - minute).abs() < 120;
     if (busy) out.addAll(r.tableIds);

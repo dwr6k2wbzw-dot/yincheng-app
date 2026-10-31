@@ -277,8 +277,9 @@ class DayLimits {
   const DayLimits({required this.closed, this.note, this.maxGroups, this.maxGuests, this.maxLarge, required this.largeSize});
 
   /// 加上這一組後會超過哪些上限（空的＝沒超過）
+  /// 現場客不算進名額（跟資料庫 reservation_day_usage 一樣；健檢 2026-11-01 Bug 2：以前算進去，有現場客的晚上電話訂位會被誤擋）
   List<String> overBy(List<Reservation> others, int party) {
-    final act = others.where((r) => r.active).toList();
+    final act = others.where((r) => r.active && !r.walkIn).toList();
     final groups = act.length + 1;
     final guests = act.fold<int>(0, (t, r) => t + r.party) + party;
     final large = act.where((r) => r.party >= largeSize).length + (party >= largeSize ? 1 : 0);

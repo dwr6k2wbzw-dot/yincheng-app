@@ -585,7 +585,8 @@ class SupabaseRepository implements Repository {
 
   @override
   Future<void> dismissShiftDraft(String draftId) async {
-    await _db.from('shift_photo_drafts').update({'status': 'dismissed'}).eq('id', draftId);
+    final rows = await _db.from('shift_photo_drafts').update({'status': 'dismissed'}).eq('id', draftId).select('id');
+    if (rows.isEmpty) throw Exception('message: 沒有權限或這份草稿已不存在,');
   }
 
   // ---------------- 交接事項與工作提醒 ----------------
@@ -673,9 +674,15 @@ class SupabaseRepository implements Repository {
   }
 
   @override
-  Future<void> setHandoverResolved(String noteId, bool resolved) => _db
-      .from('handover_notes')
-      .update({'resolved_at': resolved ? DateTime.now().toUtc().toIso8601String() : null}).eq('id', noteId);
+  Future<void> setHandoverResolved(String noteId, bool resolved) async {
+    // 檢查有沒有真的改到（RLS 擋掉時 update 不會報錯，只是 0 列；健檢 2026-11-01）
+    final rows = await _db
+        .from('handover_notes')
+        .update({'resolved_at': resolved ? DateTime.now().toUtc().toIso8601String() : null})
+        .eq('id', noteId)
+        .select('id');
+    if (rows.isEmpty) throw Exception('message: 沒有權限修改這則交接,');
+  }
 
   @override
   Future<void> markHandoverRead(String storeId, List<String> noteIds) async {
@@ -688,7 +695,10 @@ class SupabaseRepository implements Repository {
   }
 
   @override
-  Future<void> deleteHandover(String noteId) => _db.from('handover_notes').delete().eq('id', noteId);
+  Future<void> deleteHandover(String noteId) async {
+    final rows = await _db.from('handover_notes').delete().eq('id', noteId).select('id');
+    if (rows.isEmpty) throw Exception('message: 沒有權限刪除這則交接,');
+  }
 
   @override
   Future<NotificationFeed> notifications(String storeId) async {
@@ -747,12 +757,16 @@ class SupabaseRepository implements Repository {
     if (isNew) {
       await _db.from('work_reminders').insert({...row, 'store_id': storeId, 'start_date': _day.format(bizToday())});
     } else {
-      await _db.from('work_reminders').update(row).eq('id', r.id);
+      final rows = await _db.from('work_reminders').update(row).eq('id', r.id).select('id');
+      if (rows.isEmpty) throw Exception('message: 沒有權限修改這個提醒,');
     }
   }
 
   @override
-  Future<void> deleteReminder(String reminderId) => _db.from('work_reminders').delete().eq('id', reminderId);
+  Future<void> deleteReminder(String reminderId) async {
+    final rows = await _db.from('work_reminders').delete().eq('id', reminderId).select('id');
+    if (rows.isEmpty) throw Exception('message: 沒有權限刪除這個提醒,');
+  }
 
   @override
   Future<void> setReminderDone(String storeId, String reminderId, DateTime occurrence, bool done) async {

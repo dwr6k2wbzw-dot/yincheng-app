@@ -1,3 +1,4 @@
+import '../services/clock.dart';
 import 'dart:typed_data';
 
 /// 資料模型（欄位名稱對應資料庫）
@@ -784,9 +785,9 @@ class ShiftMonth {
 
 /// 營業日：早上 6 點前算前一天（酒吧凌晨還在營業）
 DateTime bizToday([DateTime? now]) {
-  final n = now ?? DateTime.now();
-  final d = DateTime(n.year, n.month, n.day);
-  return n.hour < 6 ? d.subtract(const Duration(days: 1)) : d;
+  final n = now ?? taipeiNow(); // 台北時間，不用手機時間（健檢 2026-11-01）
+  // 用年月日推前一天（DateTime 會自動處理月初、年初），不用減 24 小時：換季那天手機本地的一天不是 24 小時
+  return n.hour < 6 ? DateTime(n.year, n.month, n.day - 1) : DateTime(n.year, n.month, n.day);
 }
 
 class HandoverNote {
