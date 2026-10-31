@@ -83,4 +83,12 @@ void main() {
       expect(calendarDaysBetween(DateTime(2026, 11, 1), DateTime(2026, 11, 1)), 0);
     });
   });
+
+  group('時間軸點空白處 → 訂位日期與時段（Codex 審查 PR #137）', () {
+    final d = DateTime(2026, 11, 1);
+    test('晚上照當天', () => expect(slotFromTimeline(d, 21 * 60), (d, '21:00')));
+    test('凌晨 6 點前仍是同一個營業日', () => expect(slotFromTimeline(d, 25 * 60 + 30), (d, '01:30')));
+    test('隔天 6 點以後算下一個營業日', () => expect(slotFromTimeline(d, 30 * 60 + 30), (DateTime(2026, 11, 2), '06:30')));
+    test('月底跨月', () => expect(slotFromTimeline(DateTime(2026, 11, 30), 30 * 60), (DateTime(2026, 12, 1), '06:00')));
+  });
 }

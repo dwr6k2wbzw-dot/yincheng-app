@@ -19,3 +19,16 @@ String minuteLabel(int m) {
   final x = m % 1440;
   return '${(x ~/ 60).toString().padLeft(2, '0')}:${(x % 60).toString().padLeft(2, '0')}';
 }
+
+/// 時間軸上點到的位置 → 訂位要存的（營業日, HH:mm）。
+/// 營業日到隔天早上 6 點（分鐘數 < 1800 仍是這一天，凌晨的時段照慣例存在同一個營業日）；
+/// 時間軸畫得到 6 點以後，那一段算下一個營業日（Codex 審查 PR #137）。
+(DateTime, String) slotFromTimeline(DateTime day, int bizMin) {
+  var d = day;
+  var m = bizMin;
+  if (m >= 30 * 60) {
+    d = DateTime(day.year, day.month, day.day + 1);
+    m -= 1440;
+  }
+  return (d, minuteLabel(m));
+}

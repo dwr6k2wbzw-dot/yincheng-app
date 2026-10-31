@@ -886,10 +886,10 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
     );
   }
 
-  Future<void> _add(ReservationSettings s, {String? time, List<String> tableIds = const []}) async {
+  Future<void> _add(ReservationSettings s, {String? time, List<String> tableIds = const [], DateTime? day}) async {
     final added = await Navigator.of(context).push<bool>(MaterialPageRoute(
       builder: (_) => _AddReservationScreen(
-          membership: widget.membership, settings: s, day: _day, tables: _tables, initialTime: time, initialTableIds: tableIds),
+          membership: widget.membership, settings: s, day: day ?? _day, tables: _tables, initialTime: time, initialTableIds: tableIds),
     ));
     if (added == true) _reload();
   }
@@ -903,9 +903,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
     }();
     final isNow = _day == _today() && (minute - nowMin).abs() <= 15;
     if (isNow) return _walkIn(table, minute);
-    final m = minute % 1440;
-    final time = '${(m ~/ 60).toString().padLeft(2, '0')}:${(m % 60).toString().padLeft(2, '0')}';
-    await _add(s, time: time, tableIds: [if (table != null && table.active) table.id]);
+    // 時間軸畫得到隔天早上 6 點以後，那一段屬於下一個營業日（Codex 審查 PR #137）
+    final (day, time) = slotFromTimeline(_day, minute);
+    await _add(s, time: time, tableIds: [if (table != null && table.active) table.id], day: day);
   }
 }
 
