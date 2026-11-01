@@ -84,6 +84,24 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--brass); outline
 .copy { min-height: 36px; padding: 0 14px; background: transparent; color: var(--brass); border: 1px solid var(--line); font: inherit; font-size: 13px; letter-spacing: 0.1em; cursor: pointer; }
 .copy:hover { border-color: var(--brass); }
 
+/* 帶一張回去：分享到 IG 限動 */
+.keep { display: grid; grid-template-columns: 7.5em minmax(0, 1fr); gap: 20px; align-items: center; padding-block: 40px 8px; }
+.keep img { width: 100%; height: auto; aspect-ratio: 9 / 16; object-fit: cover; display: block; outline: 1px solid var(--line); outline-offset: 5px; }
+.keep h2 { margin: 0 0 6px; font-family: var(--serif); font-weight: 700; font-size: 24px; letter-spacing: 0.08em; }
+.keep p { margin: 0 0 14px; font-size: 14px; color: var(--dust); }
+.keep .acts { display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
+.keep .acts .btn { align-self: stretch; }
+button.btn { border: 0; font-family: inherit; cursor: pointer; }
+.ghost { min-height: 44px; padding: 0 18px; background: transparent; color: var(--brass); border: 1px solid var(--line); font: inherit; font-size: 15px; letter-spacing: 0.1em; cursor: pointer; }
+.ghost:hover { border-color: var(--brass); }
+.sheet { position: fixed; inset: 0; z-index: 60; background: var(--ink); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: calc(24px + env(safe-area-inset-top, 0px)) 20px calc(24px + env(safe-area-inset-bottom, 0px)); text-align: center; }
+.sheet[hidden] { display: none; }
+.sheet img { max-height: 60vh; height: auto; width: auto; max-width: 100%; aspect-ratio: 9 / 16; outline: 1px solid var(--line); outline-offset: 5px; -webkit-touch-callout: default; }
+.sheet p { margin: 0; font-size: 14px; color: var(--dust); max-width: 22em; }
+.sheet b { font-family: var(--serif); font-size: 18px; color: var(--cream); letter-spacing: 0.06em; }
+.sheet .acts { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+.sheet .btn { align-self: auto; }
+
 /* 結尾 */
 .end { padding-block: 48px 72px; display: flex; flex-direction: column; gap: 16px; }
 .end p { margin: 0; color: var(--dust); }
@@ -275,6 +293,18 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--brass); outline
     <div class="phone"><span>小城外</span><code id="tel">02-2559-5560</code><button class="copy" id="copyTel" type="button">複製電話</button></div>
   </section>
 
+  <section class="keep" aria-labelledby="keep-h">
+    <img src="story-10th.jpg" width="1080" height="1920" alt="重返大稻埕的限動圖：小城外吧台照片、直排片名與 11/15 日期">
+    <div>
+      <h2 id="keep-h">帶一張回去</h2>
+      <p>把這張邀請放上你的限動，約老朋友一起回來。想讓朋友點進來，就在限動加上「連結」貼紙，貼上活動連結。</p>
+      <div class="acts">
+        <button class="btn" id="shareStory" type="button">分享到 IG 限動</button>
+        <button class="ghost" id="copyLink" type="button">複製活動連結</button>
+      </div>
+    </div>
+  </section>
+
   <section class="end">
     <p>十年過去，有些人離開了大稻埕，有些故事卻一直留在這裡。</p>
     <div class="last">
@@ -284,6 +314,13 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--brass); outline
     <div class="sign">小城外 敬邀</div>
   </section>
 </main>
+
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-h" hidden>
+  <img src="story-10th.jpg" width="1080" height="1920" alt="重返大稻埕的限動圖">
+  <b id="sheet-h">長按圖片，存到照片</b>
+  <p>打開 IG 限動選這張圖，加上「連結」貼紙，貼上活動連結，朋友點了就能看到邀請。</p>
+  <div class="acts"><button class="btn" id="sheetCopy" type="button">複製活動連結</button><button class="ghost" id="sheetClose" type="button">好了</button></div>
+</div>
 
 <script>
 (function () {
@@ -314,6 +351,50 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--brass); outline
     try {
       navigator.clipboard.writeText(tel.textContent.replace(/-/g, '')).then(done, fallback);
     } catch (e) { fallback(); }
+  });
+})();
+// 分享到 IG 限動：手機叫出分享選單（選 Instagram → 限時動態）；不支援時改成長按存圖
+(function () {
+  var SHARE_URL = new URL('./', location.href).href; // 通用版：朋友打開是「致　老朋友」
+  var shareBtn = document.getElementById('shareStory');
+  var linkBtn = document.getElementById('copyLink');
+  var sheet = document.getElementById('sheet');
+  var sheetCopy = document.getElementById('sheetCopy');
+  var closeBtn = document.getElementById('sheetClose');
+  if (!shareBtn || !linkBtn || !sheet) return;
+  var file = null;
+  try {
+    fetch('story-10th.jpg').then(function (r) { return r.blob(); }).then(function (b) {
+      file = new File([b], '重返大稻埕.jpg', { type: 'image/jpeg' });
+    }).catch(function () {});
+  } catch (e) {}
+  var flash = function (btn, text, back) { btn.textContent = text; setTimeout(function () { btn.textContent = back; }, 2000); };
+  var copyLink = function () {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(SHARE_URL).then(function () { return true; }, function () { return false; });
+    } catch (e) {}
+    return Promise.resolve(false);
+  };
+  var copyWithFeedback = function (btn) {
+    copyLink().then(function (ok) {
+      if (ok) flash(btn, '已複製連結', '複製活動連結');
+      else window.prompt('長按複製活動連結', SHARE_URL);
+    });
+  };
+  var openSheet = function () { sheet.hidden = false; closeBtn.focus(); };
+  var closeSheet = function () { sheet.hidden = true; shareBtn.focus(); };
+  linkBtn.addEventListener('click', function () { copyWithFeedback(linkBtn); });
+  sheetCopy.addEventListener('click', function () { copyWithFeedback(sheetCopy); });
+  closeBtn.addEventListener('click', closeSheet);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !sheet.hidden) closeSheet(); });
+  shareBtn.addEventListener('click', function () {
+    var can = false;
+    try { can = !!(file && navigator.canShare && navigator.canShare({ files: [file] })); } catch (e) {}
+    if (!can) { openSheet(); return; }
+    // 只分享圖片：iOS 同時帶連結時，有些 App 會只收連結
+    navigator.share({ files: [file] }).catch(function (err) {
+      if (!err || err.name !== 'AbortError') openSheet();
+    });
   });
 })();
 </script>
