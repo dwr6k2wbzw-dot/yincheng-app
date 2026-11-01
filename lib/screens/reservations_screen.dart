@@ -813,7 +813,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
     }
     final now = taipeiNow();
     final m = bizMinute(now.hour * 60 + now.minute);
-    var party = 2;
+    var party = 1; // 現場客預設 1 位（老闆 2026-11-01）
     final name = TextEditingController();
     var ids = <String>[if (table != null && table.active) table.id];
     final all = (await _future).$2;
