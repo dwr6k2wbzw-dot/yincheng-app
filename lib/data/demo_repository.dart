@@ -595,11 +595,13 @@ class DemoRepository implements Repository {
 
   final _requestIds = <String>{};
   @override
-  Future<void> addPurchase(NewPurchase p) async {
+  Future<String> addPurchase(NewPurchase p) async {
     if (!_requestIds.add(p.clientRequestId)) throw Exception('duplicate key client_request');
     if (p.amount == 0) throw Exception('message: 金額不能為 0,');
+    final id = 'n${_seq++}';
+    _purchaseMeta[id] = (p.purchaseDate, DateTime.now());
     _purchases.add(Purchase(
-      id: 'n${_seq++}',
+      id: id,
       purchaseDate: p.purchaseDate,
       categoryCode: p.categoryCode,
       supplierName: _suppliers.where((s) => s.id == p.supplierId).map((s) => s.name).firstOrNull,
@@ -609,6 +611,57 @@ class DemoRepository implements Repository {
       reconciled: false,
       source: 'app',
     ));
+    return id;
+  }
+
+  final _purchaseMeta = <String, (DateTime, DateTime)>{}; // 進貨日、登記時間（算庫存用）
+  final _items = <String, List<PurchaseItem>>{};
+  final _itemNegate = <String, bool>{};
+
+  @override
+  Future<SlipReading> readSlip(String storeId, String image) async {
+    // 示範：假裝讀到一張酒商送貨單（第二行對不到庫存品項、第三行沒把握）
+    await Future<void>.delayed(const Duration(milliseconds: 1200));
+    final first = _products.where((p) => !_inactive.contains(p.id)).firstOrNull;
+    return SlipReading(
+      vendor: '大倉捷',
+      date: await businessDate(storeId),
+      total: 6300,
+      category: '酒水',
+      notes: '第三行數量有點模糊，請核對',
+      items: [
+        PurchaseItem(name: first?.name ?? '琴酒 700ml', qty: 6, unit: first?.unit ?? '瓶', unitPrice: 650,
+            productId: first?.id, stockQty: first == null ? null : 6, source: 'ai'),
+        PurchaseItem(name: '通寧水 200ml', qty: 2, unit: '箱', unitPrice: 720, source: 'ai'),
+        PurchaseItem(name: '檸檬', qty: 3, unit: '斤', unitPrice: 120, source: 'ai', sure: false),
+      ],
+    );
+  }
+
+  @override
+  Future<List<PurchaseItem>> monthPurchaseItems(String storeId, DateTime month) async => [
+        for (final e in _items.entries)
+          if (_purchaseMeta[e.key] case final m? when m.$1.year == month.year && m.$1.month == month.month)
+            for (final it in e.value)
+              PurchaseItem(name: it.name, qty: _itemNegate[e.key] == true ? -it.qty : it.qty, unit: it.unit,
+                  unitPrice: it.unitPrice, productId: it.productId, decided: true),
+      ];
+
+  @override
+  Future<List<PurchaseItem>> purchaseItems(String purchaseId) async => [
+        for (final it in _items[purchaseId] ?? const <PurchaseItem>[])
+          PurchaseItem(name: it.name, qty: it.qty, unit: it.unit, unitPrice: it.unitPrice,
+              productId: it.productId, stockQty: it.stockQty, source: it.source)
+      ];
+
+  @override
+  Future<void> savePurchaseItems(String purchaseId, List<PurchaseItem> items, {bool negate = false}) async {
+    _items[purchaseId] = [
+      for (final it in items)
+        PurchaseItem(name: it.name, qty: it.qty, unit: it.unit, unitPrice: it.unitPrice,
+            productId: it.productId, stockQty: it.stockQty, source: it.source)
+    ];
+    _itemNegate[purchaseId] = negate;
   }
 
   @override
@@ -643,18 +696,33 @@ class DemoRepository implements Repository {
 
   @override
   Future<Map<String, StockLevel>> latestStock(String storeId) async {
-    final out = <String, StockLevel>{};
+    final counted = <String, (double, DateTime, DateTime)>{};
     for (final c in _counts.reversed) {
       if (c.status != CountStatus.submitted && c.status != CountStatus.approved) continue;
       for (final e in (_lines[c.id] ?? {}).entries) {
-        out.putIfAbsent(e.key, () => StockLevel(e.value, c.bizDate));
+        counted.putIfAbsent(e.key, () => (e.value, c.bizDate, _countedAt[c.id] ?? DateTime(2000)));
       }
     }
-    return out;
+    // 盤點之後的進貨明細（同資料庫 stock_levels）
+    final inflow = <String, double>{};
+    for (final e in _items.entries) {
+      final meta = _purchaseMeta[e.key];
+      if (meta == null) continue;
+      for (final it in e.value.where((x) => x.toStock)) {
+        final c = counted[it.productId];
+        final after = c == null || meta.$1.isAfter(c.$2) || (meta.$1 == c.$2 && meta.$2.isAfter(c.$3));
+        if (after) inflow[it.productId!] = (inflow[it.productId!] ?? 0) + (_itemNegate[e.key] == true ? -it.stockQty! : it.stockQty!);
+      }
+    }
+    return {
+      for (final id in {...counted.keys, ...inflow.keys})
+        id: StockLevel((counted[id]?.$1 ?? 0) + (inflow[id] ?? 0), counted[id]?.$2, purchased: inflow[id] ?? 0),
+    };
   }
+  final _countedAt = <String, DateTime>{};
 
   @override
-  Future<void> saveProduct(String storeId, Product p) async {
+  Future<String> saveProduct(String storeId, Product p) async {
     // 同名的停用品項：恢復那一個（與正式資料庫一致）
     final old = p.id.isEmpty ? _products.where((x) => x.name == p.name.trim() && _inactive.contains(x.id)).firstOrNull : null;
     if (old != null) {
@@ -668,6 +736,7 @@ class DemoRepository implements Repository {
     } else {
       _products[i] = np;
     }
+    return np.id;
   }
 
   @override
@@ -707,6 +776,7 @@ class DemoRepository implements Repository {
   Future<void> setCountStatus(String countId, CountStatus status, {String? voidReason}) async {
     final c = _counts.firstWhere((c) => c.id == countId);
     if (status == CountStatus.approved && _isStaff) throw Exception('message: 員工不能核准盤點,');
+    if (status == CountStatus.submitted) _countedAt[c.id] = DateTime.now();
     _replace(c, status);
   }
 

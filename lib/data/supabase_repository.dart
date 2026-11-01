@@ -1057,7 +1057,7 @@ class SupabaseRepository implements Repository {
   }
 
   @override
-  Future<void> addPurchase(NewPurchase p) async {
+  Future<String> addPurchase(NewPurchase p) async {
     // created_by、period_month 由資料庫填入；client_request_id 防止重送重複
     String? photoPath;
     if (p.photoJpeg != null) {
@@ -1071,7 +1071,7 @@ class SupabaseRepository implements Repository {
         if (e.statusCode != '409' && !e.message.contains('exists')) rethrow;
       }
     }
-    await _db.from('purchases').insert({
+    final inserted = await _db.from('purchases').insert({
       'store_id': p.storeId,
       'purchase_date': _day.format(p.purchaseDate),
       'category_code': p.categoryCode,
@@ -1083,13 +1083,14 @@ class SupabaseRepository implements Repository {
       'paid_by': p.paidBy,
       'client_request_id': p.clientRequestId,
       if (p.noReceipt && photoPath == null) 'no_receipt': true,
-    });
+    }).select('id').single();
+    final id = inserted['id'] as String;
     // 送貨單照片 → 銷貨單草稿。進貨已存好，這步失敗不影響進貨
     if (photoPath != null && p.amount > 0 && p.slipDraft) {
       // 0040：存檔當下就建立草稿（內容由資料庫從這筆進貨讀）
       try {
         await _db.rpc('create_photo_slip_draft', params: {'p_photo_path': photoPath});
-        return;
+        return id;
       } catch (_) {
         // 失敗（例如網路斷了）才放進佇列，由每小時的同步補做（0034）
       }
@@ -1108,6 +1109,74 @@ class SupabaseRepository implements Repository {
         });
       } catch (_) {}
     }
+    return id;
+  }
+
+  @override
+  Future<SlipReading> readSlip(String storeId, String image) async {
+    try {
+      final r = await _db.functions.invoke('slip-read', body: {'store_id': storeId, 'image': image});
+      final data = r.data;
+      if (data is Map && data['ok'] == true) return SlipReading.fromJson(Map<String, dynamic>.from(data));
+      throw Exception('message: ${data is Map && data['error'] is String ? data['error'] : '這張照片讀不出來，請手動輸入'},');
+    } on FunctionException catch (e) {
+      final d = e.details;
+      final msg = d is Map && d['error'] is String
+          ? d['error'] as String
+          : e.status == 404
+              ? '拍照辨識還沒開通，請手動輸入'
+              : '暫時無法辨識，請手動輸入';
+      throw Exception('message: $msg,');
+    }
+  }
+
+  @override
+  Future<List<PurchaseItem>> monthPurchaseItems(String storeId, DateTime month) async {
+    final from = DateTime(month.year, month.month, 1);
+    final to = DateTime(month.year, month.month + 1, 1);
+    final out = <PurchaseItem>[];
+    const page = 1000;
+    for (var start = 0; start < page * 20; start += page) {
+      final rows = await _db
+          .from('purchase_items')
+          .select('item_name, qty, unit, unit_price, product_id, purchases!inner(store_id, purchase_date)')
+          .eq('purchases.store_id', storeId)
+          .gte('purchases.purchase_date', _day.format(from))
+          .lt('purchases.purchase_date', _day.format(to))
+          .order('id')
+          .range(start, start + page - 1);
+      for (final r in rows) {
+        out.add(PurchaseItem(
+          name: r['item_name'] as String,
+          qty: toDouble(r['qty']), // 退貨是負數
+          unit: r['unit'] as String?,
+          unitPrice: r['unit_price'] == null ? null : toDouble(r['unit_price']),
+          productId: r['product_id'] as String?,
+          decided: true,
+        ));
+      }
+      if (rows.length < page) break;
+    }
+    return out;
+  }
+
+  @override
+  Future<List<PurchaseItem>> purchaseItems(String purchaseId) async {
+    final rows = await _db
+        .from('purchase_items')
+        .select('item_name, qty, unit, unit_price, product_id, stock_qty, source')
+        .eq('purchase_id', purchaseId)
+        .order('line_no', nullsFirst: false)
+        .order('item_name');
+    return rows.map(PurchaseItem.fromRow).toList();
+  }
+
+  @override
+  Future<void> savePurchaseItems(String purchaseId, List<PurchaseItem> items, {bool negate = false}) async {
+    await _db.rpc('save_purchase_items', params: {
+      'p_purchase': purchaseId,
+      'p_items': [for (final it in items) it.toJson(negate: negate)],
+    });
   }
 
   @override
@@ -1172,6 +1241,21 @@ class SupabaseRepository implements Repository {
 
   @override
   Future<Map<String, StockLevel>> latestStock(String storeId) async {
+    // 0087：盤點＋之後進貨（資料庫 stock_levels）；資料庫還沒更新時退回只看盤點
+    try {
+      final rows = await _db.rpc('stock_levels', params: {'p_store': storeId}) as List;
+      return {
+        for (final r in rows)
+          if (r['counted_on'] != null || toDouble(r['purchased_qty']) != 0)
+            r['product_id'] as String: StockLevel(
+              toDouble(r['current_qty']),
+              r['counted_on'] == null ? null : DateTime.parse(r['counted_on'] as String),
+              purchased: toDouble(r['purchased_qty']),
+            ),
+      };
+    } on PostgrestException catch (e) {
+      if (e.code != 'PGRST202' && e.code != '42883') rethrow;
+    }
     // 可以只盤一部分，所以要一路往前找，直到每個使用中的品項都找到最近一次（Codex 審查）
     final active = (await _db.from('products').select('id').eq('store_id', storeId).eq('active', true))
         .map((r) => r['id'] as String)
@@ -1199,7 +1283,7 @@ class SupabaseRepository implements Repository {
   }
 
   @override
-  Future<void> saveProduct(String storeId, Product p) async {
+  Future<String> saveProduct(String storeId, Product p) async {
     final row = {'name': p.name.trim(), 'category': p.category, 'unit': p.unit.trim(), 'par_level': p.parLevel};
     if (p.id.isEmpty) {
       // 同名的品項以前停用過（清單上看不到）：直接恢復那一個，不另外新增（老闆 2026-10-25：新增時一直說已有相同名稱）
@@ -1213,12 +1297,14 @@ class SupabaseRepository implements Repository {
       if (old != null) {
         final r = await _db.from('products').update({...row, 'active': true}).eq('id', old['id'] as String).select('id');
         if (r.isEmpty) throw Exception('message: 只有老闆、店長、正職或兼職可以修改品項,');
-        return;
+        return old['id'] as String;
       }
-      await _db.from('products').insert({...row, 'store_id': storeId});
+      final ins = await _db.from('products').insert({...row, 'store_id': storeId}).select('id').single();
+      return ins['id'] as String;
     } else {
       final r = await _db.from('products').update(row).eq('id', p.id).select('id');
       if (r.isEmpty) throw Exception('message: 只有老闆、店長、正職或兼職可以修改品項,');
+      return p.id;
     }
   }
 

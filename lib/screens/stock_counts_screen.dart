@@ -28,6 +28,15 @@ List<Product> _sorted(List<Product> list) => [...list]
     return c != 0 ? c : a.name.compareTo(b.name);
   });
 
+/// 「・10/28 盤 ＋進貨 12」：庫存＝盤點＋之後進貨（0087）
+String _stockNote(StockLevel? s, String unit) {
+  if (s == null) return '';
+  final d = s.date == null ? '・還沒盤點' : '・${DateFormat('M/d').format(s.date!)} 盤';
+  if (s.purchased == 0) return d;
+  final sign = s.purchased > 0 ? '＋' : '−';
+  return '$d $sign進貨 ${fmtQty(s.purchased.abs())}';
+}
+
 bool _isLow(Product p, StockLevel? s) => p.parLevel != null && s != null && s.qty < p.parLevel!;
 
 class StockCountsScreen extends StatefulWidget {
@@ -42,12 +51,26 @@ class _StockCountsScreenState extends State<StockCountsScreen> {
   bool _started = false;
   String _cat = '全部';
 
+  ValueNotifier<int>? _stockRev;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_started) return;
     _started = true;
     _future = _load();
+    // 新增進貨把品項加進庫存後，分頁不用手動下拉就會更新
+    _stockRev = AppScope.of(context).stockRevision..addListener(_onStockChanged);
+  }
+
+  void _onStockChanged() {
+    if (mounted) _reload();
+  }
+
+  @override
+  void dispose() {
+    _stockRev?.removeListener(_onStockChanged);
+    super.dispose();
   }
 
   Future<(List<Product>, Map<String, StockLevel>)> _load() async {
@@ -176,7 +199,7 @@ class _StockCountsScreenState extends State<StockCountsScreen> {
             Text(p.name, style: const TextStyle(fontWeight: FontWeight.w600)),
             const SizedBox(height: 2),
             Text(
-              '${p.category}${s == null ? '' : '・${DateFormat('M/d').format(s.date)} 盤'}'
+              '${p.category}${_stockNote(s, p.unit)}'
               '${p.parLevel == null ? '' : '・安全量 ${fmtQty(p.parLevel!)}'}',
               style: TextStyle(color: AppColors.muted, fontSize: AppType.small),
             ),
