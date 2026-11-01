@@ -52,10 +52,11 @@ const _minRows = 7;
 enum _Seat { free, upcoming, seated, cleared }
 
 class _TableState {
-  _TableState(this.seat, this.r, {this.next, this.primary = true});
+  _TableState(this.seat, this.r, {this.next, this.later = 0, this.primary = true});
   final _Seat seat;
   final Reservation? r; // 佔著這張桌的訂位
-  final Reservation? next; // 空桌時：接下來的訂位
+  final Reservation? next; // 空桌時：接下來的訂位（排好桌、還沒到時間）
+  final int later; // 空桌時：之後還有幾組排在這張桌（含 next）
   final bool primary; // 併桌：只在第一張桌顯示完整資料
 }
 
@@ -175,6 +176,7 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
       var seat = _Seat.free;
       Reservation? next;
       var bestNext = 1 << 30;
+      var later = 0;
       for (final r in shown.where((r) => r.tableIds.contains(t.id))) {
         final seatedAt = seatedOn(r);
         final clearedAt = clearedOn(r);
@@ -204,9 +206,12 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
             occ = r;
             seat = _Seat.upcoming;
           }
-        } else if (start > m && start < bestNext) {
-          bestNext = start;
-          next = r;
+        } else if (start > m) {
+          later++;
+          if (start < bestNext) {
+            bestNext = start;
+            next = r;
+          }
         }
       }
       // 併桌：同一組佔多張桌，只在第一張（照位置順序）顯示完整資料
@@ -216,7 +221,15 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
           ..sort((a, b) => (a.posY ?? 0) != (b.posY ?? 0) ? (a.posY ?? 0).compareTo(b.posY ?? 0) : (a.posX ?? 0).compareTo(b.posX ?? 0));
         primary = mine.isNotEmpty && mine.first.id == t.id;
       }
-      out[t.id] = _TableState(seat, occ, next: occ == null ? next : null, primary: primary);
+      // 之後排在這張桌的訂位（老闆 2026-11-01：排完桌，座位圖要看得到是誰）；併桌也只在第一張顯示名字
+      var nextPrimary = true;
+      if (occ == null && next != null && next.tableIds.length > 1) {
+        final mine = tables.where((x) => next!.tableIds.contains(x.id)).toList()
+          ..sort((a, b) => (a.posY ?? 0) != (b.posY ?? 0) ? (a.posY ?? 0).compareTo(b.posY ?? 0) : (a.posX ?? 0).compareTo(b.posX ?? 0));
+        nextPrimary = mine.isNotEmpty && mine.first.id == t.id;
+      }
+      out[t.id] = _TableState(seat, occ,
+          next: occ == null ? next : null, later: occ == null ? later : 0, primary: occ == null ? nextPrimary : primary);
     }
     return out;
   }
@@ -405,6 +418,13 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
     final known = {for (final t in widget.tables) t.id};
     final unassigned = shown.where((r) => !r.tableIds.any(known.contains)).toList()..sort((a, b) => a.time.compareTo(b.time));
     final m = _viewMinute;
+    // 已排桌、還沒入座、時間還沒到的訂位（老闆 2026-11-01：排完桌要看得到是誰坐哪）
+    final tableName = {for (final t in widget.tables) t.id: t.name};
+    final assigned = shown
+        .where((r) => r.tableIds.any(known.contains) && seatedOn(r) == null && clearedOn(r) == null)
+        .where((r) => bizMinute(minutesOf(r.time)) > m)
+        .toList()
+      ..sort((a, b) => bizMinute(minutesOf(a.time)).compareTo(bizMinute(minutesOf(b.time))));
     // 這個時間店裡（或預計）的人數、空桌數
     final seenRes = <String>{};
     var guests = 0, freeTables = 0;
@@ -560,6 +580,24 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
               ),
           ]),
         ],
+        if (assigned.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          Row(children: [
+            Icon(Icons.event_seat_outlined, size: 16, color: AppColors.primary),
+            const SizedBox(width: 6),
+            Text('之後已排桌 ${assigned.length} 組', style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.primary)),
+          ]),
+          const SizedBox(height: 8),
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            for (final r in assigned)
+              ActionChip(
+                onPressed: () => widget.onTapReservation(r),
+                avatar: Text('${r.party}', style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.primary, fontFeatures: tabular)),
+                label: Text('${r.time} ${[for (final id in r.tableIds) if (tableName[id] != null) tableName[id]!].join('＋')} ${r.name}'),
+                side: BorderSide(color: AppColors.primary.withValues(alpha: 0.5)),
+              ),
+          ]),
+        ],
         const SizedBox(height: 8),
         Text('點桌子：有客人＝入座、清桌、換桌等；空桌＝登記現場客坐這桌。兩指放大可以看到人名；上方切換時間看之後哪幾桌有訂位。',
             style: TextStyle(color: AppColors.muted, fontSize: AppType.caption, height: 1.5)),
@@ -668,6 +706,43 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
     ]);
   }
 
+  Future<void> _bookedTableMenu(ReservationTable t, Reservation next, int later) async {
+    final view = _viewMinute;
+    final pick = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: AppColors.card,
+      showDragHandle: true,
+      builder: (c) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: Text('${t.name}・${t.seats} 人桌',
+                style: const TextStyle(fontSize: AppType.title, fontWeight: FontWeight.w700)),
+          ),
+          ListTile(
+            leading: Icon(Icons.event_seat_outlined, color: AppColors.primary),
+            title: Text('${next.time}　${next.name}・${next.party} 位'),
+            subtitle: Text(later > 1 ? '之後還有 ${later - 1} 組排在這桌' : '已排在這桌，點開看訂位'),
+            onTap: () => Navigator.pop(c, 0),
+          ),
+          ListTile(
+            leading: const Icon(Icons.person_add_alt_outlined),
+            title: const Text('現在先坐其他客人／新增訂位'),
+            subtitle: Text('${next.time} 前要把桌子空出來', style: TextStyle(color: AppColors.muted)),
+            onTap: () => Navigator.pop(c, 1),
+          ),
+          const SizedBox(height: 8),
+        ]),
+      ),
+    );
+    if (!mounted || pick == null) return;
+    if (pick == 0) {
+      widget.onTapReservation(next);
+    } else {
+      widget.onTapEmpty(t, view);
+    }
+  }
+
   /// 一張桌：圓（吧台、小圓桌）或方；縮小時只放桌號＋人數（像 iCHEF），放大才放人名、時間
   Widget _tableCard(ReservationTable t, _TableState? s, {bool lifted = false}) {
     final seat = s?.seat ?? _Seat.free;
@@ -679,8 +754,16 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
       _Seat.cleared => AppColors.muted,
     };
     final filled = seat == _Seat.upcoming || seat == _Seat.seated;
-    final bg = filled ? accent.withValues(alpha: 0.24) : (seat == _Seat.cleared ? AppColors.muted.withValues(alpha: 0.12) : AppColors.cardHigh);
-    final border = _arranging ? AppColors.primary.withValues(alpha: 0.5) : (filled ? accent.withValues(alpha: 0.85) : AppColors.line);
+    // 空桌但之後有排訂位：金色細框＋淡底，一眼看得出這桌晚點有人
+    final booked = !filled && !_arranging && s?.next != null;
+    final bg = filled
+        ? accent.withValues(alpha: 0.24)
+        : booked
+            ? AppColors.primary.withValues(alpha: 0.12)
+            : (seat == _Seat.cleared ? AppColors.muted.withValues(alpha: 0.12) : AppColors.cardHigh);
+    final border = _arranging
+        ? AppColors.primary.withValues(alpha: 0.5)
+        : (filled ? accent.withValues(alpha: 0.85) : (booked ? AppColors.primary.withValues(alpha: 0.85) : AppColors.line));
     final secondary = s != null && !s.primary; // 併桌的第二張以後
     final round = t.isRound && t.w == t.h;
     final detailed = _detailed && !_arranging;
@@ -719,9 +802,22 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
       ]);
     } else if (detailed && r != null && seat == _Seat.cleared) {
       sub = Text('剛清桌', style: TextStyle(fontSize: 10, color: AppColors.muted));
-    } else if (detailed && s?.next != null) {
-      sub = Text('${s!.next!.time} ${s.next!.name}',
-          maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 9.5, color: AppColors.muted, fontFeatures: tabular));
+    } else if (s?.next != null) {
+      // 之後排在這張桌的訂位：時間＋名字（＋還有幾組）；併桌第二張只標「併」
+      final nx = s!.next!;
+      final more = s.later > 1 ? ' +${s.later - 1}' : '';
+      final n = nx.name.trim();
+      sub = Column(mainAxisSize: MainAxisSize.min, children: [
+        Text('${nx.time}${s.primary ? '' : ' 併'}$more',
+            maxLines: 1,
+            style: TextStyle(fontSize: detailed ? 9.5 : 12, height: 1.15, color: AppColors.primary, fontWeight: FontWeight.w700, fontFeatures: tabular)),
+        if (s.primary && detailed)
+          Text('$n ${nx.party}位',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 10, height: 1.15, color: AppColors.text.withValues(alpha: 0.85))),
+      ]);
     } else if (!detailed && r != null && filled && !secondary) {
       // 縮小時：人名縮成兩個字，看得出是誰
       final n = r.name.trim();
@@ -738,7 +834,7 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
           color: bg,
           shape: round ? BoxShape.circle : BoxShape.rectangle,
           borderRadius: round ? null : BorderRadius.circular(AppRadius.sm + 2),
-          border: Border.all(color: border, width: filled ? 1.5 : 1),
+          border: Border.all(color: border, width: filled || booked ? 1.5 : 1),
           boxShadow: lifted ? [BoxShadow(color: Colors.black.withValues(alpha: 0.45), blurRadius: 14, offset: const Offset(0, 6))] : null,
         ),
         padding: EdgeInsets.symmetric(horizontal: round ? 6 : 5, vertical: 4),
@@ -751,6 +847,8 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
       onTap: () {
         if (r != null && filled) {
           widget.onTapReservation(r);
+        } else if (s?.next != null) {
+          _bookedTableMenu(t, s!.next!, s.later); // 點有排訂位的空桌：看那組，或先登記其他客人
         } else {
           widget.onTapEmpty(t, _viewMinute);
         }
