@@ -57,3 +57,41 @@ double? defaultStockQty(PurchaseItem it, Product p) {
   if (u == null || u.isEmpty || u == p.unit.trim()) return it.qty.abs();
   return null;
 }
+
+/// 本月進貨品項總表的一列（同一個庫存品項、或同名同單位的品項合在一起）
+class ItemSummary {
+  ItemSummary(this.name, this.unit);
+  final String name;
+  final String? unit;
+  double qty = 0; // 退貨是負數，合起來是淨數量
+  double total = 0;
+  double? minPrice;
+  double? maxPrice;
+  int lines = 0;
+  /// 單價：都一樣就是那個價，不一樣就用平均（總金額÷數量）
+  double? get unitPrice => qty == 0 ? null : (minPrice == maxPrice ? minPrice : round2(total / qty));
+  bool get priceVaries => minPrice != maxPrice;
+}
+
+/// 把一個月的品項明細合成總表：有對應庫存品項的照品項合；沒有的照「品名＋單位」合。
+/// 「其他差額」那行不算品項。productNames：庫存品項 id → 名稱（顯示用）。依金額大到小排。
+List<ItemSummary> summarizeItems(Iterable<PurchaseItem> items, Map<String, String> productNames) {
+  final map = <String, ItemSummary>{};
+  for (final it in items) {
+    if (it.name == diffItemName || it.qty == 0) continue;
+    final pid = it.productId;
+    final named = pid != null && productNames.containsKey(pid);
+    final unit = it.unit?.trim().isEmpty ?? true ? null : it.unit!.trim();
+    final key = named ? 'p:$pid:${unit ?? ''}' : 'n:${_norm(it.name)}:${unit ?? ''}';
+    final s = map.putIfAbsent(key, () => ItemSummary(named ? productNames[pid]! : it.name.trim(), unit));
+    final price = round2(it.unitPrice ?? 0);
+    s.qty = round2(s.qty + it.qty);
+    s.total = round2(s.total + it.amount);
+    s.minPrice = s.minPrice == null || price < s.minPrice! ? price : s.minPrice;
+    s.maxPrice = s.maxPrice == null || price > s.maxPrice! ? price : s.maxPrice;
+    s.lines++;
+  }
+  final out = map.values.where((s) => s.qty != 0 || s.total != 0).toList()
+    ..sort((a, b) => b.total != a.total ? b.total.compareTo(a.total) : a.name.compareTo(b.name));
+  return out;
+}

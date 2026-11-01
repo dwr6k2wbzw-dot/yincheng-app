@@ -109,4 +109,37 @@ void main() {
     expect(r.date, DateTime(2026, 10, 30));
     expect(r.items.every((i) => i.source == 'ai'), isTrue);
   });
+
+  group('本月進貨總表 summarizeItems', () {
+    test('同一個庫存品項合在一起，單價不同用平均', () {
+      final rows = summarizeItems([
+        PurchaseItem(name: '琴酒 700ml', qty: 2, unit: '瓶', unitPrice: 500, productId: 'p1'),
+        PurchaseItem(name: 'Gordon 琴酒', qty: 1, unit: '瓶', unitPrice: 560, productId: 'p1'),
+        PurchaseItem(name: '檸檬', qty: 3, unit: '斤', unitPrice: 100),
+      ], {'p1': '琴酒 Gordon'});
+      expect(rows.first.name, '琴酒 Gordon');
+      expect(rows.first.qty, 3);
+      expect(rows.first.total, 1560);
+      expect(rows.first.priceVaries, isTrue);
+      expect(rows.first.unitPrice, 520);
+      expect(rows.last.unitPrice, 100);
+    });
+    test('退貨扣回、其他差額不算品項', () {
+      final rows = summarizeItems([
+        PurchaseItem(name: '檸檬', qty: 5, unit: '斤', unitPrice: 100),
+        PurchaseItem(name: '檸檬', qty: -1, unit: '斤', unitPrice: 100),
+        PurchaseItem(name: diffItemName, qty: 1, unitPrice: 80),
+      ], {});
+      expect(rows, hasLength(1));
+      expect(rows.single.qty, 4);
+      expect(rows.single.total, 400);
+    });
+    test('依金額大到小', () {
+      final rows = summarizeItems([
+        PurchaseItem(name: 'A', qty: 1, unitPrice: 10),
+        PurchaseItem(name: 'B', qty: 1, unitPrice: 99),
+      ], {});
+      expect(rows.map((r) => r.name), ['B', 'A']);
+    });
+  });
 }

@@ -93,6 +93,8 @@ abstract class Repository {
   Future<String> addPurchase(NewPurchase p);
   /// 拍照辨識送貨單（0087，Claude 讀圖；每店每天有次數上限）。image＝JPEG data URL
   Future<SlipReading> readSlip(String storeId, String image);
+  /// 某個月所有進貨的品項明細（本月進貨總表用；退貨的數量是負數）
+  Future<List<PurchaseItem>> monthPurchaseItems(String storeId, DateTime month);
   /// 進貨的品項明細（0087）
   Future<List<PurchaseItem>> purchaseItems(String purchaseId);
   /// 整份換掉品項明細；negate＝退貨（庫存數量用負數）

@@ -12,6 +12,7 @@ import '../theme.dart';
 import '../services/slip_scan.dart';
 import '../widgets/common.dart';
 import '../widgets/photo_thumb.dart';
+import 'month_items_card.dart';
 import 'purchase_items_editor.dart';
 import 'vendor_contacts_screen.dart';
 
@@ -26,6 +27,8 @@ class PurchasesScreen extends StatefulWidget {
 
 class _PurchasesScreenState extends State<PurchasesScreen> {
   late Future<(List<Purchase>, Map<String, String>, DateTime?)> _future;
+  // 本月進貨總表（老闆 2026-11-01）：品項明細合成的總表；讀不到不影響上面的進貨
+  late Future<List<ItemSummary>> _itemsFuture;
   DateTime _month = DateTime(DateTime.now().year, DateTime.now().month);
   final _open = <String>{}; // 已展開的大類
   bool _started = false;
@@ -38,6 +41,19 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     if (_started) return;
     _started = true;
     _future = _load();
+    _itemsFuture = _loadItems();
+  }
+
+  Future<List<ItemSummary>> _loadItems() async {
+    final repo = AppScope.of(context).repo;
+    final id = widget.membership.storeId;
+    final items = await repo.monthPurchaseItems(id, _month);
+    if (items.isEmpty) return const [];
+    var names = <String, String>{};
+    try {
+      names = {for (final p in await repo.products(id)) p.id: p.name};
+    } catch (_) {} // 讀不到品項名稱就用送貨單上的品名
+    return summarizeItems(items, names);
   }
 
   /// 進貨以 Dropbox 日報表為準的店：只能看，不能新增或核銷（核銷也以 Excel 的「核銷」欄為準）
@@ -65,7 +81,10 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     return (r[0] as List<Purchase>, cats, last);
   }
 
-  void _reload() => setState(() => _future = _load());
+  void _reload() => setState(() {
+        _future = _load();
+        _itemsFuture = _loadItems();
+      });
 
   void _shiftMonth(int d) {
     _month = DateTime(_month.year, _month.month + d);
@@ -178,6 +197,13 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                       child: const Text('查看以日報表為準的暫記'),
                     ),
                   ),
+                const SizedBox(height: 16),
+                FutureBuilder<List<ItemSummary>>(
+                  future: _itemsFuture,
+                  builder: (context, s) => s.connectionState != ConnectionState.done
+                      ? const SizedBox(height: 80, child: Center(child: CircularProgressIndicator(strokeWidth: 2)))
+                      : MonthItemsCard(rows: s.data ?? const [], error: s.hasError),
+                ),
               ]),
             );
           },

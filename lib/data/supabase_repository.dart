@@ -1131,6 +1131,36 @@ class SupabaseRepository implements Repository {
   }
 
   @override
+  Future<List<PurchaseItem>> monthPurchaseItems(String storeId, DateTime month) async {
+    final from = DateTime(month.year, month.month, 1);
+    final to = DateTime(month.year, month.month + 1, 1);
+    final out = <PurchaseItem>[];
+    const page = 1000;
+    for (var start = 0; start < page * 20; start += page) {
+      final rows = await _db
+          .from('purchase_items')
+          .select('item_name, qty, unit, unit_price, product_id, purchases!inner(store_id, purchase_date)')
+          .eq('purchases.store_id', storeId)
+          .gte('purchases.purchase_date', _day.format(from))
+          .lt('purchases.purchase_date', _day.format(to))
+          .order('id')
+          .range(start, start + page - 1);
+      for (final r in rows) {
+        out.add(PurchaseItem(
+          name: r['item_name'] as String,
+          qty: toDouble(r['qty']), // 退貨是負數
+          unit: r['unit'] as String?,
+          unitPrice: r['unit_price'] == null ? null : toDouble(r['unit_price']),
+          productId: r['product_id'] as String?,
+          decided: true,
+        ));
+      }
+      if (rows.length < page) break;
+    }
+    return out;
+  }
+
+  @override
   Future<List<PurchaseItem>> purchaseItems(String purchaseId) async {
     final rows = await _db
         .from('purchase_items')

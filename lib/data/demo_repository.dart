@@ -639,6 +639,15 @@ class DemoRepository implements Repository {
   }
 
   @override
+  Future<List<PurchaseItem>> monthPurchaseItems(String storeId, DateTime month) async => [
+        for (final e in _items.entries)
+          if (_purchaseMeta[e.key] case final m? when m.$1.year == month.year && m.$1.month == month.month)
+            for (final it in e.value)
+              PurchaseItem(name: it.name, qty: _itemNegate[e.key] == true ? -it.qty : it.qty, unit: it.unit,
+                  unitPrice: it.unitPrice, productId: it.productId, decided: true),
+      ];
+
+  @override
   Future<List<PurchaseItem>> purchaseItems(String purchaseId) async => [
         for (final it in _items[purchaseId] ?? const <PurchaseItem>[])
           PurchaseItem(name: it.name, qty: it.qty, unit: it.unit, unitPrice: it.unitPrice,
