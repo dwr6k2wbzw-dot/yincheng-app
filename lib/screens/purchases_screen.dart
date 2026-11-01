@@ -687,7 +687,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   String? _readMsg; // 辨識結果說明（帶入了什麼、要注意什麼）
   bool _readFailed = false;
   /// 進貨已經存好、只差品項明細沒存成功：再按儲存只重存明細，不會再新增一筆（Codex 審查）
-  (String, double)? _savedPurchase; // (進貨 id, 存檔時的金額)
+  (String, double, bool)? _savedPurchase; // (進貨 id, 存檔時的金額, 是不是退貨)；這時進貨欄位鎖住不能改
   bool _dateTouched = false; // 自己選過日期：辨識結果不蓋掉（Codex 審查）
   late Future<(List<CostCategory>, List<Supplier>)> _future;
   bool _started = false;
@@ -1166,16 +1166,16 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
       );
 
   /// 存品項明細；失敗回傳要顯示的訊息（進貨本身已經存好了）
-  Future<String?> _saveItems(String purchaseId, List<PurchaseItem> rows) async {
+  /// 不依賴畫面還在不在（使用者中途離開也會存完；Codex 審查）：app、negate 由呼叫端先取好
+  Future<String?> _saveItems(AppState app, String purchaseId, List<PurchaseItem> rows, bool negate) async {
     // 修改時：現在沒有明細、原本也沒有，就不用呼叫（舊進貨、已核銷的不會被擋）
     if (widget.editing != null && rows.isEmpty) {
       try {
-        if ((await AppScope.of(context).repo.purchaseItems(purchaseId)).isEmpty) return null;
+        if ((await app.repo.purchaseItems(purchaseId)).isEmpty) return null;
       } catch (_) {}
     }
     try {
-      final app = AppScope.of(context);
-      await app.repo.savePurchaseItems(purchaseId, rows, negate: _isReturn);
+      await app.repo.savePurchaseItems(purchaseId, rows, negate: negate);
       app.stockRevision.value++;
       return null;
     } catch (e) {
@@ -1187,7 +1187,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
     final pending = _savedPurchase;
     if (pending != null) {
       setState(() => _saving = true);
-      final err = await _saveItems(pending.$1, itemsForSave(_items, pending.$2));
+      final err = await _saveItems(AppScope.of(context), pending.$1, itemsForSave(_items, pending.$2), pending.$3);
       if (!mounted) return;
       setState(() => _saving = false);
       if (err != null) {
@@ -1239,10 +1239,12 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
     final rows = itemsForSave(_items, raw);
     final name = _vendor.text.trim();
     final known = _sups.where((s) => s.name == name).firstOrNull;
+    final app = AppScope.of(context);
+    final isReturn = _isReturn;
     setState(() => _saving = true);
     try {
       if (widget.editing != null) {
-        await AppScope.of(context).repo.updatePurchase(
+        await app.repo.updatePurchase(
             widget.editing!.id,
             NewPurchase(
               storeId: widget.membership.storeId,
@@ -1255,8 +1257,8 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
               paidBy: _paidBy,
               clientRequestId: _requestId,
             ));
-        if (_itemsLoaded && mounted) {
-          final err = await _saveItems(widget.editing!.id, rows);
+        if (_itemsLoaded) {
+          final err = await _saveItems(app, widget.editing!.id, rows, isReturn);
           if (err != null && mounted) showMessage(context, err, error: true);
         }
         if (mounted) {
@@ -1265,8 +1267,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
         }
         return;
       }
-      final repo = AppScope.of(context).repo;
-      final id = await repo.addPurchase(NewPurchase(
+      final id = await app.repo.addPurchase(NewPurchase(
             storeId: widget.membership.storeId,
             purchaseDate: _date!,
             categoryCode: _category!,
@@ -1281,11 +1282,11 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
             slipVendor: name.isEmpty ? null : name,
             noReceipt: _photo == null && _noReceipt,
           ));
-      if (rows.isNotEmpty && mounted) {
-        final err = await _saveItems(id, rows);
+      if (rows.isNotEmpty) {
+        final err = await _saveItems(app, id, rows, isReturn);
         if (err != null) {
           if (mounted) {
-            setState(() => _savedPurchase = (id, raw));
+            setState(() => _savedPurchase = (id, raw, isReturn));
             showMessage(context, err, error: true);
           }
           return;
@@ -1306,9 +1307,9 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   @override
   Widget build(BuildContext context) => PopScope(
         // 進貨已存好、品項還沒存成功就離開：照樣告訴上一頁要重新整理（那筆進貨已經在了）
-        canPop: _savedPurchase == null,
+        canPop: _savedPurchase == null && !_saving, // 存檔中不能離開（進貨、品項要一起存完）
         onPopInvokedWithResult: (didPop, _) {
-          if (!didPop) Navigator.pop(context, true);
+          if (!didPop && !_saving) Navigator.pop(context, true);
         },
         child: _scaffold(context),
       );
@@ -1322,6 +1323,23 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
             if (!snap.hasData) return const Center(child: CircularProgressIndicator());
             final (cats, sups) = snap.data!;
             return ListView(padding: const EdgeInsets.all(16), children: [
+              if (_savedPurchase != null)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.warn.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                  ),
+                  child: Text('這筆進貨已經存好了，只差品項明細。上面的欄位先鎖住；要改金額、日期，存好品項後再到進貨按「修改」。',
+                      style: TextStyle(color: AppColors.warn, fontSize: AppType.small, height: 1.45)),
+                ),
+              // 進貨已存好、只差品項時：進貨欄位鎖住（改了也不會存；Codex 審查）
+              AbsorbPointer(
+                absorbing: _savedPurchase != null,
+                child: Opacity(
+                  opacity: _savedPurchase != null ? 0.45 : 1,
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               // 付款方式放第一排（老闆 2026-10-12）：先選月結廠商／零用金，下面的類別選項才會對
               SegmentedButton<String>(
                 segments: const [
@@ -1473,6 +1491,9 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
               ),
               const SizedBox(height: 12),
               if (widget.editing == null) ...[_scanCard(sups), const SizedBox(height: 12)],
+                  ]),
+                ),
+              ),
               _itemsCard(),
               const SizedBox(height: 24),
               FilledButton(
