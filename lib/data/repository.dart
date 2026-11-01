@@ -89,7 +89,14 @@ abstract class Repository {
   Future<List<String>> memberNames(String storeId);
   Future<List<Purchase>> recentPurchases(String storeId, {int limit = 30});
   Future<List<Purchase>> monthPurchases(String storeId, DateTime month);
-  Future<void> addPurchase(NewPurchase p);
+  /// 回傳新進貨的 id（存品項明細用）
+  Future<String> addPurchase(NewPurchase p);
+  /// 拍照辨識送貨單（0087，Claude 讀圖；每店每天有次數上限）。image＝JPEG data URL
+  Future<SlipReading> readSlip(String storeId, String image);
+  /// 進貨的品項明細（0087）
+  Future<List<PurchaseItem>> purchaseItems(String purchaseId);
+  /// 整份換掉品項明細；negate＝退貨（庫存數量用負數）
+  Future<void> savePurchaseItems(String purchaseId, List<PurchaseItem> items, {bool negate = false});
   Future<void> setReconciled(String purchaseId, bool reconciled);
   /// 修改、刪除 App 暫記（日報表匯入的進貨不能改刪：以日報表為準，資料庫 0035）
   Future<void> updatePurchase(String purchaseId, NewPurchase p);
@@ -169,10 +176,11 @@ abstract class Repository {
   Future<List<CountLine>> countLines(String countId);
   Future<void> upsertCountLine(String countId, String productId, double qty);
   Future<void> setCountStatus(String countId, CountStatus status, {String? voidReason});
-  /// 每個品項最近一次盤點到的數量（草稿以外、作廢與退回不算）
+  /// 每個品項目前的庫存：最近一次盤點（草稿、作廢、退回不算）＋之後進貨明細加進來的（0087）
   Future<Map<String, StockLevel>> latestStock(String storeId);
   /// 新增或修改品項（老闆／店長）；id 為空字串＝新增
-  Future<void> saveProduct(String storeId, Product p);
+  /// 回傳品項 id
+  Future<String> saveProduct(String storeId, Product p);
   /// 停用品項（不刪除，歷史盤點照常顯示）
   Future<void> deactivateProduct(String productId);
 

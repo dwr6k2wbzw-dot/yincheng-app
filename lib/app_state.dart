@@ -9,6 +9,8 @@ import 'services/load_timing.dart';
 class AppState extends ChangeNotifier {
   AppState(this.repo);
   final Repository repo;
+  /// 庫存有變動（進貨明細加進庫存，0087）：庫存分頁收到就重新讀
+  final stockRevision = ValueNotifier<int>(0);
 
   List<Membership> memberships = [];
   Membership? current;

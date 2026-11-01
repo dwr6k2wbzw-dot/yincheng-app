@@ -229,11 +229,98 @@ class Product {
   Product(this.id, this.name, this.category, this.unit, {this.parLevel});
 }
 
-/// 某品項最近一次盤點到的數量（老闆 2026-10-16：盤點只看庫存、缺貨提醒）
+/// 某品項目前的庫存（老闆 2026-10-16：盤點只看庫存、缺貨提醒）
+/// 0087（老闆 2026-11-01）：庫存＝最近一次盤點＋那次盤點之後進貨明細加進來的數量
 class StockLevel {
-  final double qty;
-  final DateTime date;
-  const StockLevel(this.qty, this.date);
+  final double qty; // 目前＝盤點＋之後進貨
+  final DateTime? date; // 最近一次盤點的營業日（沒盤過＝null）
+  final double purchased; // 盤點之後進貨加進來的
+  const StockLevel(this.qty, this.date, {this.purchased = 0});
+  double? get counted => date == null ? null : qty - purchased;
+}
+
+/// 進貨的一行品項（purchase_items，0087）
+class PurchaseItem {
+  String name;
+  double qty;
+  String? unit;
+  double? unitPrice;
+  String? productId; // 對應的庫存品項（null＝不入庫存）
+  double? stockQty; // 加進庫存幾個「品項單位」（null＝不入庫存）
+  String source; // ai＝拍照辨識、manual＝手動
+  bool sure; // 辨識有把握（只在畫面上用，不存）
+  bool decided; // 店員已決定要不要入庫存（只在畫面上用；辨識有對應、或讀回已存的＝true）
+  PurchaseItem({
+    required this.name,
+    required this.qty,
+    this.unit,
+    this.unitPrice,
+    this.productId,
+    this.stockQty,
+    this.source = 'manual',
+    this.sure = true,
+    bool? decided,
+  }) : decided = decided ?? productId != null;
+  /// 小計：同資料庫 amount（qty × unit_price，四捨五入到分）
+  double get amount => ((unitPrice ?? 0) * qty * 100).round() / 100;
+  PurchaseItem copy() => PurchaseItem(
+      name: name, qty: qty, unit: unit, unitPrice: unitPrice, productId: productId, stockQty: stockQty,
+      source: source, sure: sure, decided: decided);
+  bool get toStock => productId != null && stockQty != null && stockQty != 0;
+
+  /// negate＝退貨：數量、庫存都用負數（明細合計才會等於進貨的負數金額，0006 核銷檢查）
+  Map<String, dynamic> toJson({bool negate = false}) => {
+        'name': name.trim(),
+        'qty': negate ? -qty.abs() : qty.abs(),
+        'unit': (unit?.trim().isEmpty ?? true) ? null : unit!.trim(),
+        'unit_price': unitPrice ?? 0,
+        'product_id': toStock ? productId : null,
+        'stock_qty': toStock ? (negate ? -stockQty!.abs() : stockQty!.abs()) : null,
+        'source': source,
+      };
+
+  factory PurchaseItem.fromRow(Map<String, dynamic> r) => PurchaseItem(
+        name: r['item_name'] as String,
+        qty: _d(r['qty']).abs(),
+        unit: r['unit'] as String?,
+        unitPrice: r['unit_price'] == null ? null : _d(r['unit_price']),
+        productId: r['product_id'] as String?,
+        stockQty: r['stock_qty'] == null ? null : _d(r['stock_qty']).abs(),
+        source: r['source'] as String? ?? 'manual',
+        decided: true,
+      );
+}
+
+/// 拍照辨識送貨單的結果（Edge Function slip-read）
+class SlipReading {
+  final String? vendor;
+  final DateTime? date;
+  final double? total;
+  final String? category; // 酒水／餐食／雜項
+  final List<PurchaseItem> items;
+  final String? notes;
+  SlipReading({this.vendor, this.date, this.total, this.category, required this.items, this.notes});
+
+  factory SlipReading.fromJson(Map<String, dynamic> j) => SlipReading(
+        vendor: j['vendor'] as String?,
+        date: j['date'] is String ? DateTime.tryParse(j['date'] as String) : null,
+        total: j['total'] == null ? null : _d(j['total']),
+        category: j['category'] as String?,
+        notes: j['notes'] as String?,
+        items: [
+          for (final it in (j['items'] as List? ?? const []))
+            PurchaseItem(
+              name: (it as Map)['name'] as String,
+              qty: _d(it['qty']),
+              unit: it['unit'] as String?,
+              unitPrice: it['unit_price'] == null ? null : _d(it['unit_price']),
+              productId: it['product_id'] as String?,
+              stockQty: it['stock_qty'] == null ? null : _d(it['stock_qty']),
+              source: 'ai',
+              sure: it['sure'] == true,
+            ),
+        ],
+      );
 }
 
 enum CountStatus { draft, submitted, approved, rejected, voided }
