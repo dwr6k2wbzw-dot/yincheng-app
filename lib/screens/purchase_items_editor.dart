@@ -301,8 +301,9 @@ class _ItemSheetState extends State<_ItemSheet> {
   }
 
   void _choose(Product p) {
-    final cur = PurchaseItem(
-        name: _name.text, qty: _parse(_qty.text) ?? 0, unit: _unit.text, stockQty: _parse(_stockQty.text));
+    // 換算數量只對原本那個品項有效（例：2 箱＝48 瓶）；換成別的品項就照單位重算，單位不同要重填（Codex 審查）
+    final keep = p.id == widget.item.productId ? widget.item.stockQty : null;
+    final cur = PurchaseItem(name: _name.text, qty: _parse(_qty.text) ?? 0, unit: _unit.text, stockQty: keep);
     setState(() {
       _product = p;
       _mode = _Stock.product;

@@ -685,6 +685,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   int _readSeq = 0; // 換照片時丟掉舊的辨識結果
   String? _readMsg; // 辨識結果說明（帶入了什麼、要注意什麼）
   bool _readFailed = false;
+  bool _dateTouched = false; // 自己選過日期：辨識結果不蓋掉（Codex 審查）
   late Future<(List<CostCategory>, List<Supplier>)> _future;
   bool _started = false;
 
@@ -941,7 +942,10 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
         filled.add('金額');
       }
       final d = r.date;
-      if (d != null && _date != null) {
+      String? dateNote;
+      if (d != null && _date != null && _dateTouched && !isSameDay(d, _date!)) {
+        dateNote = '單據日期是 ${d.month}/${d.day}，跟你選的進貨日期不同，請確認。';
+      } else if (d != null && _date != null) {
         final today = DateTime.now();
         final ok = !d.isBefore(DateTime(today.year, today.month - 2, 1)) && !d.isAfter(DateTime(today.year, today.month + 2, 0));
         if (ok && !isSameDay(d, _date!)) {
@@ -961,6 +965,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
       _readFailed = r.items.isEmpty && filled.isEmpty;
       _readMsg = [
         if (filled.isNotEmpty) '已帶入${filled.join('、')}，請對照單據核對。' else if (!_readFailed) '欄位都已經填了，沒有更動。',
+        if (dateNote != null) dateNote,
         if (r.notes != null && r.notes!.trim().isNotEmpty) r.notes!.trim(),
         if (_readFailed && (r.notes == null || r.notes!.trim().isEmpty)) '這張照片讀不出內容，請手動輸入或重拍。',
       ].join('\n');
@@ -1336,7 +1341,12 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                     // 老闆 2026-10-29：可以登記到下個月底（先記下個月的進貨）
                     lastDate: DateTime(DateTime.now().year, DateTime.now().month + 2, 0),
                   );
-                  if (d != null) setState(() => _date = d);
+                  if (d != null) {
+                    setState(() {
+                      _date = d;
+                      _dateTouched = true;
+                    });
+                  }
                 },
               ),
               const SizedBox(height: 8),
