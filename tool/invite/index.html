@@ -93,6 +93,8 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--brass); outline
 .keep .acts .btn { align-self: stretch; }
 button.btn { border: 0; font-family: inherit; cursor: pointer; }
 .ghost { min-height: 44px; padding: 0 18px; background: transparent; color: var(--brass); border: 1px solid var(--line); font: inherit; font-size: 15px; letter-spacing: 0.1em; cursor: pointer; }
+.keep p.alt { margin: 14px 0 0; font-size: 13px; }
+.textlink { display: inline; min-height: 0; padding: 0; background: none; border: 0; color: var(--brass); font: inherit; text-decoration: underline; text-underline-offset: 0.25em; cursor: pointer; }
 .ghost:hover { border-color: var(--brass); }
 .sheet { position: fixed; inset: 0; z-index: 60; background: var(--ink); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: calc(24px + env(safe-area-inset-top, 0px)) 20px calc(24px + env(safe-area-inset-bottom, 0px)); text-align: center; }
 .sheet[hidden] { display: none; }
@@ -301,6 +303,7 @@ button.btn { border: 0; font-family: inherit; cursor: pointer; }
         <button class="btn" id="shareStory" type="button">分享到 IG 限動</button>
         <button class="ghost" id="copyLink" type="button">複製活動連結</button>
       </div>
+      <p class="alt">IG 會用你最後打開的帳號。想用別的帳號分享，<button class="textlink" id="saveStory" type="button">先把圖存到照片</button>，再到 IG 切換帳號貼上。</p>
     </div>
   </section>
 
@@ -317,7 +320,7 @@ button.btn { border: 0; font-family: inherit; cursor: pointer; }
 <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-h" hidden>
   <img src="story-10th.jpg" width="1080" height="1920" alt="重返大稻埕的限動圖">
   <b id="sheet-h">長按圖片，存到照片</b>
-  <p>打開 IG 限動選這張圖，加上「連結」貼紙，貼上活動連結，朋友點了就能看到邀請。</p>
+  <p>打開 IG，先切到你想用的帳號，再到限動選這張圖，加上「連結」貼紙，貼上活動連結。</p>
   <div class="acts"><button class="btn" id="sheetCopy" type="button">複製活動連結</button><button class="ghost" id="sheetClose" type="button">好了</button></div>
 </div>
 
@@ -383,6 +386,8 @@ button.btn { border: 0; font-family: inherit; cursor: pointer; }
   var openSheet = function () { sheet.hidden = false; closeBtn.focus(); };
   var closeSheet = function () { sheet.hidden = true; shareBtn.focus(); };
   linkBtn.addEventListener('click', function () { copyWithFeedback(linkBtn); });
+  var saveBtn = document.getElementById('saveStory');
+  if (saveBtn) saveBtn.addEventListener('click', openSheet);
   sheetCopy.addEventListener('click', function () { copyWithFeedback(sheetCopy); });
   closeBtn.addEventListener('click', closeSheet);
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !sheet.hidden) closeSheet(); });
