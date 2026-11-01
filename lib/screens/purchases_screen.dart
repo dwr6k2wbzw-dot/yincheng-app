@@ -484,6 +484,7 @@ class _CategoryPurchasesScreenState extends State<_CategoryPurchasesScreen> {
     if (ok != true || !mounted) return;
     try {
       await repo.deletePurchase(p.id);
+      AppScope.of(context).stockRevision.value++; // 刪掉的進貨若有加進庫存，庫存頁要重算（Codex 審查）
       if (!mounted) return;
       showMessage(context, '已刪除');
       setState(() => _items.removeWhere((x) => x.id == p.id));
@@ -685,6 +686,8 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   int _readSeq = 0; // 換照片時丟掉舊的辨識結果
   String? _readMsg; // 辨識結果說明（帶入了什麼、要注意什麼）
   bool _readFailed = false;
+  /// 進貨已經存好、只差品項明細沒存成功：再按儲存只重存明細，不會再新增一筆（Codex 審查）
+  (String, double)? _savedPurchase; // (進貨 id, 存檔時的金額)
   bool _dateTouched = false; // 自己選過日期：辨識結果不蓋掉（Codex 審查）
   late Future<(List<CostCategory>, List<Supplier>)> _future;
   bool _started = false;
@@ -1176,11 +1179,25 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
       app.stockRevision.value++;
       return null;
     } catch (e) {
-      return '進貨已存好，但品項明細沒存成功（${friendlyError(e)}）。請到這筆進貨按「修改」再存一次。';
+      return '進貨已存好，但品項明細沒存成功（${friendlyError(e)}）。品項還留在畫面上，請再按一次「儲存品項」。';
     }
   }
 
   Future<void> _save() async {
+    final pending = _savedPurchase;
+    if (pending != null) {
+      setState(() => _saving = true);
+      final err = await _saveItems(pending.$1, itemsForSave(_items, pending.$2));
+      if (!mounted) return;
+      setState(() => _saving = false);
+      if (err != null) {
+        showMessage(context, err, error: true);
+        return;
+      }
+      showMessage(context, '品項明細已存好');
+      Navigator.pop(context, true);
+      return;
+    }
     final raw = double.tryParse(_amount.text.replaceAll(',', ''));
     if (_category == null) {
       showMessage(context, '請選擇進貨類別', error: true);
@@ -1268,8 +1285,8 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
         final err = await _saveItems(id, rows);
         if (err != null) {
           if (mounted) {
+            setState(() => _savedPurchase = (id, raw));
             showMessage(context, err, error: true);
-            Navigator.pop(context, true);
           }
           return;
         }
@@ -1287,7 +1304,16 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) => PopScope(
+        // 進貨已存好、品項還沒存成功就離開：照樣告訴上一頁要重新整理（那筆進貨已經在了）
+        canPop: _savedPurchase == null,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) Navigator.pop(context, true);
+        },
+        child: _scaffold(context),
+      );
+
+  Widget _scaffold(BuildContext context) => Scaffold(
         appBar: AppBar(title: Text(widget.editing == null ? '新增進貨' : '修改進貨')),
         body: FutureBuilder<(List<CostCategory>, List<Supplier>)>(
           future: _future,
@@ -1454,7 +1480,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                 style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
                 child: _saving
                     ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Text('儲存', style: TextStyle(fontSize: AppType.title)),
+                    : Text(_savedPurchase == null ? '儲存' : '儲存品項', style: const TextStyle(fontSize: AppType.title)),
               ),
             ]);
           },
