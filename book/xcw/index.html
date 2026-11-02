@@ -1,0 +1,257 @@
+<!doctype html>
+<html data-slug="xcw" lang="zh-Hant-TW">
+<head>
+<base href="../">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>小城外｜線上訂位</title>
+<meta name="theme-color" content="#0A0A09">
+<link rel="icon" id="fav" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=5b43e48c">
+<meta property="og:type" content="website"><meta property="og:site_name" content="小城外"><meta property="og:title" content="小城外｜線上訂位"><meta property="og:description" content="大稻埕老宅二樓，仰望天井、感受歲月的溫度。線上訂位，即時確認。"><meta property="og:url" content="https://dwr6k2wbzw-dot.github.io/yincheng-app/book/xcw/"><meta property="og:image" content="https://dwr6k2wbzw-dot.github.io/yincheng-app/book/og-xcw.jpg?v=5b43e48c"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta name="twitter:card" content="summary_large_image"><meta name="description" content="大稻埕老宅二樓，仰望天井、感受歲月的溫度。線上訂位，即時確認。">
+</head>
+<body>
+<main>
+  <header class="brand">
+    <img id="logo" alt="" hidden>
+    <h1 id="store" data-i18n="booking">線上訂位</h1>
+    <p class="kicker" data-i18n="booking">線上訂位</p>
+    <p class="sub" id="contact" data-i18n="loading">載入中…</p>
+  </header>
+  <div class="card info" id="info" hidden></div>
+  <div id="app" hidden>
+    <div class="card"><p class="label"><span data-i18n="date">1. 日期</span><span class="lnote" id="window" hidden></span></p><p class="dsel" id="dsel"></p><div class="cal" id="cal"></div></div>
+    <div class="card"><p class="label" data-i18n="time">2. 時間</p><div class="grid" id="slots"></div><p class="note" id="dayInfo" style="white-space:pre-line"></p><div class="alt" id="alt" hidden></div></div>
+    <div class="card"><p class="label" data-i18n="party">3. 人數</p>
+      <div class="stepper"><button type="button" id="minus" aria-label="減少" data-i18n-aria="less">−</button><b id="party">2</b><button type="button" id="plus" aria-label="增加" data-i18n-aria="more">＋</button></div>
+      <p class="note" id="partyNote"></p>
+    </div>
+    <form class="card" id="form" autocomplete="on">
+      <p class="label" data-i18n="contact">4. 聯絡資料</p>
+      <label class="f" for="name" data-i18n="name">姓名</label><input id="name" name="name" maxlength="36" required autocomplete="family-name" placeholder="例如：王" data-i18n-ph="namePh">
+      <div class="chips" id="titles" role="radiogroup" aria-label="稱謂" data-i18n-aria="titles" style="margin-top:8px"><button type="button" class="chip" data-t="先生" role="radio" aria-checked="false" data-i18n="mr">先生</button><button type="button" class="chip" data-t="小姐" role="radio" aria-checked="false" data-i18n="ms">小姐</button></div>
+      <label class="f" for="phone" data-i18n="phone">手機</label><input id="phone" name="tel" type="tel" maxlength="20" required autocomplete="tel" inputmode="tel">
+      <label class="f" for="email" data-i18n="email">Email（確認信會寄到這裡）</label><input id="email" name="email" type="email" maxlength="120" required autocomplete="email">
+      <label class="f" for="note" data-i18n="note">備註（選填）</label><textarea id="note" maxlength="200"></textarea>
+      <div class="hp" aria-hidden="true"><label>請勿填寫<input id="website" tabindex="-1" autocomplete="off"></label></div>
+      <p class="err" id="err" hidden></p>
+      <p style="margin-top:14px"><button class="primary" id="submit" type="submit" data-i18n="submit">確認訂位</button></p>
+      <p class="note" data-i18n="privacy">送出即表示同意店家使用您的姓名、電話與 Email 聯繫這次訂位，不會用於其他用途。</p>
+    </form>
+  </div>
+  <div class="card" id="done" hidden></div>
+</main>
+<script src="common.js?v=5b43e48c"></script>
+<script src="i18n.js?v=5b43e48c"></script>
+<script>
+(async function () {
+  // 店家：網址 ?s=xxx，或各店專屬網址 book/xxx/（部署時產生，html 上有 data-slug）
+  const slug = new URLSearchParams(location.search).get('s') || document.documentElement.dataset.slug || '';
+  const $ = (id) => document.getElementById(id);
+  const T = (k, ...a) => YCI.t(k, ...a);
+  YCI.apply(); YCI.mountSwitcher();
+  // 英文／日文訂位可以不填電話（中文仍必填）
+  if (YCI.lang !== 'zh') $('phone').required = false;
+  let info = null, day = null, time = null, party = 2;
+  // 從另一家店的「改訂這家」連結過來：?d=日期&p=人數（老闆 2026-10-18 兩家互推）
+  const qs = new URLSearchParams(location.search);
+  const wantDay = /^\d{4}-\d{2}-\d{2}$/.test(qs.get('d') || '') ? qs.get('d') : null;
+  if (/^\d{1,2}$/.test(qs.get('p') || '') && +qs.get('p') >= 1) party = +qs.get('p');
+  // 店家 logo（依網址 ?s=）
+  const logos = { yincheng: 'logo-yincheng.png?v=5b43e48c', xcw: 'logo-xcw.png?v=5b43e48c' };
+  if (logos[slug]) { $('logo').src = logos[slug]; $('logo').alt = ''; $('logo').hidden = false; $('fav').href = logos[slug]; }
+  // 標題區背景照片（老闆 2026-10-15：隱城）
+  const heros = { yincheng: 'hero-yincheng.jpg?v=5b43e48c', xcw: 'hero-xcw.jpg?v=5b43e48c' };
+  // 照片取景：小城外往右移，露出左上的壁燈（老闆 2026-10-24）
+  const heroPos = { xcw: '22% 45%' };
+  if (heros[slug]) { const b = document.querySelector('.brand'); b.classList.add('hero'); b.style.backgroundImage = "url('" + heros[slug] + "')"; if (heroPos[slug]) b.style.backgroundPosition = heroPos[slug]; }
+
+  async function load() {
+    info = await YC.rpc('reservation_availability', { p_slug: slug });
+    $('store').textContent = info.display_name;
+    document.title = info.display_name + ' ' + T('booking');
+    $('contact').textContent = info.contact_note || '';
+    renderInfo();
+    if (!info.enabled) { $('contact').textContent = (info.contact_note ? info.contact_note + '\n\n' : '') + T('paused'); return; }
+    $('app').hidden = false;
+    party = Math.max(1, Math.min(party, info.max_party));
+    $('partyNote').textContent = T('partyNote', info.max_party);
+    if (!info.days.length) { $('contact').textContent += '\n' + T('noDays'); }
+    // 「僅開放一週內訂位」：天數跟著 App 設定（可訂天數）變；由最後一天推回（老闆 2026-10-18）
+    const tpToday = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
+    const nDays = info.days.length ? Math.round((Date.parse(info.days[info.days.length - 1].date) - Date.parse(tpToday)) / 864e5) + 1 : 0;
+    $('window').textContent = nDays > 0 ? T('window', nDays) : '';
+    $('window').hidden = !(nDays > 0);
+    const open = info.days.filter(d => partyOk(d, party));  // 預設選「現在人數訂得到」的第一天（Codex 審查）
+    if (!day && wantDay && info.days.some(d => d.date === wantDay && !d.closed)) day = wantDay;
+    if (!day || !info.days.some(d => d.date === day)) day = open.length ? open[0].date : (info.days.length ? info.days[0].date : null);
+    render();
+  }
+  // 地址、電話（0054）：電話可直接撥打、地址可開地圖
+  function renderInfo() {
+    const rows = [];
+    if (info.address) {
+      const q = encodeURIComponent(info.address.replace(/[（(].*?[）)]/g, '').trim());
+      const m = info.address.match(/^(.*?)\s*([（(].*[）)])\s*$/);
+      rows.push('<div class="irow"><span class="ik">' + T('address') + '</span><span><a href="https://www.google.com/maps/search/?api=1&amp;query=' + q + '" target="_blank" rel="noopener">' +
+        YC.esc(m ? m[1] : info.address) + '</a>' + (m ? '<small>' + YC.esc(m[2]) + '</small>' : '') + '</span></div>');
+    }
+    if (info.phone) {
+      rows.push('<div class="irow"><span class="ik">' + T('tel') + '</span><span><a href="tel:' + YC.esc(info.phone.replace(/[^0-9+]/g, '')) + '">' + YC.esc(info.phone) + '</a></span></div>');
+    }
+    // 低消（老闆 2026-10-17）
+    const minAmt = { yincheng: 800, xcw: 600 }[slug];
+    if (minAmt) rows.push('<div class="irow"><span class="ik">' + T('minSpend') + '</span><span>' + T('minSpendText', minAmt) + '</span></div>');
+    // 小城外咖啡時段（老闆 2026-10-19）：週六日下午，不開放預約
+    if (slug === 'xcw') rows.push('<div class="irow"><span class="ik">' + T('coffee') + '</span><span>' + T('coffeeText') + '</span></div>');
+    if (slug === 'xcw') rows.push('<div class="irow"><span class="ik">' + T('bar') + '</span><span>' + T('barText') + '</span></div>');
+    $('info').innerHTML = rows.join('');
+    $('info').hidden = !rows.length;
+  }
+  // 月曆（0054，老闆 2026-10-16：改成月曆格）
+  let calMonth = null; // 'YYYY-MM'
+  const ym = (iso) => iso.slice(0, 7);
+  function renderCal() {
+    const byDate = Object.fromEntries(info.days.map(d => [d.date, d]));
+    if (!info.days.length) { $('cal').innerHTML = ''; $('dsel').textContent = ''; return; }
+    const firstM = ym(info.days[0].date), lastM = ym(info.days[info.days.length - 1].date);
+    if (!calMonth || calMonth < firstM || calMonth > lastM) calMonth = day ? ym(day) : firstM;
+    const [y, mo] = calMonth.split('-').map(Number);
+    const startDow = new Date(y, mo - 1, 1).getDay();
+    const nDays = new Date(y, mo, 0).getDate();
+    const realToday = (() => { const n = new Date(Date.now() + 8 * 3600e3); return n.toISOString().slice(0, 10); })();
+    let h = '<div class="calhead"><button type="button" class="nav" id="prevM" aria-label="' + T('prevMonth') + '"' + (calMonth <= firstM ? ' disabled' : '') + '>‹</button>' +
+      '<b>' + T('monthTitle', y, mo) + '</b><button type="button" class="nav" id="nextM" aria-label="' + T('nextMonth') + '"' + (calMonth >= lastM ? ' disabled' : '') + '>›</button></div>';
+    h += '<div class="calgrid">' + YC.week.map(w => '<span class="wk">' + w + '</span>').join('');
+    for (let i = 0; i < startDow; i++) h += '<span></span>';
+    for (let dd = 1; dd <= nDays; dd++) {
+      const iso = calMonth + '-' + String(dd).padStart(2, '0');
+      const d = byDate[iso];
+      const isToday = iso === realToday ? ' today' : '';
+      if (!d) { h += '<span class="cd off' + isToday + '">' + dd + '</span>'; continue; }
+      const full = !d.closed && (d.groups_left === 0 || d.guests_left === 0);
+      const offDay = d.closed;  // 已滿的日子仍可點，讓客人看到另一家店有沒有位子（老闆 2026-10-18）
+      const tag = d.closed ? (YCI.lang === 'zh' && d.note ? d.note : T('closed')) : full ? T('full') : '';
+      h += '<button type="button" class="cd' + isToday + (full ? ' full' : '') + (iso === day ? ' on' : '') + '" data-d="' + iso + '"' + (offDay ? ' disabled' : '') + '>' + dd +
+        (tag ? '<small>' + YC.esc(tag.slice(0, 4)) + '</small>' : '') + '</button>';
+    }
+    $('cal').innerHTML = h + '</div>';
+    if (day) {
+      const dt = new Date(day + 'T00:00:00');
+      $('dsel').textContent = T('dsel', dt) + (day === realToday ? T('today') : '');
+    } else $('dsel').textContent = T('pickDate');
+    const pv = $('prevM'), nx = $('nextM');
+    if (pv) pv.onclick = () => { const t = new Date(y, mo - 2, 1); calMonth = t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0'); renderCal(); };
+    if (nx) nx.onclick = () => { const t = new Date(y, mo, 1); calMonth = t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0'); renderCal(); };
+  }
+  // 名額以「整天」計算（0052）：每天幾組、幾位、大桌（4 位以上）幾組；公休／包場的日子不開放
+  const large = () => info.large_party_size || 4;
+  function partyOk(d, p) {
+    if (!d || d.closed || d.groups_left === 0) return false;
+    if (d.guests_left != null && p > d.guests_left) return false;
+    if (d.large_left != null && p >= large() && d.large_left < 1) return false;
+    return true;
+  }
+  function render() {
+    $('party').textContent = party;
+    renderCal();
+    const cur = info.days.find(d => d.date === day);
+    const ok = partyOk(cur, party);
+    // 重新讀名額後，原本選的時段若已不在清單（例如過了當天截止時間）也要清掉（Codex 審查）
+    if (!ok || !(cur && !cur.closed && cur.slots.some(s => s.time === time))) time = null;
+    $('slots').innerHTML = (cur && !cur.closed ? cur.slots : []).map(s =>
+      '<button type="button" class="chip' + (s.time === time ? ' on' : '') + '" data-t="' + s.time + '"' + (ok ? '' : ' disabled') + '>' + s.time + '</button>'
+    ).join('') || '<p class="note">' + T('noSlots') + '</p>';
+    let msg = '';
+    if (cur && !cur.closed) {
+      if (cur.groups_left === 0 || cur.guests_left === 0) msg = T('dayFull');
+      else if (cur.guests_left != null && party > cur.guests_left) msg = T('dayLeft', cur.guests_left);
+      else if (cur.large_left != null && party >= large() && cur.large_left < 1) msg = T('largeFull', large());
+      else if (cur.guests_left != null && cur.guests_left <= 6) msg = T('fewLeft', cur.guests_left);
+    }
+    // 特殊日期有寫說明（沒公休、只改名額的日子）也顯示給客人看（Codex 審查）
+    if (cur && !cur.closed && cur.note && YCI.lang === 'zh') msg = cur.note + (msg ? '\n' + msg : '');
+    $('dayInfo').textContent = msg;
+    renderAlt(cur, ok);
+  }
+  // 兩家互推（老闆 2026-10-18）：這家這天滿了（或人數放不下），另一家同一天還訂得到 → 顯示「改訂另一家」
+  const OTHER = { yincheng: 'xcw', xcw: 'yincheng' };
+  let other = null, otherLoading = null;
+  async function loadOther() {
+    if (!OTHER[slug]) return null;
+    if (!otherLoading) otherLoading = YC.rpc('reservation_availability', { p_slug: OTHER[slug] }).then((r) => (other = r)).catch(() => null);
+    return otherLoading;
+  }
+  function otherOk(d, p) {
+    if (!other || !other.enabled || !d || d.closed || d.groups_left === 0) return false;
+    if (p > (other.max_party || 0)) return false;
+    if (d.guests_left != null && p > d.guests_left) return false;
+    if (d.large_left != null && p >= (other.large_party_size || 4) && d.large_left < 1) return false;
+    return d.slots && d.slots.length > 0;
+  }
+  async function renderAlt(cur, ok) {
+    const box = $('alt');
+    const show = () => {
+      const od = other && other.enabled ? other.days.find((x) => x.date === day) : null;
+      if (!cur || cur.closed || ok || !otherOk(od, party)) { box.hidden = true; box.innerHTML = ''; return; }
+      const o = OTHER[slug];
+      const href = o + '/?d=' + day + '&p=' + party + '&lang=' + YCI.lang;
+      box.innerHTML = '<p class="altk">' + T('altTitle') + '</p>' +
+        '<p class="altn">' + YC.esc(T('storeName')[o]) + '<small>' + YC.esc(T('storeIntro')[o]) + '</small></p>' +
+        '<a class="altb" href="' + href + '">' + YC.esc(T('altGo', T('storeName')[o])) + ' →</a>';
+      box.hidden = false;
+    };
+    if (!cur || cur.closed || ok) { box.hidden = true; return; }
+    show();
+    if (!other) { await loadOther(); show(); }
+  }
+  $('cal').onclick = (e) => { const b = e.target.closest('button[data-d]'); if (b && !b.disabled) { day = b.dataset.d; time = null; render(); } };
+  $('slots').onclick = (e) => { const b = e.target.closest('button[data-t]'); if (b && !b.disabled) { time = b.dataset.t; render(); } };
+  $('minus').onclick = () => { if (party > 1) { party--; render(); } };
+  $('plus').onclick = () => { if (party < info.max_party) { party++; render(); } };
+  // 稱謂：先生／小姐（老闆 2026-10-15），送出時接在姓名後面
+  let title = null;
+  document.querySelectorAll('#titles .chip').forEach((b) => {
+    b.onclick = () => {
+      title = b.dataset.t;
+      document.querySelectorAll('#titles .chip').forEach((x) => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-checked', on ? 'true' : 'false'); });
+    };
+  });
+  const fullName = () => {
+    const n = $('name').value.trim();
+    if (!title || n.endsWith(title)) return n;
+    return (n.replace(/\s*(先生|小姐)$/, '') + ' ' + title).slice(0, 40);
+  };
+  $('form').onsubmit = async (e) => {
+    e.preventDefault();
+    const err = $('err'); err.hidden = true;
+    if ($('website').value) return; // 機器人
+    if (!day || !time) { err.textContent = T('needDateTime'); err.hidden = false; return; }
+    if (!title && !/(先生|小姐)$/.test($('name').value.trim())) { err.textContent = T('needTitle'); err.hidden = false; return; }
+    $('submit').disabled = true; $('submit').textContent = T('sending');
+    try {
+      const r = await YC.rpc('book_reservation', {
+        p_slug: slug, p_date: day, p_time: time, p_party: party,
+        p_name: fullName(), p_phone: $('phone').value.trim() || null, p_email: $('email').value, p_note: $('note').value || null, p_lang: YCI.lang,
+      });
+      $('app').hidden = true;
+      const done = $('done'); done.hidden = false;
+      done.innerHTML = '<p class="big ok">' + T('booked') + '</p><p class="big">' + YC.esc(r.display_name) + '</p><p>' + YC.dateLabel(r.date) + ' ' + r.time + '　' + T('guests', r.party) + '<br>' + YC.esc(YCI.name(r.name)) + '</p><p class="hold">' + T('hold') + '</p><p class="note" id="mailNote">' + T('mailing') + '</p>' +
+        '<p class="note">' + T('manageHint', 'cancel.html?t=' + r.token + '&lang=' + YCI.lang) + '</p>';
+      const sent = await YC.mail(r.token, 'confirm');
+      $('mailNote').textContent = sent ? T('mailSent', $('email').value) : T('mailLate');
+    } catch (ex) {
+      err.textContent = YCI.err(ex.message); err.hidden = false;
+      $('submit').disabled = false; $('submit').textContent = T('submit');
+      try { await load(); } catch (_) {}
+    }
+  };
+  try { await load(); } catch (ex) { $('contact').textContent = YCI.err(ex.message); }
+})();
+</script>
+<script src="theme.js?v=5b43e48c"></script>
+<script src="anim.js?v=5b43e48c"></script>
+</body>
+</html>
