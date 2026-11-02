@@ -30,7 +30,47 @@
   const WKW_INTRO = 'grand'; // 老闆 2026-10-18 選 E
   const pick = ['clock', 'door', 'rain', 'sky', 'letter', 'grand'].includes(q.get('intro')) ? q.get('intro') : WKW_INTRO;
   if (q.get('intro') && q.get('intro') !== '0') seen = false; // 預覽用：網址指定就每次都放
-  if (!seen && q.get('intro') !== '0' && wkw) {
+  // 2026-11-03 老闆：隱城開場改成 Blender 做的 3D 短片（intro-yc.mp4：戲院布幕拉開、銀幕 3・2・1 倒數）；
+  // 播不出來（省電模式擋自動播放、網路太慢、舊瀏覽器）就照舊放下面的程式動畫。?intro=clock 等舊選項仍可預覽舊動畫
+  if (!seen && q.get('intro') !== '0') {
+    // 老闆 2026-11-03：先只上隱城；小城外維持原本的老爺鐘程式動畫
+    if (!wkw && (!q.get('intro') || q.get('intro') === 'film')) filmIntro(legacyIntro); else legacyIntro();
+  }
+  function filmIntro(fallback) {
+    const sc = document.querySelector('script[src*="anim.js"]');
+    const ver = sc ? new URL(sc.src, location.href).searchParams.get('v') : '';
+    const src = new URL('intro-yc.mp4' + (ver ? '?v=' + ver : ''), sc ? sc.src : location.href).href;
+    const o = document.createElement('div');
+    o.className = 'intro film';
+    o.setAttribute('aria-hidden', 'true');
+    const v = document.createElement('video');
+    v.muted = true; v.defaultMuted = true; v.playsInline = true; v.autoplay = true; v.preload = 'auto';
+    v.setAttribute('muted', ''); v.setAttribute('playsinline', ''); v.setAttribute('webkit-playsinline', '');
+    v.src = src;
+    o.appendChild(v);
+    o.insertAdjacentHTML('beforeend', '<span class="skip">' + (W.skip || '') + '</span>');
+    document.body.appendChild(o);
+    let over = false;
+    const timers = [];
+    const done = () => {
+      if (over) return; over = true; timers.forEach(clearTimeout);
+      o.classList.add('out'); setTimeout(() => o.remove(), 700);
+    };
+    const giveUp = () => { // 影片放不出來：拿掉黑幕，改放程式動畫
+      if (over) return; over = true; timers.forEach(clearTimeout);
+      o.remove(); fallback();
+    };
+    v.addEventListener('playing', () => { v.playbackRate = 1.2; }); // 約 5 秒
+    v.addEventListener('ended', done);
+    v.addEventListener('error', giveUp);
+    o.addEventListener('click', done);
+    timers.push(setTimeout(() => { if (v.currentTime < 0.05) giveUp(); }, 2500)); // 2.5 秒內還沒開始播
+    timers.push(setTimeout(done, 9000)); // 保險：最久 9 秒
+    const p = v.play();
+    if (p && p.catch) p.catch(giveUp);
+  }
+  function legacyIntro() {
+  if (wkw) {
     const o = document.createElement('div');
     o.className = 'intro wk wk-' + pick;
     o.setAttribute('aria-hidden', 'true');
@@ -156,7 +196,7 @@
     const done = () => { o.classList.add('out'); setTimeout(() => o.remove(), 900); clearTimeout(t); };
     const t = setTimeout(done, dur);
     o.addEventListener('click', done);
-  } else if (!seen && q.get('intro') !== '0') {
+  } else {
     const o = document.createElement('div');
     o.className = 'intro';
     o.setAttribute('aria-hidden', 'true');
@@ -177,6 +217,7 @@
       setTimeout(() => o.remove(), 600);
     }
     o.addEventListener('click', end);
+  }
   }
 
   // ---------- 2. 封面 ----------
