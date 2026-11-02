@@ -184,7 +184,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                     child: Text(
                       [
                         if (replaced > 0) '$replaced 筆 App 進貨已由日報表取代',
-                        if (covered.isNotEmpty) '${covered.length} 筆 10/12 以前的 App 進貨以日報表為準、不計入（點下方查看）',
+                        if (covered.isNotEmpty) '${covered.length} 筆 App 進貨日報表已經記過那幾天，以日報表為準、不計入（點下方查看）',
                       ].join('；'),
                       textAlign: TextAlign.center,
                       style: TextStyle(color: AppColors.warn, fontSize: AppType.small),
@@ -427,7 +427,7 @@ class _CategoryPurchasesScreenState extends State<_CategoryPurchasesScreen> {
     final repo = AppScope.of(context).repo;
     final mine = p.createdBy != null && p.createdBy == repo.currentUserId;
     if (p.fromExcel) {
-      showMessage(context, '這筆是 10/12 以前從日報表匯入的進貨，不能在 App 修改或刪除');
+      showMessage(context, '這筆是從日報表匯入的進貨，不能在 App 修改或刪除');
       return;
     }
     if (!widget.membership.isManager && !mine) {
