@@ -125,6 +125,11 @@ body { position:relative; }
 /* 1. 開場倒數 */
 .intro { position:fixed; inset:0; z-index:50; background:#0A0A09; display:flex; align-items:center; justify-content:center; cursor:pointer; animation:projector .12s steps(2) infinite; }
 .intro.out { animation:introOut .55s ease forwards; }
+/* 3D 開場短片（2026-11-03）：手機直式填滿；橫的螢幕（電腦）完整放、兩邊黑 */
+.intro.film { background:#000; animation:none; }
+.intro.film video { width:100%; height:100%; object-fit:cover; display:block; }
+@media (min-aspect-ratio: 3/4) { .intro.film video { object-fit:contain; } }
+.intro.film .skip { color:rgba(242,238,230,.42); text-shadow:0 1px 6px rgba(0,0,0,.8); }
 .intro .leader { position:relative; width:min(62vw, 260px); aspect-ratio:1; }
 .intro svg { width:100%; height:100%; display:block; }
 .intro .ring { fill:none; stroke:#D3B16E; stroke-width:2.5; opacity:.8; }
