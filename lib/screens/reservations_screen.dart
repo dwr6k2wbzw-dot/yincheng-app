@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -42,6 +44,41 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
 
   Repository get _repo => AppScope.of(context).repo;
   String get _store => widget.membership.storeId;
+
+  // 列表上的「現在」時間線（老闆 2026-11-02）：每 30 秒更新一次
+  Timer? _clock;
+  @override
+  void initState() {
+    super.initState();
+    _clock = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted && _useList && _day == _today()) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _clock?.cancel();
+    super.dispose();
+  }
+
+  int get _nowMinute {
+    final n = taipeiNow();
+    return bizMinute(n.hour * 60 + n.minute);
+  }
+
+  /// 「現在 14:47」那一條線
+  Widget _nowLine(int minute) => Padding(
+        padding: const EdgeInsets.fromLTRB(0, 12, 0, 2),
+        child: Row(children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(color: AppColors.bad, borderRadius: BorderRadius.circular(999)),
+            child: Text('現在 ${minuteLabel(minute)}',
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: AppType.body, fontFeatures: tabular)),
+          ),
+          Expanded(child: Container(height: 2, color: AppColors.bad.withValues(alpha: 0.8))),
+        ]),
+      );
 
   @override
   void didChangeDependencies() {
@@ -360,8 +397,11 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
             padding: EdgeInsets.only(top: 48),
             child: Text(list.isEmpty ? '這天還沒有訂位' : '這天沒有有效的訂位（已取消的都隱藏了）', textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted)),
           ),
+        // 「現在」時間線：放在第一個還沒到的時段前面；全部時段都過了就放在最後（老闆 2026-11-02）
         if (_useList)
         for (final t in times) ...[
+          if (_day == _today() && t == times.firstWhere((x) => bizMinute(minutesOf(x)) > _nowMinute, orElse: () => ''))
+            _nowLine(_nowMinute),
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 14, 4, 8),
             // 時間放大（老闆 2026-11-02）
@@ -413,6 +453,8 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
             ]),
           ),
         ],
+        if (_useList && _day == _today() && times.isNotEmpty && times.every((t) => bizMinute(minutesOf(t)) <= _nowMinute))
+          _nowLine(_nowMinute),
         if (_useList && hiddenCount > 0)
           Center(
             child: TextButton.icon(
