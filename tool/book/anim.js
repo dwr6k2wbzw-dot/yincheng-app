@@ -30,15 +30,16 @@
   const WKW_INTRO = 'grand'; // 老闆 2026-10-18 選 E
   const pick = ['clock', 'door', 'rain', 'sky', 'letter', 'grand'].includes(q.get('intro')) ? q.get('intro') : WKW_INTRO;
   if (q.get('intro') && q.get('intro') !== '0') seen = false; // 預覽用：網址指定就每次都放
-  // 2026-11-03 老闆：開場改成 Blender 做的 3D 短片（兩家店各一支，intro-yc.mp4／intro-xcw.mp4）；
+  // 2026-11-03 老闆：隱城開場改成 Blender 做的 3D 短片（intro-yc.mp4：戲院布幕拉開、銀幕 3・2・1 倒數）；
   // 播不出來（省電模式擋自動播放、網路太慢、舊瀏覽器）就照舊放下面的程式動畫。?intro=clock 等舊選項仍可預覽舊動畫
   if (!seen && q.get('intro') !== '0') {
-    if (!q.get('intro') || q.get('intro') === 'film') filmIntro(legacyIntro); else legacyIntro();
+    // 老闆 2026-11-03：先只上隱城；小城外維持原本的老爺鐘程式動畫
+    if (!wkw && (!q.get('intro') || q.get('intro') === 'film')) filmIntro(legacyIntro); else legacyIntro();
   }
   function filmIntro(fallback) {
     const sc = document.querySelector('script[src*="anim.js"]');
     const ver = sc ? new URL(sc.src, location.href).searchParams.get('v') : '';
-    const src = new URL('intro-' + (wkw ? 'xcw' : 'yc') + '.mp4' + (ver ? '?v=' + ver : ''), sc ? sc.src : location.href).href;
+    const src = new URL('intro-yc.mp4' + (ver ? '?v=' + ver : ''), sc ? sc.src : location.href).href;
     const o = document.createElement('div');
     o.className = 'intro film';
     o.setAttribute('aria-hidden', 'true');
