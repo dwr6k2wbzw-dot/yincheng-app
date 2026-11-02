@@ -363,12 +363,15 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
         if (_useList)
         for (final t in times) ...[
           Padding(
-            padding: const EdgeInsets.fromLTRB(4, 8, 4, 6),
-            child: Row(children: [
-              Text(t, style: const TextStyle(fontWeight: FontWeight.w700)),
+            padding: const EdgeInsets.fromLTRB(4, 14, 4, 8),
+            // 時間放大（老闆 2026-11-02）
+            child: Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
+              Text(t,
+                  style: TextStyle(
+                      fontSize: AppType.display, fontWeight: FontWeight.w600, height: 1, color: AppColors.primary, fontFeatures: tabular)),
               const Spacer(),
               Text('${byTime[t]!.where((r) => r.active).fold<int>(0, (s, r) => s + r.party)} 位',
-                  style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+                  style: TextStyle(color: AppColors.muted, fontSize: AppType.body, fontFeatures: tabular)),
             ]),
           ),
           SectionCard(
