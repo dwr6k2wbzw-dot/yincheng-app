@@ -82,6 +82,9 @@ jobs:
           open(dst, 'w', encoding='utf-8').write(h)
           PY
             grep -q 'og:image' build/web/book/$slug/index.html
+            # 店家事實寫進 HTML＋結構化資料，讓搜尋引擎和 AI 讀得到（2026-11-04）
+            python3 tool/book/seo.py tool/book/stores.json build/web/book/$slug/index.html $slug "$site/$slug/"
+            grep -q 'application/ld+json' build/web/book/$slug/index.html
           done
           # 舊網址 book/?s=… 也帶一組通用的預覽卡（隱城的照片）
           tags=$(og yincheng "隱城·小城外" "線上訂位，即時確認。" "$site/")
