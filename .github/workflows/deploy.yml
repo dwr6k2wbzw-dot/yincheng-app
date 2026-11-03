@@ -1,0 +1,126 @@
+# 每次推送到 main：在 GitHub 雲端編譯 Flutter 網頁版，發布到 GitHub Pages
+name: 編譯並發布網頁版
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: 產生網頁平台設定（若尚未存在）
+        run: |
+          if [ ! -d web ]; then flutter create --platforms web --project-name yincheng_ops --org tw.yincheng . ; fi
+          rm -f test/widget_test.dart
+          python3 tool/patch_index.py
+          # App 圖示（小城外 logo）
+          mkdir -p web/icons && cp tool/icons/Icon-*.png tool/icons/apple-touch-icon.png web/icons/ && cp tool/icons/favicon.png web/favicon.png
+          cp tool/icons/apple-touch-icon.png web/icons/xcw-touch-180-v2.png && cp tool/icons/favicon.png web/icons/xcw-favicon-v2.png
+          sed -i 's/"name": ".*"/"name": "小城外"/; s/"short_name": ".*"/"short_name": "小城外"/; s/"background_color": ".*"/"background_color": "#0A0A09"/; s/"theme_color": ".*"/"theme_color": "#0A0A09"/' web/manifest.json
+      - run: flutter pub get
+      - name: 靜態檢查（只擋錯誤，不擋建議）
+        run: |
+          set +e
+          flutter analyze --no-fatal-infos --no-fatal-warnings > analyze.txt 2>&1
+          rc=$?
+          cat analyze.txt
+          if [ $rc -ne 0 ]; then
+            msg=$(grep -E "error|warning" analyze.txt | head -60 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=analyze::${msg}"
+          fi
+          exit $rc
+      - name: 編譯網頁版
+        run: |
+          set +e
+          flutter build web --release --pwa-strategy=none --base-href "/${{ github.event.repository.name }}/" > build.txt 2>&1
+          rc=$?
+          cat build.txt
+          if [ $rc -ne 0 ]; then
+            msg=$(grep -iE "error" build.txt | head -60 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=build::${msg}"
+          fi
+          exit $rc
+      - name: 客人訂位頁（純網頁，不用 Flutter；0050）
+        run: |
+          mkdir -p build/web/book && cp tool/book/* build/web/book/
+          # 小城外十週年電子邀請函（老闆 2026-10-28）：invite/?to=名字；店家用 invite/make.html 產生每個人的連結
+          mkdir -p build/web/invite && cp tool/invite/* build/web/invite/
+          # 樣式、程式、logo 加版本號：網頁一換新，客人手機就不會混用舊的樣式
+          v=$(echo "${{ github.sha }}" | cut -c1-8)
+          sed -i -E "s#(href|src)=\"(style\.css|common\.js|i18n\.js|theme\.js|anim\.js)\"#\1=\"\2?v=$v\"#g; s#'(logo-[a-z]+\.png|hero-[a-z]+\.jpg)'#'\1?v=$v'#g" build/web/book/*.html
+          grep -o 'style.css?v=[0-9a-f]*' build/web/book/index.html
+          # 分享預覽卡（老闆 2026-10-18）：各店專屬網址 book/<店>/，頁面帶店家的 og 標籤（LINE／IG／FB 預覽用）
+          site="https://dwr6k2wbzw-dot.github.io/yincheng-app/book"
+          og() { # $1 slug、$2 標題、$3 說明、$4 網址
+            printf '%s' "<meta property=\"og:type\" content=\"website\"><meta property=\"og:site_name\" content=\"$2\"><meta property=\"og:title\" content=\"$2｜線上訂位\"><meta property=\"og:description\" content=\"$3\"><meta property=\"og:url\" content=\"$4\"><meta property=\"og:image\" content=\"$site/og-$1.jpg?v=$v\"><meta property=\"og:image:width\" content=\"1200\"><meta property=\"og:image:height\" content=\"630\"><meta name=\"twitter:card\" content=\"summary_large_image\"><meta name=\"description\" content=\"$3\">"
+          }
+          tpl=build/web/book/index.html
+          for row in "yincheng|隱城·小城外|信義路三段 160 號 2 樓，以光影為幕、調酒為引。線上訂位，即時確認。" "xcw|小城外|大稻埕老宅二樓，仰望天井、感受歲月的溫度。線上訂位，即時確認。"; do
+            IFS='|' read -r slug name desc <<< "$row"
+            mkdir -p build/web/book/$slug
+            tags=$(og "$slug" "$name" "$desc" "$site/$slug/")
+            python3 - "$tpl" "build/web/book/$slug/index.html" "$slug" "$name" "$tags" <<'PY'
+          import sys
+          src, dst, slug, name, tags = sys.argv[1:6]
+          h = open(src, encoding='utf-8').read()
+          h = h.replace('<html ', '<html data-slug="%s" ' % slug, 1)
+          h = h.replace('<head>', '<head>\n<base href="../">', 1)
+          h = h.replace('<title>線上訂位</title>', '<title>%s｜線上訂位</title>' % name, 1)
+          h = h.replace('<!--OG-->', tags, 1)
+          open(dst, 'w', encoding='utf-8').write(h)
+          PY
+            grep -q 'og:image' build/web/book/$slug/index.html
+          done
+          # 舊網址 book/?s=… 也帶一組通用的預覽卡（隱城的照片）
+          tags=$(og yincheng "隱城·小城外" "線上訂位，即時確認。" "$site/")
+          python3 -c "import sys;p=sys.argv[1];h=open(p,encoding='utf-8').read().replace('<!--OG-->',sys.argv[2],1);open(p,'w',encoding='utf-8').write(h)" "$tpl" "$tags"
+          ls build/web/book build/web/book/xcw
+      - name: 檔名加版本號（避免手機一直用舊版的暫存）
+        run: |
+          v=$(echo "${{ github.sha }}" | cut -c1-8)
+          sed -i "s#src=\"flutter_bootstrap.js\"#src=\"flutter_bootstrap.js?v=$v\"#" build/web/index.html
+          sed -i "s#\"mainJsPath\":\"main.dart.js\"#\"mainJsPath\":\"main.dart.js?v=$v\"#" build/web/flutter_bootstrap.js
+          grep -o 'flutter_bootstrap.js?v=[0-9a-f]*' build/web/index.html
+          grep -o 'main.dart.js?v=[0-9a-f]*' build/web/flutter_bootstrap.js
+          # 小鈴鐺的「App 有新版本」：目前版本寫進網頁，最新版本寫進 version.txt（App 定期比對）
+          echo "$v" > build/web/version.txt
+          # 把 App 存在手機裡（service worker），版本號換成這次的
+          sed "s/__V__/$v/" tool/sw.js > build/web/sw.js
+          grep -q "const V = '$v'" build/web/sw.js
+          sed -i "s#</head>#<script>window.ycBuild='$v';</script>\n</head>#" build/web/index.html
+          grep -q "window.ycBuild='$v'" build/web/index.html
+      - name: 另存一份編譯結果到 web-build 分支（供除錯檢查）
+        run: |
+          cd build/web
+          git init -q -b web-build
+          git -c user.email=ci@noreply -c user.name=ci add -A
+          git -c user.email=ci@noreply -c user.name=ci commit -qm "build ${{ github.sha }}"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" web-build
+          rm -rf .git
+      - name: 加上功能許願的預覽（preview/<代號>/，只放還沒上線或取消的）
+        run: bash tool/change_request/assemble_site.sh build/web "$RUNNER_TEMP/site"
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: ${{ runner.temp }}/site
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

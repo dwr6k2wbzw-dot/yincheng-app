@@ -1,0 +1,2226 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../app_state.dart';
+import '../config.dart';
+import '../data/models.dart';
+import '../data/repository.dart';
+import '../services/clock.dart';
+import '../services/open_external.dart';
+import '../theme.dart';
+import '../widgets/auto_refresh.dart';
+import '../widgets/common.dart';
+import 'reservation_floor.dart';
+import 'reservation_timeline.dart';
+
+/// 訂位管理（0050，老闆 2026-10-14）：老闆、店長、正職。客人在公開訂位頁訂位，這裡看清單、標到店／未到／取消、新增電話訂位。
+class ReservationsScreen extends StatefulWidget {
+  const ReservationsScreen({super.key, required this.membership, this.initialDay});
+  final Membership membership;
+  final DateTime? initialDay; // 從小鈴鐺通知點進來：直接看那一天
+  @override
+  State<ReservationsScreen> createState() => _ReservationsScreenState();
+}
+
+class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBindingObserver, AutoRefresh {
+  late DateTime _day = widget.initialDay ?? _today();
+  bool _calOpen = false;
+  static _ResView _view = _ResView.timeline; // 0061：列表／時間軸／座位圖（記住上次選的；座位圖 2026-11-01）
+  List<ReservationTable> _tables = const [];
+  bool get _useTimeline => _view == _ResView.timeline && _tables.isNotEmpty; // 沒設定桌位的店只有列表
+  bool get _useFloor => _view == _ResView.floor && _tables.isNotEmpty;
+  bool get _useList => !_useTimeline && !_useFloor;
+  late Future<(ReservationSettings?, List<Reservation>)> _future;
+  bool _started = false;
+
+  static DateTime _today() {
+    // 營業日：凌晨 6 點前算前一天
+    return bizToday(); // 台北時間、凌晨 6 點前算前一天（跟全 App 同一個算法；健檢 2026-11-01）
+  }
+
+  Repository get _repo => AppScope.of(context).repo;
+  String get _store => widget.membership.storeId;
+
+  // 列表上的「現在」時間線（老闆 2026-11-02）：每 30 秒更新一次
+  Timer? _clock;
+  @override
+  void initState() {
+    super.initState();
+    _clock = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted && _useList && _day == _today()) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _clock?.cancel();
+    super.dispose();
+  }
+
+  int get _nowMinute {
+    final n = taipeiNow();
+    return bizMinute(n.hour * 60 + n.minute);
+  }
+
+  /// 「現在 14:47」那一條線
+  Widget _nowLine(int minute) => Padding(
+        padding: const EdgeInsets.fromLTRB(0, 12, 0, 2),
+        child: Row(children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(color: AppColors.bad, borderRadius: BorderRadius.circular(999)),
+            child: Text('現在 ${minuteLabel(minute)}',
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: AppType.body, fontFeatures: tabular)),
+          ),
+          Expanded(child: Container(height: 2, color: AppColors.bad.withValues(alpha: 0.8))),
+        ]),
+      );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_started) {
+      _started = true;
+      _future = _load();
+    }
+  }
+
+  // 已取消的訂位可以滑掉隱藏（老闆 2026-10-18，0064）：一個人滑掉大家都看不到；資料不刪，可以取消隱藏
+  bool _showHidden = false;
+  // 滑掉的那一刻先從畫面拿掉（Dismissible 必須馬上離開畫面），資料庫存好後重新讀取
+  final Map<String, bool> _hiddenNow = {};
+  Future<void> _setHidden(Reservation r, bool hide) async {
+    setState(() => _hiddenNow[r.id] = hide);
+    try {
+      await _repo.updateReservation(r.id, {'hidden_at': hide ? DateTime.now().toUtc().toIso8601String() : null});
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          content: Text(hide ? '已隱藏「${r.name}」這筆已取消的訂位' : '已取消隱藏'),
+          action: hide ? SnackBarAction(label: '復原', onPressed: () => _setHidden(r, false)) : null,
+        ));
+    } catch (e) {
+      if (mounted) {
+        setState(() => _hiddenNow.remove(r.id));
+        showMessage(context, friendlyError(e), error: true);
+      }
+      return;
+    }
+    if (mounted) _reload();
+  }
+
+  ReservationSpecialDay? _special; // 這天的特殊日期（0052）
+  Map<String, GuestStats> _guests = {}; // 熟客紀錄（以電話數字對回）
+
+  int _loadGen = 0; // 換日期很快時，舊的讀取晚回來不能蓋掉現在這天的資料（Codex 審查）
+
+  Future<(ReservationSettings?, List<Reservation>)> _load() async {
+    final gen = ++_loadGen;
+    final day = _day;
+    final r = await Future.wait<dynamic>([
+      _repo.reservationSettings(_store),
+      _repo.reservations(_store, day, day),
+      _repo.specialDays(_store, day, day).then<List<ReservationSpecialDay>>((v) => v, onError: (_) => <ReservationSpecialDay>[]),
+      _repo.reservationTables(_store).then<List<ReservationTable>>((v) => v, onError: (_) => <ReservationTable>[]),
+    ]);
+    final list = r[1] as List<Reservation>;
+    final special = (r[2] as List<ReservationSpecialDay>).firstOrNull;
+    Map<String, GuestStats> guests;
+    try {
+      guests = await _repo.guestStats(_store, {for (final x in list) if (phoneDigitsOf(x.phone).length >= 8) phoneDigitsOf(x.phone)});
+    } catch (_) {
+      guests = {}; // 讀不到熟客資料不影響訂位清單
+    }
+    if (gen == _loadGen) {
+      _tables = r[3] as List<ReservationTable>;
+      _special = special;
+      _guests = guests;
+    }
+    return (r[0] as ReservationSettings?, list);
+  }
+
+  void _reload() {
+    markRefreshed();
+    setState(() => _future = _load());
+  }
+
+  // 每分鐘安靜重讀（別人新增、取消的訂位自己出現）；換了日期或手動重新整理過，這次的結果就不用
+  @override
+  Future<void> autoRefresh() async {
+    final day = _day;
+    final f = _load();
+    final gen = _loadGen;
+    final v = await f;
+    if (!mounted || gen != _loadGen || day != _day) return;
+    setState(() => _future = Future.value(v));
+  }
+
+  /// 執行並顯示結果；成功回 true
+  Future<bool> _run(Future<void> Function() f, String ok) async {
+    try {
+      await f();
+      if (!mounted) return true; // 已經離開這個畫面（Codex 審查）
+      showMessage(context, ok);
+      _reload();
+      return true;
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+      return false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder(
+        future: _future,
+        builder: (context, snap) {
+          final settings = snap.data?.$1;
+          return Scaffold(
+            appBar: AppBar(
+              title: Text('訂位・${widget.membership.storeName}'),
+              actions: [
+                if (settings != null && !AppConfig.demo) // 示範模式沒有可用的訂位頁（Codex 審查）
+                  IconButton(
+                    tooltip: '訂位頁連結',
+                    icon: const Icon(Icons.link),
+                    onPressed: () => _shareLink(settings),
+                  ),
+                if (settings != null && widget.membership.isManager)
+                  IconButton(
+                    tooltip: '桌位設定',
+                    icon: const Icon(Icons.table_restaurant_outlined),
+                    onPressed: () async {
+                      final changed = await Navigator.of(context).push<bool>(MaterialPageRoute(
+                        builder: (_) => ReservationTablesScreen(storeId: _store, storeName: widget.membership.storeName),
+                      ));
+                      if (changed == true) _reload();
+                    },
+                  ),
+                if (settings != null && widget.membership.role == Role.owner)
+                  IconButton(
+                    tooltip: '訂位設定',
+                    icon: const Icon(Icons.tune),
+                    onPressed: () async {
+                      final changed = await Navigator.of(context).push<bool>(MaterialPageRoute(
+                        builder: (_) => ReservationSettingsScreen(membership: widget.membership, settings: settings),
+                      ));
+                      if (changed == true) _reload();
+                    },
+                  ),
+              ],
+            ),
+            floatingActionButton: settings == null
+                ? null
+                : _useTimeline || _useFloor
+                    ? FloatingActionButton.extended(
+                        heroTag: 'walkin',
+                        onPressed: () => _walkIn(null, null),
+                        icon: const Icon(Icons.directions_walk),
+                        label: const Text('現場客'),
+                      )
+                    : FloatingActionButton.extended(
+                        onPressed: () => _add(settings),
+                        icon: const Icon(Icons.add),
+                        label: const Text('電話訂位'),
+                      ),
+            body: _body(snap),
+          );
+        },
+      );
+
+  Widget _body(AsyncSnapshot<(ReservationSettings?, List<Reservation>)> snap) {
+    if (snap.hasError) return ErrorView(message: friendlyError(snap.error!), onRetry: _reload);
+    if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+    final (settings, list) = snap.data!;
+    if (settings == null) {
+      return Center(child: Text('這家店還沒有訂位設定', style: TextStyle(color: AppColors.muted)));
+    }
+    final active = list.where((r) => r.active).toList();
+    final guests = active.fold<int>(0, (t, r) => t + r.party);
+    bool isHidden(Reservation r) => r.status == 'cancelled' && (_hiddenNow[r.id] ?? r.hiddenAt != null);
+    final hiddenCount = list.where(isHidden).length;
+    final byTime = <String, List<Reservation>>{};
+    for (final r in list) {
+      if (!_showHidden && isHidden(r)) continue;
+      byTime.putIfAbsent(r.time, () => []).add(r);
+    }
+    final times = byTime.keys.toList()..sort();
+    return RefreshIndicator(
+      onRefresh: () async => _reload(),
+      child: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 96), children: [
+        // 日期：點了在下面展開月曆（老闆 2026-10-17：跟客人訂位頁同一種樣式）
+        // 左右箭頭切前一天／後一天（老闆 2026-10-24）
+        Row(children: [
+          IconButton(
+            tooltip: '前一天',
+            onPressed: () => _shiftDay(-1),
+            icon: Icon(Icons.chevron_left, color: AppColors.primary, size: 30),
+          ),
+          Expanded(child: InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          onTap: () => setState(() => _calOpen = !_calOpen),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              border: Border.all(color: _calOpen ? AppColors.primary : AppColors.line, width: 1.2),
+            ),
+            child: Row(children: [
+              Expanded(
+                child: Text(
+                    '${_day.month}月${_day.day}日 ${DateFormat('E', 'zh_TW').format(_day)}${_day == _today() ? '（今日）' : ''}',
+                    style: TextStyle(fontSize: AppType.title, fontWeight: FontWeight.w600, fontFeatures: tabular)),
+              ),
+              if (_day != _today())
+                InkWell(
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                  onTap: () => _shiftDay(0),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    child: Text('回今天', style: TextStyle(color: AppColors.primary, fontSize: AppType.small)),
+                  ),
+                ),
+              Icon(_calOpen ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, color: AppColors.muted),
+            ]),
+          ),
+        )),
+          IconButton(
+            tooltip: '後一天',
+            onPressed: () => _shiftDay(1),
+            icon: Icon(Icons.chevron_right, color: AppColors.primary, size: 30),
+          ),
+        ]),
+        if (_calOpen)
+          ReservationMonthCalendar(
+            membership: widget.membership,
+            selected: _day,
+            today: _today(),
+            onPick: (d) {
+              _calOpen = false;
+              _day = d;
+              _reload();
+            },
+          ),
+        const SizedBox(height: 12),
+        if (!settings.enabled)
+          Padding(
+            padding: EdgeInsets.only(bottom: 8),
+            child: Text('線上訂位目前暫停中（老闆可在右上角設定開啟）', style: TextStyle(color: AppColors.warn, fontSize: AppType.small)),
+          ),
+        () {
+          // 每天名額（0052）：組數、人數、大桌
+          final lim = settings.limitsFor(_day, _special);
+          // 名額只算訂位，不算現場客（跟資料庫口徑一致；健檢 2026-11-01 Bug 2）
+          final booked = active.where((r) => !r.walkIn).toList();
+          final walkIns = active.length - booked.length;
+          final bookedGuests = booked.fold<int>(0, (t, r) => t + r.party);
+          final large = booked.where((r) => r.party >= lim.largeSize).length;
+          String cap(int used, int? max) => max == null ? '$used' : '$used/$max';
+          return SectionCard(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Icon(Icons.event_seat_outlined, color: AppColors.primary),
+                const SizedBox(width: 12),
+                Expanded(child: Text('${active.length} 組・$guests 位', style: const TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w700))),
+                if (!lim.closed)
+                  Text('訂位 ${cap(booked.length, lim.maxGroups)} 組／${cap(bookedGuests, lim.maxGuests)} 位${walkIns > 0 ? '・現場 $walkIns 組' : ''}',
+                      style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+              ]),
+              const SizedBox(height: 6),
+              if (lim.closed)
+                Text('這天不開放線上訂位${lim.note == null ? '' : '（${lim.note}）'}',
+                    style: TextStyle(color: AppColors.warn, fontSize: AppType.small))
+              else
+                Text('${lim.largeSize} 位以上：${cap(large, lim.maxLarge)} 組${_special != null ? '・今天是特殊日期' : ''}',
+                    style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+            ]),
+          );
+        }(),
+        const SizedBox(height: 12),
+        // 0061：列表／時間軸（這家店有設定桌位才有時間軸）
+        if (_tables.isNotEmpty)
+        Row(children: [
+          SegmentedButton<_ResView>(
+            segments: const [
+              ButtonSegment(value: _ResView.list, icon: Icon(Icons.view_list_outlined), label: Text('列表')),
+              ButtonSegment(value: _ResView.timeline, icon: Icon(Icons.view_timeline_outlined), label: Text('時間軸')),
+              ButtonSegment(value: _ResView.floor, icon: Icon(Icons.grid_view_outlined), label: Text('座位圖')),
+            ],
+            selected: {_view},
+            showSelectedIcon: false,
+            style: const ButtonStyle(visualDensity: VisualDensity.compact),
+            onSelectionChanged: (v) => setState(() => _view = v.first),
+          ),
+          const Spacer(),
+          if (_useTimeline || _useFloor)
+            // 三個分頁後放不下文字按鈕，改成圖示（長按有說明）；列表模式的右下角大按鈕才是電話訂位
+            IconButton.outlined(
+              tooltip: '電話訂位',
+              onPressed: () => _add(settings),
+              icon: const Icon(Icons.add_call, size: 20),
+              visualDensity: VisualDensity.compact,
+            ),
+        ]),
+        if (_tables.isNotEmpty) const SizedBox(height: 12),
+        if (_useTimeline)
+          ReservationTimeline(
+            key: ValueKey(_day),
+            day: _day,
+            isToday: _day == _today(),
+            list: list,
+            tables: _tables,
+            slots: settings.slotsFor(_day),
+            onTapReservation: _actions,
+            onTapEmpty: (t, m) => _tapEmpty(settings, t, m),
+          ),
+        if (_useFloor)
+          ReservationFloorPlan(
+            key: ValueKey('floor-$_day'),
+            storeId: _store,
+            day: _day,
+            isToday: _day == _today(),
+            list: list,
+            tables: _tables,
+            slots: settings.slotsFor(_day),
+            canArrange: widget.membership.isManager,
+            onTapReservation: _actions,
+            onTapEmpty: (t, m) => _tapEmpty(settings, t, m),
+            onLayoutSaved: _reload,
+          ),
+        if (_useList && times.isEmpty)
+          Padding(
+            padding: EdgeInsets.only(top: 48),
+            child: Text(list.isEmpty ? '這天還沒有訂位' : '這天沒有有效的訂位（已取消的都隱藏了）', textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted)),
+          ),
+        // 「現在」時間線：放在第一個還沒到的時段前面；全部時段都過了就放在最後（老闆 2026-11-02）
+        if (_useList)
+        for (final t in times) ...[
+          if (_day == _today() && t == times.firstWhere((x) => bizMinute(minutesOf(x)) > _nowMinute, orElse: () => ''))
+            _nowLine(_nowMinute),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 14, 4, 8),
+            // 時間放大（老闆 2026-11-02）
+            child: Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
+              Text(t,
+                  style: TextStyle(
+                      fontSize: AppType.display, fontWeight: FontWeight.w600, height: 1, color: AppColors.primary, fontFeatures: tabular)),
+              const Spacer(),
+              Text('${byTime[t]!.where((r) => r.active).fold<int>(0, (s, r) => s + r.party)} 位',
+                  style: TextStyle(color: AppColors.muted, fontSize: AppType.body, fontFeatures: tabular)),
+            ]),
+          ),
+          SectionCard(
+            padding: EdgeInsets.zero,
+            child: Column(children: [
+              for (final r in byTime[t]!)
+                // 已取消的往左滑可以隱藏（只有這支手機看不到，資料還在）
+                if (r.status == 'cancelled' && !isHidden(r))
+                  Dismissible(
+                    key: ValueKey('hide-${r.id}'),
+                    direction: DismissDirection.endToStart,
+                    background: Container(
+                      alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.only(right: 20),
+                      color: AppColors.line,
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(Icons.visibility_off_outlined, color: AppColors.muted, size: 20),
+                        const SizedBox(width: 6),
+                        Text('隱藏', style: TextStyle(color: AppColors.muted)),
+                      ]),
+                    ),
+                    onDismissed: (_) => _setHidden(r, true),
+                    child: _tile(r),
+                  )
+                else if (isHidden(r))
+                  Opacity(
+                    opacity: .6,
+                    child: Stack(children: [
+                      _tile(r),
+                      Positioned(
+                        right: 4,
+                        top: 4,
+                        child: TextButton(onPressed: () => _setHidden(r, false), child: const Text('取消隱藏')),
+                      ),
+                    ]),
+                  )
+                else
+                  _tile(r),
+            ]),
+          ),
+        ],
+        if (_useList && _day == _today() && times.isNotEmpty && times.every((t) => bizMinute(minutesOf(t)) <= _nowMinute))
+          _nowLine(_nowMinute),
+        if (_useList && hiddenCount > 0)
+          Center(
+            child: TextButton.icon(
+              onPressed: () => setState(() => _showHidden = !_showHidden),
+              icon: Icon(_showHidden ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 18),
+              label: Text(_showHidden ? '收起已隱藏的取消訂位' : '已隱藏 $hiddenCount 筆取消的訂位・顯示'),
+            ),
+          ),
+        if (_useList && list.any((r) => r.status == 'cancelled' && !isHidden(r)))
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text('已取消的訂位可以往左滑隱藏', textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+          ),
+      ]),
+    );
+  }
+
+  Widget _tile(Reservation r) {
+    final color = switch (r.status) {
+      'arrived' => AppColors.good,
+      'no_show' => AppColors.bad,
+      'cancelled' => AppColors.muted,
+      _ => AppColors.primary,
+    };
+    final dim = r.status == 'cancelled';
+    return ListTile(
+      onTap: () => _actions(r),
+      title: Text('${r.name}・${r.party} 位',
+          style: TextStyle(
+              fontWeight: FontWeight.w600,
+              decoration: dim ? TextDecoration.lineThrough : null,
+              color: dim ? AppColors.muted : null)),
+      subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(
+          [
+            if (_tableNames(r).isNotEmpty) '桌 ${_tableNames(r)}',
+            r.phone.isEmpty ? '沒留電話' : r.phone,
+            r.walkIn ? '現場客' : (r.source == 'web' ? '網路訂位' : '電話訂位'),
+            if (r.clearedAt != null) '已清桌',
+            if (r.lang == 'en') '英文客人',
+            if (r.lang == 'ja') '日文客人',
+            if ((r.note ?? '').isNotEmpty) '備註：${r.note}',
+            if (r.emailError != null) '確認信寄送失敗',
+          ].join('・'),
+          style: const TextStyle(fontSize: AppType.small),
+        ),
+        // 0055 客人申請改人數（待店家確認）
+        if (r.partyPending)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(color: AppColors.warn.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(AppRadius.sm)),
+              child: Text('客人申請改為 ${r.requestedParty} 位・點一下處理',
+                  style: TextStyle(fontSize: AppType.small, color: AppColors.warn, fontWeight: FontWeight.w600)),
+            ),
+          ),
+        // 熟客辨識（0052）：來過幾次、未到幾次、標籤、備註
+        if (_guestBadges(r).isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Wrap(spacing: 6, runSpacing: 4, children: _guestBadges(r)),
+          ),
+      ]),
+      trailing: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(AppRadius.sm)),
+        child: Text(reservationStatusLabel[r.status] ?? r.status, style: TextStyle(color: color, fontSize: AppType.small)),
+      ),
+    );
+  }
+
+  String _tableNames(Reservation r) =>
+      [for (final id in r.tableIds) _tables.where((t) => t.id == id).firstOrNull?.name].whereType<String>().join('、');
+
+  List<Widget> _guestBadges(Reservation r) {
+    final g = _guests[phoneDigitsOf(r.phone)];
+    if (g == null) return const [];
+    Widget badge(String t, Color c) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+          decoration: BoxDecoration(color: c.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(AppRadius.sm)),
+          child: Text(t, style: TextStyle(fontSize: AppType.caption, color: c)),
+        );
+    return [
+      if (g.visits > 0) badge('來過 ${g.visits} 次', AppColors.good),
+      if (g.noShows > 0) badge('未到 ${g.noShows} 次', AppColors.bad),
+      for (final t in g.profile?.tags ?? const <String>[]) badge(t, AppColors.primary),
+      if ((g.profile?.note ?? '').isNotEmpty) badge(g.profile!.note!, AppColors.muted),
+    ];
+  }
+
+  /// 熟客資料：標籤、備註；未到達到門檻時可以「解除」（之後可以再線上訂位）
+  Future<void> _editGuest(Reservation r, ReservationSettings s) async {
+    final digits = phoneDigitsOf(r.phone);
+    final g = _guests[digits];
+    final tags = {...?g?.profile?.tags};
+    final note = TextEditingController(text: g?.profile?.note ?? '');
+    final custom = TextEditingController();
+    var reset = false;
+    final blocked = s.noshowBlockCount > 0 && (g?.noShows ?? 0) >= s.noshowBlockCount;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setD) => AlertDialog(
+          title: Text('熟客資料・${r.name}'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('電話 ${r.phone}・來過 ${g?.visits ?? 0} 次・未到 ${g?.noShows ?? 0} 次',
+                  style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+              const SizedBox(height: 10),
+              Wrap(spacing: 6, runSpacing: 6, children: [
+                for (final t in {...guestTagPresets, ...tags})
+                  SelectChip(
+                    label: Text(t),
+                    selected: tags.contains(t),
+                    onSelected: (v) => setD(() => v ? tags.add(t) : tags.remove(t)),
+                  ),
+              ]),
+              Row(children: [
+                Expanded(child: TextField(controller: custom, maxLength: 10, decoration: const InputDecoration(hintText: '自訂標籤', counterText: ''))),
+                IconButton(
+                  tooltip: '加入標籤',
+                  icon: const Icon(Icons.add),
+                  onPressed: () {
+                    final t = custom.text.trim();
+                    if (t.isEmpty || tags.length >= 10) return;
+                    setD(() {
+                      tags.add(t);
+                      custom.clear();
+                    });
+                  },
+                ),
+              ]),
+              const SizedBox(height: 8),
+              TextField(controller: note, maxLength: 200, maxLines: 2, decoration: const InputDecoration(labelText: '熟客備註（例如：不吃香菜）')),
+              if (blocked)
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: reset,
+                  onChanged: (v) => setD(() => reset = v ?? false),
+                  title: const Text('解除未到紀錄'),
+                  subtitle: Text('未到 ${s.noshowBlockCount} 次以上目前不能線上訂位；解除後可以再線上訂',
+                      style: const TextStyle(fontSize: AppType.small)),
+                ),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
+            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('儲存')),
+          ],
+        ),
+      ),
+    );
+    if (ok != true || !mounted) return;
+    if (digits.length < 8) {
+      showMessage(context, '電話不完整，不能存熟客資料', error: true);
+      return;
+    }
+    await _run(
+        () => _repo.saveGuestProfile(_store, GuestProfile(phoneDigits: digits, tags: tags.toList(), note: note.text),
+            resetNoshow: reset),
+        reset ? '已儲存並解除未到紀錄' : '已儲存熟客資料');
+  }
+
+  /// 前一天／後一天；0＝回今天
+  void _shiftDay(int d) {
+    _calOpen = false;
+    final t = _today();
+    _day = d == 0 ? t : DateTime(_day.year, _day.month, _day.day + d);
+    _reload();
+  }
+
+  Future<void> _actions(Reservation r) async {
+    // 選項多（排桌、打電話、入座、未到、取消、修改、熟客）會超過半個螢幕：可以捲動、最高到 9 成（老闆 2026-11-01：最下面被切掉）
+    final v = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.9),
+      builder: (c) => SafeArea(
+        child: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            title: Text('${r.name}・${r.party} 位・${r.time}', style: const TextStyle(fontWeight: FontWeight.w700)),
+            // 時間軸點進來也看得到電話與完整備註（老闆 2026-10-23）
+            subtitle: Text(
+              [
+                r.phone.isEmpty ? '沒留電話' : r.phone,
+                if ((r.note ?? '').trim().isNotEmpty) '備註：${r.note!.trim()}',
+              ].join('\n'),
+              style: const TextStyle(fontSize: AppType.small),
+            ),
+          ),
+          if (r.partyPending) ...[
+            ListTile(
+                leading: Icon(Icons.check, color: AppColors.good),
+                title: Text('同意改為 ${r.requestedParty} 位'),
+                subtitle: const Text('會寄信通知客人'),
+                onTap: () => Navigator.pop(c, 'party_yes')),
+            ListTile(
+                leading: Icon(Icons.close, color: AppColors.bad),
+                title: Text('不同意（維持 ${r.party} 位）'),
+                subtitle: const Text('會寄信通知客人'),
+                onTap: () => Navigator.pop(c, 'party_no')),
+            const Divider(height: 1),
+          ],
+          if (r.active)
+            ListTile(
+                leading: const Icon(Icons.table_restaurant_outlined),
+                title: Text(r.tableIds.isEmpty ? '排桌' : '換桌（目前 ${_tableNames(r)}）'),
+                onTap: () => Navigator.pop(c, 'tables')),
+          if (r.status == 'arrived' && r.clearedAt == null)
+            ListTile(
+                leading: Icon(Icons.cleaning_services_outlined, color: AppColors.good),
+                title: const Text('清桌（客人離開了）'),
+                onTap: () => Navigator.pop(c, 'clear')),
+          if (r.status == 'arrived' && r.clearedAt != null)
+            ListTile(leading: const Icon(Icons.undo), title: const Text('取消清桌（客人還在）'), onTap: () => Navigator.pop(c, 'unclear')),
+          if (r.phone.isNotEmpty)
+            ListTile(leading: const Icon(Icons.call), title: Text('打電話 ${r.phone}'), onTap: () => Navigator.pop(c, 'call')),
+          if (r.status != 'arrived')
+            ListTile(leading: const Icon(Icons.check_circle_outline), title: const Text('入座（已到店）'), onTap: () => Navigator.pop(c, 'arrived')),
+          if (r.status != 'no_show')
+            ListTile(leading: const Icon(Icons.person_off_outlined), title: const Text('未到（no-show）'), onTap: () => Navigator.pop(c, 'no_show')),
+          if (r.status != 'confirmed' && !r.walkIn)
+            ListTile(leading: const Icon(Icons.undo), title: const Text('改回已確認'), onTap: () => Navigator.pop(c, 'confirmed')),
+          if (r.status != 'cancelled')
+            ListTile(
+                leading: Icon(Icons.cancel_outlined, color: AppColors.bad),
+                title: Text('取消訂位', style: TextStyle(color: AppColors.bad)),
+                onTap: () => Navigator.pop(c, 'cancelled')),
+          ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: const Text('修改訂位內容'),
+              subtitle: const Text('日期、時間、人數、姓名、電話、Email、備註'),
+              onTap: () => Navigator.pop(c, 'edit')),
+          ListTile(
+              leading: const Icon(Icons.loyalty_outlined),
+              title: const Text('熟客資料'),
+              subtitle: const Text('標籤、備註、解除未到紀錄'),
+              onTap: () => Navigator.pop(c, 'guest')),
+          ]),
+        ),
+      ),
+    );
+    if (v == null || !mounted) return;
+    if (v == 'call') {
+      openExternal('tel:${r.phone.replaceAll(RegExp(r'[^0-9+]'), '')}');
+      return;
+    }
+    if (v == 'tables') {
+      await _assignTables(r);
+      return;
+    }
+    if (v == 'clear' || v == 'unclear') {
+      await _run(() => _repo.updateReservation(r.id, {'cleared_at': v == 'clear' ? DateTime.now().toUtc().toIso8601String() : null}),
+          v == 'clear' ? '已清桌' : '已改回入座中');
+      return;
+    }
+    if (v == 'party_yes' || v == 'party_no') {
+      final yes = v == 'party_yes';
+      if (yes) {
+        // 加人：先看這天名額夠不夠（只提醒，店家可以決定照收）
+        try {
+          final settings = await _repo.reservationSettings(_store);
+          final same = await _repo.reservations(_store, r.date, r.date);
+          final sp = (await _repo.specialDays(_store, r.date, r.date)).firstOrNull;
+          final over = settings == null
+              ? const <String>[]
+              : settings.limitsFor(r.date, sp).overBy(same.where((x) => x.id != r.id).toList(), r.requestedParty ?? r.party);
+          if (over.isNotEmpty && mounted) {
+            final ok = await showDialog<bool>(
+              context: context,
+              builder: (c) => AlertDialog(
+                title: const Text('超過這天的名額'),
+                content: Text('${over.join('\n')}\n還是要同意嗎？'),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('不要')),
+                  FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('還是同意')),
+                ],
+              ),
+            );
+            if (ok != true) return;
+          }
+        } catch (e) {
+          if (mounted) showMessage(context, friendlyError(e), error: true);
+          return;
+        }
+      }
+      if (!mounted) return;
+      await _run(() => _repo.decidePartyRequest(r.id, yes, r.requestedParty!), yes ? '已同意，改為 ${r.requestedParty} 位' : '已回覆不同意');
+      return;
+    }
+    if (v == 'guest') {
+      final s = (await _future).$1;
+      if (s != null && mounted) await _editGuest(r, s);
+      return;
+    }
+    if (v == 'edit') {
+      final s = (await _future).$1;
+      if (s == null || !mounted) return;
+      final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(
+        builder: (_) => _AddReservationScreen(membership: widget.membership, settings: s, day: r.date, existing: r, tables: _tables),
+      ));
+      if (saved == true) _reload();
+      return;
+    }
+    if (v.startsWith('t:')) {
+      final name = withTitle(stripTitle(r.name), v.substring(2));
+      await _run(() => _repo.updateReservation(r.id, {'guest_name': name}), '已改成 $name');
+      return;
+    }
+    if (v == 'note') {
+      final ctrl = TextEditingController(text: r.note ?? '');
+      final note = await showDialog<String>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: const Text('備註'),
+          content: TextField(controller: ctrl, maxLength: 200, maxLines: 3, autofocus: true),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c), child: const Text('取消')),
+            FilledButton(onPressed: () => Navigator.pop(c, ctrl.text.trim()), child: const Text('儲存')),
+          ],
+        ),
+      );
+      if (note == null) return;
+      await _run(() => _repo.updateReservation(r.id, {'note': note.isEmpty ? null : note}), '已更新備註');
+      return;
+    }
+    if (v == 'cancelled') {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: const Text('取消這筆訂位？'),
+          content: Text('${r.name}・${r.party} 位・${r.time}\n取消後名額會釋出（不會自動通知客人）。'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('不要')),
+            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('取消訂位')),
+          ],
+        ),
+      );
+      if (ok != true) return;
+    }
+    // 從「取消／未到」改回有效：先檢查那個時段還有沒有名額（Codex 審查）
+    if (!r.active && (v == 'confirmed' || v == 'arrived')) {
+      try {
+        final settings = await _repo.reservationSettings(_store);
+        final same = await _repo.reservations(_store, r.date, r.date);
+        final sp = (await _repo.specialDays(_store, r.date, r.date)).firstOrNull;
+        final over = settings == null
+            ? const <String>[]
+            : settings.limitsFor(r.date, sp).overBy(same.where((x) => x.id != r.id).toList(), r.party);
+        if (over.isNotEmpty && mounted) {
+          final ok = await showDialog<bool>(
+            context: context,
+            builder: (c) => AlertDialog(
+              title: const Text('超過這天的名額'),
+              content: Text('${over.join('\n')}\n還是要改嗎？'),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('不要')),
+                FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('還是要改')),
+              ],
+            ),
+          );
+          if (ok != true) return;
+        }
+      } catch (e) {
+        if (mounted) showMessage(context, friendlyError(e), error: true);
+        return;
+      }
+    }
+    if (!mounted) return;
+    final done = await _run(() => _repo.updateReservation(r.id, {'status': v}), '已改成「${reservationStatusLabel[v]}」');
+    // 入座成功、還沒排桌：順便排桌（失敗就不開；Codex 審查）
+    if (done && v == 'arrived' && r.tableIds.isEmpty && _tables.any((t) => t.active) && mounted) {
+      await _assignTables(r);
+    }
+  }
+
+  /// 排桌／換桌（0061）
+  Future<void> _assignTables(Reservation r0) async {
+    final all = (await _future).$2;
+    if (!mounted) return;
+    // 用重新讀到的這筆（剛入座的話才有入座時間；Codex 審查）
+    final r = all.where((x) => x.id == r0.id).firstOrNull ?? r0;
+    // 資料裡是真實時間點，要讀「幾點幾分」才轉台北時間（只轉一次；Codex 審查 PR #137）
+    final seat = seatedOn(r) == null ? null : toTaipei(seatedOn(r)!);
+    final minute = seat != null ? bizMinute(seat.hour * 60 + seat.minute) : bizMinute(minutesOf(r.time));
+    final ids = await pickTables(context,
+        tables: _tables, selected: r.tableIds, party: r.party, busy: busyTables(all, r, minute));
+    if (ids == null || !mounted) return;
+    await _run(() => _repo.updateReservation(r.id, {'table_ids': ids}), ids.isEmpty ? '已取消排桌' : '已排桌');
+  }
+
+  /// 現場客（0061）：直接入座；從時間軸空白處點進來會帶入那張桌
+  Future<void> _walkIn(ReservationTable? table, int? minute) async {
+    // 現場客只能登記今天（入座時間由資料庫記現在時間；Codex 審查）
+    if (_day != _today()) {
+      showMessage(context, '現場客只能登記今天；其他天請用「電話訂位」', error: true);
+      return;
+    }
+    final now = taipeiNow();
+    final m = bizMinute(now.hour * 60 + now.minute);
+    var party = 1; // 現場客預設 1 位（老闆 2026-11-01）
+    final name = TextEditingController();
+    var ids = <String>[if (table != null && table.active) table.id];
+    final all = (await _future).$2;
+    if (!mounted) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, set) => AlertDialog(
+          title: Text('現場客・${minuteLabel(m)}'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                const Text('人數'),
+                const Spacer(),
+                IconButton(tooltip: '減少', onPressed: party > 1 ? () => set(() => party--) : null, icon: const Icon(Icons.remove_circle_outline)),
+                Text('$party', style: const TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w600)),
+                IconButton(tooltip: '增加', onPressed: party < 999 ? () => set(() => party++) : null, icon: const Icon(Icons.add_circle_outline)),
+              ]),
+              TextField(controller: name, maxLength: 40, decoration: const InputDecoration(labelText: '稱呼（選填，例：王先生）')),
+              const SizedBox(height: 4),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final r = await pickTables(c, tables: _tables, selected: ids, party: party, busy: busyTables(all, null, m));
+                  if (r != null) set(() => ids = r);
+                },
+                icon: const Icon(Icons.table_restaurant_outlined),
+                label: Text(ids.isEmpty
+                    ? '選桌'
+                    : '桌 ${[for (final id in ids) _tables.where((t) => t.id == id).firstOrNull?.name].whereType<String>().join('、')}'),
+              ),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
+            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('入座')),
+          ],
+        ),
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final n = name.text.trim();
+    await _run(
+        () => _repo.addWalkIn(_store, date: _day, time: minuteLabel(m), party: party, name: n.isEmpty ? '現場客' : n, tableIds: ids),
+        '已登記現場客');
+  }
+
+  void _shareLink(ReservationSettings s) {
+    final url = reservationPageUrl(s.slug);
+    showDialog<void>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('客人訂位頁'),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('把這個網址放在 IG、Google 商家、LINE 官方帳號，客人就能直接訂位：', style: TextStyle(fontSize: AppType.small)),
+          const SizedBox(height: 8),
+          SelectableText(url, style: TextStyle(fontSize: AppType.small, color: AppColors.primary)),
+        ]),
+        actions: [
+          TextButton(onPressed: () => openExternal(url), child: const Text('打開看看')),
+          FilledButton(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: url));
+              Navigator.pop(c);
+              showMessage(context, '已複製訂位頁網址');
+            },
+            child: const Text('複製網址'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _add(ReservationSettings s, {String? time, List<String> tableIds = const [], DateTime? day}) async {
+    final added = await Navigator.of(context).push<bool>(MaterialPageRoute(
+      builder: (_) => _AddReservationScreen(
+          membership: widget.membership, settings: s, day: day ?? _day, tables: _tables, initialTime: time, initialTableIds: tableIds),
+    ));
+    if (added == true) _reload();
+  }
+
+  /// 座位圖／時間軸點空桌：看的是「現在」就登記現場客；看的是別的時段（或別天）就開電話訂位、帶入時段與桌號
+  /// （健檢 2026-11-01 Bug 5：以前選 21:00 點空桌，會被當成現在入座）
+  Future<void> _tapEmpty(ReservationSettings s, ReservationTable? table, int minute) async {
+    final nowMin = () {
+      final n = taipeiNow();
+      return bizMinute(n.hour * 60 + n.minute);
+    }();
+    final isNow = _day == _today() && (minute - nowMin).abs() <= 15;
+    if (isNow) return _walkIn(table, minute);
+    // 時間軸畫得到隔天早上 6 點以後，那一段屬於下一個營業日（Codex 審查 PR #137）
+    final (day, time) = slotFromTimeline(_day, minute);
+    await _add(s, time: time, tableIds: [if (table != null && table.active) table.id], day: day);
+  }
+}
+
+/// 電話訂位（員工代客人輸入；不受線上訂位的天數、截止時間、每組人數限制，但會提醒超過這天的名額）
+class _AddReservationScreen extends StatefulWidget {
+  const _AddReservationScreen(
+      {required this.membership, required this.settings, required this.day, this.existing, this.tables = const [], this.initialTime, this.initialTableIds = const []});
+  final List<ReservationTable> tables; // 0061 桌位；沒設定桌位的店不顯示「位置」
+  final String? initialTime; // 從座位圖／時間軸的某個時段點進來
+  final List<String> initialTableIds;
+  final Membership membership;
+  final ReservationSettings settings;
+  final DateTime day;
+  final Reservation? existing; // 有值＝修改這筆訂位（老闆 2026-10-15）
+  @override
+  State<_AddReservationScreen> createState() => _AddReservationScreenState();
+}
+
+class _AddReservationScreenState extends State<_AddReservationScreen> {
+  late DateTime _date = widget.existing?.date ?? widget.day;
+  late String? _time = widget.existing?.time ?? widget.initialTime;
+  late int _party = widget.existing?.party ?? 1; // 預設 1 人（老闆 2026-11-01；吧台單人座多）
+  // 位置（老闆 2026-10-22：電話訂位可以選位置）
+  late List<String> _tableIds = widget.existing != null ? [...widget.existing!.tableIds] : [...widget.initialTableIds];
+  bool get _hasTables => widget.tables.any((t) => t.active) || _tableIds.isNotEmpty;
+  String get _tableLabel =>
+      [for (final id in _tableIds) widget.tables.where((t) => t.id == id).firstOrNull?.name].whereType<String>().join('、');
+
+  Future<void> _pickTables() async {
+    final time = _time;
+    if (time == null) {
+      showMessage(context, '請先選時段，才知道哪些位置有人', error: true);
+      return;
+    }
+    List<Reservation> same = const [];
+    try {
+      same = await AppScope.of(context).repo.reservations(widget.membership.storeId, _date, _date);
+    } catch (_) {} // 讀不到就不標「這時段有人」，仍可選
+    if (!mounted) return;
+    final ids = await pickTables(context,
+        tables: widget.tables, selected: _tableIds, party: _party, busy: busyTables(same, widget.existing, bizMinute(minutesOf(time))));
+    if (ids != null && mounted) setState(() => _tableIds = ids);
+  }
+  // 網路訂位那筆最多 50 位（資料庫限制）；電話訂位不設上限（防打錯 9999）
+  int get _maxParty => widget.existing?.source == 'web' ? 50 : 9999;
+
+  Future<void> _typeParty() async {
+    final c = TextEditingController(text: '$_party');
+    final v = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('人數'),
+        content: TextField(controller: c, autofocus: true, keyboardType: TextInputType.number, decoration: const InputDecoration(suffixText: '位')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, int.tryParse(c.text.trim())), child: const Text('確定')),
+        ],
+      ),
+    );
+    if (v == null || !mounted) return;
+    if (v < 1 || v > _maxParty) {
+      showMessage(context, '人數請填 1～$_maxParty', error: true);
+      return;
+    }
+    setState(() => _party = v);
+  }
+  late final _name = TextEditingController(text: widget.existing == null ? '' : stripTitle(widget.existing!.name));
+  // 先生／小姐（老闆 2026-10-15），存檔時接在姓名後面
+  late String? _title = reservationTitles.where((t) => (widget.existing?.name ?? '').trim().endsWith(t)).firstOrNull;
+  late final _phone = TextEditingController(text: widget.existing?.phone ?? '');
+  late final _email = TextEditingController(text: widget.existing?.email ?? '');
+  late final _note = TextEditingController(text: widget.existing?.note ?? '');
+  bool get _editing => widget.existing != null;
+  bool _saving = false;
+
+  Future<void> _pickCustomTime() async {
+    TimeOfDay initial = const TimeOfDay(hour: 19, minute: 0);
+    final cur = _time;
+    if (cur != null && cur.length == 5) {
+      initial = TimeOfDay(hour: int.tryParse(cur.substring(0, 2)) ?? 19, minute: int.tryParse(cur.substring(3)) ?? 0);
+    }
+    final t = await showTimePicker(
+      context: context,
+      initialTime: initial,
+      helpText: '選擇訂位時間',
+      initialEntryMode: TimePickerEntryMode.input,
+      builder: (c, child) => MediaQuery(data: MediaQuery.of(c).copyWith(alwaysUse24HourFormat: true), child: child!),
+    );
+    if (t == null || !mounted) return;
+    setState(() => _time = '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}');
+  }
+
+  Future<void> _save() async {
+    // 先把表單內容固定下來，檢查名額期間就算有人改欄位，也不會混用新舊值（Codex 審查）
+    final date = _date;
+    final time = _time;
+    final party = _party;
+    final raw = _name.text.trim();
+    final title = _title;
+    final name = withTitle(raw, title);
+    final phone = _phone.text.trim();
+    final email = _email.text.trim();
+    final note = _note.text.trim();
+    final tableIds = [..._tableIds];
+    if (time == null) {
+      showMessage(context, '請選時段', error: true);
+      return;
+    }
+    // 「現場客」快選（老闆 2026-10-20）不用選先生／小姐
+    if (raw.isNotEmpty && raw != _walkInName && title == null && !hasTitle(raw)) {
+      showMessage(context, '請選先生或小姐', error: true);
+      return;
+    }
+    if (name.isEmpty) {
+      showMessage(context, '請填姓名', error: true);
+      return;
+    }
+    // 電話可以不填（老闆 2026-10-17）；有填就要像電話
+    if (phone.isNotEmpty && phone.replaceAll(RegExp(r'[^0-9]'), '').length < 8) {
+      showMessage(context, '電話看起來不完整（可以留空白）', error: true);
+      return;
+    }
+    setState(() => _saving = true);
+    final repo = AppScope.of(context).repo;
+    try {
+      // 超過這天的名額先確認（電話訂位可以超收，由店家決定；0052 改成每天計算）
+      final same = await repo.reservations(widget.membership.storeId, date, date);
+      final sp = (await repo.specialDays(widget.membership.storeId, date, date)).firstOrNull;
+      if (!mounted) return; // 已離開表單：不要在沒確認的情況下新增（Codex 審查）
+      // 修改時不算自己原本那筆
+      final over = widget.settings
+          .limitsFor(date, sp)
+          .overBy(same.where((r) => r.id != widget.existing?.id).toList(), party);
+      if (over.isNotEmpty) {
+        final ok = await showDialog<bool>(
+          context: context,
+          builder: (c) => AlertDialog(
+            title: const Text('超過這天的名額'),
+            content: Text('${over.join('\n')}\n電話訂位可以超收，還是要${_editing ? '儲存' : '新增'}嗎？'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('不要')),
+              FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(_editing ? '還是儲存' : '還是新增')),
+            ],
+          ),
+        );
+        if (ok != true) {
+          if (mounted) setState(() => _saving = false);
+          return;
+        }
+        if (!mounted) return;
+      }
+      final ex = widget.existing;
+      if (ex != null) {
+        await repo.updateReservation(ex.id, {
+          'slot_date': DateFormat('yyyy-MM-dd').format(date),
+          'slot_time': time,
+          'party_size': party,
+          'guest_name': name,
+          'phone': phone.isEmpty ? null : phone,
+          'email': email.isEmpty ? null : email,
+          'note': note.isEmpty ? null : note,
+          'table_ids': tableIds,
+        });
+      } else {
+        await repo.addReservation(widget.membership.storeId,
+            date: date, time: time, party: party, name: name, phone: phone, email: email, note: note, tableIds: tableIds);
+      }
+      if (mounted) {
+        showMessage(context, _editing ? '已儲存修改' : '已新增訂位');
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (mounted) {
+        showMessage(context, friendlyError(e), error: true);
+        setState(() => _saving = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: Text(_editing ? '修改訂位' : '電話訂位')),
+        body: ListView(padding: const EdgeInsets.all(16), children: [
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.event),
+            title: const Text('日期'),
+            trailing: Text(DateFormat('M/d（E）', 'zh_TW').format(_date), style: const TextStyle(fontSize: AppType.title)),
+            onTap: () async {
+              final d = await showDatePicker(
+                context: context,
+                initialDate: _date,
+                firstDate: DateTime(2025),
+                lastDate: DateTime(2100),
+              );
+              if (d != null) setState(() => _date = d);
+            },
+          ),
+          const SizedBox(height: 8),
+          Text('時段', style: TextStyle(color: AppColors.muted)),
+          const SizedBox(height: 6),
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            for (final t in widget.settings.slotsFor(_date))
+              SelectChip(label: Text(t), selected: _time == t, onSelected: (_) => setState(() => _time = t)),
+            // 自己選的時間（不在固定時段裡）
+            if (_time != null && !widget.settings.slotsFor(_date).contains(_time))
+              SelectChip(label: Text(_time!), selected: true, onSelected: (_) => _pickCustomTime()),
+            // 電話訂位可訂任何時間（老闆 2026-10-15）
+            ActionChip(
+              avatar: Icon(Icons.add, size: 18, color: AppColors.primary),
+              label: const Text('其他時間'),
+              onPressed: _pickCustomTime,
+            ),
+          ]),
+          const SizedBox(height: 16),
+          Row(children: [
+            Text('人數', style: TextStyle(color: AppColors.muted)),
+            const Spacer(),
+            IconButton(tooltip: '減少', onPressed: _party > 1 ? () => setState(() => _party--) : null, icon: const Icon(Icons.remove_circle_outline)),
+            // 點數字可以直接輸入（電話訂位人數不設上限，老闆 2026-10-17）
+            InkWell(
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+              onTap: _typeParty,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                child: Text('$_party', style: const TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w700, decoration: TextDecoration.underline)),
+              ),
+            ),
+            IconButton(tooltip: '增加', onPressed: _party < _maxParty ? () => setState(() => _party++) : null, icon: const Icon(Icons.add_circle_outline)),
+          ]),
+          // 位置（選填）：跟排桌同一個選桌畫面，可併桌、可自動選桌
+          if (_hasTables) ...[
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.table_restaurant_outlined),
+              title: const Text('位置（選填）'),
+              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                Text(_tableIds.isEmpty ? '不指定' : _tableLabel,
+                    style: TextStyle(fontSize: AppType.title, color: _tableIds.isEmpty ? AppColors.muted : null)),
+                const Icon(Icons.chevron_right),
+              ]),
+              onTap: _pickTables,
+            ),
+            const SizedBox(height: 4),
+          ],
+          TextField(
+            controller: _name,
+            maxLength: 36,
+            onChanged: (_) => setState(() {}), // 讓「現場客」快選的勾選狀態跟著變
+            decoration: InputDecoration(
+              labelText: '姓名',
+              counterText: '',
+              // 點一下選先生／小姐，再點一次取消
+              suffixIcon: Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  for (final t in const ['先生', '小姐'])
+                    Padding(
+                      padding: const EdgeInsets.only(left: 6),
+                      child: SelectChip(
+                        label: Text(t),
+                        selected: _title == t,
+                        showCheckmark: false,
+                        visualDensity: VisualDensity.compact,
+                        onSelected: (v) => setState(() {
+                          _title = v ? t : null;
+                          if (v && _name.text.trim() == _walkInName) _name.clear();
+                        }),
+                      ),
+                    ),
+                  // 現場客快選：名字直接填「現場客」（老闆 2026-10-20）
+                  Padding(
+                    padding: const EdgeInsets.only(left: 6),
+                    child: SelectChip(
+                      label: const Text(_walkInName),
+                      selected: _name.text.trim() == _walkInName,
+                      showCheckmark: false,
+                      visualDensity: VisualDensity.compact,
+                      onSelected: (v) => setState(() {
+                        _title = null;
+                        _name.text = v ? _walkInName : '';
+                      }),
+                    ),
+                  ),
+                ]),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+              controller: _phone,
+              maxLength: 20,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(labelText: '電話（選填）', counterText: '')),
+          const SizedBox(height: 12),
+          TextField(
+              controller: _email,
+              maxLength: 120,
+              keyboardType: TextInputType.emailAddress,
+              decoration: InputDecoration(
+                  labelText: _editing ? 'Email（選填；修改不會另外寄信）' : 'Email（選填；不寄確認信，會寄當天下午的提醒信）', counterText: '')),
+          const SizedBox(height: 12),
+          TextField(controller: _note, maxLength: 200, maxLines: 2, decoration: const InputDecoration(labelText: '備註（選填）')),
+          const SizedBox(height: 24),
+          FilledButton(
+            onPressed: _saving ? null : _save,
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+            child: _saving ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)) : Text(_editing ? '儲存修改' : '新增訂位'),
+          ),
+        ]),
+      );
+}
+
+/// 訂位設定（只有老闆）
+class ReservationSettingsScreen extends StatefulWidget {
+  const ReservationSettingsScreen({super.key, required this.membership, required this.settings});
+  final Membership membership;
+  final ReservationSettings settings;
+  @override
+  State<ReservationSettingsScreen> createState() => _ReservationSettingsScreenState();
+}
+
+class _ReservationSettingsScreenState extends State<ReservationSettingsScreen> {
+  late bool _enabled = widget.settings.enabled;
+  // 0054 時段自由增刪（老闆 2026-10-16）
+  late final List<String> _slots = [...widget.settings.slots];
+  // 0063 依星期另設時段（老闆 2026-10-18：隱城週五週六 19:00 開始）
+  late final Map<int, List<String>> _wdSlots = {
+    for (final e in widget.settings.weekdaySlotTimes.entries) e.key: [...e.value],
+  };
+  static const _wdName = ['一', '二', '三', '四', '五', '六', '日'];
+  late final _address = TextEditingController(text: widget.settings.address ?? '');
+  late final _phone = TextEditingController(text: widget.settings.phone ?? '');
+  late String _cutoff = widget.settings.sameDayCutoff;
+  late final _name = TextEditingController(text: widget.settings.displayName);
+  // 0052 每天名額（空白＝不限）、大桌、每週公休、未到擋線上訂位
+  late final _groups = TextEditingController(text: widget.settings.maxGroupsPerDay?.toString() ?? '');
+  late final _guestsDay = TextEditingController(text: widget.settings.maxGuestsPerDay?.toString() ?? '');
+  late final _largeSize = TextEditingController(text: '${widget.settings.largePartySize}');
+  late final _largeMax = TextEditingController(text: widget.settings.maxLargePerDay?.toString() ?? '');
+  late final _noshow = TextEditingController(text: '${widget.settings.noshowBlockCount}');
+  late final Set<int> _closedDays = {...widget.settings.closedWeekdays};
+  late final _party = TextEditingController(text: '${widget.settings.maxParty}');
+  late final _days = TextEditingController(text: '${widget.settings.daysAhead}');
+  late final _contact = TextEditingController(text: widget.settings.contactNote ?? '');
+  bool _saving = false;
+
+  Future<void> _addSlot([List<String>? target]) async {
+    final list = target ?? _slots;
+    final last = list.isEmpty ? '19:00' : list.last;
+    final t = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: minutesOf(last) ~/ 60, minute: minutesOf(last) % 60),
+      helpText: '新增訂位時段',
+    );
+    if (t == null || !mounted) return;
+    final v = '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+    if (list.contains(v)) {
+      showMessage(context, '已經有 $v 這個時段');
+      return;
+    }
+    if (list.length >= 48) {
+      showMessage(context, '時段最多 48 個', error: true);
+      return;
+    }
+    setState(() => list
+      ..add(v)
+      ..sort());
+  }
+
+  Future<void> _addWeekday() async {
+    final free = [for (var i = 1; i <= 7; i++) if (!_wdSlots.containsKey(i)) i];
+    if (free.isEmpty) return;
+    final picked = await showDialog<Set<int>>(
+      context: context,
+      builder: (ctx) {
+        final sel = <int>{};
+        return StatefulBuilder(
+          builder: (ctx, setD) => AlertDialog(
+            title: const Text('哪幾天要另設時段？'),
+            content: Wrap(spacing: 6, runSpacing: 6, children: [
+              for (final i in free)
+                SelectChip(
+                  label: Text('週${_wdName[i - 1]}'),
+                  selected: sel.contains(i),
+                  onSelected: (v) => setD(() => v ? sel.add(i) : sel.remove(i)),
+                ),
+            ]),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+              FilledButton(onPressed: () => Navigator.pop(ctx, sel), child: const Text('確定')),
+            ],
+          ),
+        );
+      },
+    );
+    if (picked == null || picked.isEmpty || !mounted) return;
+    // 先複製平常的時段，再自己增刪
+    setState(() {
+      for (final i in picked) {
+        _wdSlots[i] = [..._slots];
+      }
+    });
+  }
+
+  Future<void> _pick(String current, void Function(String) set) async {
+    final t = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: minutesOf(current) ~/ 60, minute: minutesOf(current) % 60),
+    );
+    if (t != null) setState(() => set('${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}'));
+  }
+
+  Future<void> _save() async {
+    int? opt(TextEditingController c) => c.text.trim().isEmpty ? null : int.tryParse(c.text.trim());
+    bool bad(TextEditingController c, int lo, int hi) {
+      if (c.text.trim().isEmpty) return false;
+      final v = int.tryParse(c.text.trim());
+      return v == null || v < lo || v > hi;
+    }
+    final party = int.tryParse(_party.text.trim());
+    final days = int.tryParse(_days.text.trim());
+    if (_name.text.trim().isEmpty) {
+      showMessage(context, '請填店名', error: true);
+      return;
+    }
+    if (bad(_groups, 1, 500) || bad(_guestsDay, 1, 2000) || bad(_largeMax, 0, 500)) {
+      showMessage(context, '每天名額請填數字（空白＝不限）', error: true);
+      return;
+    }
+    final largeSize = int.tryParse(_largeSize.text.trim());
+    final noshow = int.tryParse(_noshow.text.trim());
+    if (largeSize == null || largeSize < 2 || largeSize > 50) {
+      showMessage(context, '大桌人數請填 2～50', error: true);
+      return;
+    }
+    if (noshow == null || noshow < 0 || noshow > 20) {
+      showMessage(context, '未到次數請填 0～20（0＝不擋）', error: true);
+      return;
+    }
+    if (party == null || party < 1 || party > 50) {
+      showMessage(context, '一組最多人數請填 1～50', error: true);
+      return;
+    }
+    if (days == null || days < 1 || days > 60) {
+      showMessage(context, '可訂天數請填 1～60', error: true);
+      return;
+    }
+    if (_slots.isEmpty) {
+      showMessage(context, '至少要有一個訂位時段', error: true);
+      return;
+    }
+    final emptyWd = [for (final e in _wdSlots.entries) if (e.value.isEmpty) e.key];
+    if (emptyWd.isNotEmpty) {
+      showMessage(context, '週${_wdName[emptyWd.first - 1]}至少要有一個時段，或按「改回平常時段」', error: true);
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await AppScope.of(context).repo.saveReservationSettings(widget.membership.storeId, {
+        'enabled': _enabled,
+        'display_name': _name.text.trim(),
+        'slot_times': _slots,
+        'weekday_slot_times': {for (final e in _wdSlots.entries) '${e.key}': e.value},
+        'address': _address.text.trim().isEmpty ? null : _address.text.trim(),
+        'phone': _phone.text.trim().isEmpty ? null : _phone.text.trim(),
+        'same_day_cutoff': _cutoff,
+        'max_groups_per_day': opt(_groups),
+        'max_guests_per_day': opt(_guestsDay),
+        'large_party_size': largeSize,
+        'max_large_groups_per_day': opt(_largeMax),
+        'closed_weekdays': (_closedDays.toList()..sort()),
+        'noshow_block_count': noshow,
+        'max_party': party,
+        'days_ahead': days,
+        'contact_note': _contact.text.trim().isEmpty ? null : _contact.text.trim(),
+      });
+      if (mounted) {
+        showMessage(context, '已儲存訂位設定');
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (mounted) {
+        showMessage(context, friendlyError(e), error: true);
+        setState(() => _saving = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: const Text('訂位設定')),
+        body: ListView(padding: const EdgeInsets.all(16), children: [
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('開放線上訂位'),
+            subtitle: const Text('關閉後訂位頁會顯示「暫停線上訂位」', style: TextStyle(fontSize: AppType.small)),
+            value: _enabled,
+            onChanged: (v) => setState(() => _enabled = v),
+          ),
+          TextField(controller: _name, maxLength: 40, decoration: const InputDecoration(labelText: '訂位頁顯示的店名', counterText: '')),
+          const SizedBox(height: 8),
+          TextField(controller: _address, maxLength: 200, maxLines: 2, minLines: 1,
+              decoration: const InputDecoration(labelText: '地址（訂位頁、確認信顯示，可點開地圖）', counterText: '')),
+          const SizedBox(height: 8),
+          TextField(controller: _phone, maxLength: 30, keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(labelText: '電話（訂位頁可直接撥打）', counterText: '')),
+          const SizedBox(height: 16),
+          Row(children: [
+            Expanded(
+                child: Text(_wdSlots.isEmpty ? '訂位時段（點 ✕ 刪除）' : '平常的訂位時段（點 ✕ 刪除）',
+                    style: TextStyle(color: AppColors.muted, fontSize: AppType.small))),
+            TextButton.icon(onPressed: _addSlot, icon: const Icon(Icons.add, size: 18), label: const Text('新增時段')),
+          ]),
+          Wrap(spacing: 6, runSpacing: 6, children: [
+            for (final t in _slots)
+              InputChip(
+                label: Text(t),
+                onDeleted: () => setState(() => _slots.remove(t)),
+                deleteButtonTooltipMessage: '刪除 $t',
+              ),
+          ]),
+          if (_slots.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text('至少要有一個時段', style: TextStyle(color: AppColors.bad, fontSize: AppType.small)),
+            ),
+          // 0063 依星期另設時段：有設的那天用自己的時段，改這裡不影響平常的時段
+          for (final i in (_wdSlots.keys.toList()..sort())) ...[
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(
+                  child: Text('週${_wdName[i - 1]}的時段', style: TextStyle(color: AppColors.primary, fontSize: AppType.small, fontWeight: FontWeight.w600))),
+              TextButton(onPressed: () => _addSlot(_wdSlots[i]), child: const Text('新增')),
+              TextButton(
+                  onPressed: () => setState(() => _wdSlots.remove(i)),
+                  child: Text('改回平常時段', style: TextStyle(color: AppColors.muted))),
+            ]),
+            Wrap(spacing: 6, runSpacing: 6, children: [
+              for (final t in _wdSlots[i]!)
+                InputChip(
+                  label: Text(t),
+                  onDeleted: () => setState(() => _wdSlots[i]!.remove(t)),
+                  deleteButtonTooltipMessage: '刪除 $t',
+                ),
+            ]),
+          ],
+          if (_wdSlots.length < 7)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: _addWeekday,
+                icon: const Icon(Icons.event_repeat, size: 18),
+                label: const Text('依星期另設時段（例如週五、週六晚一點開始）'),
+              ),
+            ),
+          const SizedBox(height: 8),
+          ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('當天訂位截止'),
+              subtitle: const Text('這個時間以後不接受當天的線上訂位', style: TextStyle(fontSize: AppType.small)),
+              trailing: Text(_cutoff, style: const TextStyle(fontSize: AppType.title)),
+              onTap: () => _pick(_cutoff, (v) => _cutoff = v)),
+          const SizedBox(height: 8),
+          Text('每天名額（不限用餐時間；空白＝不限；電話訂位可超收）', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+          const SizedBox(height: 8),
+          Row(children: [
+            Expanded(child: TextField(controller: _groups, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '每天最多幾組'))),
+            const SizedBox(width: 12),
+            Expanded(child: TextField(controller: _guestsDay, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '每天最多幾位'))),
+          ]),
+          const SizedBox(height: 12),
+          Row(children: [
+            Expanded(child: TextField(controller: _largeSize, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '幾位以上算大桌'))),
+            const SizedBox(width: 12),
+            Expanded(child: TextField(controller: _largeMax, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '大桌每天最多幾組'))),
+          ]),
+          const SizedBox(height: 16),
+          Text('每週固定公休（不開放線上訂位）', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+          const SizedBox(height: 6),
+          Wrap(spacing: 6, runSpacing: 6, children: [
+            for (var i = 1; i <= 7; i++)
+              SelectChip(
+                label: Text('週${const ['一', '二', '三', '四', '五', '六', '日'][i - 1]}'),
+                selected: _closedDays.contains(i),
+                onSelected: (v) => setState(() => v ? _closedDays.add(i) : _closedDays.remove(i)),
+              ),
+          ]),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => SpecialDaysScreen(membership: widget.membership))),
+            icon: const Icon(Icons.event_busy_outlined),
+            label: const Text('特殊日期（公休、包場、改名額）'),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+              controller: _noshow,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: '同一支電話未到幾次就不能線上訂位（0＝不擋）')),
+          const SizedBox(height: 12),
+          TextField(controller: _party, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '線上訂位一組最多幾位')),
+          const SizedBox(height: 12),
+          TextField(controller: _days, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '可以訂幾天內（含今天）')),
+          const SizedBox(height: 12),
+          TextField(
+              controller: _contact,
+              maxLength: 300,
+              maxLines: 3,
+              decoration: const InputDecoration(labelText: '其他店家資訊（例如注意事項，會顯示在訂位頁和確認信）')),
+          const SizedBox(height: 24),
+          FilledButton(
+            onPressed: _saving ? null : _save,
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+            child: const Text('儲存'),
+          ),
+        ]),
+      );
+}
+
+
+/// 總覽上的「今日訂位」卡片：點了進訂位管理
+class ReservationSummaryCard extends StatefulWidget {
+  const ReservationSummaryCard({super.key, required this.membership, this.compact = false});
+  final Membership membership;
+  final bool compact; // 隱城（C 版）：放在 2×2 小格裡
+  @override
+  State<ReservationSummaryCard> createState() => _ReservationSummaryCardState();
+}
+
+class _ReservationSummaryCardState extends State<ReservationSummaryCard> with WidgetsBindingObserver, AutoRefresh {
+  Future<List<Reservation>>? _future;
+  // 0062（老闆 2026-10-18）：新訂位、取消、改人數的動態；看過的時間記在這支手機（每家店分開）
+  List<AppNotification> _events = const [];
+  DateTime? _seen;
+  String get _seenKey => 'resv_seen_${widget.membership.storeId}';
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_future == null) {
+      _future = _load();
+      _loadEvents();
+    }
+  }
+
+  Future<void> _loadEvents() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final ms = prefs.getInt(_seenKey);
+      final ev = await AppScope.of(context).repo.reservationEvents(widget.membership.storeId);
+      if (!mounted) return;
+      setState(() {
+        // 第一次用：以前的不算新的
+        _seen = ms == null ? DateTime.now() : DateTime.fromMillisecondsSinceEpoch(ms);
+        _events = ev;
+      });
+      if (ms == null) await prefs.setInt(_seenKey, DateTime.now().millisecondsSinceEpoch);
+    } catch (_) {
+      // 讀不到動態不影響卡片
+    }
+  }
+
+  List<AppNotification> get _unread => [for (final e in _events) if (_seen == null || e.createdAt.isAfter(_seen!)) e];
+
+  Future<void> _markSeen() async {
+    final now = DateTime.now();
+    setState(() => _seen = now);
+    try {
+      (await SharedPreferences.getInstance()).setInt(_seenKey, now.millisecondsSinceEpoch);
+    } catch (_) {}
+  }
+
+  static String _ago(DateTime t) {
+    final m = DateTime.now().difference(t).inMinutes;
+    if (m < 1) return '剛剛';
+    if (m < 60) return '$m 分鐘前';
+    if (m < 24 * 60) return '${m ~/ 60} 小時前';
+    return '${m ~/ (24 * 60)} 天前';
+  }
+
+  /// 卡片下方的動態列：紅點＋最新一則＋共幾則
+  Widget _eventsLine({bool compact = false}) {
+    final u = _unread;
+    if (u.isEmpty) return const SizedBox.shrink();
+    final e = u.first;
+    final color = e.title == '訂位取消' ? AppColors.bad : (e.title == '改人數申請' ? AppColors.warn : AppColors.good);
+    return Padding(
+      padding: EdgeInsets.only(top: compact ? 6 : 10),
+      child: Row(children: [
+        Container(width: 7, height: 7, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text('${e.title}・${e.body ?? ''}${compact ? '' : '・${_ago(e.createdAt)}'}',
+              maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: compact ? 11 : 12, color: color)),
+        ),
+        if (u.length > 1)
+          Container(
+            margin: const EdgeInsets.only(left: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+            decoration: BoxDecoration(color: AppColors.bad, borderRadius: BorderRadius.circular(AppRadius.sm)),
+            child: Text('${u.length}', style: const TextStyle(fontSize: AppType.caption, color: Colors.white, fontWeight: FontWeight.w600)),
+          ),
+      ]),
+    );
+  }
+
+  Future<List<Reservation>> _load() {
+    final d = _ReservationsScreenState._today();
+    return AppScope.of(context).repo.reservations(widget.membership.storeId, d, d);
+  }
+
+  // 首頁「今日訂位」卡片：每分鐘安靜重讀組數、位數和新動態
+  @override
+  Future<void> autoRefresh() async {
+    final v = await _load();
+    if (!mounted) return;
+    setState(() => _future = Future.value(v));
+    await _loadEvents();
+  }
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<List<Reservation>>(
+        future: _future,
+        builder: (context, snap) {
+          final list = (snap.data ?? const <Reservation>[]).where((r) => r.active).toList();
+          final guests = list.fold<int>(0, (t, r) => t + r.party);
+          final sub = snap.hasError
+              ? '讀取失敗，點進去重新整理'
+              : !snap.hasData
+                  ? '讀取中…'
+                  : list.isEmpty
+                      ? '今天還沒有訂位'
+                      : '今天 ${list.length} 組・$guests 位';
+          // 下一組：還沒到店的最早時段
+          final waiting = list.where((r) => r.status == 'confirmed').map((r) => r.time).toList()..sort();
+          Future<void> open() async {
+            // 有新動態：直接跳到最新那筆的日期；點開就算看過
+            final u = _unread;
+            final day = u.isNotEmpty ? u.first.refMonth : null;
+            if (u.isNotEmpty) await _markSeen();
+            if (!context.mounted) return;
+            await Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => ReservationsScreen(membership: widget.membership, initialDay: day),
+            ));
+            if (mounted) {
+              setState(() => _future = _load());
+              _loadEvents();
+            }
+          }
+
+          final ready = snap.hasData && !snap.hasError;
+          if (widget.compact) {
+            return Material(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(AppRadius.lg),
+                onTap: open,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Text('今日訂位', style: TextStyle(fontSize: AppType.small, color: AppColors.muted)),
+                    const SizedBox(height: 6),
+                    if (ready && list.isNotEmpty)
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text.rich(TextSpan(children: [
+                          TextSpan(text: '${list.length}', style: const TextStyle(fontSize: AppType.display, fontWeight: FontWeight.w600, fontFeatures: tabular)),
+                          TextSpan(text: ' 組 · $guests 位', style: TextStyle(fontSize: AppType.small, color: AppColors.muted)),
+                        ])),
+                      )
+                    else
+                      Text(ready ? '還沒有訂位' : sub, style: TextStyle(fontSize: AppType.body, color: AppColors.muted)),
+                    if (waiting.isNotEmpty)
+                      Text('下一組 ${waiting.first}', style: TextStyle(fontSize: AppType.caption, color: AppColors.muted, fontFeatures: tabular)),
+                    _eventsLine(compact: true),
+                  ]),
+                ),
+              ),
+            );
+          }
+          return SectionCard(
+            padding: EdgeInsets.zero,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+              onTap: open,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Row(children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(AppRadius.sm)),
+                    child: Icon(Icons.event_seat_outlined, size: 20, color: AppColors.primary),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text('今日訂位', style: TextStyle(fontSize: AppType.small, color: AppColors.muted)),
+                      const SizedBox(height: 2),
+                      Text(ready && list.isNotEmpty ? '${list.length} 組 · $guests 位' : sub,
+                          style: const TextStyle(fontSize: AppType.title, fontWeight: FontWeight.w500, fontFeatures: tabular)),
+                    ]),
+                  ),
+                  if (waiting.isNotEmpty)
+                    Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                      Text('下一組', style: TextStyle(fontSize: AppType.caption, color: AppColors.muted)),
+                      Text(waiting.first, style: const TextStyle(fontSize: AppType.body, fontFeatures: tabular)),
+                    ])
+                  else
+                    Icon(Icons.chevron_right, color: AppColors.muted),
+                ]),
+                _eventsLine(),
+                ]),
+              ),
+            ),
+          );
+        },
+      );
+}
+
+/// 訂位月曆（老闆 2026-10-14：像 iPhone 行事曆那樣一次看好幾個月、點日期跳過去）
+/// 前 2 個月到後 4 個月；有訂位的日期底下畫一條線、數字＝組數；今天實心圓、選中的日期外框。
+/// 訂位管理頁內嵌月曆（老闆 2026-10-17）：一次一個月、‹ › 換月；選中＝金底、今天上方一條短線、有訂位的日子下方顯示組數
+class ReservationMonthCalendar extends StatefulWidget {
+  const ReservationMonthCalendar(
+      {super.key, required this.membership, required this.selected, required this.today, required this.onPick});
+  final Membership membership;
+  final DateTime selected;
+  final DateTime today;
+  final ValueChanged<DateTime> onPick;
+  @override
+  State<ReservationMonthCalendar> createState() => _ReservationMonthCalendarState();
+}
+
+class _ReservationMonthCalendarState extends State<ReservationMonthCalendar> {
+  late DateTime _month = DateTime(widget.selected.year, widget.selected.month);
+  Map<DateTime, int> _groups = const {};
+  int _loadGen = 0;
+  bool _started = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    _load();
+  }
+
+  Future<void> _load() async {
+    final gen = ++_loadGen;
+    final from = _month, to = DateTime(_month.year, _month.month + 1, 0);
+    try {
+      final list = await AppScope.of(context).repo.reservations(widget.membership.storeId, from, to);
+      final m = <DateTime, int>{};
+      for (final r in list.where((r) => r.active)) {
+        final d = DateTime(r.date.year, r.date.month, r.date.day);
+        m[d] = (m[d] ?? 0) + 1;
+      }
+      if (mounted && gen == _loadGen) setState(() => _groups = m);
+    } catch (_) {
+      // 讀不到組數也能選日期
+    }
+  }
+
+  void _go(int delta) {
+    setState(() {
+      _month = DateTime(_month.year, _month.month + delta);
+      _groups = const {};
+    });
+    _load();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final days = DateTime(_month.year, _month.month + 1, 0).day;
+    final lead = DateTime(_month.year, _month.month, 1).weekday % 7; // 週日開頭
+    final sel = DateTime(widget.selected.year, widget.selected.month, widget.selected.day);
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Column(children: [
+        Row(children: [
+          IconButton(tooltip: '上個月', onPressed: () => _go(-1), icon: Icon(Icons.chevron_left, color: AppColors.primary)),
+          Expanded(
+            child: Text('${_month.year}年${_month.month}月',
+                textAlign: TextAlign.center, style: const TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w700)),
+          ),
+          IconButton(tooltip: '下個月', onPressed: () => _go(1), icon: Icon(Icons.chevron_right, color: AppColors.primary)),
+        ]),
+        const SizedBox(height: 4),
+        Row(children: [
+          for (final w in const ['日', '一', '二', '三', '四', '五', '六'])
+            Expanded(child: Text(w, textAlign: TextAlign.center, style: TextStyle(fontSize: AppType.small, color: AppColors.muted))),
+        ]),
+        const SizedBox(height: 6),
+        GridView.count(
+          crossAxisCount: 7,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 6,
+          crossAxisSpacing: 6,
+          children: [
+            for (var i = 0; i < lead; i++) const SizedBox.shrink(),
+            for (var d = 1; d <= days; d++) _cell(DateTime(_month.year, _month.month, d), sel),
+          ],
+        ),
+        TextButton(onPressed: () => widget.onPick(widget.today), child: const Text('回到今天')),
+      ]),
+    );
+  }
+
+  Widget _cell(DateTime d, DateTime sel) {
+    final isSel = d == sel;
+    final isToday = d == widget.today;
+    final past = d.isBefore(widget.today);
+    final n = _groups[d] ?? 0;
+    final fg = isSel ? AppColors.onPrimary : (past ? AppColors.muted : AppColors.text);
+    return InkWell(
+      borderRadius: BorderRadius.circular(AppRadius.sm),
+      onTap: () => widget.onPick(d),
+      child: Container(
+        decoration: BoxDecoration(
+          color: isSel ? AppColors.primary : AppColors.cardHigh,
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          border: Border.all(color: isSel ? AppColors.primary : AppColors.line),
+        ),
+        child: Stack(alignment: Alignment.center, children: [
+          if (isToday)
+            Positioned(
+              top: 5,
+              child: Container(width: 10, height: 2, color: isSel ? AppColors.onPrimary : AppColors.primary),
+            ),
+          Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Text('${d.day}',
+                style: TextStyle(fontSize: AppType.title, fontWeight: isSel ? FontWeight.w700 : FontWeight.w500, color: fg, fontFeatures: tabular)),
+            if (n > 0)
+              Text('$n 組',
+                  style: TextStyle(fontSize: AppType.micro, height: 1.1, color: isSel ? AppColors.onPrimary : AppColors.primary, fontFeatures: tabular)),
+          ]),
+        ]),
+      ),
+    );
+  }
+}
+
+class ReservationCalendarScreen extends StatefulWidget {
+  const ReservationCalendarScreen({super.key, required this.membership, required this.selected, required this.today});
+  final Membership membership;
+  final DateTime selected;
+  final DateTime today;
+  @override
+  State<ReservationCalendarScreen> createState() => _ReservationCalendarScreenState();
+}
+
+class _ReservationCalendarScreenState extends State<ReservationCalendarScreen> {
+  late final DateTime _from = DateTime(widget.today.year, widget.today.month - 2, 1);
+  late final DateTime _to = DateTime(widget.today.year, widget.today.month + 5, 0);
+  Map<DateTime, int> _groups = const {};
+  final _selectedKey = GlobalKey();
+  bool _started = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    _load();
+    // 打開時捲到選中的那個月
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final c = _selectedKey.currentContext;
+      if (c != null) Scrollable.ensureVisible(c, alignment: 0.05);
+    });
+  }
+
+  Future<void> _load() async {
+    try {
+      final list = await AppScope.of(context).repo.reservations(widget.membership.storeId, _from, _to);
+      final m = <DateTime, int>{};
+      for (final r in list.where((r) => r.active)) {
+        final d = DateTime(r.date.year, r.date.month, r.date.day);
+        m[d] = (m[d] ?? 0) + 1;
+      }
+      if (mounted) setState(() => _groups = m);
+    } catch (_) {
+      // 讀不到訂位數也能選日期
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final months = [for (var m = DateTime(_from.year, _from.month); !m.isAfter(_to); m = DateTime(m.year, m.month + 1)) m];
+    final sel = DateTime(widget.selected.year, widget.selected.month, widget.selected.day);
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('選擇日期'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, widget.today), child: const Text('今天')),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('底線＝當天有訂位（數字是組數）', style: TextStyle(fontSize: AppType.small, color: AppColors.muted)),
+          const SizedBox(height: 8),
+          for (final m in months)
+            Container(
+              key: m.year == sel.year && m.month == sel.month ? _selectedKey : null,
+              padding: const EdgeInsets.only(top: 16, bottom: 8),
+              child: _month(m, sel),
+            ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _month(DateTime m, DateTime sel) {
+    final isThisMonth = m.year == widget.today.year && m.month == widget.today.month;
+    final days = DateTime(m.year, m.month + 1, 0).day;
+    final lead = DateTime(m.year, m.month, 1).weekday - 1; // 週一開頭
+    final cells = <Widget>[
+      for (var i = 0; i < lead; i++) const SizedBox.shrink(),
+      for (var d = 1; d <= days; d++) _dayCell(DateTime(m.year, m.month, d), sel),
+    ];
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text('${m.year == widget.today.year ? '' : '${m.year} 年 '}${m.month} 月',
+          style: TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w700, color: isThisMonth ? AppColors.primary : AppColors.text)),
+      const SizedBox(height: 10),
+      Row(children: [
+        for (final w in const ['一', '二', '三', '四', '五', '六', '日'])
+          Expanded(child: Text(w, textAlign: TextAlign.center, style: TextStyle(fontSize: AppType.small, color: AppColors.muted))),
+      ]),
+      const SizedBox(height: 6),
+      GridView.count(
+        crossAxisCount: 7,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        childAspectRatio: 0.95,
+        children: cells,
+      ),
+    ]);
+  }
+
+  Widget _dayCell(DateTime d, DateTime sel) {
+    final isToday = d == widget.today;
+    final isSel = d == sel;
+    final n = _groups[d] ?? 0;
+    return InkWell(
+      customBorder: const CircleBorder(),
+      onTap: () => Navigator.pop(context, d),
+      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Container(
+          width: 34,
+          height: 34,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: isToday ? AppColors.primary : null,
+            border: isSel && !isToday ? Border.all(color: AppColors.primary, width: 1.5) : null,
+          ),
+          child: Text('${d.day}',
+              style: TextStyle(
+                fontSize: AppType.title,
+                fontWeight: isToday || isSel ? FontWeight.w700 : FontWeight.w500,
+                color: isToday ? AppColors.onPrimary : AppColors.text,
+                fontFeatures: tabular,
+              )),
+        ),
+        const SizedBox(height: 2),
+        SizedBox(
+          height: 14,
+          child: n == 0
+              ? null
+              : Column(children: [
+                  Container(width: 18, height: 2, color: AppColors.primary),
+                  Text('$n', style: TextStyle(fontSize: AppType.micro, height: 1.2, color: AppColors.primary, fontFeatures: tabular)),
+                ]),
+        ),
+      ]),
+    );
+  }
+}
+
+/// 電話訂位名字的「現場客」快選（老闆 2026-10-20）
+const _walkInName = '現場客';
+
+/// 稱謂（老闆 2026-10-15）：訂位姓名後面接「先生」或「小姐」
+const reservationTitles = ['先生', '小姐'];
+bool hasTitle(String name) => reservationTitles.any((t) => name.trim().endsWith(t));
+String stripTitle(String name) {
+  var n = name.trim();
+  for (final t in reservationTitles) {
+    if (n.endsWith(t)) n = n.substring(0, n.length - t.length).trim();
+  }
+  return n.isEmpty ? name.trim() : n;
+}
+
+String withTitle(String raw, String? title) {
+  final n = raw.trim();
+  if (n.isEmpty || title == null || n.endsWith(title)) return n;
+  final base = stripTitle(n);
+  final out = '$base $title';
+  return out.length > 40 ? out.substring(0, 40) : out;
+}
+
+/// 特殊日期（0052，只有老闆）：整天不開放（公休／包場，可寫說明給客人看），或這天改名額
+class SpecialDaysScreen extends StatefulWidget {
+  const SpecialDaysScreen({super.key, required this.membership});
+  final Membership membership;
+  @override
+  State<SpecialDaysScreen> createState() => _SpecialDaysScreenState();
+}
+
+class _SpecialDaysScreenState extends State<SpecialDaysScreen> {
+  Future<List<ReservationSpecialDay>>? _future;
+  final _from = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+
+  Repository get _repo => AppScope.of(context).repo;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _future ??= _load();
+  }
+
+  Future<List<ReservationSpecialDay>> _load() =>
+      _repo.specialDays(widget.membership.storeId, _from, _from.add(const Duration(days: 365)));
+
+  Future<void> _edit(ReservationSpecialDay? d) async {
+    var day = d?.day;
+    if (day == null) {
+      day = await showDatePicker(context: context, initialDate: _from, firstDate: _from, lastDate: _from.add(const Duration(days: 365)));
+      if (day == null || !mounted) return;
+    }
+    var closed = d?.closed ?? true;
+    final note = TextEditingController(text: d?.note ?? '');
+    final groups = TextEditingController(text: d?.maxGroups?.toString() ?? '');
+    final guests = TextEditingController(text: d?.maxGuests?.toString() ?? '');
+    final large = TextEditingController(text: d?.maxLarge?.toString() ?? '');
+    final pickedDay = day;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setD) => AlertDialog(
+          title: Text(DateFormat('M/d（E）', 'zh_TW').format(pickedDay)),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('整天不開放線上訂位'),
+                subtitle: const Text('公休、包場', style: TextStyle(fontSize: AppType.small)),
+                value: closed,
+                onChanged: (v) => setD(() => closed = v),
+              ),
+              TextField(controller: note, maxLength: 100, decoration: const InputDecoration(labelText: '說明（會顯示在訂位頁，例如：包場）')),
+              if (!closed) ...[
+                const SizedBox(height: 8),
+                Text('這天改名額（空白＝照平常）', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+                TextField(controller: groups, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '最多幾組')),
+                TextField(controller: guests, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '最多幾位')),
+                TextField(controller: large, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '大桌最多幾組')),
+              ],
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
+            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('儲存')),
+          ],
+        ),
+      ),
+    );
+    if (ok != true || !mounted) return;
+    int? opt(TextEditingController c) => c.text.trim().isEmpty ? null : int.tryParse(c.text.trim());
+    // 有填就一定要是 0～999 的整數；打錯不能默默當成「照平常」（Codex 審查）
+    if (!closed) {
+      for (final (c, label) in [(groups, '最多幾組'), (guests, '最多幾位'), (large, '大桌最多幾組')]) {
+        final t = c.text.trim();
+        final v = int.tryParse(t);
+        if (t.isNotEmpty && (v == null || v < 0 || v > 999)) {
+          showMessage(context, '「$label」請填 0～999 的整數，或留空白', error: true);
+          return;
+        }
+      }
+    }
+    try {
+      await _repo.saveSpecialDay(
+          widget.membership.storeId,
+          ReservationSpecialDay(
+            day: pickedDay,
+            closed: closed,
+            note: note.text.trim().isEmpty ? null : note.text.trim(),
+            maxGroups: closed ? null : opt(groups),
+            maxGuests: closed ? null : opt(guests),
+            maxLarge: closed ? null : opt(large),
+          ));
+      if (!mounted) return;
+      showMessage(context, '已儲存');
+      setState(() => _future = _load());
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+    }
+  }
+
+  Future<void> _delete(ReservationSpecialDay d) async {
+    try {
+      await _repo.deleteSpecialDay(widget.membership.storeId, d.day);
+      if (!mounted) return;
+      showMessage(context, '已刪除，這天照平常開放');
+      setState(() => _future = _load());
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: const Text('特殊日期')),
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: () => _edit(null),
+          icon: const Icon(Icons.add),
+          label: const Text('新增日期'),
+        ),
+        body: FutureBuilder<List<ReservationSpecialDay>>(
+          future: _future,
+          builder: (context, snap) {
+            if (snap.hasError) return ErrorView(message: friendlyError(snap.error!));
+            if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+            final list = snap.data!;
+            if (list.isEmpty) {
+              return Center(
+                  child: Text('還沒有特殊日期\n按右下角新增公休、包場或改名額的日子',
+                      textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted, height: 1.6)));
+            }
+            return ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 96), children: [
+              for (final d in list)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Material(
+                    color: AppColors.card,
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
+                    child: ListTile(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.lg)),
+                      title: Text(DateFormat('M/d（E）', 'zh_TW').format(d.day)),
+                      subtitle: Text(
+                        d.closed
+                            ? '不開放線上訂位${d.note == null ? '' : '・${d.note}'}'
+                            : [
+                                if (d.maxGroups != null) '最多 ${d.maxGroups} 組',
+                                if (d.maxGuests != null) '最多 ${d.maxGuests} 位',
+                                if (d.maxLarge != null) '大桌 ${d.maxLarge} 組',
+                                if (d.note != null) d.note!,
+                              ].join('・'),
+                        style: TextStyle(color: d.closed ? AppColors.warn : AppColors.muted, fontSize: AppType.small),
+                      ),
+                      onTap: () => _edit(d),
+                      trailing: IconButton(
+                        tooltip: '刪除',
+                        icon: Icon(Icons.delete_outline, color: AppColors.muted),
+                        onPressed: () => _delete(d),
+                      ),
+                    ),
+                  ),
+                ),
+            ]);
+          },
+        ),
+      );
+}
+
+/// 訂位頁的三種看法
+enum _ResView { list, timeline, floor }
