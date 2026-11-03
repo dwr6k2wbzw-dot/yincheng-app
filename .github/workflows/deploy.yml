@@ -54,6 +54,8 @@ jobs:
           exit $rc
       - name: 客人訂位頁（純網頁，不用 Flutter；0050）
         run: |
+          # Google Search Console 驗證檔與網站地圖（2026-11-04）
+          cp tool/seo/* build/web/
           mkdir -p build/web/book && cp tool/book/* build/web/book/
           # 小城外十週年電子邀請函（老闆 2026-10-28）：invite/?to=名字；店家用 invite/make.html 產生每個人的連結
           mkdir -p build/web/invite && cp tool/invite/* build/web/invite/
