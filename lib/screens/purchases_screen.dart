@@ -689,6 +689,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   /// 進貨已經存好、只差品項明細沒存成功：再按儲存只重存明細，不會再新增一筆（Codex 審查）
   (String, double, bool)? _savedPurchase; // (進貨 id, 存檔時的金額, 是不是退貨)；這時進貨欄位鎖住不能改
   bool _dateTouched = false; // 自己選過日期：辨識結果不蓋掉（Codex 審查）
+  bool _editHeaderSaved = false; // 修改進貨：主檔已存、品項沒存成功（離開時也要讓上一頁重新整理）
   late Future<(List<CostCategory>, List<Supplier>)> _future;
   bool _started = false;
 
@@ -1259,7 +1260,14 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
             ));
         if (_itemsLoaded) {
           final err = await _saveItems(app, widget.editing!.id, rows, isReturn);
-          if (err != null && mounted) showMessage(context, err, error: true);
+          if (err != null) {
+            // 品項沒存成功：不關畫面，改過的品項留著，再按一次儲存就好（Codex 全專案審查 2026-11-03）
+            if (mounted) {
+              setState(() => _editHeaderSaved = true);
+              showMessage(context, '進貨已改好，但品項明細沒存成功，品項還留在畫面上，請再按一次「儲存」。', error: true);
+            }
+            return;
+          }
         }
         if (mounted) {
           showMessage(context, '已修改');
@@ -1307,7 +1315,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   @override
   Widget build(BuildContext context) => PopScope(
         // 進貨已存好、品項還沒存成功就離開：照樣告訴上一頁要重新整理（那筆進貨已經在了）
-        canPop: _savedPurchase == null && !_saving, // 存檔中不能離開（進貨、品項要一起存完）
+        canPop: _savedPurchase == null && !_editHeaderSaved && !_saving, // 存檔中不能離開（進貨、品項要一起存完）
         onPopInvokedWithResult: (didPop, _) {
           if (!didPop && !_saving) Navigator.pop(context, true);
         },
