@@ -35,7 +35,7 @@ def info_rows(slug, s):
         row('地址', '<a href="https://www.google.com/maps/search/?api=1&amp;query=%s" target="_blank" rel="noopener">%s</a><small>（%s）</small>'
             % (q, html.escape(addr), html.escape(s['directions']))),
         row('電話', '<a href="tel:%s">%s</a>' % (s['telephone'].replace('-', ''), s['phoneDisplay'])),
-        row('低消', '每人一杯飲品，國定假日前夕<span class="nw">每人 %d 元</span><br>（無限時）' % s['minSpend']),
+        row('低消', '每人一杯飲品%s%s<span class="nw">每人 %d 元</span><br>（無限時）' % ('<br>' if s['minSpendWhen'].startswith('週') else '，', s['minSpendWhen'], s['minSpend'])),
     ]
     if slug == 'xcw':
         rows.append(row('咖啡', '咖啡與咖啡調酒時段營業時間：每週六、日 13:00～17:30<br>無開放預約'))
@@ -69,7 +69,7 @@ def json_ld(slug, s, url):
             for h in s['hours']
         ],
         'servesCuisine': s['servesCuisine'],
-        'priceRange': '低消每人一杯飲品；國定假日前夕每人 NT$%d' % s['minSpend'],
+        'priceRange': '低消每人一杯飲品；%s每人 NT$%d' % (s['minSpendWhen'], s['minSpend']),
         'acceptsReservations': url,
         'brand': {'@type': 'Brand', 'name': '小城外 CityNorth'},
         'sameAs': s['sameAs'],
@@ -89,6 +89,13 @@ def main():
     # 舊的 meta description 換成含事實的版本
     h = re.sub(r'<meta name="description" content="[^"]*">', '', h)
     h = h.replace('</head>', '<meta name="description" content="%s">\n%s\n</head>' % (html.escape(desc), json_ld(slug, s, url)), 1)
+    # 正式網址（canonical），避免 ?s= 等不同網址被當成重複頁面
+    h = h.replace('</head>', '<link rel="canonical" href="%s">\n</head>' % url, 1)
+    # 頁尾連到另一家店：客人多一個選擇，搜尋引擎也能從一家找到另一家（2026-11-04）
+    o = s['sister']
+    sister_url = url.rsplit('/', 2)[0] + '/' + o['slug'] + '/'
+    h = h.replace('</main>', '<footer class="sister"><span class="sk">%s</span><a href="%s">%s<small>%s</small></a></footer>\n</main>'
+                  % (html.escape(o['label']), sister_url, html.escape(o['name']), html.escape(o['where'])), 1)
     old = '<div class="card info" id="info" hidden></div>'
     assert old in h, '找不到資訊卡'
     h = h.replace(old, '<div class="card info" id="info">%s</div>' % info_rows(slug, s), 1)

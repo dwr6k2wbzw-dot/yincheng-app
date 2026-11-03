@@ -54,7 +54,14 @@
         "closes": "01:00"
       }
     ],
-    "phoneDisplay": "02-25595560"
+    "phoneDisplay": "02-25595560",
+    "minSpendWhen": "國定假日前夕",
+    "sister": {
+      "slug": "yincheng",
+      "label": "二店",
+      "name": "隱城・小城外",
+      "where": "大安站旁・電影院主題酒吧"
+    }
   },
   "yincheng": {
     "displayName": "隱城·小城外",
@@ -100,6 +107,13 @@
         "closes": "02:00"
       }
     ],
-    "phoneDisplay": "02-27017898"
+    "phoneDisplay": "02-27017898",
+    "minSpendWhen": "週五、六及國定假日前夕",
+    "sister": {
+      "slug": "xcw",
+      "label": "本店",
+      "name": "小城外",
+      "where": "大稻埕老宅・調酒與咖啡"
+    }
   }
 }

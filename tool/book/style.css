@@ -568,3 +568,9 @@ button.cd:focus-visible, button.chip:focus-visible, .langs button:focus-visible,
 .calhead .nav:focus-visible, .primary:focus-visible, .altb:focus-visible, a:focus-visible {
   outline:2px solid var(--gold); outline-offset:3px; }
 .primary:focus-visible { outline-offset:4px; }
+
+/* 頁尾：另一家店（2026-11-04） */
+.sister { margin:28px auto 8px; text-align:center; }
+.sister .sk { display:block; color:var(--gold); font-size:11px; letter-spacing:.3em; margin-bottom:6px; }
+.sister a { color:var(--ink); text-decoration:none; font-size:15px; letter-spacing:.12em; border-bottom:1px solid var(--gold-soft); padding-bottom:4px; }
+.sister a small { display:block; color:var(--muted); font-size:12px; letter-spacing:.06em; margin-top:4px; border:0; }
