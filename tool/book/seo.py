@@ -41,7 +41,7 @@ def info_rows(slug, s):
         rows.append(row('咖啡', '咖啡與咖啡調酒時段營業時間：每週六、日 13:00～17:30<br>無開放預約'))
         rows.append(row('酒吧', '經典酒吧時段營業時間：18:00～24:00（週末～01:00）<br>無公休日'))
     if slug == 'yincheng':
-        rows.append(row('酒吧', '週日至週四 18:00～01:00<br>週五、六 19:00～02:00（無公休日）'))
+        rows.append(row('營業時間', '週日至週四 18:00～01:00<br>週五、六 19:00～02:00（無公休日）'))
     return ''.join(rows)
 
 

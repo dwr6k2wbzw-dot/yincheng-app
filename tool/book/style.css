@@ -48,6 +48,9 @@ a { color:var(--gold); }
 .irow { display:flex; gap:12px; align-items:flex-start; font-size:14px; line-height:1.5; }
 .irow + .irow { margin-top:8px; }
 .ik { color:var(--gold); letter-spacing:.2em; font-size:12px; padding-top:2px; flex:none; }
+/* 資訊卡標籤固定寬度，四個字的「營業時間」和兩個字的標籤，右邊內容才會對齊（2026-11-04） */
+.info .ik { min-width:5em; }
+html:not([lang^="zh"]) .info .ik { min-width:6.2em; }
 .irow a { color:var(--ink); text-decoration:underline; text-decoration-color:var(--gold); text-underline-offset:3px; }
 .irow small { display:block; color:var(--muted); font-size:12px; }
 /* 月曆（0054） */
