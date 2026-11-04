@@ -94,8 +94,12 @@ def main():
     # 頁尾連到另一家店：客人多一個選擇，搜尋引擎也能從一家找到另一家（2026-11-04）
     o = s['sister']
     sister_url = url.rsplit('/', 2)[0] + '/' + o['slug'] + '/'
-    h = h.replace('</main>', '<footer class="sister"><span class="sk">%s</span><a href="%s">%s<small>%s</small></a></footer>\n</main>'
-                  % (html.escape(o['label']), sister_url, html.escape(o['name']), html.escape(o['where'])), 1)
+    # 老闆 2026-11-04：拿掉最下面一行說明，第一行改成「二店・訂位連結」＋往下指店名的箭頭
+    arrow = ('<svg class="sa" viewBox="0 0 10 16" width="9" height="14" aria-hidden="true">'
+             '<path d="M5 1v13M1 10l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.2" '
+             'stroke-linecap="round" stroke-linejoin="round"/></svg>')
+    h = h.replace('</main>', '<footer class="sister"><span class="sk">%s<i>・</i>訂位連結%s</span><a href="%s">%s</a></footer>\n</main>'
+                  % (html.escape(o['label']), arrow, sister_url, html.escape(o['name'])), 1)
     old = '<div class="card info" id="info" hidden></div>'
     assert old in h, '找不到資訊卡'
     h = h.replace(old, '<div class="card info" id="info">%s</div>' % info_rows(slug, s), 1)
