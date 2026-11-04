@@ -10,6 +10,12 @@
 - **只用它的易用性規則**：觸控大小、表單與錯誤提示、導覽、無障礙、載入狀態、圖表選擇、Flutter 實作（`--stack flutter`）。
 - **不要用它挑風格、配色、字體**：品牌外觀一律沿用 App 現有設計（深色底 #0A0A09、現代黑體搭配字重對比、一句話說明），兩者衝突時以現有設計為準。
 
+## Claudex Loop（Claude 寫計畫、Codex 挑毛病，只在本專案）
+- `.claude/skills/` 下的 `claudex-loop`、`codex-review`、`codex-build`、`claudex-route`，來源 chaseai-yt/claudex-loop（MIT，commit 53cddc4，2026-11-04 加入）。
+- **只用在大功能**：POS 結帳、訂金／金流、權限、資料庫結構、訂位核心流程這類一出錯就影響營收或客人的改動；先跑 claudex-loop 把計畫審到 Codex 同意，再動手。改文字、顏色、小 UI 不要用。
+- 需要能執行 Codex CLI 且已 `codex login` 的環境（老闆的 Mac）；沒有 Codex 時不要硬跑，照一般流程做並說明。
+- **「功能許願」自動派工（`claude-change.yml`）不要使用這四個 skill。**
+
 ## 寫程式守則（Karpathy 四原則）
 - 來源：multica-ai/andrej-karpathy-skills（MIT），2026-11-04 加入；整理自 Andrej Karpathy 對 AI 寫程式常見毛病的觀察（不是他本人寫的）。
 - 和本檔其他規則衝突時，以本專案規則為準。
