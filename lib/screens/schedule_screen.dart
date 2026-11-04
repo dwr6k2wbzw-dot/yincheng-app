@@ -5,6 +5,8 @@ import '../app_state.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
 import '../data/shift_marks.dart';
+import '../services/pl_export.dart' deferred as pl;
+import '../services/shift_export.dart' deferred as sx;
 import '../services/slip_scan.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -317,6 +319,26 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
   Future<void> _showPhoto(String path) => showStoragePhoto(context, path);
 
+  /// 匯出班表 Excel（小城外，老闆 2026-11-04）：手機跳分享選單可「儲存到檔案」或傳 LINE
+  Future<void> _export(ShiftMonth d) async {
+    try {
+      await Future.wait([pl.loadLibrary(), sx.loadLibrary()]);
+    } catch (e) {
+      if (mounted) showMessage(context, '匯出工具下載失敗，請檢查網路後再試', error: true);
+      return;
+    }
+    try {
+      final name = sx.shiftFileName(_storeName, _month);
+      final bytes = sx.buildShiftXlsx(
+          storeName: _storeName, data: d, marks: _marks, codeHours: _codeHours ?? const {}, codeTimes: _codeTimes);
+      final r = await pl.saveFile(bytes, name, pl.xlsxMime);
+      if (!mounted) return;
+      if (r == 'downloaded') showMessage(context, '已下載 $name');
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+    }
+  }
+
   Future<void> _deletePhoto(ShiftPhoto ph, int no) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -480,6 +502,17 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 _monthSummary(d, full),
               const SizedBox(height: 12),
               _photoRow(d),
+              if (_codeHours != null && d.people.any((p) => p.active)) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _export(d),
+                    icon: const Icon(Icons.file_download_outlined),
+                    label: Text('匯出 ${_month.month} 月班表（Excel）'),
+                  ),
+                ),
+              ],
               if (_canEdit) ...[
                 const SizedBox(height: 8),
                 Wrap(spacing: 8, runSpacing: 8, children: [
