@@ -62,7 +62,7 @@ class _DashboardData {
 
   double itemsOf(String category) => items.where((e) => e.category == category).fold(0.0, (a, e) => a + e.amount);
   double recurringOf(String category) =>
-      recurring.where((e) => e.category == category).fold(0.0, (a, e) => a + e.amount);
+      recurring.where((e) => e.category == category).fold(0.0, (a, e) => a + e.amountFor(month));
   /// 這個月有沒有舊版手動輸入的「刷卡手續費」明細（0037 舊 UI 可能已輸入過）
   bool get hasManualCardFee => items.any((e) => e.name.trim() == '刷卡手續費');
   /// 當月刷卡手續費＝刷卡金額 × 費率（歸雜項）。
@@ -744,7 +744,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
     detail(String cat, double? base, String baseLabel) => [
           if (base != null) pl.PlLine(baseLabel, base),
-          for (final it in d.recurring.where((e) => e.category == cat)) pl.PlLine(it.name, it.amount, '每月固定'),
+          for (final it in d.recurring.where((e) => e.category == cat)) pl.PlLine(it.name, it.amountFor(d.month), '每月固定'),
           for (final it in d.items.where((e) => e.category == cat)) pl.PlLine(it.name, it.amount),
         ];
     final cardFee = d.cardFee(s);
@@ -811,7 +811,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           onTap: () => _editCardFeeRate(d)),
       // 每月固定支出
       for (final it in d.recurring)
-        _expItemRow(ExpenseItem.categoryLabels[it.category] ?? it.category, it.name, it.amount,
+        _expItemRow(ExpenseItem.categoryLabels[it.category] ?? it.category, it.name, it.amountFor(d.month),
             tag: '每月固定', onTap: () => _editRecurring(d, it)),
       // 一次性支出
       for (final it in d.items)
@@ -954,7 +954,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // 修改／刪除每月固定支出
   Future<void> _editRecurring(_DashboardData d, RecurringExpenseItem item) async {
     final name = TextEditingController(text: item.name);
-    final amount = TextEditingController(text: item.amount.round().toString());
+    final monthAmount = item.amountFor(d.month);
+    final amount = TextEditingController(text: monthAmount.round().toString());
     var category = item.category;
     final result = await showModalBottomSheet<String>(
       context: context,
@@ -967,7 +968,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               const Text('每月固定支出', style: TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w700)),
               const SizedBox(height: 4),
-              Text('改金額會套用到每個月；不要了就刪除。', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+              Text('改金額從 ${d.month.month} 月起生效，之前的月份不變；不要了就刪除。',
+                  style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
               const SizedBox(height: 12),
               TextField(controller: name, maxLength: 40, decoration: const InputDecoration(labelText: '項目')),
               const SizedBox(height: 12),
@@ -1014,10 +1016,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (result == 'delete') {
         await repo.deleteRecurringExpenseItem(item.id);
       } else {
-        await repo.saveRecurringExpenseItem(
-          widget.membership.storeId,
-          RecurringExpenseItem(id: item.id, name: name.text.trim(), category: category, amount: double.parse(amount.text)),
-        );
+        // 項目名稱、大項改了套用到每個月；金額改了只從這個月起（0090，老闆 2026-11-04）
+        if (name.text.trim() != item.name || category != item.category) {
+          await repo.saveRecurringExpenseItem(
+            widget.membership.storeId,
+            RecurringExpenseItem(id: item.id, name: name.text.trim(), category: category, amount: item.amount),
+          );
+        }
+        final v = double.parse(amount.text);
+        if (v != monthAmount) await repo.setRecurringAmountFrom(item.id, d.month, v);
       }
       if (mounted) { showMessage(context, '已儲存'); _reload(); }
     } catch (e) {
