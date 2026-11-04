@@ -573,4 +573,9 @@ button.cd:focus-visible, button.chip:focus-visible, .langs button:focus-visible,
 .sister { margin:28px auto 8px; text-align:center; }
 .sister .sk { display:block; color:var(--gold); font-size:11px; letter-spacing:.3em; margin-bottom:6px; }
 .sister a { color:var(--ink); text-decoration:none; font-size:15px; letter-spacing:.12em; border-bottom:1px solid var(--gold-soft); padding-bottom:4px; }
-.sister a small { display:block; color:var(--muted); font-size:12px; letter-spacing:.06em; margin-top:4px; border:0; }
+.sister .sk i { font-style:normal; opacity:.55; letter-spacing:0; }
+.sister .sk { display:inline-flex; align-items:center; gap:2px; margin-bottom:10px; }
+.sister .sa { margin-left:6px; animation:sisterNudge 2.4s ease-in-out infinite; }
+@keyframes sisterNudge { 0%,100% { transform:translateY(-1px); opacity:.7; } 50% { transform:translateY(3px); opacity:1; } }
+@media (prefers-reduced-motion: reduce) { .sister .sa { animation:none; } }
+.sister a { display:table; margin:0 auto; }
