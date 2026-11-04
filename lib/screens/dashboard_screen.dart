@@ -345,7 +345,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
               if (!multi) _figure('訂金', s.deposit),
             ]),
             const SizedBox(height: 14),
-            Row(children: [for (final p in parts) _amount(p.label, p.amount, p.color)]),
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              for (final p in parts)
+                _amount(p.label, p.amount, p.color,
+                    // 小城外調酒＝酒水＋餐食，另外列出餐食金額（老闆 2026-11-04）
+                    sub: multi && p.label == '調酒' && s.foodRevenue != 0 ? '含餐食 ${ntd(s.foodRevenue)}' : null),
+            ]),
             const SizedBox(height: 10),
             MixBar(parts: parts, height: 4),
             const SizedBox(height: 16),
@@ -461,7 +466,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           _label('營收組成'),
           const SizedBox(height: 10),
-          for (final p in parts) _kv(p.label, p.amount, dot: p.color),
+          for (final p in parts) ...[
+            _kv(p.label, p.amount, dot: p.color),
+            // 小城外調酒＝酒水＋餐食，另外列出餐食金額（老闆 2026-11-04）
+            if (multi && p.label == '調酒' && s.foodRevenue != 0) _kv('　其中餐食', s.foodRevenue),
+          ],
           const SizedBox(height: 8),
           MixBar(parts: parts, height: 6),
           const SizedBox(height: 12),
@@ -1095,7 +1104,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       );
 
-  Widget _amount(String label, double v, Color dot) => Expanded(
+  Widget _amount(String label, double v, Color dot, {String? sub}) => Expanded(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             Icon(Icons.circle, size: 8, color: dot),
@@ -1108,6 +1117,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             alignment: Alignment.centerLeft,
             child: Text(ntd(v), style: const TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w700)),
           ),
+          if (sub != null)
+            Text(sub, style: TextStyle(color: AppColors.muted, fontSize: AppType.small, fontFeatures: tabular)),
         ]),
       );
 
