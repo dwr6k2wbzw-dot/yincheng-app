@@ -506,14 +506,31 @@ class RecurringExpenseItem {
   final String id;
   final String name;
   final String category; // rent / payroll / misc
-  final double amount;
-  RecurringExpenseItem({required this.id, required this.name, required this.category, required this.amount});
+  final double amount; // 原本的金額（還沒在任何月份改過金額前，每個月都用這個）
+  /// 0090（老闆 2026-11-04）：某月起改成的金額（月初 → 金額）。改金額只從那個月起生效，過去月份不變。
+  final Map<DateTime, double> amountsFrom;
+  RecurringExpenseItem(
+      {required this.id, required this.name, required this.category, required this.amount, this.amountsFrom = const {}});
   factory RecurringExpenseItem.fromRow(Map<String, dynamic> r) => RecurringExpenseItem(
         id: r['id'] as String,
         name: r['name'] as String,
         category: r['category'] as String,
         amount: (r['amount'] as num).toDouble(),
+        amountsFrom: {
+          for (final a in (r['recurring_expense_amounts'] as List? ?? const []))
+            DateTime.parse(a['from_month'] as String): (a['amount'] as num).toDouble(),
+        },
       );
+
+  /// 某個月的金額＝那個月（含）以前最近一次改的金額；都沒改過就用原本的金額
+  double amountFor(DateTime month) {
+    final m = DateTime(month.year, month.month);
+    DateTime? best;
+    for (final k in amountsFrom.keys) {
+      if (!k.isAfter(m) && (best == null || k.isAfter(best))) best = k;
+    }
+    return best == null ? amount : amountsFrom[best]!;
+  }
 }
 
 /// 成員管理：店家成員（含 Email，只有老闆看得到）

@@ -375,7 +375,7 @@ class SupabaseRepository implements Repository {
   Future<List<RecurringExpenseItem>> recurringExpenseItems(String storeId) async {
     final rows = await _db
         .from('recurring_expense_items')
-        .select('id, name, category, amount')
+        .select('id, name, category, amount, recurring_expense_amounts(from_month, amount)')
         .eq('store_id', storeId)
         .eq('active', true)
         .order('created_at');
@@ -397,6 +397,13 @@ class SupabaseRepository implements Repository {
   Future<void> deleteRecurringExpenseItem(String itemId) async {
     final r = await _db.from('recurring_expense_items').delete().eq('id', itemId).select('id');
     if (r.isEmpty) throw Exception('message: 沒有權限刪除（只有老闆可以）,');
+  }
+
+  @override
+  Future<void> setRecurringAmountFrom(String itemId, DateTime month, double amount) async {
+    await _db.from('recurring_expense_amounts').upsert(
+        {'item_id': itemId, 'from_month': _day.format(DateTime(month.year, month.month)), 'amount': amount},
+        onConflict: 'item_id,from_month');
   }
 
 

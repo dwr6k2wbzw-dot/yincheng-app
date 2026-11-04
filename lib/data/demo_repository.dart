@@ -499,9 +499,26 @@ class DemoRepository implements Repository {
   Future<void> saveRecurringExpenseItem(String storeId, RecurringExpenseItem item, {bool isNew = false}) async {
     if (_isStaff) throw Exception('message: 沒有權限,');
     final list = _recurring.putIfAbsent(storeId, () => []);
+    final old = list.where((e) => e.id == item.id).firstOrNull;
     list.removeWhere((e) => e.id == item.id);
     list.add(RecurringExpenseItem(
-        id: isNew ? 'rc${_seq++}' : item.id, name: item.name, category: item.category, amount: item.amount));
+        id: isNew ? 'rc${_seq++}' : item.id,
+        name: item.name,
+        category: item.category,
+        amount: item.amount,
+        amountsFrom: old?.amountsFrom ?? const {}));
+  }
+  @override
+  Future<void> setRecurringAmountFrom(String itemId, DateTime month, double amount) async {
+    if (_isStaff) throw Exception('message: 沒有權限,');
+    for (final l in _recurring.values) {
+      final i = l.indexWhere((e) => e.id == itemId);
+      if (i < 0) continue;
+      final e = l[i];
+      l[i] = RecurringExpenseItem(
+          id: e.id, name: e.name, category: e.category, amount: e.amount,
+          amountsFrom: {...e.amountsFrom, DateTime(month.year, month.month): amount});
+    }
   }
   @override
   Future<void> deleteRecurringExpenseItem(String itemId) async {
