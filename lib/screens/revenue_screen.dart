@@ -73,7 +73,13 @@ class _RevenueScreenState extends State<RevenueScreen> {
           builder: (context, snap) {
             if (snap.hasError) return ErrorView(message: friendlyError(snap.error!), onRetry: _reload);
             if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-            final (list, last) = snap.data!;
+            final (all, last) = snap.data!;
+            // 日報表先打好、還沒營業的日子（例：隱城 11/8 員旅，全是 0）不顯示（老闆 2026-11-05）
+            final today = bizToday();
+            final list = [
+              for (final e in all)
+                if (!(e.bizDate.isAfter(today) && e.received == 0 && e.guests == 0 && e.drinks + e.food + e.project + e.coffee + e.ramen == 0)) e
+            ];
             final banner = _excelSynced ? _SyncBanner(last: last, canWrite: _canWrite) : null;
             if (list.isEmpty) {
               return ListView(padding: const EdgeInsets.all(16), children: [
