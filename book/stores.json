@@ -1,0 +1,119 @@
+{
+  "_說明": "兩家店的公開事實（地址、電話、營業時間、低消）。部署時用來產生訂位頁的靜態資訊與 schema.org 結構化資料，讓搜尋引擎和 AI 讀得到。改營業時間或低消時，這裡、i18n.js、Google 商家檔案要一起改。來源：Google 商家檔案與訂位頁（2026-11-04 核對）。",
+  "xcw": {
+    "displayName": "小城外",
+    "title": "小城外 Bar CityNorth｜大稻埕老宅調酒酒吧・咖啡調酒｜線上訂位",
+    "name": "小城外 Bar CityNorth",
+    "alternateName": [
+      "小城外",
+      "小城外珈琲 Caffé CityNorth",
+      "Bar CityNorth"
+    ],
+    "description": "大稻埕老宅二樓的調酒酒吧，王家衛風格。週六、日下午是咖啡與咖啡調酒時段，每晚 18:00 起是經典酒吧時段。",
+    "telephone": "+886-2-2559-5560",
+    "streetAddress": "民生西路362巷15號2樓",
+    "addressLocality": "大同區",
+    "postalCode": "103",
+    "directions": "走進一樓穿堂到中庭天井有樓梯上二樓",
+    "foundingDate": "2016-10-01",
+    "servesCuisine": [
+      "調酒",
+      "咖啡調酒",
+      "咖啡"
+    ],
+    "minSpend": 600,
+    "sameAs": [
+      "https://www.instagram.com/bar_citynorth/"
+    ],
+    "hours": [
+      {
+        "days": [
+          "Saturday",
+          "Sunday"
+        ],
+        "opens": "13:00",
+        "closes": "17:30"
+      },
+      {
+        "days": [
+          "Sunday",
+          "Monday",
+          "Tuesday",
+          "Wednesday",
+          "Thursday"
+        ],
+        "opens": "18:00",
+        "closes": "00:00"
+      },
+      {
+        "days": [
+          "Friday",
+          "Saturday"
+        ],
+        "opens": "18:00",
+        "closes": "01:00"
+      }
+    ],
+    "phoneDisplay": "02-25595560",
+    "minSpendWhen": "國定假日前夕",
+    "sister": {
+      "slug": "yincheng",
+      "label": "二店",
+      "name": "隱城・小城外",
+      "where": "大安站旁・電影院主題酒吧"
+    }
+  },
+  "yincheng": {
+    "displayName": "隱城·小城外",
+    "title": "隱城・小城外 Hidden City｜大安站電影院主題調酒酒吧｜線上訂位",
+    "name": "隱城・小城外 Hidden City",
+    "alternateName": [
+      "隱城",
+      "隱城•小城外",
+      "Hidden City",
+      "Hidden City Bar CityNorth"
+    ],
+    "description": "大安站旁的電影院主題調酒酒吧，小城外的二店。一樓是隱城售票口，從旁邊的樓梯上二樓。",
+    "telephone": "+886-2-2701-7898",
+    "streetAddress": "信義路三段160號",
+    "addressLocality": "大安區",
+    "postalCode": "106",
+    "directions": "一樓隱城售票口旁進去有樓梯上二樓",
+    "servesCuisine": [
+      "調酒"
+    ],
+    "minSpend": 800,
+    "sameAs": [
+      "https://www.facebook.com/hiddencitybarcitynorth"
+    ],
+    "hours": [
+      {
+        "days": [
+          "Sunday",
+          "Monday",
+          "Tuesday",
+          "Wednesday",
+          "Thursday"
+        ],
+        "opens": "18:00",
+        "closes": "01:00"
+      },
+      {
+        "days": [
+          "Friday",
+          "Saturday"
+        ],
+        "opens": "19:00",
+        "closes": "02:00"
+      }
+    ],
+    "phoneDisplay": "02-27017898",
+    "minSpendWhen": "週五、六及國定假日前夕",
+    "sister": {
+      "slug": "xcw",
+      "label": "本店",
+      "name": "小城外",
+      "where": "大稻埕老宅・調酒與咖啡"
+    }
+  }
+}
