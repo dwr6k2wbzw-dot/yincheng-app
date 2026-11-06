@@ -31,33 +31,6 @@ List<PurchaseItem> withoutDiffLine(List<PurchaseItem> items) => [for (final it i
 
 String _norm(String s) => s.toLowerCase().replaceAll(RegExp(r'[\s\-_.·・()（）/]'), '');
 
-/// 品名對不到庫存品項時，用名稱找一個建議（店員確認才算）：
-/// 完全相同 > 一邊包含另一邊（取最長的品項名稱）；太短（1 個字）不比
-Product? suggestProduct(String itemName, List<Product> products) {
-  final n = _norm(itemName);
-  if (n.length < 2) return null;
-  Product? best;
-  var bestLen = 0;
-  for (final p in products) {
-    final q = _norm(p.name);
-    if (q.length < 2) continue;
-    if (q == n) return p;
-    if ((n.contains(q) || q.contains(n)) && q.length > bestLen) {
-      best = p;
-      bestLen = q.length;
-    }
-  }
-  return best;
-}
-
-/// 選了庫存品項後預設加幾個：辨識給的數量 > 單位相同就等於數量 > 不知道（要店員填）
-double? defaultStockQty(PurchaseItem it, Product p) {
-  if (it.stockQty != null && it.stockQty! > 0) return it.stockQty;
-  final u = it.unit?.trim();
-  if (u == null || u.isEmpty || u == p.unit.trim()) return it.qty.abs();
-  return null;
-}
-
 /// 本月進貨品項總表的一列（同一個庫存品項、或同名同單位的品項合在一起）
 class ItemSummary {
   ItemSummary(this.name, this.unit);

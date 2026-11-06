@@ -3,10 +3,6 @@ import 'package:yincheng_ops/data/models.dart';
 import 'package:yincheng_ops/data/purchase_items_math.dart';
 
 void main() {
-  final gin = Product('p1', '琴酒 Gordon', '酒水', '瓶');
-  final lemon = Product('p2', '檸檬', '餐食', '顆');
-  final tonic = Product('p3', '通寧水', '酒水', '瓶');
-
   group('itemsForSave', () {
     test('加總等於金額時不補差額', () {
       final rows = itemsForSave([
@@ -63,34 +59,7 @@ void main() {
     });
   });
 
-  group('suggestProduct', () {
-    final ps = [gin, lemon, tonic];
-    test('名稱相同或包含就建議', () {
-      expect(suggestProduct('檸檬', ps), lemon);
-      expect(suggestProduct('通寧水 200ml', ps), tonic);
-      expect(suggestProduct('Gordon', ps), gin);
-    });
-    test('一個字不比', () {
-      expect(suggestProduct('水', ps), isNull);
-    });
-    test('對不到回傳 null', () {
-      expect(suggestProduct('冰塊', ps), isNull);
-    });
-  });
-
-  group('defaultStockQty', () {
-    test('單位相同＝數量', () {
-      expect(defaultStockQty(PurchaseItem(name: '琴酒', qty: 6, unit: '瓶'), gin), 6);
-    });
-    test('單位不同要店員填', () {
-      expect(defaultStockQty(PurchaseItem(name: '通寧水', qty: 2, unit: '箱'), tonic), isNull);
-    });
-    test('辨識給了換算就用', () {
-      expect(defaultStockQty(PurchaseItem(name: '通寧水', qty: 2, unit: '箱', stockQty: 48), tonic), 48);
-    });
-  });
-
-  test('辨識結果：有對應的算已決定，沒有的要店員決定', () {
+  test('辨識結果：直接列進總表，不對應庫存', () {
     final r = SlipReading.fromJson({
       'ok': true,
       'vendor': '大倉捷',
@@ -103,8 +72,7 @@ void main() {
       ],
       'notes': null,
     });
-    expect(r.items.first.decided, isTrue);
-    expect(r.items.last.decided, isFalse);
+    expect(r.items.every((i) => i.productId == null && i.stockQty == null), isTrue);
     expect(r.items.last.sure, isFalse);
     expect(r.date, DateTime(2026, 10, 30));
     expect(r.items.every((i) => i.source == 'ai'), isTrue);

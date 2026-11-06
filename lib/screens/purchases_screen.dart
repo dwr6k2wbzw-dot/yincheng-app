@@ -679,7 +679,6 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   bool _saving = false;
   // 品項明細（0087，老闆 2026-11-01：拍照辨識 → 品項 → 庫存）
   List<PurchaseItem> _items = [];
-  List<Product> _products = [];
   List<CostCategory> _cats = [];
   bool _itemsLoaded = true; // 修改時：讀得到原本的明細才能改（讀不到就不動明細）
   bool _reading = false; // 正在辨識照片
@@ -730,9 +729,6 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
     } catch (_) {} // 讀不到時清單只剩「手動新增廠商」
     _sups = r[1] as List<Supplier>;
     _cats = r[0] as List<CostCategory>;
-    try {
-      _products = await repo.products(id);
-    } catch (_) {} // 讀不到品項：明細照樣可以填，只是不能對應庫存
     if (e != null) {
       try {
         _items = withoutDiffLine(await repo.purchaseItems(e.id));
@@ -994,44 +990,12 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
         ok.where((c) => c.name.contains(label)).firstOrNull?.code;
   }
 
-  /// 品項的大類（新增庫存品項用）：照目前選的進貨類別
-  String get _productCategory {
-    final c = _cats.where((c) => c.code == _category).firstOrNull;
-    final name = c == null ? '' : (_cats.where((x) => x.code == (_displayAs[c.code] ?? c.code)).firstOrNull?.name ?? c.name);
-    for (final k in const ['酒水', '餐食', '雜項']) {
-      if (name.contains(k)) return k;
-    }
-    return '雜項';
-  }
-
-  Future<Product?> _createProduct(String name, String unit) async {
-    final repo = AppScope.of(context).repo;
-    final existing = _products.where((p) => p.name == name).firstOrNull;
-    if (existing != null) return existing;
-    try {
-      final p = Product('', name, _productCategory, unit);
-      final id = await repo.saveProduct(widget.membership.storeId, p);
-      final np = Product(id, name, p.category, unit);
-      if (mounted) {
-        setState(() => _products = [..._products, np]);
-        showMessage(context, '已新增庫存品項「$name」（$unit・${p.category}）');
-      }
-      return np;
-    } catch (e) {
-      if (mounted) showMessage(context, friendlyError(e), error: true);
-      return null;
-    }
-  }
-
   Future<void> _editItem(int? index) async {
     final isNew = index == null;
     final r = await editPurchaseItem(
       context,
-      item: isNew ? PurchaseItem(name: '', qty: 1, decided: false) : _items[index],
-      products: _products,
+      item: isNew ? PurchaseItem(name: '', qty: 1) : _items[index],
       isNew: isNew,
-      isReturn: _isReturn,
-      createProduct: _createProduct,
     );
     if (r == null || !mounted) return;
     setState(() {
@@ -1057,7 +1021,6 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
     }
     return PurchaseItemsCard(
       items: _items,
-      products: _products,
       total: double.tryParse(_amount.text.replaceAll(',', '')),
       isReturn: _isReturn,
       enabled: !_saving && !_reading,
@@ -1217,11 +1180,6 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
       showMessage(context, '照片還在讀取中，請稍等', error: true);
       return;
     }
-    final undecided = _items.where((it) => !it.decided).length;
-    if (undecided > 0) {
-      showMessage(context, '還有 $undecided 行品項沒決定要不要入庫存（點那一行）', error: true);
-      return;
-    }
     final unsure = _items.where((it) => !it.sure).length;
     if (unsure > 0) {
       final ok = await showDialog<bool>(
@@ -1301,8 +1259,8 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
         }
       }
       if (mounted) {
-        final stocked = rows.where((it) => it.toStock).length;
-        showMessage(context, stocked == 0 ? '已新增' : '已新增，$stocked 個品項${_isReturn ? '已從庫存扣掉' : '已加進庫存'}');
+        final n = withoutDiffLine(rows).length;
+        showMessage(context, n == 0 ? '已新增' : '已新增，$n 個品項已列進本月進貨總表');
         Navigator.pop(context, true);
       }
     } catch (e) {
