@@ -338,6 +338,23 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
               else
                 Text('${lim.largeSize} 位以上：${cap(large, lim.maxLarge)} 組${_special != null ? '・今天是特殊日期' : ''}',
                     style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+              // 0091 網路訂位從哪裡來（Google／IG／FB…）
+              () {
+                final web = booked.where((r) => r.source == 'web').toList();
+                if (web.isEmpty) return const SizedBox.shrink();
+                final count = <String, int>{};
+                for (final r in web) {
+                  final k = r.refLabel ?? '不明';
+                  count[k] = (count[k] ?? 0) + 1;
+                }
+                final parts = count.entries.toList()
+                  ..sort((a, b) => a.key == '不明' ? 1 : b.key == '不明' ? -1 : b.value.compareTo(a.value));
+                return Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text('網路訂位來源：${parts.map((e) => '${e.key} ${e.value}').join('・')}',
+                      style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+                );
+              }(),
             ]),
           );
         }(),
@@ -492,7 +509,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
           [
             if (_tableNames(r).isNotEmpty) '桌 ${_tableNames(r)}',
             r.phone.isEmpty ? '沒留電話' : r.phone,
-            r.walkIn ? '現場客' : (r.source == 'web' ? '網路訂位' : '電話訂位'),
+            r.walkIn ? '現場客' : (r.source == 'web' ? '網路訂位${r.refLabel == null ? '' : '（${r.refLabel}）'}' : '電話訂位'),
             if (r.clearedAt != null) '已清桌',
             if (r.lang == 'en') '英文客人',
             if (r.lang == 'ja') '日文客人',

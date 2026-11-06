@@ -58,6 +58,23 @@
   const qs = new URLSearchParams(location.search);
   const wantDay = /^\d{4}-\d{2}-\d{2}$/.test(qs.get('d') || '') ? qs.get('d') : null;
   if (/^\d{1,2}$/.test(qs.get('p') || '') && +qs.get('p') >= 1) party = +qs.get('p');
+  // 客人從哪裡點進來（老闆 2026-11-06，0091）：網址 ?ref=google／ig／fb…；沒帶就看瀏覽器的來源網址；
+  // 記在這個分頁裡（切換語言重新整理也不會掉）。只是統計用，格式不對就不送。
+  const ref = (function () {
+    const ok = (v) => (/^[a-z0-9_-]{1,20}$/.test(v || '') ? v : null);
+    let v = ok((qs.get('ref') || qs.get('utm_source') || '').trim().toLowerCase());
+    if (!v) {
+      let host = '';
+      try { host = new URL(document.referrer).hostname; } catch (_) {}
+      const map = [[/(^|\.)google\./, 'google'], [/instagram\.com$/, 'ig'], [/(facebook\.com|fb\.com|fb\.me)$/, 'fb'],
+        [/(line\.me|line-apps\.com)$/, 'line'], [/threads\.(net|com)$/, 'threads']];
+      if (host && host !== location.hostname) for (const [re, name] of map) if (re.test(host)) { v = name; break; }
+    }
+    try {
+      if (v) sessionStorage.setItem('yc_ref', v); else v = ok(sessionStorage.getItem('yc_ref'));
+    } catch (_) {}
+    return v;
+  })();
   // 店家 logo（依網址 ?s=）
   const logos = { yincheng: 'logo-yincheng.png', xcw: 'logo-xcw.png' };
   if (logos[slug]) { $('logo').src = logos[slug]; $('logo').alt = ''; $('logo').hidden = false; $('fav').href = logos[slug]; }
@@ -198,7 +215,7 @@
       const od = other && other.enabled ? other.days.find((x) => x.date === day) : null;
       if (!cur || cur.closed || ok || !otherOk(od, party)) { box.hidden = true; box.innerHTML = ''; return; }
       const o = OTHER[slug];
-      const href = o + '/?d=' + day + '&p=' + party + '&lang=' + YCI.lang;
+      const href = o + '/?d=' + day + '&p=' + party + '&lang=' + YCI.lang + '&ref=' + (slug === 'xcw' ? 'from-xcw' : 'from-yc');
       box.innerHTML = '<p class="altk">' + T('altTitle') + '</p>' +
         '<p class="altn">' + YC.esc(T('storeName')[o]) + '<small>' + YC.esc(T('storeIntro')[o]) + '</small></p>' +
         '<a class="altb" href="' + href + '">' + YC.esc(T('altGo', T('storeName')[o])) + ' →</a>';
@@ -236,6 +253,7 @@
       const r = await YC.rpc('book_reservation', {
         p_slug: slug, p_date: day, p_time: time, p_party: party,
         p_name: fullName(), p_phone: $('phone').value.trim() || null, p_email: $('email').value, p_note: $('note').value || null, p_lang: YCI.lang,
+        ...(ref ? { p_ref: ref } : {}),
       });
       $('app').hidden = true;
       const done = $('done'); done.hidden = false;

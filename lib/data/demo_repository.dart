@@ -826,16 +826,16 @@ class DemoRepository implements Repository {
     final n = DateTime.now().subtract(const Duration(hours: 6));
     final day = DateTime(n.year, n.month, n.day);
     final now = DateTime.now();
-    Reservation mk(int i, String time, int party, String name, List<String> tables, {DateTime? seated, bool walkIn = false, String? note}) =>
+    Reservation mk(int i, String time, int party, String name, List<String> tables, {DateTime? seated, bool walkIn = false, String? note, String? ref}) =>
         Reservation(
           id: '$storeId-seed$i', date: day, time: time, party: party, name: name, phone: '0912-000-00$i',
           status: seated != null ? 'arrived' : 'confirmed', source: walkIn ? 'app' : 'web', createdAt: now,
-          tableIds: tables, seatedAt: seated, walkIn: walkIn, note: note,
+          tableIds: tables, seatedAt: seated, walkIn: walkIn, note: note, ref: ref,
         );
     return [
-      mk(1, '19:00', 2, '林小姐', ['A1', 'A2'], seated: now.subtract(const Duration(minutes: 40))),
-      mk(2, '19:30', 4, '陳先生', ['S1'], seated: now.subtract(const Duration(minutes: 15)), note: '慶生，要蛋糕盤'),
-      mk(3, '20:00', 2, '王先生', ['A5']),
+      mk(1, '19:00', 2, '林小姐', ['A1', 'A2'], seated: now.subtract(const Duration(minutes: 40)), ref: 'google'),
+      mk(2, '19:30', 4, '陳先生', ['S1'], seated: now.subtract(const Duration(minutes: 15)), note: '慶生，要蛋糕盤', ref: 'ig'),
+      mk(3, '20:00', 2, '王先生', ['A5'], ref: 'google'),
       mk(4, '20:30', 3, 'Kenji', ['S3']),
       mk(5, '21:00', 1, '現場', ['A8'], walkIn: true),
       mk(6, '21:30', 2, '張小姐', const []),

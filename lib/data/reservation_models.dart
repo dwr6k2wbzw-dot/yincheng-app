@@ -116,6 +116,7 @@ class Reservation {
   final String? note;
   final String status; // confirmed / cancelled / arrived / no_show
   final String source; // web / app
+  final String? ref; // 0091 網路訂位：客人從哪裡點進來（google／ig／fb…，沒有＝不知道）
   final String? emailError;
   final DateTime createdAt;
   // 0055 客人申請改人數（pending 待確認／approved／rejected）
@@ -139,6 +140,7 @@ class Reservation {
     this.note,
     required this.status,
     required this.source,
+    this.ref,
     this.emailError,
     required this.createdAt,
     this.requestedParty,
@@ -161,6 +163,7 @@ class Reservation {
         note: r['note'] as String?,
         status: r['status'] as String,
         source: r['source'] as String,
+        ref: r['ref'] as String?,
         emailError: r['email_error'] as String?,
         createdAt: DateTime.parse(r['created_at'] as String).toLocal(),
         requestedParty: (r['requested_party'] as num?)?.toInt(),
@@ -173,12 +176,22 @@ class Reservation {
         hiddenAt: r['hidden_at'] == null ? null : DateTime.parse(r['hidden_at'] as String).toLocal(),
       );
 
+  /// 0091 來源顯示名稱（網路訂位才有；null＝不知道從哪裡來）
+  String? get refLabel {
+    if (ref == null) return null;
+    const names = {
+      'google': 'Google', 'ig': 'IG', 'fb': 'FB', 'line': 'LINE', 'threads': 'Threads',
+      'site': '官網', 'from-xcw': '小城外訂位頁', 'from-yc': '隱城訂位頁',
+    };
+    return names[ref] ?? ref;
+  }
+
   /// 示範模式用：改幾個欄位
   Reservation copyWith({String? status, String? note, bool clearNote = false, List<String>? tableIds, DateTime? seatedAt,
           bool clearSeated = false, DateTime? clearedAt, bool clearCleared = false, int? party, String? partyRequestStatus, DateTime? hiddenAt, bool clearHidden = false}) =>
       Reservation(
         id: id, date: date, time: time, party: party ?? this.party, name: name, phone: phone, email: email,
-        note: clearNote ? null : (note ?? this.note), status: status ?? this.status, source: source, emailError: emailError,
+        note: clearNote ? null : (note ?? this.note), status: status ?? this.status, source: source, ref: ref, emailError: emailError,
         createdAt: createdAt, requestedParty: requestedParty, partyRequestStatus: partyRequestStatus ?? this.partyRequestStatus,
         lang: lang, tableIds: tableIds ?? this.tableIds, seatedAt: clearSeated ? null : (seatedAt ?? this.seatedAt),
         clearedAt: clearCleared ? null : (clearedAt ?? this.clearedAt), walkIn: walkIn,
