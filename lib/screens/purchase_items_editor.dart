@@ -1,7 +1,6 @@
 // 進貨品項明細（0087，老闆 2026-11-01）
-//   拍照辨識送貨單 → 一行一個品項 → 店員核對、改 → 有對應庫存品項的加進庫存
-//   老闆決定：辨識結果先填表單、店員核對再存；配不到庫存品項的「建議對應，店員確認」
-//   （選一個既有品項、一鍵新增成庫存品項，或標成不入庫存）
+//   拍照辨識送貨單 → 一行一個品項 → 店員核對、改 → 存檔後列進「本月進貨總表」
+//   老闆 2026-11-06：移除「加進庫存」的選項（辨識後直接列在總表）
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -19,7 +18,6 @@ class PurchaseItemsCard extends StatelessWidget {
   const PurchaseItemsCard({
     super.key,
     required this.items,
-    required this.products,
     required this.total,
     required this.isReturn,
     required this.onTap,
@@ -27,7 +25,6 @@ class PurchaseItemsCard extends StatelessWidget {
     this.enabled = true,
   });
   final List<PurchaseItem> items;
-  final List<Product> products;
   final double? total; // 單據金額（表單上的金額欄）
   final bool isReturn;
   final void Function(int index) onTap;
@@ -36,12 +33,9 @@ class PurchaseItemsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final byId = {for (final p in products) p.id: p};
     final sum = itemsTotal(items);
     final diff = total == null ? null : round2(total! - sum);
-    final undecided = items.where((it) => !it.decided).length;
     final unsure = items.where((it) => !it.sure).length;
-    final stocked = items.where((it) => it.toStock).length;
     return SectionCard(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -56,24 +50,15 @@ class PurchaseItemsCard extends StatelessWidget {
           padding: const EdgeInsets.only(top: 4, bottom: 6),
           child: Text(
             items.isEmpty
-                ? '選填。拍照後會自動列出；也可以自己新增。對應到庫存品項的，存檔後會${isReturn ? '從庫存扣掉' : '加進庫存'}。'
-                : stocked == 0
-                    ? '沒有品項會${isReturn ? '從庫存扣掉' : '加進庫存'}'
-                    : '$stocked 項存檔後會${isReturn ? '從庫存扣掉' : '加進庫存'}；點一行可以修改',
+                ? '選填。拍照後會自動列出；也可以自己新增。存檔後會列進本月進貨總表。'
+                : '存檔後會列進本月進貨總表；點一行可以修改',
             style: TextStyle(color: AppColors.muted, fontSize: AppType.small, height: 1.4),
           ),
         ),
-        if (undecided > 0 || unsure > 0)
-          _Notice(
-            color: AppColors.warn,
-            text: [
-              if (unsure > 0) '$unsure 行字看不清楚，請對照單據',
-              if (undecided > 0) '$undecided 行還沒決定要不要入庫存',
-            ].join('；'),
-          ),
+        if (unsure > 0) _Notice(color: AppColors.warn, text: '$unsure 行字看不清楚，請對照單據'),
         for (var i = 0; i < items.length; i++) ...[
           if (i > 0) Divider(height: 1, color: AppColors.line),
-          _ItemRow(item: items[i], product: byId[items[i].productId], isReturn: isReturn, onTap: enabled ? () => onTap(i) : null),
+          _ItemRow(item: items[i], onTap: enabled ? () => onTap(i) : null),
         ],
         if (items.isNotEmpty) ...[
           Divider(height: 1, color: AppColors.line),
@@ -83,7 +68,7 @@ class PurchaseItemsCard extends StatelessWidget {
             _SumLine(
               label: '其他差額',
               value: '${diff > 0 ? '＋' : '−'}${ntd(diff.abs())}',
-              note: '運費、稅、折讓等，存檔時另記一行（不入庫存）',
+              note: '運費、稅、折讓等，存檔時另記一行',
               warn: diff.abs() > (total!.abs() * 0.2) && diff.abs() >= 100,
             ),
         ],
@@ -144,27 +129,13 @@ class _SumLine extends StatelessWidget {
 }
 
 class _ItemRow extends StatelessWidget {
-  const _ItemRow({required this.item, required this.product, required this.isReturn, required this.onTap});
+  const _ItemRow({required this.item, required this.onTap});
   final PurchaseItem item;
-  final Product? product;
-  final bool isReturn;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final unit = item.unit?.trim().isNotEmpty == true ? item.unit! : '';
-    final Widget stock;
-    if (!item.decided) {
-      stock = _Tag(icon: Icons.help_outline, text: '入庫存？點這裡決定', color: AppColors.warn);
-    } else if (item.toStock && product != null) {
-      stock = _Tag(
-        icon: Icons.inventory_2_outlined,
-        text: '${product!.name} ${isReturn ? '−' : '＋'}${fmtQty(item.stockQty!)} ${product!.unit}',
-        color: AppColors.good,
-      );
-    } else {
-      stock = _Tag(icon: Icons.remove_circle_outline, text: '不入庫存', color: AppColors.muted);
-    }
     return InkWell(
       onTap: onTap,
       child: Padding(
@@ -189,8 +160,6 @@ class _ItemRow extends StatelessWidget {
                 '${fmtQty(item.qty)}$unit${item.unitPrice == null ? '' : ' × ${ntd(item.unitPrice!)}'}',
                 style: TextStyle(color: AppColors.muted, fontSize: AppType.small, fontFeatures: tabular),
               ),
-              const SizedBox(height: 6),
-              stock,
             ]),
           ),
           const SizedBox(width: 12),
@@ -199,24 +168,6 @@ class _ItemRow extends StatelessWidget {
       ),
     );
   }
-}
-
-class _Tag extends StatelessWidget {
-  const _Tag({required this.icon, required this.text, required this.color});
-  final IconData icon;
-  final String text;
-  final Color color;
-  @override
-  Widget build(BuildContext context) => Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, size: 14, color: color),
-        const SizedBox(width: 4),
-        Flexible(
-          child: Text(text,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: AppType.caption, color: color, fontWeight: AppFont.label)),
-        ),
-      ]);
 }
 
 /// 修改一行的結果：null＝取消、delete＝刪掉這行
@@ -229,39 +180,24 @@ class ItemSaved extends ItemEdit {
 
 class ItemDeleted extends ItemEdit {}
 
-/// 修改一行（底部面板）。createProduct：一鍵新增庫存品項，回傳新品項（失敗回傳 null，訊息自己顯示）
+/// 修改一行（底部面板）
 Future<ItemEdit?> editPurchaseItem(
   BuildContext context, {
   required PurchaseItem item,
-  required List<Product> products,
   required bool isNew,
-  required bool isReturn,
-  required Future<Product?> Function(String name, String unit) createProduct,
 }) =>
     showModalBottomSheet<ItemEdit>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
       backgroundColor: AppColors.card,
-      builder: (_) => _ItemSheet(
-          item: item.copy(), products: products, isNew: isNew, isReturn: isReturn, createProduct: createProduct),
+      builder: (_) => _ItemSheet(item: item.copy(), isNew: isNew),
     );
 
-enum _Stock { product, none }
-
 class _ItemSheet extends StatefulWidget {
-  const _ItemSheet({
-    required this.item,
-    required this.products,
-    required this.isNew,
-    required this.isReturn,
-    required this.createProduct,
-  });
+  const _ItemSheet({required this.item, required this.isNew});
   final PurchaseItem item;
-  final List<Product> products;
   final bool isNew;
-  final bool isReturn;
-  final Future<Product?> Function(String name, String unit) createProduct;
   @override
   State<_ItemSheet> createState() => _ItemSheetState();
 }
@@ -273,21 +209,6 @@ class _ItemSheetState extends State<_ItemSheet> {
   late final _price = TextEditingController(text: _num(widget.item.unitPrice));
   late final _amount =
       TextEditingController(text: widget.item.unitPrice == null ? '' : _num(round2(widget.item.amount)));
-  late final _stockQty = TextEditingController(text: _num(widget.item.stockQty));
-  late List<Product> _products = widget.products;
-  _Stock? _mode;
-  Product? _product;
-  Product? _suggest;
-  bool _creating = false;
-
-  @override
-  void initState() {
-    super.initState();
-    final it = widget.item;
-    _product = _products.where((p) => p.id == it.productId).firstOrNull;
-    if (it.decided) _mode = _product != null && it.stockQty != null ? _Stock.product : _Stock.none;
-    if (_product == null) _suggest = suggestProduct(it.name, _products);
-  }
 
   // 單價、小計互相帶（數量不變時）
   void _fromPrice() {
@@ -300,55 +221,11 @@ class _ItemSheetState extends State<_ItemSheet> {
     if (q != null && q != 0 && a != null) _price.text = _num(round2(a / q));
   }
 
-  void _choose(Product p) {
-    // 換算數量只對原本那個品項有效（例：2 箱＝48 瓶）；換成別的品項就照單位重算，單位不同要重填（Codex 審查）
-    final keep = p.id == widget.item.productId ? widget.item.stockQty : null;
-    final cur = PurchaseItem(name: _name.text, qty: _parse(_qty.text) ?? 0, unit: _unit.text, stockQty: keep);
-    setState(() {
-      _product = p;
-      _mode = _Stock.product;
-      final d = defaultStockQty(cur, p);
-      _stockQty.text = _num(d);
-    });
-  }
-
-  Future<void> _pickProduct() async {
-    final p = await showModalBottomSheet<Product>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      backgroundColor: AppColors.card,
-      builder: (_) => _ProductPicker(products: _products, suggest: _suggest ?? suggestProduct(_name.text, _products)),
-    );
-    if (p != null && mounted) _choose(p);
-  }
-
-  Future<void> _newProduct() async {
-    final name = _name.text.trim();
-    if (name.isEmpty) {
-      showMessage(context, '先填品名', error: true);
-      return;
-    }
-    setState(() => _creating = true);
-    final p = await widget.createProduct(name, _unit.text.trim().isEmpty ? '個' : _unit.text.trim());
-    if (!mounted) return;
-    setState(() {
-      _creating = false;
-      if (p != null) _products = [..._products, p];
-    });
-    if (p != null) _choose(p);
-  }
-
   void _done() {
     final name = _name.text.trim();
     final qty = _parse(_qty.text);
     if (name.isEmpty) return showMessage(context, '請填品名', error: true);
     if (qty == null || qty <= 0) return showMessage(context, '數量要大於 0', error: true);
-    if (_mode == null) return showMessage(context, '請選擇要不要入庫存', error: true);
-    final sq = _parse(_stockQty.text);
-    if (_mode == _Stock.product && (sq == null || sq <= 0)) {
-      return showMessage(context, '請填要${widget.isReturn ? '扣掉' : '加進'}庫存幾${_product?.unit ?? ''}', error: true);
-    }
     final price = _parse(_price.text);
     Navigator.pop(
       context,
@@ -357,8 +234,9 @@ class _ItemSheetState extends State<_ItemSheet> {
         qty: qty,
         unit: _unit.text.trim().isEmpty ? null : _unit.text.trim(),
         unitPrice: price == null ? null : round2(price),
-        productId: _mode == _Stock.product ? _product?.id : null,
-        stockQty: _mode == _Stock.product ? sq : null,
+        // 原本已經對應庫存的舊明細：沒改品名就保留對應（老闆 2026-11-06 起新的不再對應庫存）
+        productId: name == widget.item.name ? widget.item.productId : null,
+        stockQty: name == widget.item.name ? widget.item.stockQty : null,
         source: widget.item.source,
         sure: true, // 店員看過、按完成＝已核對
         decided: true,
@@ -368,7 +246,6 @@ class _ItemSheetState extends State<_ItemSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final verb = widget.isReturn ? '扣掉' : '加進';
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: ConstrainedBox(
@@ -389,9 +266,6 @@ class _ItemSheetState extends State<_ItemSheet> {
               controller: _name,
               maxLength: 120,
               decoration: const InputDecoration(labelText: '品名', counterText: ''),
-              onChanged: (v) {
-                if (_product == null) setState(() => _suggest = suggestProduct(v, _products));
-              },
             ),
             const SizedBox(height: 12),
             Row(children: [
@@ -438,78 +312,6 @@ class _ItemSheetState extends State<_ItemSheet> {
               ),
             ]),
             const SizedBox(height: 20),
-            Text('$verb庫存', style: const TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            if (_mode == _Stock.product && _product != null) ...[
-              Container(
-                padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
-                decoration: BoxDecoration(
-                  border: Border.all(color: AppColors.good.withValues(alpha: 0.6)),
-                  borderRadius: BorderRadius.circular(AppRadius.md),
-                ),
-                child: Row(children: [
-                  Icon(Icons.inventory_2_outlined, size: 18, color: AppColors.good),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text('${_product!.name}（${_product!.unit}）', style: const TextStyle(fontWeight: FontWeight.w600)),
-                  ),
-                  TextButton(onPressed: _pickProduct, child: const Text('換一個')),
-                ]),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _stockQty,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-                decoration: InputDecoration(
-                  labelText: '$verb庫存幾${_product!.unit}',
-                  suffixText: _product!.unit,
-                  helperText: _unit.text.trim().isNotEmpty && _unit.text.trim() != _product!.unit
-                      ? '單位不同（單上是${_unit.text.trim()}），請換算成${_product!.unit}'
-                      : null,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton(
-                  onPressed: () => setState(() => _mode = _Stock.none),
-                  child: const Text('改成不入庫存'),
-                ),
-              ),
-            ] else ...[
-              if (_suggest != null && _mode != _Stock.none)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: FilledButton.tonalIcon(
-                    onPressed: () => _choose(_suggest!),
-                    icon: const Icon(Icons.auto_awesome_outlined, size: 18),
-                    label: Text('建議：${_suggest!.name}（${_suggest!.unit}）'),
-                  ),
-                ),
-              Row(children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _pickProduct,
-                    icon: const Icon(Icons.search, size: 18),
-                    label: const Text('選庫存品項'),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _creating ? null : _newProduct,
-                    icon: _creating
-                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(Icons.add, size: 18),
-                    label: const Text('新增成品項'),
-                  ),
-                ),
-              ]),
-              const SizedBox(height: 8),
-              _NoneChoice(selected: _mode == _Stock.none, onTap: () => setState(() => _mode = _Stock.none)),
-            ],
-            const SizedBox(height: 20),
             Row(children: [
               if (!widget.isNew)
                 TextButton.icon(
@@ -526,87 +328,6 @@ class _ItemSheetState extends State<_ItemSheet> {
             ]),
           ]),
         ),
-      ),
-    );
-  }
-}
-
-class _NoneChoice extends StatelessWidget {
-  const _NoneChoice({required this.selected, required this.onTap});
-  final bool selected;
-  final VoidCallback onTap;
-  @override
-  Widget build(BuildContext context) => InkWell(
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          decoration: BoxDecoration(
-            border: Border.all(color: selected ? AppColors.primary : AppColors.line),
-            borderRadius: BorderRadius.circular(AppRadius.md),
-          ),
-          child: Row(children: [
-            Icon(selected ? Icons.radio_button_checked : Icons.radio_button_off,
-                size: 18, color: selected ? AppColors.primary : AppColors.muted),
-            const SizedBox(width: 10),
-            const Expanded(child: Text('不入庫存（冰塊、清潔用品、耗材…）')),
-          ]),
-        ),
-      );
-}
-
-class _ProductPicker extends StatefulWidget {
-  const _ProductPicker({required this.products, this.suggest});
-  final List<Product> products;
-  final Product? suggest;
-  @override
-  State<_ProductPicker> createState() => _ProductPickerState();
-}
-
-class _ProductPickerState extends State<_ProductPicker> {
-  String _q = '';
-  @override
-  Widget build(BuildContext context) {
-    final q = _q.toLowerCase();
-    final list = widget.products.where((p) => q.isEmpty || p.name.toLowerCase().contains(q)).toList();
-    final s = widget.suggest;
-    return SizedBox(
-      height: MediaQuery.of(context).size.height * 0.75,
-      child: Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-        child: Column(children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('選庫存品項', style: TextStyle(fontSize: AppType.title, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 8),
-              TextField(
-                decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: '搜尋', isDense: true),
-                onChanged: (v) => setState(() => _q = v.trim()),
-              ),
-            ]),
-          ),
-          Expanded(
-            child: list.isEmpty
-                ? Center(child: Text('沒有符合的品項', style: TextStyle(color: AppColors.muted)))
-                : ListView(children: [
-                    if (s != null && q.isEmpty)
-                      ListTile(
-                        leading: Icon(Icons.auto_awesome_outlined, color: AppColors.primary),
-                        title: Text(s.name),
-                        subtitle: Text('建議・${s.category}・${s.unit}', style: const TextStyle(fontSize: AppType.small)),
-                        onTap: () => Navigator.pop(context, s),
-                      ),
-                    for (final p in list)
-                      if (!(s != null && q.isEmpty && p.id == s.id))
-                        ListTile(
-                          title: Text(p.name),
-                          subtitle: Text('${p.category}・${p.unit}', style: const TextStyle(fontSize: AppType.small)),
-                          onTap: () => Navigator.pop(context, p),
-                        ),
-                  ]),
-          ),
-        ]),
       ),
     );
   }

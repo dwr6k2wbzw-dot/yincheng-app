@@ -314,10 +314,10 @@ class SlipReading {
               qty: _d(it['qty']),
               unit: it['unit'] as String?,
               unitPrice: it['unit_price'] == null ? null : _d(it['unit_price']),
-              productId: it['product_id'] as String?,
-              stockQty: it['stock_qty'] == null ? null : _d(it['stock_qty']),
+              // 老闆 2026-11-06：辨識後直接列進總表，不再問要不要加進庫存
               source: 'ai',
               sure: it['sure'] == true,
+              decided: true,
             ),
         ],
       );
