@@ -111,7 +111,7 @@ class _VendorSlipsScreenState extends State<VendorSlipsScreen> {
                   Expanded(
                     child: Text('${slips.length} 張銷貨單$summary', style: TextStyle(color: AppColors.muted)),
                   ),
-                  Text(ntd(_sum(slips)), style: const TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w700)),
+                  Text(ntd(_sum(slips)), style: const TextStyle(fontSize: AppType.heading, fontWeight: AppFont.figure, fontFeatures: tabular)),
                 ]),
               ),
               const SizedBox(height: 12),

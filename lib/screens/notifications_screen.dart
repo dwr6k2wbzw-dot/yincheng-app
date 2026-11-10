@@ -223,8 +223,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     ]),
                   ),
                 const SizedBox(height: 12),
-                Text('有人新增交接、新增提醒、修改班表，或 App 有新版本時會通知；自己做的不會通知自己。',
-                    style: TextStyle(color: AppColors.muted, fontSize: AppType.caption, height: 1.5)),
+                const InfoLine(
+                  icon: null,
+                  text: '新交接、新提醒、改班表、App 新版本會通知',
+                  detail: '有人新增交接、新增提醒、修改班表，或 App 有新版本時會通知；自己做的不會通知自己。',
+                ),
               ]),
             );
           },

@@ -169,14 +169,10 @@ class _RevenueTile extends StatelessWidget {
           ]),
           if (base > 0) ...[
             const SizedBox(height: 10),
-            if (multi)
-              Wrap(spacing: 12, runSpacing: 4, children: [
-                for (final p in parts) _chip(p.label, p.amount, share(p.amount), p.color),
-              ])
-            else
-              Row(children: [
-                for (final p in parts) Expanded(child: _chip(p.label, p.amount, share(p.amount), p.color)),
-              ]),
+            // 一律用 Wrap：窄螢幕放不下就換行，金額不會被截成「85…」
+            Wrap(spacing: 12, runSpacing: 4, children: [
+              for (final p in parts) _chip(p.label, p.amount, share(p.amount), p.color),
+            ]),
             const SizedBox(height: 8),
             MixBar(parts: parts, height: 6, showLegend: false),
           ],

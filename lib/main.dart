@@ -15,6 +15,7 @@ import 'screens/home_shell.dart';
 import 'screens/login_screen.dart';
 import 'services/load_timing.dart';
 import 'theme.dart';
+import 'widgets/content_width_limit.dart';
 
 /// 啟動進度（顯示在網頁的錯誤畫面上，方便診斷）
 @JS('ycStage')
@@ -81,6 +82,7 @@ class YinchengApp extends StatelessWidget {
           title: '小城外',
           debugShowCheckedModeBanner: false,
           theme: buildTheme(palette),
+          builder: (context, child) => ContentWidthLimit(child: child!),
           locale: const Locale('zh', 'TW'),
           supportedLocales: const [Locale('zh', 'TW'), Locale('en')],
           localizationsDelegates: const [
