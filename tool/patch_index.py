@@ -4,6 +4,9 @@ import pathlib, re
 p = pathlib.Path("web/index.html")
 s = p.read_text(encoding="utf-8")
 s = re.sub(r"<title>.*?</title>", "<title>小城外</title>", s, flags=re.S)
+# 營運 App 是內部工具：不讓搜尋引擎收錄，也換掉 Flutter 預設的說明「A new Flutter project.」（2026-11-10）
+s = re.sub(r'\s*<meta name="(description|robots)"[^>]*>', "", s)
+s = s.replace("</title>", '</title>\n  <meta name="description" content="小城外・隱城 營運管理（內部使用）">\n  <meta name="robots" content="noindex">', 1)
 # iPhone「加入主畫面」用的圖示（180×180）
 s = re.sub(r'<link rel="apple-touch-icon"[^>]*>', '<link rel="apple-touch-icon" sizes="180x180" href="icons/xcw-touch-180-v2.png">', s)
 # 網頁小圖示：換檔名避免 Safari 用舊的暫存

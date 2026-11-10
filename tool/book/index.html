@@ -86,8 +86,9 @@
 
   async function load() {
     info = await YC.rpc('reservation_availability', { p_slug: slug });
-    $('store').textContent = info.display_name;
-    document.title = info.display_name + ' ' + T('booking');
+    // 英文顯示英文店名（跟 Google、媒體一致）；各店專屬網址的標題部署時已寫好，不再蓋掉（2026-11-10）
+    $('store').textContent = (YCI.lang === 'en' && T('storeName')[slug]) || info.display_name;
+    if (!document.documentElement.dataset.slug) document.title = info.display_name + ' ' + T('booking');
     $('contact').textContent = info.contact_note || '';
     renderInfo();
     if (!info.enabled) { $('contact').textContent = (info.contact_note ? info.contact_note + '\n\n' : '') + T('paused'); return; }
@@ -110,7 +111,9 @@
     const rows = [];
     if (info.address) {
       const q = encodeURIComponent(info.address.replace(/[（(].*?[）)]/g, '').trim());
-      const m = info.address.match(/^(.*?)\s*([（(].*[）)])\s*$/);
+      let m = info.address.match(/^(.*?)\s*([（(].*[）)])\s*$/);
+      const en = (T('addr') || {})[slug];  // 英文地址（只有英文有）
+      if (en) m = [null, en, T('addrNote')[slug]];
       rows.push('<div class="irow"><span class="ik">' + T('address') + '</span><span><a href="https://www.google.com/maps/search/?api=1&amp;query=' + q + '" target="_blank" rel="noopener">' +
         YC.esc(m ? m[1] : info.address) + '</a>' + (m ? '<small>' + YC.esc(m[2]) + '</small>' : '') + '</span></div>');
     }
