@@ -1,8 +1,9 @@
 // 訂位頁多語系（老闆 2026-10-17：客人可選中文／英文／日文；確認信照客人選的語言寄）
-// 語言：網址 ?lang=en|ja|zh ＞ 上次選的（localStorage）＞ 手機語言 ＞ 中文
+// 語言：網址 ?lang=en|ja|zh ＞ 英文靜態頁 book/<店>/en/（html 上有 data-lang）＞ 上次選的（localStorage）＞ 手機語言 ＞ 中文
 (function () {
   const LANGS = ['zh', 'en', 'ja'];
   let lang = new URLSearchParams(location.search).get('lang');
+  if (!LANGS.includes(lang)) lang = document.documentElement.dataset.lang;
   if (!LANGS.includes(lang)) {
     try { lang = localStorage.getItem('yc_lang'); } catch (_) { lang = null; }
   }
@@ -22,7 +23,7 @@
       partyNote: (n) => '線上訂位一組最多 ' + n + ' 位；更多人數或包場請直接聯絡店家。',
       address: '地址', tel: '電話', minSpend: '低消', coffee: '咖啡',
       coffeeText: '咖啡與咖啡調酒時段營業時間：每週六、日 13:00～17:30<br>無開放預約',
-      bar: '酒吧', barText: '經典酒吧時段營業時間：18:00～24:00（週末～01:00）<br>無公休日',
+      bar: '酒吧', barText: '經典酒吧時段營業時間：18:00～24:00（週五、六～01:00）<br>無公休日',
       hoursLabel: '營業時間', ycHours: '週日至週四 18:00～01:00<br>週五、六 19:00～02:00（無公休日）',
       minSpendTextYc: (amt) => '每人一杯飲品<br>週五、六及國定假日前夕<span class="nw">每人 ' + amt + ' 元</span><br>（無限時）',
       minSpendText: (amt) => '每人一杯飲品，國定假日前夕<span class="nw">每人 ' + amt + ' 元</span><br>（無限時）',
@@ -68,7 +69,7 @@
       partyNote: (n) => 'Online reservations are for up to ' + n + ' guests. For larger groups or private events, please contact us.',
       address: 'Address', tel: 'Phone', minSpend: 'Minimum', coffee: 'Café',
       coffeeText: 'Coffee & coffee cocktail hours: Sat–Sun 13:00–17:30<br>Walk-in only (no reservations)',
-      bar: 'Bar', barText: 'Classic bar hours: 18:00–24:00 (weekends until 01:00)<br>Open every day',
+      bar: 'Bar', barText: 'Classic bar hours: 18:00–24:00 (Fri–Sat until 01:00)<br>Open every day',
       hoursLabel: 'Hours', ycHours: 'Sun–Thu 18:00–01:00<br>Fri–Sat 19:00–02:00 (open every day)',
       minSpendTextYc: (amt) => 'One drink per person. Fri, Sat & eve of national holidays: <span class="nw">NT$' + amt + ' per person.</span><br>(No time limit)',
       minSpendText: (amt) => 'One drink per person. Eve of national holidays: <span class="nw">NT$' + amt + ' per person.</span><br>(No time limit)',
@@ -80,8 +81,11 @@
       dateLabel: (d) => D.en.week[d.getDay()] + ' ' + (d.getMonth() + 1) + '/' + d.getDate(),
       noSlots: 'No times available on this day',
       altTitle: 'Our sister bar still has seats on this day', altGo: (n) => 'Book ' + n,
-      storeName: { yincheng: 'Yincheng', xcw: 'Xiaochengwai' },
-      storeIntro: { xcw: 'A bar in a historic old house in Dadaocheng', yincheng: 'The second Xiaochengwai location, in Da\'an District' },
+      storeName: { yincheng: 'Hidden City', xcw: 'Bar CityNorth' },
+      storeIntro: { xcw: 'A bar in a historic old house in Dadaocheng', yincheng: 'Bar CityNorth\'s second bar, in Da\'an District' },
+      // 英文地址（顯示用；地圖連結仍用中文地址查）
+      addr: { xcw: '2F, No. 15, Lane 362, Minsheng W. Rd., Datong Dist., Taipei', yincheng: 'No. 160, Sec. 3, Xinyi Rd., Da\'an Dist., Taipei' },
+      addrNote: { xcw: '(walk through the ground-floor passage to the courtyard, then take the stairs to 2F)', yincheng: '(enter beside the Hidden City ticket booth on the ground floor, then take the stairs to 2F)' },
       dayFull: 'This day is fully booked. Please choose another day or call us.',
       dayLeft: (n) => 'Only ' + n + ' seats left on this day. Please adjust the party size or choose another day.',
       largeFull: (n) => 'Reservations for ' + n + ' or more guests are full on this day. Please choose another day or call us.',
@@ -114,7 +118,7 @@
       partyNote: (n) => 'オンライン予約は1組 ' + n + ' 名様までです。それ以上の人数や貸切は直接お店にご連絡ください。',
       address: '住所', tel: '電話', minSpend: '最低消費', coffee: 'カフェ',
       coffeeText: 'コーヒー・コーヒーカクテルの営業時間：毎週土・日 13:00～17:30<br>ご予約不可',
-      bar: 'バー', barText: 'クラシックバーの営業時間：18:00～24:00（週末は～01:00）<br>定休日なし',
+      bar: 'バー', barText: 'クラシックバーの営業時間：18:00～24:00（金・土は～01:00）<br>定休日なし',
       hoursLabel: '営業時間', ycHours: '日〜木 18:00～01:00<br>金・土 19:00～02:00（定休日なし）',
       minSpendTextYc: (amt) => 'お一人様1ドリンク<br>金・土・祝日の前日は<span class="nw">お一人様 ' + amt + ' 元</span><br>（時間制限なし）',
       minSpendText: (amt) => 'お一人様1ドリンク、祝日の前日は<span class="nw">お一人様 ' + amt + ' 元</span><br>（時間制限なし）',
@@ -187,7 +191,11 @@
     },
     set(l) {
       try { localStorage.setItem('yc_lang', l); } catch (_) {}
-      const u = new URL(location.href); u.searchParams.set('lang', l); location.replace(u.toString());
+      const u = new URL(location.href); u.searchParams.set('lang', l);
+      // 各店專屬網址有英文靜態頁 book/<店>/en/（2026-11-10）：切換語言時連網址一起換
+      const slug = document.documentElement.dataset.slug;
+      if (slug) u.pathname = new URL(slug + '/' + (l === 'en' ? 'en/' : ''), document.baseURI).pathname;
+      location.replace(u.toString());
     },
     // 顯示姓名：資料庫存「王 先生／小姐」；英文顯示 Mr./Ms. 王、日文顯示 王 様
     name(n) {

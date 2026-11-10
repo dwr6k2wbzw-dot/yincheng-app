@@ -1,5 +1,5 @@
 {
-  "_說明": "兩家店的公開事實（地址、電話、營業時間、低消）。部署時用來產生訂位頁的靜態資訊與 schema.org 結構化資料，讓搜尋引擎和 AI 讀得到。改營業時間或低消時，這裡、i18n.js、Google 商家檔案要一起改。來源：Google 商家檔案與訂位頁（2026-11-04 核對）。",
+  "_說明": "兩家店的公開事實（地址、電話、營業時間、低消）。部署時用來產生訂位頁的靜態資訊與 schema.org 結構化資料，讓搜尋引擎和 AI 讀得到。改營業時間或低消時，這裡、i18n.js、Google 商家檔案要一起改。來源：Google 商家檔案與訂位頁（2026-11-04 核對）。「en」是英文靜態頁 book/<店>/en/ 用的（2026-11-10）；英文的營業時間、低消、地址顯示文字在 i18n.js。",
   "xcw": {
     "displayName": "小城外",
     "title": "小城外 Bar CityNorth｜大稻埕老宅調酒酒吧・咖啡調酒｜線上訂位",
@@ -61,10 +61,24 @@
       "label": "二店",
       "name": "隱城・小城外",
       "where": "大安站旁・電影院主題酒吧"
+    },
+    "en": {
+      "displayName": "Bar CityNorth",
+      "title": "Bar CityNorth 小城外 | Cocktail & coffee bar in a historic house, Dadaocheng, Taipei | Reservations",
+      "description": "A cocktail bar on the second floor of a historic house in Dadaocheng, Taipei, with a Wong Kar-wai mood. Coffee and coffee cocktails on Saturday and Sunday afternoons; classic cocktails every night from 18:00.",
+      "streetAddress": "2F, No. 15, Lane 362, Minsheng W. Rd.",
+      "addressLocality": "Datong District",
+      "servesCuisine": [
+        "Cocktails",
+        "Coffee cocktails",
+        "Coffee"
+      ],
+      "priceRange": "Minimum one drink per person; NT$600 per person on the eve of national holidays",
+      "sisterLabel": "Second bar"
     }
   },
   "yincheng": {
-    "displayName": "隱城·小城外",
+    "displayName": "隱城・小城外",
     "title": "隱城・小城外 Hidden City｜大安站電影院主題調酒酒吧｜線上訂位",
     "name": "隱城・小城外 Hidden City",
     "alternateName": [
@@ -114,6 +128,18 @@
       "label": "本店",
       "name": "小城外",
       "where": "大稻埕老宅・調酒與咖啡"
+    },
+    "en": {
+      "displayName": "Hidden City",
+      "title": "Hidden City 隱城・小城外 | Cinema-themed cocktail bar near Daan Station, Taipei | Reservations",
+      "description": "A cinema-themed cocktail bar next to MRT Daan Station in Taipei, and the second bar from Bar CityNorth (小城外). The ground floor is the Hidden City ticket booth; take the stairs beside it up to the second floor.",
+      "streetAddress": "No. 160, Sec. 3, Xinyi Rd.",
+      "addressLocality": "Da'an District",
+      "servesCuisine": [
+        "Cocktails"
+      ],
+      "priceRange": "Minimum one drink per person; NT$800 per person on Fridays, Saturdays and the eve of national holidays",
+      "sisterLabel": "Original bar"
     }
   }
 }
