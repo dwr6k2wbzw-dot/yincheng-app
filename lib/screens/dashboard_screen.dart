@@ -291,12 +291,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // ── A 沉穩黑金（小城外）──
       return [
         Row(children: [
-          IconButton(tooltip: '上個月', onPressed: () => _shiftMonth(-1), icon: Icon(Icons.chevron_left, color: AppColors.muted)),
+          // 月份列跟進貨、班表同一種寫法（2026-11-10）
+          IconButton(tooltip: '上個月', onPressed: () => _shiftMonth(-1), icon: const Icon(Icons.chevron_left)),
           Expanded(
-            child: Text('${d.month.year} · ${d.month.month} 月',
-                textAlign: TextAlign.center, style: TextStyle(fontSize: AppType.body, letterSpacing: 3, color: AppColors.text)),
+            child: Text(DateFormat('yyyy 年 M 月', 'zh_TW').format(d.month),
+                textAlign: TextAlign.center, style: const TextStyle(fontSize: AppType.title)),
           ),
-          IconButton(tooltip: '下個月', onPressed: () => _shiftMonth(1), icon: Icon(Icons.chevron_right, color: AppColors.muted)),
+          IconButton(tooltip: '下個月', onPressed: () => _shiftMonth(1), icon: const Icon(Icons.chevron_right)),
         ]),
         const SizedBox(height: 6),
         reservation,
@@ -358,18 +359,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ]),
         ),
         const SizedBox(height: 14),
-        Row(children: [
-          Expanded(child: StatTile(label: '來客數', value: money.format(s.guests), unit: '人', trailing: cmp.guests)),
-          const SizedBox(width: 14),
-          Expanded(child: StatTile(label: '客單價', value: avgText, unit: avgTicket == null ? null : '元', sub: avgSub, trailing: cmp.ticket)),
-        ]),
+        // 兩格一樣高（右邊多一行說明時，左邊跟著拉高）
+        IntrinsicHeight(
+          child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Expanded(child: StatTile(label: '來客數', value: money.format(s.guests), unit: '人', trailing: cmp.guests)),
+            const SizedBox(width: 14),
+            Expanded(child: StatTile(label: '客單價', value: avgText, unit: avgTicket == null ? null : '元', sub: avgSub, trailing: cmp.ticket)),
+          ]),
+        ),
         const SizedBox(height: 14),
         SectionCard(
           padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
               Expanded(child: _label('進貨成本率')),
-              if (!noCost) Text(pct(s.totalCostRate), style: const TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w500, fontFeatures: tabular)),
+              if (!noCost) Text(pct(s.totalCostRate), style: const TextStyle(fontSize: AppType.heading, fontWeight: AppFont.figure, fontFeatures: tabular)),
             ]),
             if (!noCost) Text('總進貨 ${ntd(s.totalCost.round())}', textAlign: TextAlign.right,
                 style: TextStyle(fontSize: AppType.caption, color: AppColors.muted)),
@@ -495,7 +499,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     String n(num? v) => v == null || v == 0 ? '—' : money.format(v.round());
     Widget side(String a, String b, String unit) {
       final st = TextStyle(fontSize: AppType.caption, color: AppColors.muted, fontFeatures: tabular, height: 1.5);
-      return Column(crossAxisAlignment: CrossAxisAlignment.end, mainAxisSize: MainAxisSize.min, children: [
+      return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
         Text('上月 $a${a == '—' ? '' : unit}', style: st),
         Text('近3月 $b${b == '—' ? '' : unit}', style: st),
       ]);
@@ -709,10 +713,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ]),
         Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
           Text(ntd(profit),
-              style: TextStyle(fontSize: AppType.display, fontWeight: AppFont.heading, color: profit >= 0 ? AppColors.good : AppColors.bad)),
+              style: TextStyle(fontSize: AppType.display, fontWeight: AppFont.figure, color: profit >= 0 ? AppColors.good : AppColors.bad, fontFeatures: tabular)),
           const SizedBox(width: 8),
           Text(ofRevenue(profit),
-              style: TextStyle(fontSize: AppType.title, fontWeight: FontWeight.w600, color: profit >= 0 ? AppColors.good : AppColors.bad)),
+              style: TextStyle(fontSize: AppType.title, fontWeight: AppFont.figure, color: profit >= 0 ? AppColors.good : AppColors.bad, fontFeatures: tabular)),
         ]),
         if (missing.isNotEmpty)
           Padding(
@@ -1115,7 +1119,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
-            child: Text(ntd(v), style: const TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w700)),
+            child: Text(ntd(v), style: const TextStyle(fontSize: AppType.heading, fontWeight: AppFont.figure, fontFeatures: tabular)),
           ),
           if (sub != null)
             Text(sub, style: TextStyle(color: AppColors.muted, fontSize: AppType.small, fontFeatures: tabular)),

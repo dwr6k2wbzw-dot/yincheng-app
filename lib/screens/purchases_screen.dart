@@ -247,7 +247,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                   Text('$sub・${items.length} 筆', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
                 ]),
               ),
-              Text(ntd(total), style: const TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w800)),
+              Text(ntd(total), style: const TextStyle(fontSize: AppType.heading, fontWeight: AppFont.figure, fontFeatures: tabular)),
               const SizedBox(width: 4),
               Icon(open ? Icons.expand_less : Icons.expand_more, color: AppColors.muted),
             ]),
@@ -514,7 +514,7 @@ class _CategoryPurchasesScreenState extends State<_CategoryPurchasesScreen> {
           child: Row(children: [
             Text(DateFormat('M 月合計', 'zh_TW').format(widget.month), style: TextStyle(color: AppColors.muted)),
             const Spacer(),
-            Text(ntd(total), style: const TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w800)),
+            Text(ntd(total), style: const TextStyle(fontSize: AppType.heading, fontWeight: AppFont.figure, fontFeatures: tabular)),
           ]),
         ),
         if (widget.vendorBlocks) ...[

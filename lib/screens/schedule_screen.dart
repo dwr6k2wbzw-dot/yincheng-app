@@ -447,7 +447,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           final part = d.people.where((p) => p.active && !p.isFull).toList();
           return RefreshIndicator(
             onRefresh: () async => _reload(),
-            child: ListView(padding: const EdgeInsets.fromLTRB(12, 8, 12, 32), children: [
+            child: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [
               Row(children: [
                 IconButton(tooltip: '上個月', onPressed: () => _shiftMonth(-1), icon: const Icon(Icons.chevron_left)),
                 Expanded(
@@ -698,7 +698,11 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               sum(''),
             ]),
           const SizedBox(height: 4),
-          Row(children: [name('正職', color: AppColors.muted), const Spacer(), sum('休', color: AppColors.muted)]),
+          // 外面是橫向捲動（寬度不限），要給固定寬度 Spacer 才推得開；原本「休」會擠在「正職」旁邊（2026-11-10）
+          SizedBox(
+            width: nameW + sumW + (cellW + 2) * 7,
+            child: Row(children: [name('正職', color: AppColors.muted), const Spacer(), sum('休', color: AppColors.muted)]),
+          ),
           for (final p in full) personRow(p),
           if (part.isNotEmpty) ...[
             const SizedBox(height: 6),
@@ -1076,7 +1080,7 @@ class _DraftScreenState extends State<_DraftScreen> {
         ]);
     return Scaffold(
       appBar: AppBar(title: Text('${widget.month.month} 月班表草稿')),
-      body: ListView(padding: const EdgeInsets.fromLTRB(12, 8, 12, 32), children: [
+      body: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [
         Text(
             '依 ${_d.photoCount ?? widget.current.photos.length} 張照片讀出 ${_d.cellCount} 格。'
             '${widget.current.marks.values.any((m) => m.isNotEmpty) ? '框起來的是跟目前班表不同的格子（$_changed 格）。' : ''}'

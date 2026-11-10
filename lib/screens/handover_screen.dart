@@ -251,7 +251,11 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
                     activeColor: AppColors.bad,
                     controlAffinity: ListTileControlAffinity.leading,
                     dense: true,
-                    title: const Text('⚠ 重要，發到 LINE 群組', style: TextStyle(fontWeight: FontWeight.w700)),
+                    title: Row(children: [
+                      Icon(Icons.warning_amber_rounded, size: 18, color: AppColors.bad),
+                      const SizedBox(width: 6),
+                      const Flexible(child: Text('重要，發到 LINE 群組', style: TextStyle(fontWeight: FontWeight.w700))),
+                    ]),
                     subtitle: Text(editing && (n.important) ? '已經發過；取消勾選不會收回 LINE 訊息' : '一般交接只在 App 裡看；真的要大家馬上知道的才勾',
                         style: TextStyle(fontSize: AppType.caption, color: AppColors.muted)),
                   ),
@@ -365,7 +369,11 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
                     decorationColor: AppColors.muted,
                   )),
               if (it.done)
-                Text('✓ ${it.doneName ?? ''}・${_when(it.doneAt!)}', style: TextStyle(color: AppColors.good, fontSize: AppType.caption)),
+                Row(children: [
+                  Icon(Icons.check, size: 14, color: AppColors.good),
+                  const SizedBox(width: 4),
+                  Flexible(child: Text('${it.doneName ?? ''}・${_when(it.doneAt!)}', style: TextStyle(color: AppColors.good, fontSize: AppType.caption))),
+                ]),
             ]),
           ),
         ]),
@@ -393,7 +401,11 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
                 margin: const EdgeInsets.only(right: 6),
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                 decoration: BoxDecoration(color: AppColors.bad, borderRadius: BorderRadius.circular(AppRadius.sm)),
-                child: const Text('⚠ 重要', style: TextStyle(fontSize: AppType.caption, color: Colors.white, fontWeight: FontWeight.w700)),
+                child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.warning_amber_rounded, size: 13, color: Colors.white),
+                  SizedBox(width: 3),
+                  Text('重要', style: TextStyle(fontSize: AppType.caption, color: Colors.white, fontWeight: FontWeight.w700)),
+                ]),
               ),
             Text(n.authorName.isEmpty ? '—' : n.authorName, style: const TextStyle(fontWeight: FontWeight.w700)),
             const SizedBox(width: 8),
@@ -440,12 +452,17 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
           const SizedBox(height: 8),
           Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
             Expanded(
-              child: Text(
-                [
-                  if (readers.isNotEmpty) '已讀：${readers.join('、')}',
-                  if (n.resolved) '✓ ${n.resolvedName ?? ''} 已處理（${_when(n.resolvedAt!)}）',
-                ].join('\n'),
+              child: DefaultTextStyle.merge(
                 style: TextStyle(color: n.resolved ? AppColors.good : AppColors.muted, fontSize: AppType.small, height: 1.5),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  if (readers.isNotEmpty) Text('已讀：${readers.join('、')}'),
+                  if (n.resolved)
+                    Row(children: [
+                      Icon(Icons.check, size: 16, color: AppColors.good),
+                      const SizedBox(width: 4),
+                      Flexible(child: Text('${n.resolvedName ?? ''} 已處理（${_when(n.resolvedAt!)}）')),
+                    ]),
+                ]),
               ),
             ),
             n.resolved
@@ -533,7 +550,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
     }
     final on = _lineOn ?? true;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(top: 12),
       child: SectionCard(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           if (_isOwner) ...[
@@ -555,7 +572,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
                       }
                     },
               title: const Text('LINE 群組通知', style: TextStyle(fontWeight: FontWeight.w700)),
-              subtitle: Text(on ? '勾「⚠ 重要」的交接會發到這家店的 LINE 群組' : '已關掉，交接只在 App 裡看',
+              subtitle: Text(on ? '勾「重要」的交接會發到這家店的 LINE 群組' : '已關掉，交接只在 App 裡看',
                   style: TextStyle(fontSize: AppType.small, color: AppColors.muted)),
             ),
             const Divider(height: 1),
@@ -581,7 +598,6 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
     return RefreshIndicator(
       onRefresh: () async => _reload(),
       child: ListView(padding: const EdgeInsets.fromLTRB(16, 12, 16, 96), children: [
-        if (_canManage) _lineSwitch(), // 0084：店長也能綁定 LINE（許願改 App）；開關只有老闆
         if (open.isEmpty)
           Padding(
             padding: EdgeInsets.symmetric(vertical: 32),
@@ -598,8 +614,14 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
             ),
           ),
         const SizedBox(height: 8),
-        Text('大家都能寫交接、修改、刪除；做完一項勾一項，全部勾完才能按「已處理」。勾「⚠ 重要」的才會發到 LINE 群組。打開這頁就會記錄你已讀。',
-            style: TextStyle(color: AppColors.muted, fontSize: AppType.caption, height: 1.5)),
+        // 一句話＋ⓘ（老闆 2026-10-29 的寫法），點了才展開完整說明
+        const InfoLine(
+          icon: null,
+          text: '大家都能寫、改、刪；全部勾完才能按「已處理」',
+          detail: '大家都能寫交接、修改、刪除；做完一項勾一項，全部勾完才能按「已處理」。勾「重要」的才會發到 LINE 群組。打開這頁就會記錄你已讀。',
+        ),
+        // LINE 設定放在交接清單下面：每天要看的是交接，設定不用佔最上面（2026-11-10）
+        if (_canManage) _lineSwitch(), // 0084：店長也能綁定 LINE（許願改 App）；開關只有老闆
       ]),
     );
   }
@@ -650,7 +672,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
       r.repeatLabel,
       if (who.isNotEmpty) '給：$who',
       if (overdue) '${occ.month}/${occ.day}（${WorkReminder.weekdayNames[occ.weekday % 7]}）那次還沒做',
-      if (dn != null) '✓ ${dn.doneName} ${DateFormat('HH:mm').format(dn.doneAt)} 完成',
+      if (dn != null) '${dn.doneName} ${DateFormat('HH:mm').format(dn.doneAt)} 完成',
     ].join('・');
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),

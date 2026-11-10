@@ -101,7 +101,7 @@ class AppColors {
 class AppType {
   static const double micro = 10;
   static const double caption = 12; // 補充說明、標籤
-  static const double small = 13; // 次要文字、清單副標
+  static const double small = 14; // 次要文字、清單副標（2026-11-10：13 在昏暗的吧台偏小，放大一級）
   static const double body = 15; // 內文
   static const double title = 17; // 卡片標題、按鈕
   static const double heading = 20; // 區塊大標、重要數字
@@ -166,7 +166,30 @@ ThemeData buildTheme(StorePalette p) {
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: p.cardHigh,
-      border: const OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(AppRadius.md)), borderSide: BorderSide.none),
+      // 用「底線型」邊框（線本身不畫）：有內容時標籤會留在框裡面。
+      // 原本用外框型，標籤會浮到上緣、一半跑出框外（2026-11-10）
+      border: const UnderlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(AppRadius.md)), borderSide: BorderSide.none),
+    ),
+    // 按鈕外形統一成圓角 md，跟右下角主按鈕、篩選鈕同一套（原本是 Material 預設的膠囊形，2026-11-10）
+    filledButtonTheme: FilledButtonThemeData(style: FilledButton.styleFrom(shape: _buttonShape)),
+    outlinedButtonTheme: OutlinedButtonThemeData(style: OutlinedButton.styleFrom(shape: _buttonShape)),
+    textButtonTheme: TextButtonThemeData(style: TextButton.styleFrom(shape: _buttonShape)),
+    // 分段切換（列表／時間軸／座位圖…）：選到的用金色淡底＋金色字，跟篩選鈕一樣
+    segmentedButtonTheme: SegmentedButtonThemeData(
+      style: ButtonStyle(
+        shape: const WidgetStatePropertyAll(_buttonShape),
+        side: WidgetStatePropertyAll(BorderSide(color: p.line)),
+        backgroundColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.disabled)
+            ? null
+            : s.contains(WidgetState.selected)
+                ? p.primary.withValues(alpha: 0.16)
+                : Colors.transparent),
+        foregroundColor: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.disabled)
+            ? null
+            : s.contains(WidgetState.selected)
+                ? p.primary
+                : p.text),
+      ),
     ),
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: p.nav,
@@ -219,6 +242,8 @@ ThemeData buildTheme(StorePalette p) {
     ),
   );
 }
+
+const _buttonShape = RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(AppRadius.md)));
 
 class _FadeRiseTransitions extends PageTransitionsBuilder {
   const _FadeRiseTransitions();

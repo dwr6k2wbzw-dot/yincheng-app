@@ -270,7 +270,7 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
     final offCount = mine.values.where((v) => v == 'off').length;
     final onCount = mine.values.where((v) => v == 'on').length;
 
-    return ListView(padding: const EdgeInsets.fromLTRB(12, 8, 12, 32), children: [
+    return ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [
       Row(children: [
         IconButton(tooltip: '上個月', 
             onPressed: () {
@@ -620,7 +620,7 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
           ? ErrorView(message: friendlyError(_error!), onRetry: _load)
           : _setup == null
               ? const Center(child: CircularProgressIndicator())
-              : ListView(padding: const EdgeInsets.fromLTRB(12, 8, 12, 40), children: [
+              : ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 40), children: [
                   SectionCard(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       const Text('每天需要幾個人', style: TextStyle(fontWeight: FontWeight.w700)),
@@ -1150,7 +1150,7 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
             ),
           _cell('${(_entries[p.id] ?? const <int, String>{}).values.where(_isWork).length}', w: 34),
         ]);
-    return ListView(padding: const EdgeInsets.fromLTRB(12, 8, 12, 32), children: [
+    return ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [
       Text(
           '照每天要幾人、每個人的條件、大家填的指休／可以上排出來的草稿，還沒寫進班表。'
           '點格子可以改；小圓點＝有填（橘：指休／不能上，綠：可以上／想上班）。',
@@ -1400,7 +1400,7 @@ class _ShiftMarkOptionsScreenState extends State<ShiftMarkOptionsScreen> {
               ? const Center(child: CircularProgressIndicator())
               : !o.loaded
                   ? ErrorView(message: '讀不到班別／時段清單，請稍後再試', onRetry: _load)
-                  : ListView(padding: const EdgeInsets.fromLTRB(12, 8, 12, 40), children: [
+                  : ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 40), children: [
                       Text('$_storeName 的清單，只影響這家店。點一項可以修改，刪掉不會改到已經排好的班。',
                           style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
                       const SizedBox(height: 10),

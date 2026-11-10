@@ -144,7 +144,8 @@ class StatTile extends StatelessWidget {
   final String value;
   final String? sub;
   final Color? subColor;
-  /// 大數字右邊的小字（例：總覽來客數旁的上月／近 3 月平均）
+  /// 大數字下面的小字（例：總覽來客數的上月／近 3 月平均）。
+  /// 原本放在大數字右邊，數字位數一多就被擠小，並排的兩格大小不一（2026-11-10）
   final Widget? trailing;
   /// 大數字後面的小字單位（例：人、元）
   final String? unit;
@@ -153,20 +154,16 @@ class StatTile extends StatelessWidget {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(label, style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
           const SizedBox(height: 6),
-          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            (trailing == null ? (Widget c) => Expanded(child: c) : (Widget c) => Flexible(child: c))(
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text.rich(TextSpan(children: [
-                  TextSpan(text: value),
-                  if (unit != null)
-                    TextSpan(text: ' $unit', style: TextStyle(fontSize: AppType.small, fontWeight: FontWeight.w400, color: AppColors.muted)),
-                ]), style: const TextStyle(fontSize: AppType.display, fontWeight: AppFont.figure, fontFeatures: tabular)),
-              ),
-            ),
-            if (trailing != null) ...[const SizedBox(width: 8), Flexible(child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerRight, child: trailing!))],
-          ]),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text.rich(TextSpan(children: [
+              TextSpan(text: value),
+              if (unit != null)
+                TextSpan(text: ' $unit', style: TextStyle(fontSize: AppType.small, fontWeight: FontWeight.w400, color: AppColors.muted)),
+            ]), style: const TextStyle(fontSize: AppType.display, fontWeight: AppFont.figure, fontFeatures: tabular)),
+          ),
+          if (trailing != null) ...[const SizedBox(height: 4), trailing!],
           if (sub != null) ...[
             const SizedBox(height: 4),
             Text(sub!, style: TextStyle(color: subColor ?? AppColors.muted, fontSize: AppType.small)),

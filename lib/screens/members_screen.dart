@@ -84,9 +84,10 @@ class _MembersScreenState extends State<MembersScreen> {
                 for (final m in inactive) _memberTile(m, isMe: false),
               ],
               const SizedBox(height: 16),
-              Text(
-                '邀請方式：按「邀請成員」產生邀請碼，用 LINE 傳給對方。對方打開 App 網址 → 「第一次使用？用邀請碼建立帳號」→ 輸入 Email、密碼和邀請碼就能加入。邀請碼 14 天內有效、只能用一次。',
-                style: TextStyle(color: AppColors.muted, fontSize: AppType.small, height: 1.6),
+              const InfoLine(
+                icon: null,
+                text: '邀請方式：產生邀請碼，用 LINE 傳給對方',
+                detail: '按「邀請成員」產生邀請碼，用 LINE 傳給對方。對方打開 App 網址 → 「第一次使用？用邀請碼建立帳號」→ 輸入 Email、密碼和邀請碼就能加入。邀請碼 14 天內有效、只能用一次。',
               ),
             ]),
           );
