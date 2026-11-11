@@ -237,7 +237,9 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
   // ---------------- 縮放 ----------------
 
   void _setZoom(bool zoomIn, Size viewport) {
-    final target = zoomIn ? math.min(_fit * 1.8, 1.0) : _fit;
+    // 放大後桌上的人名、時間要到手機上 12 點以上才看得清楚（2026-11-12 健檢）：
+    // 原本最多放大到 1 倍，手機上整張圖約 0.5 倍，放大後實際字只有 9 點左右；改成至少 1.3 倍
+    final target = zoomIn ? math.max(_fit * 1.8, 1.3) : _fit;
     final cur = _tc.value;
     // 放大：以目前畫面中心為準；縮小：回到左上整張圖
     if (!zoomIn) {
@@ -326,7 +328,7 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
                   segments: [for (final f in floorOptions) ButtonSegment(value: f, label: Text(f))],
                   selected: {floorOptions.contains(floor) ? floor : floorOptions.first},
                   showSelectedIcon: false,
-                  style: const ButtonStyle(visualDensity: VisualDensity.compact),
+                  style: const ButtonStyle(visualDensity: VisualDensity(horizontal: -2, vertical: 0)),
                   onSelectionChanged: (v) => set(() => floor = v.first),
                 ),
               ]),
@@ -501,7 +503,6 @@ class _ReservationFloorPlanState extends State<ReservationFloorPlan> {
               if (!_arranging)
                 IconButton(
                   tooltip: _zoomed ? '看整張圖' : '放大看人名',
-                  visualDensity: VisualDensity.compact,
                   onPressed: () => _setZoom(!_zoomed, _viewSize),
                   icon: Icon(_zoomed ? Icons.zoom_out_map : Icons.zoom_in, size: 20),
                 ),

@@ -167,11 +167,9 @@ class _VendorCard extends StatelessWidget {
                 '匯款帳號',
                 v.account.trim(),
                 trailing: SizedBox(
-                  height: 28,
+                  height: 48, // 原本 28 點太小不好按，改成標準 48（2026-11-12）
                   child: IconButton(
                     tooltip: '複製帳號',
-                    padding: EdgeInsets.zero,
-                    visualDensity: VisualDensity.compact,
                     iconSize: 18,
                     icon: Icon(Icons.copy_outlined, color: AppColors.muted),
                     onPressed: () => _copy(context, v.account.trim(), '帳號'),

@@ -370,7 +370,8 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
             ],
             selected: {_view},
             showSelectedIcon: false,
-            style: const ButtonStyle(visualDensity: VisualDensity.compact),
+            // 只收窄左右、高度不縮：按得到的範圍維持標準高度（2026-11-12）
+            style: const ButtonStyle(visualDensity: VisualDensity(horizontal: -2, vertical: 0)),
             onSelectionChanged: (v) => setState(() => _view = v.first),
           ),
           const Spacer(),
@@ -380,7 +381,6 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
               tooltip: '電話訂位',
               onPressed: () => _add(settings),
               icon: const Icon(Icons.add_call, size: 20),
-              visualDensity: VisualDensity.compact,
             ),
         ]),
         if (_tables.isNotEmpty) const SizedBox(height: 12),
@@ -2040,7 +2040,7 @@ class _ReservationCalendarScreenState extends State<ReservationCalendarScreen> {
         ),
         const SizedBox(height: 2),
         SizedBox(
-          height: 14,
+          height: 17, // 字從 10 放大到 12，高度跟著加（2026-11-12）
           child: n == 0
               ? null
               : Column(children: [
