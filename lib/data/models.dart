@@ -1211,3 +1211,20 @@ class VendorContact {
     };
   }
 }
+
+/// iCHEF 每營業日品項銷售（0096，老闆 2026-11-11）：品項、類別、數量、金額（不含服務費）
+class ItemSale {
+  final String name;
+  final String category;
+  final bool isDrink; // grp=drink（酒水）；否則餐食
+  final double qty;
+  final double amount;
+  const ItemSale({required this.name, this.category = '', this.isDrink = true, required this.qty, required this.amount});
+  factory ItemSale.fromRow(Map<String, dynamic> r) => ItemSale(
+        name: r['name'] as String,
+        category: (r['category'] as String?) ?? '',
+        isDrink: r['grp'] == 'drink',
+        qty: _d(r['qty']),
+        amount: _d(r['amount']),
+      );
+}

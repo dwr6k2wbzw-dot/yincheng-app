@@ -266,6 +266,29 @@ class SupabaseRepository implements Repository {
     return r == null ? null : DateTime.tryParse(r['imported_at'] as String)?.toLocal();
   }
 
+  @override
+  Future<Set<DateTime>> ichefDays(String storeId, {int limit = 120}) async {
+    final rows = await _db
+        .from('ichef_daily')
+        .select('biz_date')
+        .eq('store_id', storeId)
+        .order('biz_date', ascending: false)
+        .limit(limit);
+    return {for (final r in rows) DateTime.parse(r['biz_date'] as String)};
+  }
+
+  @override
+  Future<List<ItemSale>> itemSales(String storeId, DateTime bizDate) async {
+    final rows = await _db
+        .from('ichef_item_sales')
+        .select('name, category, grp, qty, amount')
+        .eq('store_id', storeId)
+        .eq('biz_date', _day.format(bizDate))
+        .order('amount', ascending: false)
+        .order('name');
+    return rows.map(ItemSale.fromRow).toList();
+  }
+
   // ---------------- 租金／人事成本 ----------------
   @override
   Future<FixedCosts> fixedCosts(String storeId, DateTime month) async {
