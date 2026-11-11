@@ -406,6 +406,32 @@ class DemoRepository implements Repository {
     list.add(saved);
   }
 
+  // 示範：最近 7 筆營收有 iCHEF 品項（假資料）
+  @override
+  Future<Set<DateTime>> ichefDays(String storeId, {int limit = 120}) async {
+    final list = List.of(_revList(storeId))..sort((a, b) => b.bizDate.compareTo(a.bizDate));
+    return {for (final e in list.take(7)) DateTime(e.bizDate.year, e.bizDate.month, e.bizDate.day)};
+  }
+
+  @override
+  Future<List<ItemSale>> itemSales(String storeId, DateTime bizDate) async {
+    const base = [
+      ('Long Island Iced Tea', '調酒', true, 450.0), ('first contact', '調酒', true, 400.0),
+      ('茶徑', '調酒', true, 365.0), ("Bee's Knees", '調酒', true, 390.0), ('lychee vesper', '調酒', true, 406.0),
+      ('鴨油薯條', '小郭餐點', false, 238.0), ('煙波', '調酒', true, 380.0), ('梅園', '調酒', true, 420.0),
+      ('Gin Fizz', '調酒', true, 385.0), ('關東煮', '小郭餐點', false, 280.0), ('Negroni', '調酒', true, 400.0),
+      ('瑞士修道院起司', '起司', false, 280.0),
+    ];
+    final list = <ItemSale>[
+      for (var i = 0; i < base.length; i++)
+        ItemSale(
+            name: base[i].$1, category: base[i].$2, isDrink: base[i].$3,
+            qty: ((bizDate.day * 7 + i * 3) % 7 + 1).toDouble(),
+            amount: base[i].$4 * ((bizDate.day * 7 + i * 3) % 7 + 1)),
+    ]..sort((a, b) => b.amount.compareTo(a.amount));
+    return list;
+  }
+
   @override
   Future<DateTime?> lastExcelSync(String storeId) async =>
       storeId == 'yc' ? DateTime.now().subtract(const Duration(minutes: 25)) : null;
