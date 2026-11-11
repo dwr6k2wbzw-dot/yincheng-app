@@ -685,10 +685,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   int _readSeq = 0; // 換照片時丟掉舊的辨識結果
   String? _readMsg; // 辨識結果說明（帶入了什麼、要注意什麼）
   bool _readFailed = false;
-  /// 進貨已經存好、只差品項明細沒存成功：再按儲存只重存明細，不會再新增一筆（Codex 審查）
-  (String, double, bool)? _savedPurchase; // (進貨 id, 存檔時的金額, 是不是退貨)；這時進貨欄位鎖住不能改
   bool _dateTouched = false; // 自己選過日期：辨識結果不蓋掉（Codex 審查）
-  bool _editHeaderSaved = false; // 修改進貨：主檔已存、品項沒存成功（離開時也要讓上一頁重新整理）
   late Future<(List<CostCategory>, List<Supplier>)> _future;
   bool _started = false;
 
@@ -1129,39 +1126,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
         ]),
       );
 
-  /// 存品項明細；失敗回傳要顯示的訊息（進貨本身已經存好了）
-  /// 不依賴畫面還在不在（使用者中途離開也會存完；Codex 審查）：app、negate 由呼叫端先取好
-  Future<String?> _saveItems(AppState app, String purchaseId, List<PurchaseItem> rows, bool negate) async {
-    // 修改時：現在沒有明細、原本也沒有，就不用呼叫（舊進貨、已核銷的不會被擋）
-    if (widget.editing != null && rows.isEmpty) {
-      try {
-        if ((await app.repo.purchaseItems(purchaseId)).isEmpty) return null;
-      } catch (_) {}
-    }
-    try {
-      await app.repo.savePurchaseItems(purchaseId, rows, negate: negate);
-      app.stockRevision.value++;
-      return null;
-    } catch (e) {
-      return '進貨已存好，但品項明細沒存成功（${friendlyError(e)}）。品項還留在畫面上，請再按一次「儲存品項」。';
-    }
-  }
-
   Future<void> _save() async {
-    final pending = _savedPurchase;
-    if (pending != null) {
-      setState(() => _saving = true);
-      final err = await _saveItems(AppScope.of(context), pending.$1, itemsForSave(_items, pending.$2), pending.$3);
-      if (!mounted) return;
-      setState(() => _saving = false);
-      if (err != null) {
-        showMessage(context, err, error: true);
-        return;
-      }
-      showMessage(context, '品項明細已存好');
-      Navigator.pop(context, true);
-      return;
-    }
     final raw = double.tryParse(_amount.text.replaceAll(',', ''));
     if (_category == null) {
       showMessage(context, '請選擇進貨類別', error: true);
@@ -1200,67 +1165,39 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
     final known = _sups.where((s) => s.name == name).firstOrNull;
     final app = AppScope.of(context);
     final isReturn = _isReturn;
+    // 不動明細（原品項讀不到時）就傳 null；其他情況一律把目前畫面上的明細整份存進去（可能是空清單＝清掉）
+    final itemsToSave = widget.editing != null && !_itemsLoaded ? null : rows;
     setState(() => _saving = true);
     try {
-      if (widget.editing != null) {
-        await app.repo.updatePurchase(
-            widget.editing!.id,
-            NewPurchase(
-              storeId: widget.membership.storeId,
-              purchaseDate: _date!,
-              categoryCode: _category!,
-              supplierId: known?.id,
-              vendorName: known == null && name.isNotEmpty ? name : null,
-              memo: _memo.text,
-              amount: _isReturn ? -raw : raw,
-              paidBy: _paidBy,
-              clientRequestId: _requestId,
-            ));
-        if (_itemsLoaded) {
-          final err = await _saveItems(app, widget.editing!.id, rows, isReturn);
-          if (err != null) {
-            // 品項沒存成功：不關畫面，改過的品項留著，再按一次儲存就好（Codex 全專案審查 2026-11-03）
-            if (mounted) {
-              setState(() => _editHeaderSaved = true);
-              showMessage(context, '進貨已改好，但品項明細沒存成功，品項還留在畫面上，請再按一次「儲存」。', error: true);
-            }
-            return;
-          }
-        }
-        if (mounted) {
-          showMessage(context, '已修改');
-          Navigator.pop(context, true);
-        }
-        return;
-      }
-      final id = await app.repo.addPurchase(NewPurchase(
-            storeId: widget.membership.storeId,
-            purchaseDate: _date!,
-            categoryCode: _category!,
-            supplierId: known?.id,
-            vendorName: known == null && name.isNotEmpty ? name : null,
-            photoJpeg: _photo == null ? null : dataUrlBytes(_photo!),
-            memo: _memo.text,
-            amount: _isReturn ? -raw : raw,
-            paidBy: _paidBy,
-            clientRequestId: _requestId,
-            slipDraft: AppConfig.vendorSlipStores.contains(widget.membership.storeName),
-            slipVendor: name.isEmpty ? null : name,
-            noReceipt: _photo == null && _noReceipt,
-          ));
-      if (rows.isNotEmpty) {
-        final err = await _saveItems(app, id, rows, isReturn);
-        if (err != null) {
-          if (mounted) {
-            setState(() => _savedPurchase = (id, raw, isReturn));
-            showMessage(context, err, error: true);
-          }
-          return;
-        }
-      }
+      // 主檔＋品項一次存完，全部成功才算（0089 修復）；新增時 clientRequestId 擋重送，
+      // 斷線重送會接續存好既有那筆、不會被擋住（0089 修復）
+      await app.repo.savePurchaseWithItems(
+        purchaseId: widget.editing?.id,
+        purchase: NewPurchase(
+          storeId: widget.membership.storeId,
+          purchaseDate: _date!,
+          categoryCode: _category!,
+          supplierId: known?.id,
+          vendorName: known == null && name.isNotEmpty ? name : null,
+          photoJpeg: widget.editing == null && _photo != null ? dataUrlBytes(_photo!) : null,
+          memo: _memo.text,
+          amount: isReturn ? -raw : raw,
+          paidBy: _paidBy,
+          clientRequestId: _requestId,
+          slipDraft: AppConfig.vendorSlipStores.contains(widget.membership.storeName),
+          slipVendor: name.isEmpty ? null : name,
+          noReceipt: _photo == null && _noReceipt,
+        ),
+        items: itemsToSave,
+        negate: isReturn,
+      );
+      if (itemsToSave != null) app.stockRevision.value++;
       if (mounted) {
-        final n = withoutDiffLine(rows).length;
-        showMessage(context, n == 0 ? '已新增' : '已新增，$n 個品項已列進本月進貨總表');
+        showMessage(context, widget.editing != null
+            ? '已修改'
+            : withoutDiffLine(rows).isEmpty
+                ? '已新增'
+                : '已新增，${withoutDiffLine(rows).length} 個品項已列進本月進貨總表');
         Navigator.pop(context, true);
       }
     } catch (e) {
@@ -1272,8 +1209,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
 
   @override
   Widget build(BuildContext context) => PopScope(
-        // 進貨已存好、品項還沒存成功就離開：照樣告訴上一頁要重新整理（那筆進貨已經在了）
-        canPop: _savedPurchase == null && !_editHeaderSaved && !_saving, // 存檔中不能離開（進貨、品項要一起存完）
+        canPop: !_saving, // 存檔中不能離開（主檔、品項一次存完，不會有存一半的狀態）
         onPopInvokedWithResult: (didPop, _) {
           if (!didPop && !_saving) Navigator.pop(context, true);
         },
@@ -1289,7 +1225,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
             if (!snap.hasData) return const Center(child: CircularProgressIndicator());
             final (cats, sups) = snap.data!;
             return ListView(padding: const EdgeInsets.all(16), children: [
-              if (_savedPurchase != null)
+              if (widget.editing != null && !_itemsLoaded)
                 Container(
                   margin: const EdgeInsets.only(bottom: 12),
                   padding: const EdgeInsets.all(12),
@@ -1297,15 +1233,10 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                     color: AppColors.warn.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(AppRadius.md),
                   ),
-                  child: Text('這筆進貨已經存好了，只差品項明細。上面的欄位先鎖住；要改金額、日期，存好品項後再到進貨按「修改」。',
+                  child: Text('原本的品項明細讀不到，金額、退貨先鎖住，避免金額跟品項明細合計不一致；品項讀到後才能改。',
                       style: TextStyle(color: AppColors.warn, fontSize: AppType.small, height: 1.45)),
                 ),
-              // 進貨已存好、只差品項時：進貨欄位鎖住（改了也不會存；Codex 審查）
-              AbsorbPointer(
-                absorbing: _savedPurchase != null,
-                child: Opacity(
-                  opacity: _savedPurchase != null ? 0.45 : 1,
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               // 付款方式放第一排（老闆 2026-10-12）：先選月結廠商／零用金，下面的類別選項才會對
               SegmentedButton<String>(
                 segments: const [
@@ -1427,9 +1358,14 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
               const SizedBox(height: 12),
               TextField(
                 controller: _amount,
+                enabled: widget.editing == null || _itemsLoaded,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
-                decoration: const InputDecoration(labelText: '金額（元）', prefixText: '\$ '),
+                decoration: InputDecoration(
+                  labelText: '金額（元）',
+                  prefixText: '\$ ',
+                  helperText: widget.editing != null && !_itemsLoaded ? '品項明細讀不到，金額先鎖住' : null,
+                ),
                 onChanged: (_) => setState(() {}), // 品項明細的差額跟著變
               ),
               const SizedBox(height: 8),
@@ -1438,7 +1374,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                 title: const Text('這是退貨／退單'),
                 subtitle: const Text('會以負數記錄，沖減當月成本', style: TextStyle(fontSize: AppType.small)),
                 value: _isReturn,
-                onChanged: (v) => setState(() => _isReturn = v),
+                onChanged: widget.editing != null && !_itemsLoaded ? null : (v) => setState(() => _isReturn = v),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -1457,9 +1393,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
               ),
               const SizedBox(height: 12),
               if (widget.editing == null) ...[_scanCard(sups), const SizedBox(height: 12)],
-                  ]),
-                ),
-              ),
+              ]),
               _itemsCard(),
               const SizedBox(height: 24),
               FilledButton(
@@ -1467,7 +1401,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                 style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
                 child: _saving
                     ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
-                    : Text(_savedPurchase == null ? '儲存' : '儲存品項', style: const TextStyle(fontSize: AppType.title)),
+                    : const Text('儲存', style: TextStyle(fontSize: AppType.title)),
               ),
             ]);
           },

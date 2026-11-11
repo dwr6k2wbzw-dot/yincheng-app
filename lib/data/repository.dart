@@ -95,19 +95,20 @@ abstract class Repository {
   Future<List<String>> memberNames(String storeId);
   Future<List<Purchase>> recentPurchases(String storeId, {int limit = 30});
   Future<List<Purchase>> monthPurchases(String storeId, DateTime month);
-  /// 回傳新進貨的 id（存品項明細用）
-  Future<String> addPurchase(NewPurchase p);
   /// 拍照辨識送貨單（0087，Claude 讀圖；每店每天有次數上限）。image＝JPEG data URL
   Future<SlipReading> readSlip(String storeId, String image);
   /// 某個月所有進貨的品項明細（本月進貨總表用；退貨的數量是負數）
   Future<List<PurchaseItem>> monthPurchaseItems(String storeId, DateTime month);
   /// 進貨的品項明細（0087）
   Future<List<PurchaseItem>> purchaseItems(String purchaseId);
-  /// 整份換掉品項明細；negate＝退貨（庫存數量用負數）
-  Future<void> savePurchaseItems(String purchaseId, List<PurchaseItem> items, {bool negate = false});
+  /// 新增或修改進貨主檔＋品項明細，一次存完，全部成功才算（0089 修復：原本分兩次存，中途斷線會變成
+  /// 帳改了、庫存沒改）。purchaseId＝null 表示新增（日報表匯入的進貨不能改：以日報表為準，資料庫 0035）；
+  /// items＝null 表示不動明細（例如改進貨時原品項讀不到）；negate＝退貨（庫存數量用負數）。
+  /// 新增時用 purchase.clientRequestId 擋網路重送：同一張表單重送會接續存好既有那筆，不會被擋住（0089 修復）。
+  /// 回傳進貨 id。
+  Future<String> savePurchaseWithItems(
+      {String? purchaseId, required NewPurchase purchase, List<PurchaseItem>? items, bool negate = false});
   Future<void> setReconciled(String purchaseId, bool reconciled);
-  /// 修改、刪除 App 暫記（日報表匯入的進貨不能改刪：以日報表為準，資料庫 0035）
-  Future<void> updatePurchase(String purchaseId, NewPurchase p);
   Future<void> deletePurchase(String purchaseId);
 
   // 廠商銷貨單明細（小城外）

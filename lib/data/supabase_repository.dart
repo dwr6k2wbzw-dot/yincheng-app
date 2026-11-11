@@ -1087,10 +1087,16 @@ class SupabaseRepository implements Repository {
   }
 
   @override
-  Future<String> addPurchase(NewPurchase p) async {
-    // created_by、period_month 由資料庫填入；client_request_id 防止重送重複
+  Future<String> savePurchaseWithItems({
+    String? purchaseId,
+    required NewPurchase purchase,
+    List<PurchaseItem>? items,
+    bool negate = false,
+  }) async {
+    final p = purchase;
+    // created_by、period_month（新增時）由資料庫填入；client_request_id 防止重送重複
     String? photoPath;
-    if (p.photoJpeg != null) {
+    if (purchaseId == null && p.photoJpeg != null) {
       // 路徑規則：receipts/{店家 id}/...（資料庫與 Storage 權限都會檢查）
       photoPath = '${p.storeId}/slips/${p.clientRequestId}.jpg';
       try {
@@ -1101,22 +1107,35 @@ class SupabaseRepository implements Repository {
         if (e.statusCode != '409' && !e.message.contains('exists')) rethrow;
       }
     }
-    final inserted = await _db.from('purchases').insert({
-      'store_id': p.storeId,
-      'purchase_date': _day.format(p.purchaseDate),
-      'category_code': p.categoryCode,
-      'supplier_id': p.supplierId,
-      'vendor_name': (p.vendorName?.trim().isEmpty ?? true) ? null : p.vendorName!.trim(),
-      if (photoPath != null) 'photo_path': photoPath,
-      'memo': (p.memo?.trim().isEmpty ?? true) ? null : p.memo!.trim(),
-      'amount': p.amount,
-      'paid_by': p.paidBy,
-      'client_request_id': p.clientRequestId,
-      if (p.noReceipt && photoPath == null) 'no_receipt': true,
-    }).select('id').single();
-    final id = inserted['id'] as String;
+    // 主檔＋品項在資料庫同一個交易裡存完，全部成功才算（0089 修復：原本分兩次存，中途斷線會變成
+    // 帳改了、庫存沒改）；新增時 client_request_id 衝突會接續存好既有那筆，不會被擋住（0089 修復）
+    String id;
+    try {
+      id = await _db.rpc('save_purchase_with_items', params: {
+        'p_purchase_id': purchaseId,
+        'p_store_id': p.storeId,
+        'p_purchase_date': _day.format(p.purchaseDate),
+        'p_category_code': p.categoryCode,
+        'p_supplier_id': p.supplierId,
+        'p_vendor_name': (p.vendorName?.trim().isEmpty ?? true) ? null : p.vendorName!.trim(),
+        'p_photo_path': photoPath,
+        'p_memo': (p.memo?.trim().isEmpty ?? true) ? null : p.memo!.trim(),
+        'p_amount': p.amount,
+        'p_paid_by': p.paidBy,
+        'p_client_request_id': p.clientRequestId,
+        'p_no_receipt': p.noReceipt && photoPath == null,
+        'p_items': items == null ? null : [for (final it in items) it.toJson(negate: negate)],
+      }) as String;
+    } on PostgrestException catch (e) {
+      // 資料庫還沒套用 save_purchase_with_items 函式：明確提示暫停儲存，不要退回舊的分兩步存法
+      // （那樣會失去重送防護與交易完整性，審查第三輪要求移除這個退路）
+      if (e.code == 'PGRST202' || e.code == '42883') {
+        throw Exception('message: 系統更新中，這筆進貨現在還不能存檔，請稍後再試一次；如果一直這樣請聯絡工程師,');
+      }
+      rethrow;
+    }
     // 送貨單照片 → 銷貨單草稿。進貨已存好，這步失敗不影響進貨
-    if (photoPath != null && p.amount > 0 && p.slipDraft) {
+    if (purchaseId == null && photoPath != null && p.amount > 0 && p.slipDraft) {
       // 0040：存檔當下就建立草稿（內容由資料庫從這筆進貨讀）
       try {
         await _db.rpc('create_photo_slip_draft', params: {'p_photo_path': photoPath});
@@ -1199,33 +1218,6 @@ class SupabaseRepository implements Repository {
         .order('line_no', nullsFirst: false)
         .order('item_name');
     return rows.map(PurchaseItem.fromRow).toList();
-  }
-
-  @override
-  Future<void> savePurchaseItems(String purchaseId, List<PurchaseItem> items, {bool negate = false}) async {
-    await _db.rpc('save_purchase_items', params: {
-      'p_purchase': purchaseId,
-      'p_items': [for (final it in items) it.toJson(negate: negate)],
-    });
-  }
-
-  @override
-  Future<void> updatePurchase(String purchaseId, NewPurchase p) async {
-    final rows = await _db
-        .from('purchases')
-        .update({
-          'purchase_date': _day.format(p.purchaseDate),
-          'period_month': _day.format(DateTime(p.purchaseDate.year, p.purchaseDate.month, 1)),
-          'category_code': p.categoryCode,
-          'supplier_id': p.supplierId,
-          'vendor_name': (p.vendorName?.trim().isEmpty ?? true) ? null : p.vendorName!.trim(),
-          'memo': (p.memo?.trim().isEmpty ?? true) ? null : p.memo!.trim(),
-          'amount': p.amount,
-          'paid_by': p.paidBy,
-        })
-        .eq('id', purchaseId)
-        .select('id');
-    if (rows.isEmpty) throw Exception('message: 沒有權限修改這筆進貨（只有建立的人或老闆、店長可以改）,');
   }
 
   @override
