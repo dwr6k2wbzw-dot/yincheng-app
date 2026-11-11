@@ -132,6 +132,12 @@ class SelectChip extends StatelessWidget {
         ),
       ),
     );
+    // 外觀維持 34 點高，但上下各多 5 點也點得到：按得到的範圍 44 點，手指不容易點偏（2026-11-12 UI UX Pro Max 健檢）
+    chip = GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: enabled ? () => onSelected!(!selected) : null,
+      child: Padding(padding: const EdgeInsets.symmetric(vertical: 5), child: chip),
+    );
     if (!enabled) chip = Opacity(opacity: 0.45, child: chip);
     if (tooltip != null) chip = Tooltip(message: tooltip!, child: chip);
     return Semantics(button: true, selected: selected, enabled: enabled, child: chip);

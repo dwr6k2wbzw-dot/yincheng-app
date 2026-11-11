@@ -317,7 +317,7 @@ class _ReservationTimelineState extends State<ReservationTimeline> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 3),
                             color: AppColors.bad,
-                            child: Text(minuteLabel(_now), style: const TextStyle(fontSize: AppType.micro, color: Colors.white)),
+                            child: Text(minuteLabel(_now), style: TextStyle(fontSize: AppType.micro, color: AppColors.bg)), // 紅底白字對比只有 2.5:1，改深色字 7.8:1（2026-11-12）
                           ),
                           Expanded(child: Container(width: 2, color: AppColors.bad)),
                         ]),

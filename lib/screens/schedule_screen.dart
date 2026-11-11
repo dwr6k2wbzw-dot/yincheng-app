@@ -692,7 +692,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: AppType.micro, color: Colors.black)),
                   bg: day != null && d.notes[day] != null ? const Color(0xFF7CC6F2) : null,
-                  h: 26,
+                  h: 34, // 字放大到 12，兩行才放得下（2026-11-12）
                   onTap: day != null && _canEdit ? () => _editNote(day, d.notes[day]) : null,
                 ),
               sum(''),

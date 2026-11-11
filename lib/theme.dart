@@ -99,7 +99,7 @@ class AppColors {
 /// 字級（2026-10-29 統一）：全 App 只用這幾種大小，畫面才整齊
 /// micro 只給月曆格、時間軸這種很擠的格子用；一般文字最小 caption。
 class AppType {
-  static const double micro = 10;
+  static const double micro = 12; // 2026-11-12：10 在昏暗的吧台看不清楚，提高到最小可讀的 12（UI UX Pro Max 健檢）
   static const double caption = 12; // 補充說明、標籤
   static const double small = 14; // 次要文字、清單副標（2026-11-10：13 在昏暗的吧台偏小，放大一級）
   static const double body = 15; // 內文

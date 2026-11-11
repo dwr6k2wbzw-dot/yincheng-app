@@ -731,13 +731,11 @@ class _Stepper extends StatelessWidget {
   final String prefix, suffix;
   @override
   Widget build(BuildContext context) => Row(mainAxisSize: MainAxisSize.min, children: [
-        IconButton(tooltip: '減少', 
-            visualDensity: VisualDensity.compact,
+        IconButton(tooltip: '減少', // 不縮小：按鈕至少 48 點才好按（2026-11-12）
             onPressed: value > min ? () => onChanged(value - 1) : null,
             icon: const Icon(Icons.remove_circle_outline)),
         Text('$prefix$value$suffix', style: const TextStyle(fontSize: AppType.small)),
-        IconButton(tooltip: '增加', 
-            visualDensity: VisualDensity.compact,
+        IconButton(tooltip: '增加',
             onPressed: value < max ? () => onChanged(value + 1) : null,
             icon: const Icon(Icons.add_circle_outline)),
       ]);
