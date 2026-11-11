@@ -610,27 +610,7 @@ class DemoRepository implements Repository {
       .toList()
     ..sort((a, b) => b.purchaseDate.compareTo(a.purchaseDate));
 
-  final _requestIds = <String>{};
-  @override
-  Future<String> addPurchase(NewPurchase p) async {
-    if (!_requestIds.add(p.clientRequestId)) throw Exception('duplicate key client_request');
-    if (p.amount == 0) throw Exception('message: 金額不能為 0,');
-    final id = 'n${_seq++}';
-    _purchaseMeta[id] = (p.purchaseDate, DateTime.now());
-    _purchases.add(Purchase(
-      id: id,
-      purchaseDate: p.purchaseDate,
-      categoryCode: p.categoryCode,
-      supplierName: _suppliers.where((s) => s.id == p.supplierId).map((s) => s.name).firstOrNull,
-      memo: p.memo,
-      amount: p.amount,
-      paidBy: p.paidBy,
-      reconciled: false,
-      source: 'app',
-    ));
-    return id;
-  }
-
+  final _requestIds = <String, String>{}; // clientRequestId → 已建立的進貨 id（新增重送時接續用同一筆，0089 修復）
   final _purchaseMeta = <String, (DateTime, DateTime)>{}; // 進貨日、登記時間（算庫存用）
   final _items = <String, List<PurchaseItem>>{};
   final _itemNegate = <String, bool>{};
@@ -671,24 +651,56 @@ class DemoRepository implements Repository {
               productId: it.productId, stockQty: it.stockQty, source: it.source)
       ];
 
+  // 主檔＋品項一次存完，全部成功才算（0089 修復：原本分兩次存，中途斷線會變成帳改了、庫存沒改）；
+  // 新增時同一個 clientRequestId 重送會接續用原來那筆的 id，不會重複新增、也不會被擋住（0089 修復）
   @override
-  Future<void> savePurchaseItems(String purchaseId, List<PurchaseItem> items, {bool negate = false}) async {
-    _items[purchaseId] = [
-      for (final it in items)
-        PurchaseItem(name: it.name, qty: it.qty, unit: it.unit, unitPrice: it.unitPrice,
-            productId: it.productId, stockQty: it.stockQty, source: it.source)
-    ];
-    _itemNegate[purchaseId] = negate;
-  }
-
-  @override
-  Future<void> updatePurchase(String purchaseId, NewPurchase p) async {
-    final i = _purchases.indexWhere((x) => x.id == purchaseId);
-    final o = _purchases[i];
-    _purchases[i] = Purchase(
-        id: o.id, purchaseDate: p.purchaseDate, categoryCode: p.categoryCode,
-        supplierName: p.vendorName ?? o.supplierName, memo: p.memo, amount: p.amount, paidBy: p.paidBy,
-        reconciled: o.reconciled, source: o.source, createdBy: o.createdBy);
+  Future<String> savePurchaseWithItems({
+    String? purchaseId,
+    required NewPurchase purchase,
+    List<PurchaseItem>? items,
+    bool negate = false,
+  }) async {
+    final p = purchase;
+    String id;
+    if (purchaseId != null) {
+      final i = _purchases.indexWhere((x) => x.id == purchaseId);
+      final o = _purchases[i];
+      _purchases[i] = Purchase(
+          id: o.id, purchaseDate: p.purchaseDate, categoryCode: p.categoryCode,
+          supplierName: p.vendorName ?? o.supplierName, memo: p.memo, amount: p.amount, paidBy: p.paidBy,
+          reconciled: o.reconciled, source: o.source, createdBy: o.createdBy);
+      id = purchaseId;
+    } else {
+      final existing = _requestIds[p.clientRequestId];
+      if (existing != null) {
+        id = existing;
+      } else {
+        if (p.amount == 0) throw Exception('message: 金額不能為 0,');
+        id = 'n${_seq++}';
+        _purchaseMeta[id] = (p.purchaseDate, DateTime.now());
+        _purchases.add(Purchase(
+          id: id,
+          purchaseDate: p.purchaseDate,
+          categoryCode: p.categoryCode,
+          supplierName: _suppliers.where((s) => s.id == p.supplierId).map((s) => s.name).firstOrNull,
+          memo: p.memo,
+          amount: p.amount,
+          paidBy: p.paidBy,
+          reconciled: false,
+          source: 'app',
+        ));
+        _requestIds[p.clientRequestId] = id;
+      }
+    }
+    if (items != null) {
+      _items[id] = [
+        for (final it in items)
+          PurchaseItem(name: it.name, qty: it.qty, unit: it.unit, unitPrice: it.unitPrice,
+              productId: it.productId, stockQty: it.stockQty, source: it.source)
+      ];
+      _itemNegate[id] = negate;
+    }
+    return id;
   }
 
   @override
