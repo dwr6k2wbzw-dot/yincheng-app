@@ -154,7 +154,15 @@ abstract class Repository {
   Future<void> addShiftPairRule(String storeId, String a, String b, String kind);
   Future<void> deleteShiftPairRule(String id);
   /// 套用自動排班：列出的人這個月整個換成 plan，回傳寫入格數
-  Future<int> applyShiftPlan(String storeId, DateTime month, Map<String, Map<int, String>> plan);
+  /// expected：畫面載入時的班表版本（shiftMonthVersion）；有帶就會檢查班表有沒有被別人改過，並在成功後清掉草稿（0098）
+  Future<int> applyShiftPlan(String storeId, DateTime month, Map<String, Map<int, String>> plan, {String? expected});
+  // 0098：班表版本、排班草稿（只有老闆店長）、盡量不連上幾天、LINE 指休提醒
+  Future<String> shiftMonthVersion(String storeId, DateTime month);
+  Future<ShiftPlanDraft?> shiftPlanDraft(String storeId, DateTime month);
+  Future<void> saveShiftPlanDraft(String storeId, DateTime month, Map<String, Map<int, String>> plan, Map<String, Set<int>> locked);
+  Future<void> deleteShiftPlanDraft(String storeId, DateTime month);
+  Future<void> saveShiftPreferRun(String storeId, int? days);
+  Future<String> remindShiftRequests(String storeId, DateTime month);
 
   // 交接事項與工作提醒（同店成員可看、可寫交接、可打勾；提醒只有老闆／店長能建立）
   Future<HandoverBoard> handoverBoard(String storeId, {bool withSchedule = false});

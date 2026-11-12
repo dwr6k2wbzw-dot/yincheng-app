@@ -75,14 +75,16 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     super.didChangeDependencies();
     if (!_started) {
       _started = true;
-      _week = _weekOf(DateTime.now());
+      _week = _weekOf(bizToday());
       _future = _load();
     }
   }
 
   Future<ShiftMonth> _load() async {
-    final d = await _repo.shiftMonth(_store, _month);
-    _data = d;
+    // 切月份時，上一個月份的資料比較晚回來也不能蓋掉現在看的月份（2026-11-13 健檢）
+    final m = _month;
+    final d = await _repo.shiftMonth(_store, m);
+    if (m == _month) _data = d;
     return d;
   }
 
@@ -110,7 +112,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
   void _shiftMonth(int n) {
     _month = DateTime(_month.year, _month.month + n);
-    _week = _weekOf(DateTime.now());
+    _data = null; // 新月份的資料回來以前先轉圈，不拿舊月份的資料配新月份的日期
+    _week = _weekOf(bizToday());
     _reload();
   }
 
@@ -439,7 +442,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         future: _future,
         builder: (context, snap) {
           if (snap.hasError) return ErrorView(message: friendlyError(snap.error!), onRetry: _reload);
-          if (!snap.hasData && _data == null) return const Center(child: CircularProgressIndicator());
+          // FutureBuilder 換新的 future 時還留著上一份資料，所以要看是不是載完了
+          if (_data == null && (snap.connectionState != ConnectionState.done || !snap.hasData)) {
+            return const Center(child: CircularProgressIndicator());
+          }
           final d = _data ?? snap.data!;
           final weeks = _weeks();
           final wk = weeks[_week.clamp(0, weeks.length - 1)];
@@ -566,9 +572,14 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       ]);
 
   Widget _todayCard(ShiftMonth d) {
-    final now = DateTime.now();
+    // 「今天」跟交接、提醒一樣以早上 6 點換日（凌晨還在營業時不會跳到隔天；2026-11-13）
+    final now = bizToday();
     if (now.year != _month.year || now.month != _month.month) return const SizedBox.shrink();
-    final on = d.people.where((p) => p.active && ShiftMonth.isOn(d.mark(p.id, now.day))).map((p) => p.name).toList();
+    // 有班別／時段的店，名字後面帶班別（V、O 不用寫）
+    final on = d.people.where((p) => p.active && ShiftMonth.isOn(d.mark(p.id, now.day))).map((p) {
+      final m = d.mark(p.id, now.day)!;
+      return (m == 'V' || m == 'O') ? p.name : '${p.name}（${_codeTimes[m] == null ? m : '$m ${_codeTimes[m]}'}）';
+    }).toList();
     final off = d.people.where((p) => p.active && p.isFull && ShiftMonth.isAway(d.mark(p.id, now.day))).map((p) => p.name).toList();
     final note = d.notes[now.day];
     return SectionCard(
@@ -594,7 +605,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       return (day >= wk.$1 && day <= wk.$2) ? day : null;
     });
     const wd = ['日', '一', '二', '三', '四', '五', '六'];
-    final today = DateTime.now();
+    final today = bizToday();
     return LayoutBuilder(builder: (context, box) {
       // 每格左右各有 1px 間距，要先扣掉，不然最右邊一欄會被裁掉（2026-10-29）
       const nameW = 52.0, sumW = 28.0;

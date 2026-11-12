@@ -108,16 +108,46 @@ class DemoRepository implements Repository {
       );
 
   @override
-  Future<ShiftMonth> shiftMonth(String storeId, DateTime month) async => ShiftMonth(
-        DateTime(month.year, month.month, 1),
-        [ShiftPerson(id: 'p1', name: '示範正職'), ShiftPerson(id: 'p2', name: '示範兼職', kind: 'part', sortOrder: 10)],
-        {'p1': {1: 'V', 2: '休', 3: '指休'}, 'p2': {1: 'V', 3: 'O'}},
-        {3: '月會日'},
-        {'p1': const ShiftStats(shouldOff: 8, prevUnused: 3)},
-        const [],
-        null,
-        ShiftOptions([..._markOpts]),
-      );
+  Future<ShiftMonth> shiftMonth(String storeId, DateTime month) async {
+    // 示範班表：這個月以前排好了；下個月以後是空的，可以試「自動排班」
+    final m = DateTime(month.year, month.month, 1);
+    final now = DateTime.now();
+    final future = m.isAfter(DateTime(now.year, now.month, 1));
+    final days = DateTime(m.year, m.month + 1, 0).day;
+    final key = '${m.year}-${m.month}';
+    const fulls = ['阿明', '小安', '阿哲'];
+    const parts = {'小魚': {5, 6}, '阿凱': {6, 7}, '芳芳': {3, 4}, '小白': {5, 6, 7}, '阿樂': {1, 2, 4}};
+    final marks = <String, Map<int, String>>{};
+    if (_demoShifts.containsKey(key)) {
+      marks.addAll({for (final e in _demoShifts[key]!.entries) e.key: {...e.value}});
+    } else if (!future) {
+      for (final (i, _) in fulls.indexed) {
+        marks['f$i'] = {for (var d = 1; d <= days; d++) d: ((d + i * 2) % 7) < 2 ? '休' : 'V'};
+      }
+      for (final (i, wds) in parts.values.indexed) {
+        marks['p$i'] = {for (var d = 1; d <= days; d++) if (wds.contains(DateTime(m.year, m.month, d).weekday) && (d + i) % 3 != 0) d: 'V'};
+      }
+    }
+    return ShiftMonth(
+      m,
+      [
+        for (final (i, n) in fulls.indexed) ShiftPerson(id: 'f$i', name: n, sortOrder: i),
+        for (final (i, n) in parts.keys.indexed) ShiftPerson(id: 'p$i', name: n, kind: 'part', sortOrder: 10 + i),
+      ],
+      marks,
+      future ? const {} : const {3: '月會日'},
+      {
+        if (!future || _demoOff.containsKey(key))
+          for (final (i, _) in fulls.indexed) 'f$i': ShiftStats(shouldOff: _demoOff[key]?['f$i'] ?? 9, prevUnused: 3),
+      },
+      const [],
+      null,
+      ShiftOptions([..._markOpts]),
+    );
+  }
+
+  final _demoShifts = <String, Map<String, Map<int, String>>>{}; // 示範：公布過的班表（只存在記憶體）
+  final _demoOff = <String, Map<String, double>>{};
   final _markOpts = <ShiftMarkOption>[
     const ShiftMarkOption(id: 'r1', kind: 'range', mark: '18:00-00:30'),
     const ShiftMarkOption(id: 'r2', kind: 'range', mark: '19:00-01:30'),
@@ -137,7 +167,9 @@ class DemoRepository implements Repository {
   @override
   Future<void> saveShiftPerson(String storeId, ShiftPerson p, {bool isNew = false}) async {}
   @override
-  Future<void> saveShiftStats(String storeId, String personId, DateTime month, ShiftStats s) async {}
+  Future<void> saveShiftStats(String storeId, String personId, DateTime month, ShiftStats s) async {
+    if (s.shouldOff != null) _demoOff.putIfAbsent('${month.year}-${month.month}', () => {})[personId] = s.shouldOff!;
+  }
   @override
   Future<void> uploadShiftPhoto(String storeId, DateTime month, Uint8List jpeg) async {}
   @override
@@ -157,7 +189,8 @@ class DemoRepository implements Repository {
   var _deadline = 20;
   @override
   Future<ShiftPlanSetup> shiftPlanSetup(String storeId, DateTime month) async => ShiftPlanSetup(
-      staffing: _staffing, specialDays: _staffDays, deadline: _deadline, rules: _shiftRules, requests: _shiftReq, pairRules: [..._pairRules]);
+      staffing: _staffing, specialDays: _staffDays, deadline: _deadline, rules: _shiftRules, requests: _shiftReq, pairRules: [..._pairRules],
+      preferRun: _preferRun);
   final _pairRules = <PairRule>[];
   @override
   Future<void> addShiftPairRule(String storeId, String a, String b, String kind) async =>
@@ -192,8 +225,28 @@ class DemoRepository implements Repository {
   @override
   Future<void> saveShiftDeadline(String storeId, int day) async => _deadline = day;
   @override
-  Future<int> applyShiftPlan(String storeId, DateTime month, Map<String, Map<int, String>> plan) async =>
-      plan.values.fold<int>(0, (a, m) => a + m.length);
+  Future<int> applyShiftPlan(String storeId, DateTime month, Map<String, Map<int, String>> plan, {String? expected}) async {
+    _planDrafts.remove('$storeId|${month.year}-${month.month}');
+    _demoShifts['${month.year}-${month.month}'] = {for (final e in plan.entries) e.key: {...e.value}};
+    return plan.values.fold<int>(0, (a, m) => a + m.length);
+  }
+
+  final _planDrafts = <String, ShiftPlanDraft>{};
+  int? _preferRun = 5;
+  @override
+  Future<String> shiftMonthVersion(String storeId, DateTime month) async => '';
+  @override
+  Future<ShiftPlanDraft?> shiftPlanDraft(String storeId, DateTime month) async => _planDrafts['$storeId|${month.year}-${month.month}'];
+  @override
+  Future<void> saveShiftPlanDraft(String storeId, DateTime month, Map<String, Map<int, String>> plan, Map<String, Set<int>> locked) async =>
+      _planDrafts['$storeId|${month.year}-${month.month}'] = ShiftPlanDraft(
+          {for (final e in plan.entries) e.key: {...e.value}}, {for (final e in locked.entries) e.key: {...e.value}}, '示範老闆', DateTime.now());
+  @override
+  Future<void> deleteShiftPlanDraft(String storeId, DateTime month) async => _planDrafts.remove('$storeId|${month.year}-${month.month}');
+  @override
+  Future<void> saveShiftPreferRun(String storeId, int? days) async => _preferRun = days;
+  @override
+  Future<String> remindShiftRequests(String storeId, DateTime month) async => '（示範）${month.month} 月班表要開始排了';
 
   // 交接・提醒（示範：只存在記憶體）
   final _notes = <HandoverNote>[];
