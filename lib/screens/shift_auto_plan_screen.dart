@@ -68,12 +68,14 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
 
   Future<void> _load() async {
     try {
+      // 版本一定要比班表「先」讀（Codex P2）：這樣如果有人剛好在中間改了班表，拿到的是舊版本，
+      // 公布時會被擋下來請你重新載入；反過來（班表舊、版本新）就會把沒看到的修改蓋掉。
+      final version = await _repo.shiftMonthVersion(_store, _m);
       final r = await Future.wait<dynamic>([
         _repo.shiftMonth(_store, _m),
         _repo.shiftMonth(_store, DateTime(_m.year, _m.month - 1)),
         _repo.shiftMonth(_store, DateTime(_m.year, _m.month + 1)),
         _repo.shiftPlanSetup(_store, _m),
-        _repo.shiftMonthVersion(_store, _m),
         _repo.shiftPlanDraft(_store, _m),
       ]);
       if (!mounted) return;
@@ -81,8 +83,8 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
       _prev = r[1] as ShiftMonth;
       _next = r[2] as ShiftMonth;
       _setup = r[3] as ShiftPlanSetup;
-      _version = r[4] as String;
-      _saved = r[5] as ShiftPlanDraft?;
+      _version = version;
+      _saved = r[4] as ShiftPlanDraft?;
       _error = null;
       _keep = _cur!.marks.values.any((m) => m.isNotEmpty);
       _locked.clear();
@@ -654,8 +656,15 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
       if (!mounted) return;
       if ('$e'.contains('SHIFT_CHANGED')) {
         // 班表在調整的時候被別人改過：先把草稿存起來，重新載入後讓使用者對照再公布
-        await _saveDraft(quiet: true);
+        // 草稿沒存成功就不要重新載入（重新載入會把畫面上的草稿換掉）：留在原畫面讓使用者再試（Codex P2）
+        final saved = await _saveDraft(quiet: true);
         if (!mounted) return;
+        if (!saved) {
+          setState(() => _busy = false);
+          showMessage(context, '班表剛剛被別人改過，這次沒有公布；草稿也沒存成功，請先按「存草稿」再試一次',
+              error: true);
+          return;
+        }
         await showDialog<void>(
           context: context,
           builder: (x) => AlertDialog(
