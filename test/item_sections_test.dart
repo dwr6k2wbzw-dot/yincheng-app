@@ -48,4 +48,134 @@ void main() {
     final m = ItemSale.fromRow({'name': 'C', 'grp': 'drink', 'qty': 9, 'amount': 4000, 'amount_list': 3700, 'days': 4});
     expect([m.amount, m.listAmount, m.days], [4000, 3700, 4]);
   });
+
+  testWidgets('金額有角分時顯示到分，各列加起來＝小計（0101 以分分配）', (tester) async {
+    await tester.pumpWidget(_app(const ItemSections(items: [
+      ItemSale(name: 'A', qty: 1, amount: 428.79, listAmount: 400),
+      ItemSale(name: 'B', qty: 1, amount: 571.71, listAmount: 600),
+    ])));
+    expect(find.text(r'$428.79'), findsOneWidget);
+    expect(find.text(r'$571.71'), findsOneWidget);
+    expect(find.text(r'小計 $1,000.50'), findsOneWidget);
+    expect(ntdExact(1438), ntd(1438)); // 整數照舊
+  });
+
+  group('月累計', () {
+    final ichef = {DateTime(2026, 11, 10), DateTime(2026, 11, 12)};
+    final entries = [
+      for (final d in [9, 10, 11, 12]) RevenueEntry(bizDate: DateTime(2026, 11, d), cash: 1000),
+      RevenueEntry(bizDate: DateTime(2026, 11, 13), cash: 1000), // 今天還沒結束，不算未計入
+    ];
+
+    testWidgets('MonthItemsCard：天數、未計入範圍、兩區小計', (tester) async {
+      final today = DateTime(2026, 11, 13);
+      await tester.pumpWidget(_app(MonthItemsCard(
+        month: DateTime(2026, 11),
+        items: items,
+        ichefDays: ichef,
+        missing: MonthItemsCard.missingDays(entries, ichef, DateTime(2026, 11), today),
+      )));
+      expect(find.text('11 月銷售品項累計'), findsOneWidget);
+      expect(find.text('iCHEF 2 天・到 11/12・金額含服務費・每天早上更新'), findsOneWidget);
+      expect(find.text('未計入（那天沒有 iCHEF 資料）：11/9、11/11'), findsOneWidget);
+      expect(find.text('小計 ${ntd(1438 + 959 + 895 + 895)}'), findsOneWidget);
+      expect(MonthItemsCard.ranges([DateTime(2026, 11, 1), DateTime(2026, 11, 2), DateTime(2026, 11, 3), DateTime(2026, 11, 5)]),
+          '11/1～11/3、11/5');
+    });
+
+    testWidgets('下拉更新：資料庫回傳不同金額後，月累計跟著更新', (tester) async {
+      var amount = 1000.0;
+      final calls = <String>[];
+      Future<List<ItemSale>> load(String store, DateTime m) async {
+        calls.add('$store ${m.month}');
+        return [ItemSale(name: 'Gimlet', qty: 2, amount: amount, listAmount: amount)];
+      }
+
+      await tester.pumpWidget(MaterialApp(
+          theme: buildTheme(StorePalette.gold),
+          home: Scaffold(body: _Harness(load: load, entries: entries, ichef: ichef))));
+      await tester.pumpAndSettle();
+      expect(find.text('小計 ${ntd(1000)}'), findsOneWidget);
+
+      // 一般重畫（例如展開某一天）不重新查詢
+      await tester.tap(find.text('重畫'));
+      await tester.pumpAndSettle();
+      expect(calls, ['yc 11']);
+
+      amount = 2500;
+      await tester.fling(find.byType(ListView), const Offset(0, 400), 1000);
+      await tester.pumpAndSettle();
+      expect(calls, ['yc 11', 'yc 11']);
+      expect(find.text('小計 ${ntd(1000)}'), findsNothing);
+      expect(find.text('小計 ${ntd(2500)}'), findsOneWidget);
+    });
+
+    testWidgets('換店、跨月都重新查詢', (tester) async {
+      final calls = <String>[];
+      Future<List<ItemSale>> load(String store, DateTime m) async {
+        calls.add('$store ${m.year}/${m.month}');
+        return const [ItemSale(name: 'Gimlet', qty: 1, amount: 100, listAmount: 100)];
+      }
+
+      final h = GlobalKey<_HarnessState>();
+      await tester.pumpWidget(MaterialApp(home: Scaffold(body: _Harness(key: h, load: load, entries: entries, ichef: ichef))));
+      await tester.pumpAndSettle();
+      h.currentState!.set(() => h.currentState!.store = 'xc');
+      await tester.pumpAndSettle();
+      h.currentState!.set(() => h.currentState!.today = DateTime(2026, 12, 2)); // 12/2 看的是 12 月（到 12/1）
+      await tester.pumpAndSettle();
+      expect(calls, ['yc 2026/11', 'xc 2026/11', 'xc 2026/12']);
+      expect(find.text('12 月銷售品項累計'), findsOneWidget);
+    });
+
+    testWidgets('查詢失敗顯示錯誤和重試，不當成沒有資料', (tester) async {
+      var fail = true;
+      Future<List<ItemSale>> load(String store, DateTime m) async {
+        if (fail) throw Exception('網路中斷');
+        return const [ItemSale(name: 'Gimlet', qty: 1, amount: 100, listAmount: 100)];
+      }
+
+      await tester.pumpWidget(MaterialApp(home: Scaffold(body: _Harness(load: load, entries: entries, ichef: ichef))));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('11 月銷售品項累計載入失敗'), findsOneWidget);
+      fail = false;
+      await tester.tap(find.text('重試'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('載入失敗'), findsNothing);
+      expect(find.text('11 月銷售品項累計'), findsOneWidget);
+    });
+  });
+}
+
+/// 模擬營收頁：下拉更新時 version +1（同 RevenueScreen._reload）
+class _Harness extends StatefulWidget {
+  const _Harness({super.key, required this.load, required this.entries, required this.ichef});
+  final MonthItemsLoader load;
+  final List<RevenueEntry> entries;
+  final Set<DateTime> ichef;
+  @override
+  State<_Harness> createState() => _HarnessState();
+}
+
+class _HarnessState extends State<_Harness> {
+  int version = 0;
+  String store = 'yc';
+  DateTime today = DateTime(2026, 11, 13);
+  void set(VoidCallback f) => setState(f);
+
+  @override
+  Widget build(BuildContext context) => RefreshIndicator(
+        onRefresh: () async => setState(() => version++),
+        child: ListView(children: [
+          TextButton(onPressed: () => setState(() {}), child: const Text('重畫')),
+          MonthItemsSection(
+            storeId: store,
+            version: version,
+            load: widget.load,
+            entries: widget.entries,
+            ichef: widget.ichef,
+            today: () => today,
+          ),
+        ]),
+      );
 }

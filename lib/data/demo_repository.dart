@@ -423,11 +423,23 @@ class DemoRepository implements Repository {
   // 依店別分開存（示範用）：yc 有兩筆 Excel 匯入；xc 一開始沒有
   final _revenue = <String, List<RevenueEntry>>{
     'yc': [
+      ..._recent,
       RevenueEntry(id: 'r1', bizDate: DateTime(2026, 9, 30), cash: 8000, creditCard: 20000, guests: 28, drinks: 24000, food: 4000, source: 'import'),
       RevenueEntry(id: 'r2', bizDate: DateTime(2026, 9, 29), cash: 5000, creditCard: 16000, amex: 1000, guests: 21, drinks: 18000, food: 4000, source: 'import'),
     ],
     'xc': [],
   };
+  // 當月示範（2026-11-13，讓「當月銷售品項累計」有東西看）：昨天往回 5 天，前 4 天有 iCHEF、最早那天沒有（顯示「未計入」）
+  static final _recent = [
+    for (final (i, cash, card, guests, drinks, food) in const [
+      (1, 3655.0, 11402.0, 17, 13746.0, 1311.0), (2, 4200.0, 15800.0, 22, 17300.0, 2700.0),
+      (3, 3100.0, 12900.0, 18, 13900.0, 2100.0), (4, 2800.0, 9200.0, 13, 10400.0, 1600.0),
+      (5, 3000.0, 10000.0, 15, 11500.0, 1500.0),
+    ])
+      RevenueEntry(id: 'rc$i', bizDate: bizToday().subtract(Duration(days: i)), cash: cash, creditCard: card,
+          guests: guests, drinks: drinks, food: food, source: 'import'),
+  ];
+  static final _noIchef = {'rc5'};
   List<RevenueEntry> _revList(String storeId) => _revenue[storeId] ??= [];
 
   @override
@@ -463,7 +475,10 @@ class DemoRepository implements Repository {
   @override
   Future<Set<DateTime>> ichefDays(String storeId, {int limit = 120}) async {
     final list = List.of(_revList(storeId))..sort((a, b) => b.bizDate.compareTo(a.bizDate));
-    return {for (final e in list.take(7)) DateTime(e.bizDate.year, e.bizDate.month, e.bizDate.day)};
+    return {
+      for (final e in list.where((e) => !_noIchef.contains(e.id)).take(7))
+        DateTime(e.bizDate.year, e.bizDate.month, e.bizDate.day)
+    };
   }
 
   @override

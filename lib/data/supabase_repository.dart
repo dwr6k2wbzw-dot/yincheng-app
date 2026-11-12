@@ -302,8 +302,10 @@ class SupabaseRepository implements Repository {
           .eq('store_id', storeId)
           .eq('period_month', _day.format(DateTime(month.year, month.month, 1)));
       return _sortItems(rows.map(ItemSale.fromRow));
-    } on PostgrestException {
-      return const []; // ops 0102 還沒套用
+    } on PostgrestException catch (e) {
+      // 只有「ops 0102 還沒套用、找不到 v_ichef_item_month」當成沒有資料；其他錯誤要讓畫面顯示並可重試（審查）
+      if (e.code == 'PGRST205' || e.code == '42P01') return const [];
+      rethrow;
     }
   }
 

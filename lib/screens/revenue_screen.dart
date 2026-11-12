@@ -57,8 +57,12 @@ class _RevenueScreenState extends State<RevenueScreen> {
   Future<List<ItemSale>> _itemsFor(DateTime d) =>
       _items[d] ??= AppScope.of(context).repo.itemSales(widget.membership.storeId, d);
 
+  /// 每次重新載入 +1：月累計卡跟著重新查詢（審查 P2）
+  int _version = 0;
+
   void _reload() => setState(() {
         _items.clear();
+        _version++;
         _future = _load();
       });
 
@@ -108,7 +112,16 @@ class _RevenueScreenState extends State<RevenueScreen> {
             final headers = <Widget>[
               if (banner != null) banner,
               _WeekdayStats(entries: list, multi: isMultiLineStore(widget.membership.storeName)),
-              if (ichef.isNotEmpty) _MonthItems(storeId: widget.membership.storeId, entries: list, ichef: ichef),
+              // 當月銷售品項累計（老闆 2026-11-13）：只算有 iCHEF 的日子，沒有的列「未計入」
+              if (ichef.isNotEmpty)
+                MonthItemsSection(
+                  storeId: widget.membership.storeId,
+                  version: _version,
+                  load: AppScope.of(context).repo.monthItemSales,
+                  entries: list,
+                  ichef: ichef,
+                  wrap: (child) => SectionCard(child: child),
+                ),
             ];
             final offset = headers.length;
             return RefreshIndicator(
@@ -664,84 +677,4 @@ class _ItemSales extends StatelessWidget {
           );
         },
       );
-}
-
-/// 當月銷售品項累計（老闆 2026-11-13）：本月到昨天，每個品項的累計份數與金額（含服務費），
-/// 分酒水／餐食兩區、各前 5 名可展開。只算有 iCHEF 資料的日子（ops 0102），
-/// 所以兩區小計＝那幾天每日營收的酒水／餐食加總；有營收但沒有 iCHEF 的日子另外列出「未計入」。
-class _MonthItems extends StatefulWidget {
-  const _MonthItems({required this.storeId, required this.entries, required this.ichef});
-  final String storeId;
-  final List<RevenueEntry> entries;
-  final Set<DateTime> ichef;
-  @override
-  State<_MonthItems> createState() => _MonthItemsState();
-}
-
-class _MonthItemsState extends State<_MonthItems> {
-  Future<List<ItemSale>>? _future;
-  late DateTime _month;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_future != null) return;
-    final y = bizToday().subtract(const Duration(days: 1)); // 到昨天為止：1 號看的是上個月
-    _month = DateTime(y.year, y.month);
-    _future = AppScope.of(context).repo.monthItemSales(widget.storeId, _month).catchError((_) => <ItemSale>[]);
-  }
-
-  bool _inMonth(DateTime d) => d.year == _month.year && d.month == _month.month;
-
-  @override
-  Widget build(BuildContext context) => FutureBuilder<List<ItemSale>>(
-        future: _future,
-        builder: (context, snap) {
-          final list = snap.data;
-          if (list == null || list.isEmpty) return const SizedBox.shrink();
-          final days = widget.ichef.where(_inMonth).toList()..sort();
-          final today = bizToday();
-          final missing = [
-            for (final e in widget.entries)
-              if (_inMonth(e.bizDate) &&
-                  e.bizDate.isBefore(today) &&
-                  e.received > 0 &&
-                  !widget.ichef.contains(DateTime(e.bizDate.year, e.bizDate.month, e.bizDate.day)))
-                DateTime(e.bizDate.year, e.bizDate.month, e.bizDate.day)
-          ]..sort();
-          final muted = TextStyle(color: AppColors.muted, fontSize: AppType.small);
-          return SectionCard(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Text('${_month.month} 月銷售品項累計', style: const TextStyle(fontWeight: FontWeight.w600)),
-              const SizedBox(height: 4),
-              Text(
-                  'iCHEF ${days.length} 天${days.isEmpty ? '' : '・到 ${DateFormat('M/d').format(days.last)}'}'
-                  '・金額含服務費・每天早上更新',
-                  style: muted),
-              if (missing.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Text('未計入（那天沒有 iCHEF 資料）：${_ranges(missing)}',
-                    style: TextStyle(color: AppColors.warn, fontSize: AppType.small)),
-              ],
-              ItemSections(items: list, top: 5),
-            ]),
-          );
-        },
-      );
-
-  /// 11/1、11/2、11/3、11/5 → 11/1～11/3、11/5
-  static String _ranges(List<DateTime> ds) {
-    final f = DateFormat('M/d');
-    final out = <String>[];
-    var start = ds.first, prev = ds.first;
-    for (final d in [...ds.skip(1), null]) {
-      if (d != null && d.difference(prev).inDays == 1) {
-        prev = d;
-        continue;
-      }
-      out.add(start == prev ? f.format(start) : '${f.format(start)}～${f.format(prev)}');
-      if (d != null) start = prev = d;
-    }
-    return out.join('、');
-  }
 }
