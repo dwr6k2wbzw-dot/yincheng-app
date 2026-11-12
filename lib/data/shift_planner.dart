@@ -503,7 +503,7 @@ List<PlanIssue> precheckPlan({
   return out;
 }
 
-/// 自動排班。fixed：保留不動的格子（人 → 日 → 記號）。tries：算幾份挑最好的。
+/// 自動排班。fixed：保留不動的格子（人 → 日 → 記號；記號是空字串＝這格要留空白、不能排）。tries：算幾份挑最好的。
 PlanResult planShifts({
   required int year,
   required int month,
@@ -979,6 +979,10 @@ Map<String, Map<int, String>> _planOnce({
         out[p.id]![d] = requests[p.id]?[d] == 'off' ? '指休' : '休';
       }
     }
+  }
+  // 保留成空白的格子（fixed 裡的空字串）只是用來擋住不排，不寫進結果
+  for (final row in out.values) {
+    row.removeWhere((_, m) => m.isEmpty);
   }
   return out;
 }

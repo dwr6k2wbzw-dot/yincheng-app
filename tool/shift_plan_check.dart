@@ -223,6 +223,17 @@ void regressions() {
     check('$tag 互相要求一起上的兩個人排得到班、而且同進同出',
         r.workDays['m1']! >= 3 && [for (var d = 1; d <= days; d++) d].every((d) => isWork(w['m1']![d]) == isWork(w['m2']![d])), 'm1 ${r.workDays['m1']} 天');
     check('$tag 沒有超編', r.check!.score[5] == 0, r.warnings.join('｜'));
+    // 手動清成空白並鎖住的格子（fixed 裡的空字串）：再排一次也不能排進去，結果裡也不會出現
+    r = planShifts(year: y, month: mo, seed: seed, needByDay: need3, minFullByDay: mf1, fixed: {
+      'f1': {3: '', 4: ''},
+      'q1': {for (var d = 1; d <= 10; d++) d: ''},
+    }, people: [
+      for (final n in ['f1', 'f2', 'f3']) PlanPerson(id: n, name: n, full: true, offTarget: 10, marks: const ['V']),
+      for (final n in ['q1', 'q2', 'q3']) PlanPerson(id: n, name: n, full: false, marks: const ['V']),
+    ]);
+    check('$tag 鎖成空白的格子不會被排進去', !r.entries['f1']!.containsKey(3) && !r.entries['f1']!.containsKey(4) && [for (var d = 1; d <= 10; d++) d].every((d) => !r.entries['q1']!.containsKey(d)),
+        'f1 ${r.entries['f1']![3]}／${r.entries['f1']![4]}');
+    check('$tag 鎖成空白時其他人補得滿', r.check!.score[2] == 0 && r.check!.score[3] == 0, r.warnings.join('｜'));
   }
 
   // --- 照過去的班表整理習慣 ---
