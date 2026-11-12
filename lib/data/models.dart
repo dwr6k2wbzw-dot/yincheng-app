@@ -1218,13 +1218,22 @@ class ItemSale {
   final String category;
   final bool isDrink; // grp=drink（酒水）；否則餐食
   final double qty;
+  /// 含服務費與折扣（ops 0101 amount_net）：同區加總＝每日營收的酒水／餐食；舊資料庫沒有就是原價
   final double amount;
-  const ItemSale({required this.name, this.category = '', this.isDrink = true, required this.qty, required this.amount});
+  /// iCHEF 原價（不含服務費）
+  final double listAmount;
+  /// 當月累計（ops 0102 v_ichef_item_month）：這個月有賣的天數；單日品項為 1
+  final int days;
+  const ItemSale(
+      {required this.name, this.category = '', this.isDrink = true, required this.qty, required this.amount, double? listAmount, this.days = 1})
+      : listAmount = listAmount ?? amount;
   factory ItemSale.fromRow(Map<String, dynamic> r) => ItemSale(
         name: r['name'] as String,
         category: (r['category'] as String?) ?? '',
         isDrink: r['grp'] == 'drink',
         qty: _d(r['qty']),
-        amount: _d(r['amount']),
+        amount: _d(r['amount_net'] ?? r['amount']),
+        listAmount: _d(r['amount_list'] ?? r['amount']),
+        days: (r['days'] as num?)?.toInt() ?? 1,
       );
 }

@@ -8,6 +8,7 @@ import '../data/models.dart';
 import '../data/repository.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/item_sections.dart';
 import '../widgets/revenue_mix.dart';
 
 /// 每日營收：列表＋手動登記／修改。老闆／店長／正職可手動登記暫記（source=app）；
@@ -107,6 +108,7 @@ class _RevenueScreenState extends State<RevenueScreen> {
             final headers = <Widget>[
               if (banner != null) banner,
               _WeekdayStats(entries: list, multi: isMultiLineStore(widget.membership.storeName)),
+              if (ichef.isNotEmpty) _MonthItems(storeId: widget.membership.storeId, entries: list, ichef: ichef),
             ];
             final offset = headers.length;
             return RefreshIndicator(
@@ -638,87 +640,108 @@ class _Label extends StatelessWidget {
       );
 }
 
-/// 每日營收卡片裡的品項銷售（老闆 2026-11-11）：預設前 3 名，點「全部」展開。
-/// 金額為品項售價合計（不含服務費），所以加總會比上面的酒水＋餐食少一點。
-class _ItemSales extends StatefulWidget {
+/// 每日營收卡片裡的品項銷售（老闆 2026-11-11；11-13 分酒水／餐食兩區、金額含服務費）：
+/// 每區小計＝上面的酒水／餐食（ops 0101 分配，分毫不差），各自前 3 名，點「全部」展開。
+class _ItemSales extends StatelessWidget {
   const _ItemSales({required this.items});
   final Future<List<ItemSale>> items;
-  @override
-  State<_ItemSales> createState() => _ItemSalesState();
-}
-
-class _ItemSalesState extends State<_ItemSales> {
-  bool _open = false;
-  static const _top = 3;
 
   @override
   Widget build(BuildContext context) => FutureBuilder<List<ItemSale>>(
-        future: widget.items,
+        future: items,
         builder: (context, snap) {
           final list = snap.data;
           if (list == null || list.isEmpty) return const SizedBox.shrink();
-          final shown = _open ? list : list.take(_top).toList();
-          final qty = list.fold<double>(0, (a, x) => a + x.qty);
-          final muted = TextStyle(color: AppColors.muted, fontSize: AppType.caption);
           return Padding(
             padding: const EdgeInsets.only(top: 12),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               Divider(height: 1, color: AppColors.muted.withValues(alpha: 0.18)),
               const SizedBox(height: 10),
-              Text('品項銷售', style: muted.copyWith(letterSpacing: 1.2)),
-              const SizedBox(height: 6),
-              for (var i = 0; i < shown.length; i++) _row(i + 1, shown[i]),
-              if (list.length > _top)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton(
-                    style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 10),
-                        minimumSize: const Size(44, 44),
-                        foregroundColor: AppColors.muted),
-                    onPressed: () => setState(() => _open = !_open),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Text(_open ? '收起' : '全部 ${list.length} 項・${_n(qty)} 份',
-                          style: const TextStyle(fontSize: AppType.small)),
-                      const SizedBox(width: 2),
-                      Icon(_open ? Icons.expand_less : Icons.expand_more, size: 18),
-                    ]),
-                  ),
-                ),
+              Text('品項銷售・含服務費',
+                  style: TextStyle(color: AppColors.muted, fontSize: AppType.caption, letterSpacing: 1.2)),
+              ItemSections(items: list, top: 3),
+            ]),
+          );
+        },
+      );
+}
+
+/// 當月銷售品項累計（老闆 2026-11-13）：本月到昨天，每個品項的累計份數與金額（含服務費），
+/// 分酒水／餐食兩區、各前 5 名可展開。只算有 iCHEF 資料的日子（ops 0102），
+/// 所以兩區小計＝那幾天每日營收的酒水／餐食加總；有營收但沒有 iCHEF 的日子另外列出「未計入」。
+class _MonthItems extends StatefulWidget {
+  const _MonthItems({required this.storeId, required this.entries, required this.ichef});
+  final String storeId;
+  final List<RevenueEntry> entries;
+  final Set<DateTime> ichef;
+  @override
+  State<_MonthItems> createState() => _MonthItemsState();
+}
+
+class _MonthItemsState extends State<_MonthItems> {
+  Future<List<ItemSale>>? _future;
+  late DateTime _month;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_future != null) return;
+    final y = bizToday().subtract(const Duration(days: 1)); // 到昨天為止：1 號看的是上個月
+    _month = DateTime(y.year, y.month);
+    _future = AppScope.of(context).repo.monthItemSales(widget.storeId, _month).catchError((_) => <ItemSale>[]);
+  }
+
+  bool _inMonth(DateTime d) => d.year == _month.year && d.month == _month.month;
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<List<ItemSale>>(
+        future: _future,
+        builder: (context, snap) {
+          final list = snap.data;
+          if (list == null || list.isEmpty) return const SizedBox.shrink();
+          final days = widget.ichef.where(_inMonth).toList()..sort();
+          final today = bizToday();
+          final missing = [
+            for (final e in widget.entries)
+              if (_inMonth(e.bizDate) &&
+                  e.bizDate.isBefore(today) &&
+                  e.received > 0 &&
+                  !widget.ichef.contains(DateTime(e.bizDate.year, e.bizDate.month, e.bizDate.day)))
+                DateTime(e.bizDate.year, e.bizDate.month, e.bizDate.day)
+          ]..sort();
+          final muted = TextStyle(color: AppColors.muted, fontSize: AppType.small);
+          return SectionCard(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Text('${_month.month} 月銷售品項累計', style: const TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 4),
+              Text(
+                  'iCHEF ${days.length} 天${days.isEmpty ? '' : '・到 ${DateFormat('M/d').format(days.last)}'}'
+                  '・金額含服務費・每天早上更新',
+                  style: muted),
+              if (missing.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text('未計入（那天沒有 iCHEF 資料）：${_ranges(missing)}',
+                    style: TextStyle(color: AppColors.warn, fontSize: AppType.small)),
+              ],
+              ItemSections(items: list, top: 5),
             ]),
           );
         },
       );
 
-  Widget _row(int rank, ItemSale x) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(children: [
-          SizedBox(
-            width: 22,
-            child: Text('$rank',
-                style: TextStyle(
-                    color: AppColors.muted,
-                    fontSize: AppType.caption,
-                    fontFeatures: const [FontFeature.tabularFigures()])),
-          ),
-          Icon(Icons.circle, size: 6, color: x.isDrink ? AppColors.primary : ramenColor),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(x.name, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: AppType.small)),
-          ),
-          Text('× ${_n(x.qty)}',
-              style: TextStyle(
-                  color: AppColors.muted,
-                  fontSize: AppType.small,
-                  fontFeatures: const [FontFeature.tabularFigures()])),
-          SizedBox(
-            width: 76,
-            child: Text(ntd(x.amount),
-                textAlign: TextAlign.right,
-                style: const TextStyle(fontSize: AppType.small, fontFeatures: [FontFeature.tabularFigures()])),
-          ),
-        ]),
-      );
-
-  static String _n(double v) => v == v.roundToDouble() ? v.round().toString() : v.toStringAsFixed(1);
+  /// 11/1、11/2、11/3、11/5 → 11/1～11/3、11/5
+  static String _ranges(List<DateTime> ds) {
+    final f = DateFormat('M/d');
+    final out = <String>[];
+    var start = ds.first, prev = ds.first;
+    for (final d in [...ds.skip(1), null]) {
+      if (d != null && d.difference(prev).inDays == 1) {
+        prev = d;
+        continue;
+      }
+      out.add(start == prev ? f.format(start) : '${f.format(start)}～${f.format(prev)}');
+      if (d != null) start = prev = d;
+    }
+    return out.join('、');
+  }
 }

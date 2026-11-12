@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import '../config.dart';
 import '../theme.dart';
 import 'common.dart';
+import 'revenue_colors.dart';
+
+export 'revenue_colors.dart';
 
 /// 營收的一個組成項目（金額＋顏色）
 class RevenuePart {
@@ -12,10 +15,6 @@ class RevenuePart {
   const RevenuePart(this.label, this.amount, this.color);
 }
 
-// 營收組成（老闆 2026-10-14）：小城外咖啡綠色、拉麵紅色；隱城餐食紅色
-// 2026-10-29：同色相、降低飽和度，跟黑金底比較協調（鼠尾草綠、赤陶紅）
-const coffeeColor = Color(0xFF8DAE92);
-const ramenColor = Color(0xFFC57B6A);
 
 bool isMultiLineStore(String storeName) => AppConfig.multiLineStores.contains(storeName);
 

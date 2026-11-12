@@ -2,13 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../app_state.dart';
 import '../data/repository.dart';
-import 'package:intl/intl.dart';
 
 import '../theme.dart';
 
-final money = NumberFormat('#,##0', 'zh_TW');
-String ntd(num v) => '\$${money.format(v)}';
-String pct(double? v) => v == null ? '—' : '${(v * 100).toStringAsFixed(1)}%';
+export 'format.dart';
+
 
 class SectionCard extends StatelessWidget {
   const SectionCard({super.key, required this.child, this.padding = const EdgeInsets.all(16)});

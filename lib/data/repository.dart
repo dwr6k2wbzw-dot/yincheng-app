@@ -59,8 +59,10 @@ abstract class Repository {
   Future<DateTime?> lastExcelSync(String storeId);
   /// 有 iCHEF 資料的營業日（0096）：這些天的來客、酒水、餐食、現金、刷卡以 iCHEF 為準
   Future<Set<DateTime>> ichefDays(String storeId, {int limit = 120});
-  /// 某營業日的 iCHEF 品項銷售，金額由大到小
+  /// 某營業日的 iCHEF 品項銷售，金額（含服務費）由大到小
   Future<List<ItemSale>> itemSales(String storeId, DateTime bizDate);
+  /// 當月銷售品項累計（ops 0102）：只算有 iCHEF 資料的日子，金額含服務費、由大到小；舊資料庫回空清單
+  Future<List<ItemSale>> monthItemSales(String storeId, DateTime month);
 
   // 租金／人事成本（只有老闆；資料庫 RLS 也只允許老闆）
   Future<FixedCosts> fixedCosts(String storeId, DateTime month);

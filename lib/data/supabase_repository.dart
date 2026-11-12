@@ -279,15 +279,39 @@ class SupabaseRepository implements Repository {
 
   @override
   Future<List<ItemSale>> itemSales(String storeId, DateTime bizDate) async {
-    final rows = await _db
+    Future<List<Map<String, dynamic>>> q(String cols) => _db
         .from('ichef_item_sales')
-        .select('name, category, grp, qty, amount')
+        .select(cols)
         .eq('store_id', storeId)
-        .eq('biz_date', _day.format(bizDate))
-        .order('amount', ascending: false)
-        .order('name');
-    return rows.map(ItemSale.fromRow).toList();
+        .eq('biz_date', _day.format(bizDate));
+    List<Map<String, dynamic>> rows;
+    try {
+      rows = await q('name, category, grp, qty, amount, amount_net');
+    } on PostgrestException {
+      rows = await q('name, category, grp, qty, amount'); // ops 0101 還沒套用：沒有含服務費金額
+    }
+    return _sortItems(rows.map(ItemSale.fromRow));
   }
+
+  @override
+  Future<List<ItemSale>> monthItemSales(String storeId, DateTime month) async {
+    try {
+      final rows = await _db
+          .from('v_ichef_item_month')
+          .select('name, category, grp, qty, amount, amount_list, days')
+          .eq('store_id', storeId)
+          .eq('period_month', _day.format(DateTime(month.year, month.month, 1)));
+      return _sortItems(rows.map(ItemSale.fromRow));
+    } on PostgrestException {
+      return const []; // ops 0102 還沒套用
+    }
+  }
+
+  static List<ItemSale> _sortItems(Iterable<ItemSale> it) => it.toList()
+    ..sort((a, b) {
+      final c = b.amount.compareTo(a.amount);
+      return c != 0 ? c : a.name.compareTo(b.name);
+    });
 
   // ---------------- 租金／人事成本 ----------------
   @override

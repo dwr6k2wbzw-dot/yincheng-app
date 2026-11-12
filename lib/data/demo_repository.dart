@@ -475,14 +475,49 @@ class DemoRepository implements Repository {
       ('Gin Fizz', '調酒', true, 385.0), ('關東煮', '小郭餐點', false, 280.0), ('Negroni', '調酒', true, 400.0),
       ('瑞士修道院起司', '起司', false, 280.0),
     ];
-    final list = <ItemSale>[
+    final raw = [
       for (var i = 0; i < base.length; i++)
-        ItemSale(
-            name: base[i].$1, category: base[i].$2, isDrink: base[i].$3,
-            qty: ((bizDate.day * 7 + i * 3) % 7 + 1).toDouble(),
-            amount: base[i].$4 * ((bizDate.day * 7 + i * 3) % 7 + 1)),
-    ]..sort((a, b) => b.amount.compareTo(a.amount));
-    return list;
+        (base[i], ((bizDate.day * 7 + i * 3) % 7 + 1).toDouble()),
+    ];
+    // 同正式資料庫 0101：含服務費金額依原價比例分，同區加總＝那天的酒水／餐食（最大餘數法）
+    final day = DateTime(bizDate.year, bizDate.month, bizDate.day);
+    final e = _revList(storeId).where((x) => DateTime(x.bizDate.year, x.bizDate.month, x.bizDate.day) == day).firstOrNull;
+    final list = <ItemSale>[];
+    for (final drink in [true, false]) {
+      final g = [for (final r in raw) if (r.$1.$3 == drink) r];
+      final listSum = g.fold<double>(0, (a, r) => a + r.$1.$4 * r.$2);
+      final target = e == null ? listSum : (drink ? e.drinks : e.food).roundToDouble();
+      final exact = [for (final r in g) listSum == 0 ? 0.0 : target * r.$1.$4 * r.$2 / listSum];
+      final net = [for (final v in exact) v.floorToDouble()];
+      final order = List.generate(g.length, (i) => i)..sort((a, b) => (exact[b] - net[b]).compareTo(exact[a] - net[a]));
+      var rem = (target - net.fold<double>(0, (a, v) => a + v)).round();
+      for (final i in order) {
+        if (rem-- <= 0) break;
+        net[i] += 1;
+      }
+      for (var i = 0; i < g.length; i++) {
+        list.add(ItemSale(
+            name: g[i].$1.$1, category: g[i].$1.$2, isDrink: drink, qty: g[i].$2,
+            amount: net[i], listAmount: g[i].$1.$4 * g[i].$2));
+      }
+    }
+    return list..sort((a, b) => b.amount.compareTo(a.amount));
+  }
+
+  @override
+  Future<List<ItemSale>> monthItemSales(String storeId, DateTime month) async {
+    final sums = <String, ItemSale>{};
+    for (final d in await ichefDays(storeId)) {
+      if (d.year != month.year || d.month != month.month) continue;
+      for (final x in await itemSales(storeId, d)) {
+        final o = sums[x.name];
+        sums[x.name] = ItemSale(
+            name: x.name, category: x.category, isDrink: x.isDrink,
+            qty: x.qty + (o?.qty ?? 0), amount: x.amount + (o?.amount ?? 0),
+            listAmount: x.listAmount + (o?.listAmount ?? 0), days: 1 + (o?.days ?? 0));
+      }
+    }
+    return sums.values.toList()..sort((a, b) => b.amount.compareTo(a.amount));
   }
 
   @override
