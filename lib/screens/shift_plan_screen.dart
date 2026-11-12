@@ -8,6 +8,8 @@ import '../data/shift_marks.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 
+part 'shift_auto_plan_screen.dart';
+
 /// 自動排班（老闆 2026-10-27，0073）
 ///   * 填想休／可以上：所有成員（含兼職），只能改自己的、下個月、截止日以前；老闆店長隨時可改任何人
 ///   * 排班條件：老闆、店長
@@ -47,6 +49,28 @@ class ShiftPlanCard extends StatelessWidget {
   final MarkBg markBg;
   final VoidCallback onChanged;
 
+  /// LINE 群組提醒填指休（0098）：LINE 發到群組照群組人數算則數，所以按了才發
+  Future<void> _remind(BuildContext context) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text('提醒大家填 ${viewMonth.month} 月指休？'),
+        content: const Text('會發一則訊息到這家店的 LINE 工作群組，請大家跟店長說想休哪幾天、哪幾天可以上。\n\nLINE 是照群組人數算則數（群組 14 人＝一則算 14 則，每月免費 200 則），同一個月份最多發 2 次。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('發送')),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    try {
+      await AppScope.of(context).repo.remindShiftRequests(membership.storeId, viewMonth);
+      if (context.mounted) showMessage(context, '已經發到 LINE 群組');
+    } catch (e) {
+      if (context.mounted) showMessage(context, friendlyError(e), error: true);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
@@ -75,20 +99,26 @@ class ShiftPlanCard extends StatelessWidget {
     }
 
     // 跟著目前看的月份（老闆 2026-10-27）：
-    //   * 這個月已經排好班（有人有格子）→ 整張卡片不顯示（填指休、自動排班、排班條件都不出現）
+    //   * 這個月已經排好班（有人有格子）→ 員工看不到這張卡片；
+    //     老闆店長還看得到「重新自動排（保留已排的格子）」和排班條件（老闆 2026-11-12：已排的月份也可以重排）
     //   * 「填指休」只在下個月以後才有（員工只能填下個月以後）；「自動排班」不排已經過去的月份
     final thisMonth = DateTime(now.year, now.month);
     final scheduled = data.people.any((p) => p.active && (data.marks[p.id]?.isNotEmpty ?? false));
     final showRequest = !scheduled && !viewMonth.isBefore(next);
-    final showAuto = manager && !scheduled && !viewMonth.isBefore(thisMonth);
+    final showAuto = manager && !viewMonth.isBefore(thisMonth);
     final tiles = <Widget>[
       if (showRequest)
         tile(Icons.event_busy_outlined, '填 ${viewMonth.month} 月指休／可以上的日子', '正職點指休、兼職點可以上，排班會照著排',
             () => go(ShiftRequestScreen(membership: membership, month: viewMonth))),
       if (showAuto)
-        tile(Icons.auto_awesome_outlined, '自動排 ${viewMonth.month} 月班表', '先出草稿給你看，確認才套用',
+        tile(
+            Icons.auto_awesome_outlined,
+            scheduled ? '重新自動排 ${viewMonth.month} 月班表' : '自動排 ${viewMonth.month} 月班表',
+            scheduled ? '已經排好的格子會保留，只補空白；公布後員工才看得到' : '先出草稿，可以存起來慢慢調；公布後員工才看得到',
             () => go(ShiftAutoPlanScreen(membership: membership, month: viewMonth, markBg: markBg))),
-      if (manager && !scheduled)
+      if (manager && showRequest)
+        tile(Icons.campaign_outlined, '在 LINE 群組提醒大家填指休', '發一則到工作群組（一個月份最多 2 次）', () => _remind(context)),
+      if (showAuto)
         tile(Icons.tune, '排班條件', '每天要幾人、每個人的條件、填寫截止日',
             () => go(ShiftRulesScreen(membership: membership, month: viewMonth, people: data.people, options: data.options))),
     ];
@@ -598,6 +628,135 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
     }
   }
 
+  Future<void> _editPreferRun() async {
+    var v = _setup!.preferRun ?? 5;
+    final n = await showDialog<int>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, set) => AlertDialog(
+          title: const Text('盡量不要連上超過幾天'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            _Stepper(value: v, min: 1, max: 10, onChanged: (x) => set(() => v = x), suffix: '天'),
+            const SizedBox(height: 8),
+            Text('自動排班會盡量照這個排；真的排不開時，還是可以排到每個人的「最多連上幾天」（沒設＝6 天）。',
+                style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, 0), child: const Text('不設')),
+            TextButton(onPressed: () => Navigator.pop(c), child: const Text('取消')),
+            FilledButton(onPressed: () => Navigator.pop(c, v), child: const Text('儲存')),
+          ],
+        ),
+      ),
+    );
+    if (n == null) return;
+    try {
+      await _repo.saveShiftPreferRun(_store, n == 0 ? null : n);
+      _load();
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+    }
+  }
+
+  /// 照過去兩個月的班表整理每個人的習慣（哪幾天不上、一個月幾天、各星期的班別），店長勾選確認後才存成排班條件
+  Future<void> _importHabits() async {
+    final m = widget.month;
+    List<ShiftMonth> past;
+    try {
+      past = await Future.wait([for (final k in [2, 1]) _repo.shiftMonth(_store, DateTime(m.year, m.month - k))]);
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+      return;
+    }
+    if (!mounted) return;
+    final rows = <(ShiftPerson, RuleSuggestion)>[];
+    for (final p in widget.people.where((x) => x.active)) {
+      final full = _planFull(p, _setup);
+      final s = suggestRule([for (final sm in past) (sm.month, sm.marks[p.id] ?? const <int, String>{})], full: full);
+      if (s.worked == 0) continue;
+      if (full ? s.weekdayMarks.isEmpty : (s.worked < 3)) continue;
+      rows.add((p, s));
+    }
+    if (rows.isEmpty) {
+      showMessage(context, '過去兩個月的班表資料不夠，整理不出習慣');
+      return;
+    }
+    String desc(ShiftPerson p, RuleSuggestion s) => [
+          if (s.noWeekdays.isNotEmpty) '只上${[for (var w = 1; w <= 7; w++) if (!s.noWeekdays.contains(w)) _wdNames[w - 1]].join('、')}',
+          if (s.minShifts != null) '一個月 ${s.minShifts == s.maxShifts ? s.minShifts : '${s.minShifts}～${s.maxShifts}'} 天',
+          if (s.weekdayMarks.isNotEmpty)
+            '班別：${(s.weekdayMarks.keys.toList()..sort()).map((w) => '${_wdNames[w - 1]} ${s.weekdayMarks[w]}').join('、')}',
+        ].join('\n');
+    final picked = {for (final r in rows) r.$1.id};
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.card,
+      builder: (c) => StatefulBuilder(
+        builder: (c, set) => SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: MediaQuery.of(c).size.height * 0.85),
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
+                child: Text('照過去兩個月的班表帶入', style: TextStyle(fontSize: AppType.title, fontWeight: FontWeight.w700)),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text('這只是過去的習慣，不代表那個人下個月真的可以。請看過、把不對的取消勾選；存了以後還可以一個一個改。'
+                    '兼職沒上過的星期會設成「固定不排」，天數範圍會設成最少～最多。',
+                    style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+              ),
+              Flexible(
+                child: ListView(shrinkWrap: true, children: [
+                  for (final (p, s) in rows)
+                    CheckboxListTile(
+                      value: picked.contains(p.id),
+                      onChanged: (v) => set(() => v == true ? picked.add(p.id) : picked.remove(p.id)),
+                      title: Text('${p.name}（${p.isFull ? '正職' : '兼職'}・過去兩個月上 ${s.worked} 天）'),
+                      subtitle: Text(desc(p, s), style: const TextStyle(fontSize: AppType.small)),
+                    ),
+                ]),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: FilledButton(
+                    onPressed: picked.isEmpty ? null : () => Navigator.pop(c, true), child: Text('存成排班條件（${picked.length} 人）')),
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
+    if (ok != true) return;
+    try {
+      for (final (p, s) in rows) {
+        if (!picked.contains(p.id)) continue;
+        final old = _setup!.rules[p.id] ?? ShiftRule(personId: p.id);
+        final full = _planFull(p, _setup);
+        await _repo.saveShiftRule(
+            _store,
+            ShiftRule(
+              personId: p.id,
+              planAsPart: old.planAsPart,
+              monthOff: old.monthOff,
+              minShifts: full ? old.minShifts : s.minShifts,
+              maxShifts: full ? old.maxShifts : s.maxShifts,
+              maxConsecutive: old.maxConsecutive,
+              noWeekdays: full ? old.noWeekdays : s.noWeekdays,
+              marks: old.marks,
+              weekdayMarks: s.weekdayMarks.isEmpty ? old.weekdayMarks : s.weekdayMarks,
+              note: old.note,
+            ));
+      }
+      if (mounted) showMessage(context, '已經存成排班條件，可以再一個一個調整');
+      _load();
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+      _load();
+    }
+  }
+
   String _ruleSummary(ShiftPerson p) {
     final r = _setup!.rules[p.id];
     if (r == null || r.isEmpty) return '沒設（照預設排）';
@@ -608,6 +767,8 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
       if (r.maxConsecutive != null) '最多連上 ${r.maxConsecutive} 天',
       if (r.noWeekdays.isNotEmpty) '不排${(r.noWeekdays.toList()..sort()).map(_wdName).join('、')}',
       if (r.marks.isNotEmpty) '排 ${r.marks.join('、')}',
+      if (r.weekdayMarks.isNotEmpty)
+        '依星期：${(r.weekdayMarks.keys.toList()..sort()).map((w) => '${_wdNames[w - 1]} ${r.weekdayMarks[w]}').join('、')}',
       if (r.note != null && r.note!.isNotEmpty) r.note!,
     ].join('・');
   }
@@ -699,14 +860,30 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
                     ),
                   ),
                   const SizedBox(height: 10),
+                  SectionCard(
+                    child: InkWell(
+                      onTap: _editPreferRun,
+                      child: Row(children: [
+                        const Expanded(child: Text('盡量不要連上超過', style: TextStyle(fontWeight: FontWeight.w700))),
+                        Text(_setup!.preferRun == null ? '沒設（只看每個人的最多連上）' : '${_setup!.preferRun} 天'),
+                        const Icon(Icons.chevron_right),
+                      ]),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
                   _pairRulesCard(),
                   const SizedBox(height: 10),
                   SectionCard(
                     padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
                     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                       const Text('每個人的條件', style: TextStyle(fontWeight: FontWeight.w700)),
-                      Text('沒設的照預設：正職照該月「應休」天數排休，最多連上 6 天',
+                      Text('沒設的照預設：正職照該月「應休」天數排休，最多連上 6 天；兼職當作每天都可以、大家平均分',
                           style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                            onPressed: _importHabits, icon: const Icon(Icons.history), label: const Text('照過去兩個月的班表帶入')),
+                      ),
                       for (final p in widget.people.where((x) => x.active))
                         ListTile(
                           contentPadding: EdgeInsets.zero,
@@ -764,6 +941,7 @@ class _RuleEditorState extends State<_RuleEditor> {
   late final Set<int> _noWd = {...widget.rule.noWeekdays};
   late final List<String> _marks = [...widget.rule.marks];
   late bool _asPart = widget.rule.planAsPart;
+  late final Map<int, String> _wdMarks = {...widget.rule.weekdayMarks};
   bool _busy = false;
 
   List<String> get _choices {
@@ -773,6 +951,7 @@ class _RuleEditorState extends State<_RuleEditor> {
       ...work,
       ...ranges,
       for (final m in _marks) if (!work.contains(m) && !ranges.contains(m)) m,
+      for (final m in _wdMarks.values) if (!work.contains(m) && !ranges.contains(m) && !_marks.contains(m)) m,
     ];
   }
 
@@ -787,6 +966,7 @@ class _RuleEditorState extends State<_RuleEditor> {
       maxConsecutive: i(_consec),
       noWeekdays: _noWd,
       marks: _marks,
+      weekdayMarks: {for (final e in _wdMarks.entries) if (!_noWd.contains(e.key)) e.key: e.value},
       note: _note.text.trim(),
     );
     if (r.minShifts != null && r.maxShifts != null && r.minShifts! > r.maxShifts!) {
@@ -866,6 +1046,28 @@ class _RuleEditorState extends State<_RuleEditor> {
               }),
             ),
         ]),
+        if (_choices.length > 1) ...[
+          const SizedBox(height: 16),
+          const Text('依星期排不同的班別／時段', style: TextStyle(fontWeight: FontWeight.w600)),
+          Text('例如週五六排 BH、其他天排 B。沒設的星期用上面的第一個。', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+          const SizedBox(height: 6),
+          for (var w = 1; w <= 7; w++)
+            if (!_noWd.contains(w))
+              Row(children: [
+                SizedBox(width: 48, child: Text(_wdName(w))),
+                Expanded(
+                  child: DropdownButton<String>(
+                    isExpanded: true,
+                    value: _wdMarks[w] ?? '',
+                    items: [
+                      const DropdownMenuItem(value: '', child: Text('照上面的第一個')),
+                      for (final m in _choices) DropdownMenuItem(value: m, child: Text(m)),
+                    ],
+                    onChanged: (v) => setState(() => (v == null || v.isEmpty) ? _wdMarks.remove(w) : _wdMarks[w] = v),
+                  ),
+                ),
+              ]),
+        ],
         const SizedBox(height: 12),
         TextField(controller: _note, maxLength: 200, decoration: const InputDecoration(labelText: '備註（自己看的，例如：只能上晚班）')),
         const SizedBox(height: 12),
@@ -875,357 +1077,6 @@ class _RuleEditorState extends State<_RuleEditor> {
         ),
       ]),
     );
-  }
-}
-
-// =====================================================================
-// 自動排班草稿
-// =====================================================================
-class ShiftAutoPlanScreen extends StatefulWidget {
-  const ShiftAutoPlanScreen({super.key, required this.membership, required this.month, required this.markBg});
-  final Membership membership;
-  final DateTime month;
-  final MarkBg markBg;
-  @override
-  State<ShiftAutoPlanScreen> createState() => _ShiftAutoPlanScreenState();
-}
-
-class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
-  ShiftMonth? _cur;
-  ShiftMonth? _prev;
-  ShiftPlanSetup? _setup;
-  Object? _error;
-  bool _keep = false;
-  int _seed = 0;
-  PlanResult? _plan;
-  Map<String, Map<int, String>> _entries = {};
-  final List<String> _notes = []; // 預設值說明
-  bool _busy = false;
-
-  Repository get _repo => AppScope.of(context).repo;
-  String get _store => widget.membership.storeId;
-  String get _storeName => widget.membership.storeName;
-  DateTime get _m => widget.month;
-  int get _days => DateTime(_m.year, _m.month + 1, 0).day;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_cur == null && _error == null) _load();
-  }
-
-  Future<void> _load() async {
-    try {
-      final r = await Future.wait<dynamic>([
-        _repo.shiftMonth(_store, _m),
-        _repo.shiftMonth(_store, DateTime(_m.year, _m.month - 1)),
-        _repo.shiftPlanSetup(_store, _m),
-      ]);
-      _cur = r[0] as ShiftMonth;
-      _prev = r[1] as ShiftMonth;
-      _setup = r[2] as ShiftPlanSetup;
-      _keep = _cur!.marks.values.any((m) => m.isNotEmpty);
-      _run();
-    } catch (e) {
-      setState(() => _error = e);
-    }
-  }
-
-  List<ShiftPerson> get _people {
-    final ps = _cur!.people.where((p) => p.active).toList();
-    return [...ps.where((p) => p.isFull), ...ps.where((p) => !p.isFull)];
-  }
-
-  /// 上個月（與這個月已排的）最常排的上班記號
-  List<String> _usualMarks(ShiftPerson p) {
-    final c = <String, int>{};
-    for (final sm in [_prev, _cur]) {
-      for (final m in (sm?.marks[p.id] ?? const <int, String>{}).values) {
-        if (_isWork(m)) c[m] = (c[m] ?? 0) + 1;
-      }
-    }
-    final ms = c.keys.toList()..sort((a, b) => c[b]!.compareTo(c[a]!));
-    return ms.take(3).toList();
-  }
-
-  void _run() {
-    final s = _setup!;
-    _notes.clear();
-    final defaultOff = (_days * 9 / 31).roundToDouble();
-    final noOff = <String>[];
-    final people = [
-      for (final p in _people)
-        () {
-          final r = s.rules[p.id];
-          final should = _cur!.stats[p.id]?.shouldOff;
-          final off = should ?? r?.monthOff;
-          final full = _planFull(p, s);
-          if (full && off == null) noOff.add(p.name);
-          final usual = _usualMarks(p);
-          return PlanPerson(
-            id: p.id,
-            name: p.name,
-            full: full,
-            offTarget: off ?? defaultOff,
-            minShifts: r?.minShifts,
-            maxShifts: r?.maxShifts,
-            maxConsecutive: r?.maxConsecutive ?? 6,
-            noWeekdays: r?.noWeekdays ?? const {},
-            marks: (r?.marks.isNotEmpty ?? false) ? r!.marks : (usual.isNotEmpty ? usual : _defaultMarks(_storeName, full, _cur!.options)),
-          );
-        }(),
-    ];
-    if (noOff.isNotEmpty) _notes.add('${noOff.join('、')} 沒填應休，先用 ${_n(defaultOff)} 天（可在班表下方統計或排班條件填）');
-    if (s.staffing.isEmpty) _notes.add('還沒設每天要幾人，先用 3 人（可在排班條件改）');
-    final need = <int, int>{}, minFull = <int, int>{};
-    for (var d = 1; d <= _days; d++) {
-      final st = s.staffing[DateTime(_m.year, _m.month, d).weekday];
-      need[d] = s.specialDays[d] ?? st?.need ?? 3;
-      minFull[d] = (st?.minFull ?? 0).clamp(0, need[d]!);
-    }
-    final fixed = _keep
-        ? {for (final p in _people) p.id: Map<int, String>.from(_cur!.marks[p.id] ?? const {})}
-        : <String, Map<int, String>>{};
-    final res = planShifts(
-        year: _m.year,
-        month: _m.month,
-        people: people,
-        needByDay: need,
-        minFullByDay: minFull,
-        fixed: fixed,
-        requests: s.requests,
-        pairRules: s.pairRules,
-        seed: _seed);
-    setState(() {
-      _plan = res;
-      _entries = {for (final e in res.entries.entries) e.key: Map<int, String>.from(e.value)};
-    });
-  }
-
-  int _staffed(int d) => _people.where((p) => _isWork(_entries[p.id]?[d])).length;
-
-  int get _changed {
-    var n = 0;
-    for (final p in _people) {
-      for (var d = 1; d <= _days; d++) {
-        if (_entries[p.id]?[d] != _cur!.mark(p.id, d)) n++;
-      }
-    }
-    return n;
-  }
-
-  Future<void> _editCell(ShiftPerson p, int d) async {
-    final cur = _entries[p.id]?[d];
-    final picked = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: AppColors.card,
-      builder: (c) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Text('${p.name}・${DateFormat('M/d（E）', 'zh_TW').format(DateTime(_m.year, _m.month, d))}',
-                style: const TextStyle(fontSize: AppType.title, fontWeight: FontWeight.w700)),
-            if (_setup!.requests[p.id]?[d] != null)
-              Text(_setup!.requests[p.id]![d] == 'off' ? '這天${_planFull(p, _setup) ? '指休' : '不能上'}' : '這天${_planFull(p, _setup) ? '想上班' : '可以上'}',
-                  style: TextStyle(color: AppColors.warn, fontSize: AppType.small)),
-            const SizedBox(height: 12),
-            Wrap(spacing: 10, runSpacing: 10, children: [
-              for (final m in {
-                ..._storeMarks(_storeName, _cur!.options),
-                ...storeRanges(_storeName, _cur!.options),
-                ..._usualMarks(p)
-              })
-                SelectChip(
-                  label: Text(m),
-                  selected: m == cur,
-                  selectedColor: widget.markBg(m) ?? AppColors.cardHigh,
-                  onSelected: (_) => Navigator.pop(c, m),
-                ),
-              ActionChip(label: const Text('清除'), onPressed: () => Navigator.pop(c, '')),
-            ]),
-          ]),
-        ),
-      ),
-    );
-    if (picked == null) return;
-    setState(() {
-      final m = _entries.putIfAbsent(p.id, () => {});
-      if (picked.isEmpty) {
-        m.remove(d);
-      } else {
-        m[d] = picked;
-      }
-    });
-  }
-
-  Future<void> _apply() async {
-    final hasData = _cur!.marks.values.any((m) => m.isNotEmpty);
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: Text('套用到 ${_m.month} 月班表？'),
-        content: Text([
-          if (hasData) '${_m.month} 月目前的班會換成這份草稿（$_changed 格不同）。' else '會把這份草稿排進 ${_m.month} 月班表。',
-          '只會改班表上顯示中的人；備註、統計數字不動。',
-          '套用後還是可以點格子修改。',
-        ].join('\n\n')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('套用')),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    setState(() => _busy = true);
-    try {
-      final n = await _repo.applyShiftPlan(_store, _m, {for (final p in _people) p.id: _entries[p.id] ?? {}});
-      if (mounted) {
-        showMessage(context, '已排好 ${_m.month} 月班表（$n 格）');
-        Navigator.pop(context, true);
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _busy = false);
-        showMessage(context, friendlyError(e), error: true);
-      }
-    }
-  }
-
-  Widget _cell(String? text,
-          {Color? bg, bool changed = false, bool header = false, double w = 40, Color? dot, VoidCallback? onTap, Color? color}) =>
-      GestureDetector(
-        onTap: onTap,
-        child: Container(
-          width: w,
-          height: header ? 36 : 34,
-          margin: const EdgeInsets.all(1),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(AppRadius.xs),
-            border: changed ? Border.all(color: AppColors.primary, width: 2) : (bg == null && !header ? Border.all(color: AppColors.cardHigh) : null),
-          ),
-          child: Stack(children: [
-            Center(
-              child: Text(text ?? '',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: header ? 11 : (text != null && text.length > 4 ? 9 : 12), height: 1.1, color: color)),
-            ),
-            if (dot != null)
-              Positioned(
-                  right: 2, top: 2, child: Container(width: 6, height: 6, decoration: BoxDecoration(color: dot, shape: BoxShape.circle))),
-          ]),
-        ),
-      );
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text('自動排 ${_m.month} 月班表')),
-      body: _error != null
-          ? ErrorView(message: friendlyError(_error!), onRetry: _load)
-          : _plan == null
-              ? const Center(child: CircularProgressIndicator())
-              : _body(),
-    );
-  }
-
-  Widget _body() {
-    final wd = DateFormat('E', 'zh_TW');
-    final people = _people;
-    final req = _setup!.requests;
-    final short = [for (var d = 1; d <= _days; d++) if (_staffed(d) < (_plan!.need[d] ?? 0)) d];
-    final warnings = _plan!.warnings;
-    Widget row(ShiftPerson p) => Row(children: [
-          _cell(_planFull(p, _setup) ? p.name : '${p.name}\n${p.isFull ? '當兼職' : '兼職'}', w: 64),
-          for (var d = 1; d <= _days; d++)
-            _cell(
-              (_entries[p.id]?[d])?.replaceFirst('-', '\n'),
-              bg: widget.markBg(_entries[p.id]?[d]),
-              changed: _keep && _entries[p.id]?[d] != _cur!.mark(p.id, d),
-              dot: req[p.id]?[d] == 'off' ? const Color(0xFFE0A34A) : (req[p.id]?[d] == 'on' ? AppColors.good : null),
-              onTap: () => _editCell(p, d),
-            ),
-          _cell('${(_entries[p.id] ?? const <int, String>{}).values.where(_isWork).length}', w: 34),
-        ]);
-    return ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [
-      Text(
-          '照每天要幾人、每個人的條件、大家填的指休／可以上排出來的草稿，還沒寫進班表。'
-          '點格子可以改；小圓點＝有填（橘：指休／不能上，綠：可以上／想上班）。',
-          style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
-      SwitchListTile(
-        contentPadding: EdgeInsets.zero,
-        title: const Text('保留已經排好的格子'),
-        subtitle: Text(_keep ? '只補空白的格子（框起來＝跟目前班表不同）' : '整個月重新排', style: const TextStyle(fontSize: AppType.small)),
-        value: _keep,
-        onChanged: (v) {
-          _keep = v;
-          _run();
-        },
-      ),
-      if (_notes.isNotEmpty || warnings.isNotEmpty || short.isNotEmpty)
-        SectionCard(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(short.isEmpty && warnings.isEmpty ? '說明' : '要注意的地方', style: TextStyle(color: AppColors.warn, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 6),
-            for (final w in [..._notes, ...warnings])
-              Padding(padding: const EdgeInsets.only(bottom: 4), child: Text('・$w', style: const TextStyle(fontSize: AppType.small))),
-          ]),
-        ),
-      const SizedBox(height: 10),
-      SectionCard(
-        padding: const EdgeInsets.all(6),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              _cell('', w: 64, header: true),
-              for (var d = 1; d <= _days; d++)
-                _cell('$d\n${wd.format(DateTime(_m.year, _m.month, d))}',
-                    header: true, bg: _setup!.specialDays.containsKey(d) ? AppColors.primary.withValues(alpha: 0.15) : null),
-              _cell('天數', w: 34, header: true),
-            ]),
-            for (final p in people.where((p) => p.isFull)) row(p),
-            if (people.any((p) => !p.isFull)) const SizedBox(height: 6),
-            for (final p in people.where((p) => !p.isFull)) row(p),
-            const SizedBox(height: 4),
-            Row(children: [
-              _cell('人力／要', w: 64),
-              for (var d = 1; d <= _days; d++)
-                _cell('${_staffed(d)}/${_plan!.need[d]}',
-                    color: _staffed(d) < (_plan!.need[d] ?? 0) ? AppColors.bad : AppColors.primary,
-                    bg: _staffed(d) < (_plan!.need[d] ?? 0) ? AppColors.bad.withValues(alpha: 0.15) : null),
-              _cell('', w: 34),
-            ]),
-          ]),
-        ),
-      ),
-      const SizedBox(height: 20),
-      Row(children: [
-        Expanded(
-          child: OutlinedButton.icon(
-            onPressed: _busy
-                ? null
-                : () {
-                    _seed++;
-                    _run();
-                  },
-            icon: const Icon(Icons.refresh),
-            label: const Text('再排一次'),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          flex: 2,
-          child: FilledButton(
-            onPressed: _busy ? null : _apply,
-            child: _busy
-                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                : Text('套用到 ${_m.month} 月班表'),
-          ),
-        ),
-      ]),
-    ]);
   }
 }
 

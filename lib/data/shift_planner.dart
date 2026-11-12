@@ -127,6 +127,31 @@ class ShiftPlanSetup {
   static DateTime deadlineFor(DateTime month, int deadline) => DateTime(month.year, month.month - 1, deadline);
 }
 
+/// 存在資料庫的排班草稿（0098；只有老闆店長看得到，公布後自動清掉）
+class ShiftPlanDraft {
+  final Map<String, Map<int, String>> plan; // 人 → 日 → 記號
+  final Map<String, Set<int>> locked; // 人 → 手動改過的日子（再排一次不動）
+  final String? updatedName;
+  final DateTime? updatedAt;
+  const ShiftPlanDraft(this.plan, this.locked, this.updatedName, this.updatedAt);
+
+  factory ShiftPlanDraft.fromRow(Map<String, dynamic> r) => ShiftPlanDraft(
+        {
+          for (final e in ((r['plan'] as Map?) ?? const {}).entries)
+            '${e.key}': {
+              for (final d in ((e.value as Map?) ?? const {}).entries)
+                if (_int(d.key) != null && '${d.value}'.isNotEmpty) _int(d.key)!: '${d.value}'
+            }
+        },
+        {
+          for (final e in ((r['locked'] as Map?) ?? const {}).entries)
+            '${e.key}': {for (final d in (e.value as List?) ?? const []) if (_int(d) != null) _int(d)!}
+        },
+        r['updated_name'] as String?,
+        DateTime.tryParse('${r['updated_at'] ?? ''}')?.toLocal(),
+      );
+}
+
 /// 排班用的人
 class PlanPerson {
   final String id;
@@ -494,7 +519,9 @@ PlanResult planShifts({
   Map<String, Map<int, String>>? best;
   PlanCheck? bestCheck;
   final n = max(1, tries);
+  var done = 0;
   for (var i = 0; i < n; i++) {
+    done = i + 1;
     final e = _planOnce(
         year: year,
         month: month,
@@ -525,7 +552,7 @@ PlanResult planShifts({
   final days = DateTime(year, month + 1, 0).day;
   return PlanResult(best!, bestCheck!.staffed, {for (var d = 1; d <= days; d++) d: needByDay[d] ?? 0}, bestCheck.workDays,
       [for (final i in bestCheck.issues) if (i.code != 'pref') i.text],
-      check: bestCheck, tries: n);
+      check: bestCheck, tries: done);
 }
 
 Map<String, Map<int, String>> _planOnce({

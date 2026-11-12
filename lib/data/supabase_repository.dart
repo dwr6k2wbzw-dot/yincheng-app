@@ -814,7 +814,7 @@ class SupabaseRepository implements Repository {
     final r = await Future.wait<dynamic>([
       _db.from('shift_staffing').select('weekday, need, min_full').eq('store_id', storeId),
       _db.from('shift_staffing_days').select('day, need').eq('store_id', storeId).gte('day', _day.format(from)).lt('day', _day.format(to)),
-      _db.from('shift_settings').select('request_deadline').eq('store_id', storeId).maybeSingle(),
+      _db.from('shift_settings').select().eq('store_id', storeId).maybeSingle(),
       _db.from('shift_rules').select().eq('store_id', storeId),
       _db.from('shift_pair_rules').select('id, person_a, person_b, kind').eq('store_id', storeId).order('created_at'),
       _db
@@ -839,7 +839,23 @@ class SupabaseRepository implements Repository {
       rules: {for (final x in r[3] as List) x['person_id'] as String: ShiftRule.fromRow(x as Map<String, dynamic>)},
       requests: requests,
       pairRules: [for (final x in r[4] as List) PairRule.fromRow(x as Map<String, dynamic>)],
+      preferRun: ((r[2] as Map?)?['prefer_run'] as num?)?.toInt(),
+      otherStoreDays: await _otherStoreDays(storeId, from),
     );
+  }
+
+  /// 兩家店都有班的人，這個月在另一家店有班的日子（0098；只有老闆店長拿得到，其他人回空的）
+  Future<Map<String, Set<int>>> _otherStoreDays(String storeId, DateTime month) async {
+    try {
+      final rows = await _db.rpc('shift_other_store_days', params: {'p_store': storeId, 'p_month': _day.format(month)}) as List;
+      final out = <String, Set<int>>{};
+      for (final x in rows) {
+        out.putIfAbsent(x['person_id'] as String, () => {}).add((x['day'] as num).toInt());
+      }
+      return out;
+    } catch (_) {
+      return const {};
+    }
   }
 
   @override
@@ -898,16 +914,55 @@ class SupabaseRepository implements Repository {
       _db.from('shift_settings').upsert({'store_id': storeId, 'request_deadline': day}, onConflict: 'store_id');
 
   @override
-  Future<int> applyShiftPlan(String storeId, DateTime month, Map<String, Map<int, String>> plan) async {
+  Future<int> applyShiftPlan(String storeId, DateTime month, Map<String, Map<int, String>> plan, {String? expected}) async {
     final n = await _db.rpc('apply_shift_plan', params: {
       'p_store': storeId,
       'p_month': _day.format(DateTime(month.year, month.month, 1)),
-      'p_plan': {
-        for (final e in plan.entries) e.key: {for (final d in e.value.entries) '${d.key}': d.value}
-      },
+      'p_plan': _planJson(plan),
+      if (expected != null) 'p_expected': expected,
     });
     return (n as num?)?.toInt() ?? 0;
   }
+
+  Map<String, Map<String, String>> _planJson(Map<String, Map<int, String>> plan) => {
+        for (final e in plan.entries) e.key: {for (final d in e.value.entries) '${d.key}': d.value}
+      };
+
+  @override
+  Future<String> shiftMonthVersion(String storeId, DateTime month) async =>
+      '${await _db.rpc('shift_month_version', params: {'p_store': storeId, 'p_month': _day.format(DateTime(month.year, month.month, 1))}) ?? ''}';
+
+  @override
+  Future<ShiftPlanDraft?> shiftPlanDraft(String storeId, DateTime month) async {
+    final r = await _db
+        .from('shift_plan_drafts')
+        .select()
+        .eq('store_id', storeId)
+        .eq('month', _day.format(DateTime(month.year, month.month, 1)))
+        .maybeSingle();
+    return r == null ? null : ShiftPlanDraft.fromRow(r);
+  }
+
+  @override
+  Future<void> saveShiftPlanDraft(String storeId, DateTime month, Map<String, Map<int, String>> plan, Map<String, Set<int>> locked) =>
+      _db.from('shift_plan_drafts').upsert({
+        'store_id': storeId,
+        'month': _day.format(DateTime(month.year, month.month, 1)),
+        'plan': _planJson(plan),
+        'locked': {for (final e in locked.entries) if (e.value.isNotEmpty) e.key: (e.value.toList()..sort())},
+      }, onConflict: 'store_id,month');
+
+  @override
+  Future<void> deleteShiftPlanDraft(String storeId, DateTime month) =>
+      _db.from('shift_plan_drafts').delete().eq('store_id', storeId).eq('month', _day.format(DateTime(month.year, month.month, 1)));
+
+  @override
+  Future<void> saveShiftPreferRun(String storeId, int? days) =>
+      _db.from('shift_settings').upsert({'store_id': storeId, 'prefer_run': days}, onConflict: 'store_id');
+
+  @override
+  Future<String> remindShiftRequests(String storeId, DateTime month) async =>
+      '${await _db.rpc('shift_request_remind', params: {'p_store': storeId, 'p_month': _day.format(DateTime(month.year, month.month, 1))})}';
 
   @override
   Future<void> saveShiftMarkOption(String storeId, ShiftMarkOption o) async {
