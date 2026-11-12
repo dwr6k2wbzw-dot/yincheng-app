@@ -288,7 +288,10 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
     if (_pre.any((i) => i.level == 0)) {
       // 設定互相衝突：不排。已經有草稿的話要留著（連同手動鎖住的格子），只跳出說明（Codex P2）；
       // 還沒有草稿時，畫面會顯示「先改好才能排」。
-      setState(() {});
+      // 留著的草稿要照新的設定重新檢查，不然畫面跟公布會用到舊的檢查結果（Codex P2）
+      setState(() {
+        if (_entries != null) _validate();
+      });
       if (_entries != null) _showBlocked();
       return;
     }
