@@ -125,8 +125,7 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
     ];
     if (missing.isNotEmpty) {
       for (final p in missing) {
-        _off[p.id] =
-            _prev?.stats[p.id]?.shouldOff ??
+        _off[p.id] = _prev?.stats[p.id]?.shouldOff ??
             _setup!.rules[p.id]?.monthOff ??
             _defaultOff;
       }
@@ -171,8 +170,7 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
   void _editOff() {
     for (final p in _people) {
       if (_planFull(p, _setup))
-        _off[p.id] =
-            _cur!.stats[p.id]?.shouldOff ??
+        _off[p.id] = _cur!.stats[p.id]?.shouldOff ??
             _prev?.stats[p.id]?.shouldOff ??
             _defaultOff;
     }
@@ -221,8 +219,7 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
             id: p.id,
             name: p.name,
             full: full,
-            offTarget:
-                _cur!.stats[p.id]?.shouldOff ??
+            offTarget: _cur!.stats[p.id]?.shouldOff ??
                 _off[p.id] ??
                 r?.monthOff ??
                 _defaultOff,
@@ -233,8 +230,8 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
             marks: (r?.marks.isNotEmpty ?? false)
                 ? r!.marks
                 : (usual.isNotEmpty
-                      ? usual
-                      : _defaultMarks(_storeName, full, _cur!.options)),
+                    ? usual
+                    : _defaultMarks(_storeName, full, _cur!.options)),
             weekdayMarks: r?.weekdayMarks ?? const {},
             preferRun: s.preferRun,
             prevRun: _tailRun(_prev, p.id),
@@ -246,9 +243,9 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
   }
 
   Map<int, int> get _need => {
-    for (var d = 1; d <= _days; d++)
-      d: _setup!.specialDays[d] ?? _setup!.staffing[_wd(d)]?.need ?? 3,
-  };
+        for (var d = 1; d <= _days; d++)
+          d: _setup!.specialDays[d] ?? _setup!.staffing[_wd(d)]?.need ?? 3,
+      };
   Map<int, int> get _minFull {
     final need = _need;
     return {
@@ -274,26 +271,53 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
   }
 
   List<PlanIssue> _precheck() => precheckPlan(
-    year: _m.year,
-    month: _m.month,
-    people: _planPeople(),
-    needByDay: _need,
-    minFullByDay: _minFull,
-    fixed: _fixed(),
-    requests: _setup!.requests,
-    pairRules: _setup!.pairRules,
-  );
+        year: _m.year,
+        month: _m.month,
+        people: _planPeople(),
+        needByDay: _need,
+        minFullByDay: _minFull,
+        fixed: _fixed(),
+        requests: _setup!.requests,
+        pairRules: _setup!.pairRules,
+      );
 
   void _start() {
     _pre = _precheck();
     if (_pre.any((i) => i.level == 0)) {
-      setState(() {
-        _entries = null;
-        _check = null;
-      });
+      // 設定互相衝突：不排。已經有草稿的話要留著（連同手動鎖住的格子），只跳出說明（Codex P2）；
+      // 還沒有草稿時，畫面會顯示「先改好才能排」。
+      setState(() {});
+      if (_entries != null) _showBlocked();
       return;
     }
     _run();
+  }
+
+  Future<void> _showBlocked() async {
+    final r = await showDialog<String>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('有設定互相衝突，這次沒有重排'),
+        content: SingleChildScrollView(
+          child: Text(
+            '${_pre.where((i) => i.level == 0).map((i) => '・${i.text}').join('\n')}\n\n目前的草稿（包含你改過的格子）都還在。改好設定後再按「再排一次」。',
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(c), child: const Text('先不改')),
+          TextButton(
+              onPressed: () => Navigator.pop(c, 'off'),
+              child: const Text('改應休天數')),
+          FilledButton(
+              onPressed: () => Navigator.pop(c, 'rules'),
+              child: const Text('改排班條件')),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (r == 'off') _editOff();
+    if (r == 'rules') _openRules();
   }
 
   void _run() {
@@ -457,9 +481,9 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
 
   // ---------------- 存草稿／公布 ----------------
   Map<String, Map<int, String>> _planOut() => {
-    for (final p in _people)
-      p.id: Map<int, String>.from(_entries?[p.id] ?? const {}),
-  };
+        for (final p in _people)
+          p.id: Map<int, String>.from(_entries?[p.id] ?? const {}),
+      };
 
   Future<bool> _saveDraft({bool quiet = false}) async {
     setState(() => _busy = true);
@@ -747,58 +771,60 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
     VoidCallback? onTap,
     Color? color,
     double gap = 0,
-  }) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      width: w,
-      height: header ? 36 : 34,
-      margin: EdgeInsets.fromLTRB(1 + gap, 1, 1, 1),
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(AppRadius.xs),
-        border: frame != null
-            ? Border.all(color: frame, width: 2)
-            : (bg == null && !header
-                  ? Border.all(color: AppColors.cardHigh)
-                  : null),
-      ),
-      child: Stack(
-        children: [
-          Center(
-            child: Text(
-              text ?? '',
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              style: TextStyle(
-                fontSize: header
-                    ? 11
-                    : (text != null && text.length > 4 ? 10 : 12),
-                height: 1.1,
-                color: color,
-              ),
-            ),
+  }) =>
+      GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: w,
+          height: header ? 36 : 34,
+          margin: EdgeInsets.fromLTRB(1 + gap, 1, 1, 1),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(AppRadius.xs),
+            border: frame != null
+                ? Border.all(color: frame, width: 2)
+                : (bg == null && !header
+                    ? Border.all(color: AppColors.cardHigh)
+                    : null),
           ),
-          if (dot != null)
-            Positioned(
-              right: 2,
-              top: 2,
-              child: Container(
-                width: 6,
-                height: 6,
-                decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
+          child: Stack(
+            children: [
+              Center(
+                child: Text(
+                  text ?? '',
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  style: TextStyle(
+                    fontSize: header
+                        ? 11
+                        : (text != null && text.length > 4 ? 10 : 12),
+                    height: 1.1,
+                    color: color,
+                  ),
+                ),
               ),
-            ),
-          if (lock)
-            Positioned(
-              left: 1,
-              top: 1,
-              child: Icon(Icons.lock, size: 9, color: AppColors.muted),
-            ),
-        ],
-      ),
-    ),
-  );
+              if (dot != null)
+                Positioned(
+                  right: 2,
+                  top: 2,
+                  child: Container(
+                    width: 6,
+                    height: 6,
+                    decoration:
+                        BoxDecoration(color: dot, shape: BoxShape.circle),
+                  ),
+                ),
+              if (lock)
+                Positioned(
+                  left: 1,
+                  top: 1,
+                  child: Icon(Icons.lock, size: 9, color: AppColors.muted),
+                ),
+            ],
+          ),
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -823,12 +849,12 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
         body: _error != null
             ? ErrorView(message: friendlyError(_error!), onRetry: _load)
             : !ready
-            ? const Center(child: CircularProgressIndicator())
-            : _offAsk
-            ? _offBody()
-            : _entries == null
-            ? _blockedBody()
-            : _body(),
+                ? const Center(child: CircularProgressIndicator())
+                : _offAsk
+                    ? _offBody()
+                    : _entries == null
+                        ? _blockedBody()
+                        : _body(),
       ),
     );
   }
@@ -915,69 +941,69 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
 
   /// 設定互相衝突：先講清楚，不硬排
   Widget _blockedBody() => ListView(
-    padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-    children: [
-      Text(
-        '有設定互相衝突，先改好才能排',
-        style: TextStyle(
-          fontSize: AppType.title,
-          fontWeight: FontWeight.w700,
-          color: AppColors.bad,
-        ),
-      ),
-      const SizedBox(height: 10),
-      SectionCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (final i in _pre.where((i) => i.level == 0))
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Text('・${i.text}'),
-              ),
-          ],
-        ),
-      ),
-      const SizedBox(height: 16),
-      Row(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
         children: [
-          Expanded(
-            child: OutlinedButton(
-              onPressed: _editOff,
-              child: const Text('改應休天數'),
+          Text(
+            '有設定互相衝突，先改好才能排',
+            style: TextStyle(
+              fontSize: AppType.title,
+              fontWeight: FontWeight.w700,
+              color: AppColors.bad,
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: FilledButton(
-              onPressed: _openRules,
-              child: const Text('改排班條件'),
+          const SizedBox(height: 10),
+          SectionCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final i in _pre.where((i) => i.level == 0))
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text('・${i.text}'),
+                  ),
+              ],
             ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _editOff,
+                  child: const Text('改應休天數'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton(
+                  onPressed: _openRules,
+                  child: const Text('改排班條件'),
+                ),
+              ),
+            ],
           ),
         ],
-      ),
-    ],
-  );
+      );
 
   Widget _issueLine(PlanIssue i) => InkWell(
-    onTap: i.days.isEmpty ? null : () => _jumpTo(i.days.first),
-    child: Padding(
-      padding: const EdgeInsets.only(bottom: 5),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Text(
-              '・${i.text}',
-              style: const TextStyle(fontSize: AppType.small),
-            ),
+        onTap: i.days.isEmpty ? null : () => _jumpTo(i.days.first),
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 5),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  '・${i.text}',
+                  style: const TextStyle(fontSize: AppType.small),
+                ),
+              ),
+              if (i.days.isNotEmpty)
+                Icon(Icons.chevron_right, size: 16, color: AppColors.muted),
+            ],
           ),
-          if (i.days.isNotEmpty)
-            Icon(Icons.chevron_right, size: 16, color: AppColors.muted),
-        ],
-      ),
-    ),
-  );
+        ),
+      );
 
   Widget _body() {
     final wdf = DateFormat('E', 'zh_TW');
@@ -1019,9 +1045,11 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
     double gapOf(int d) => (d > 1 && _wd(d) == 1) ? 5 : 0; // 週一前面留一點空，一週一週看得出來
 
     Widget nameCell(ShiftPerson p) => _cell(
-      _planFull(p, _setup) ? p.name : '${p.name}\n${p.isFull ? '當兼職' : '兼職'}',
-      w: _nameW,
-    );
+          _planFull(p, _setup)
+              ? p.name
+              : '${p.name}\n${p.isFull ? '當兼職' : '兼職'}',
+          w: _nameW,
+        );
     Widget dayRow(ShiftPerson p) {
       final row = _entries![p.id] ?? const <int, String>{};
       final full = _planFull(p, _setup);
@@ -1041,14 +1069,14 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
               frame: bad.containsKey('${p.id}|$d')
                   ? AppColors.bad
                   : (hasData && row[d] != _cur!.mark(p.id, d)
-                        ? AppColors.primary
-                        : null),
+                      ? AppColors.primary
+                      : null),
               lock: _locked[p.id]?.contains(d) ?? false,
               dot: (_setup!.otherStoreDays[p.id]?.contains(d) ?? false)
                   ? AppColors.bad
                   : (req[p.id]?[d] == 'off'
-                        ? const Color(0xFFE0A34A)
-                        : (req[p.id]?[d] == 'on' ? AppColors.good : null)),
+                      ? const Color(0xFFE0A34A)
+                      : (req[p.id]?[d] == 'on' ? AppColors.good : null)),
               onTap: _busy ? null : () => _editCell(p, d),
             ),
           _cell('$work', w: 34),
@@ -1088,7 +1116,7 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
                 Expanded(
                   child: Text(
                     '存起來的草稿${_saved!.updatedName == null ? '' : '（${_saved!.updatedName}'
-                              '${_saved!.updatedAt == null ? '' : '・${DateFormat('M/d HH:mm').format(_saved!.updatedAt!)}'}）'}'
+                        '${_saved!.updatedAt == null ? '' : '・${DateFormat('M/d HH:mm').format(_saved!.updatedAt!)}'}）'}'
                     '${_dirty ? '，有新的修改還沒存' : ''}・還沒公布',
                     style: const TextStyle(fontSize: AppType.small),
                   ),
@@ -1116,14 +1144,14 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
                   c.clean
                       ? '這份草稿沒有問題${_tries > 1 ? '（算了 $_tries 份挑最好的）' : ''}。還沒公布，員工看不到。'
                       : [
-                              if (hard.isNotEmpty) '${hard.length} 個一定要改',
-                              if (rule.isNotEmpty) '${rule.length} 個違反排班條件',
-                              if (c.score[2] > 0)
-                                '缺正職 ${short.where((i) => i.code == 'noFull').length} 天',
-                              if (c.score[3] > 0)
-                                '缺人 ${short.where((i) => i.code == 'short').length} 天',
-                            ].join('、') +
-                            '。${rule.isEmpty && hard.isEmpty && _locked.values.every((s) => s.isEmpty) ? '照現在的條件排不滿，下面列出原因。' : '下面列出來，點一下會跳到那一天。'}',
+                            if (hard.isNotEmpty) '${hard.length} 個一定要改',
+                            if (rule.isNotEmpty) '${rule.length} 個違反排班條件',
+                            if (c.score[2] > 0)
+                              '缺正職 ${short.where((i) => i.code == 'noFull').length} 天',
+                            if (c.score[3] > 0)
+                              '缺人 ${short.where((i) => i.code == 'short').length} 天',
+                          ].join('、') +
+                          '。${rule.isEmpty && hard.isEmpty && _locked.values.every((s) => s.isEmpty) ? '照現在的條件排不滿，下面列出原因。' : '下面列出來，點一下會跳到那一天。'}',
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
               ),
@@ -1262,8 +1290,8 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
                               bg: _setup!.specialDays.containsKey(d)
                                   ? AppColors.primary.withValues(alpha: 0.15)
                                   : ((_wd(d) == 5 || _wd(d) == 6)
-                                        ? AppColors.cardHigh
-                                        : null),
+                                      ? AppColors.cardHigh
+                                      : null),
                             ),
                           _cell('上班', w: 34, header: true),
                           _cell('休/應休', w: 44, header: true),
@@ -1283,8 +1311,8 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
                               color: c.staffed[d]! < need[d]!
                                   ? AppColors.bad
                                   : (c.staffed[d]! > need[d]!
-                                        ? AppColors.warn
-                                        : AppColors.primary),
+                                      ? AppColors.warn
+                                      : AppColors.primary),
                               bg: c.staffed[d]! < need[d]!
                                   ? AppColors.bad.withValues(alpha: 0.15)
                                   : null,
