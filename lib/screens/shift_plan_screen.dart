@@ -947,12 +947,8 @@ class _RuleEditorState extends State<_RuleEditor> {
   List<String> get _choices {
     final work = _storeMarks(widget.storeName, widget.options).where((m) => !ShiftMonth.isAway(m)).toList();
     final ranges = storeRanges(widget.storeName, widget.options);
-    return [
-      ...work,
-      ...ranges,
-      for (final m in _marks) if (!work.contains(m) && !ranges.contains(m)) m,
-      for (final m in _wdMarks.values) if (!work.contains(m) && !ranges.contains(m) && !_marks.contains(m)) m,
-    ];
+    // 用集合去掉重複（好幾個星期用同一個、已經不在清單上的班別時，下拉選單不能有兩個一樣的選項；Codex P2）
+    return <String>{...work, ...ranges, ..._marks, ..._wdMarks.values}.toList();
   }
 
   Future<void> _save() async {
