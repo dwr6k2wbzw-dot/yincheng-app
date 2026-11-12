@@ -18,6 +18,11 @@ for (let i = 0; i < tabs; i++) {
   await p.mouse.wheel(0, 700);
   await p.waitForTimeout(1200);
   await p.screenshot({ path: `${out}/tab${i}-b.png` });
-  await p.mouse.wheel(0, -2000);
+  // 捲到最底：確認最後一列沒被右下角浮動按鈕蓋住
+  for (let k = 0; k < 20; k++) await p.mouse.wheel(0, 5000);
+  await p.waitForTimeout(1500);
+  await p.screenshot({ path: `${out}/tab${i}-c.png` });
+  for (let k = 0; k < 20; k++) await p.mouse.wheel(0, -5000);
+  await p.waitForTimeout(800);
 }
 await b.close();

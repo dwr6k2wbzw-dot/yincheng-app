@@ -423,11 +423,23 @@ class DemoRepository implements Repository {
   // 依店別分開存（示範用）：yc 有兩筆 Excel 匯入；xc 一開始沒有
   final _revenue = <String, List<RevenueEntry>>{
     'yc': [
+      ..._recent,
       RevenueEntry(id: 'r1', bizDate: DateTime(2026, 9, 30), cash: 8000, creditCard: 20000, guests: 28, drinks: 24000, food: 4000, source: 'import'),
       RevenueEntry(id: 'r2', bizDate: DateTime(2026, 9, 29), cash: 5000, creditCard: 16000, amex: 1000, guests: 21, drinks: 18000, food: 4000, source: 'import'),
     ],
     'xc': [],
   };
+  // 當月示範（2026-11-13，讓「當月銷售品項累計」有東西看）：昨天往回 5 天，前 4 天有 iCHEF、最早那天沒有（顯示「未計入」）
+  static final _recent = [
+    for (final (i, cash, card, guests, drinks, food) in const [
+      (1, 3655.0, 11402.0, 17, 13746.0, 1311.0), (2, 4200.0, 15800.0, 22, 17300.0, 2700.0),
+      (3, 3100.0, 12900.0, 18, 13900.0, 2100.0), (4, 2800.0, 9200.0, 13, 10400.0, 1600.0),
+      (5, 3000.0, 10000.0, 15, 11500.0, 1500.0),
+    ])
+      RevenueEntry(id: 'rc$i', bizDate: bizToday().subtract(Duration(days: i)), cash: cash, creditCard: card,
+          guests: guests, drinks: drinks, food: food, source: 'import'),
+  ];
+  static final _noIchef = {'rc5'};
   List<RevenueEntry> _revList(String storeId) => _revenue[storeId] ??= [];
 
   @override
@@ -463,7 +475,10 @@ class DemoRepository implements Repository {
   @override
   Future<Set<DateTime>> ichefDays(String storeId, {int limit = 120}) async {
     final list = List.of(_revList(storeId))..sort((a, b) => b.bizDate.compareTo(a.bizDate));
-    return {for (final e in list.take(7)) DateTime(e.bizDate.year, e.bizDate.month, e.bizDate.day)};
+    return {
+      for (final e in list.where((e) => !_noIchef.contains(e.id)).take(7))
+        DateTime(e.bizDate.year, e.bizDate.month, e.bizDate.day)
+    };
   }
 
   @override
@@ -475,14 +490,49 @@ class DemoRepository implements Repository {
       ('Gin Fizz', '調酒', true, 385.0), ('關東煮', '小郭餐點', false, 280.0), ('Negroni', '調酒', true, 400.0),
       ('瑞士修道院起司', '起司', false, 280.0),
     ];
-    final list = <ItemSale>[
+    final raw = [
       for (var i = 0; i < base.length; i++)
-        ItemSale(
-            name: base[i].$1, category: base[i].$2, isDrink: base[i].$3,
-            qty: ((bizDate.day * 7 + i * 3) % 7 + 1).toDouble(),
-            amount: base[i].$4 * ((bizDate.day * 7 + i * 3) % 7 + 1)),
-    ]..sort((a, b) => b.amount.compareTo(a.amount));
-    return list;
+        (base[i], ((bizDate.day * 7 + i * 3) % 7 + 1).toDouble()),
+    ];
+    // 同正式資料庫 0101：含服務費金額依原價比例分，同區加總＝那天的酒水／餐食（最大餘數法）
+    final day = DateTime(bizDate.year, bizDate.month, bizDate.day);
+    final e = _revList(storeId).where((x) => DateTime(x.bizDate.year, x.bizDate.month, x.bizDate.day) == day).firstOrNull;
+    final list = <ItemSale>[];
+    for (final drink in [true, false]) {
+      final g = [for (final r in raw) if (r.$1.$3 == drink) r];
+      final listSum = g.fold<double>(0, (a, r) => a + r.$1.$4 * r.$2);
+      final target = e == null ? listSum : (drink ? e.drinks : e.food).roundToDouble();
+      final exact = [for (final r in g) listSum == 0 ? 0.0 : target * r.$1.$4 * r.$2 / listSum];
+      final net = [for (final v in exact) v.floorToDouble()];
+      final order = List.generate(g.length, (i) => i)..sort((a, b) => (exact[b] - net[b]).compareTo(exact[a] - net[a]));
+      var rem = (target - net.fold<double>(0, (a, v) => a + v)).round();
+      for (final i in order) {
+        if (rem-- <= 0) break;
+        net[i] += 1;
+      }
+      for (var i = 0; i < g.length; i++) {
+        list.add(ItemSale(
+            name: g[i].$1.$1, category: g[i].$1.$2, isDrink: drink, qty: g[i].$2,
+            amount: net[i], listAmount: g[i].$1.$4 * g[i].$2));
+      }
+    }
+    return list..sort((a, b) => b.amount.compareTo(a.amount));
+  }
+
+  @override
+  Future<List<ItemSale>> monthItemSales(String storeId, DateTime month) async {
+    final sums = <String, ItemSale>{};
+    for (final d in await ichefDays(storeId)) {
+      if (d.year != month.year || d.month != month.month) continue;
+      for (final x in await itemSales(storeId, d)) {
+        final o = sums[x.name];
+        sums[x.name] = ItemSale(
+            name: x.name, category: x.category, isDrink: x.isDrink,
+            qty: x.qty + (o?.qty ?? 0), amount: x.amount + (o?.amount ?? 0),
+            listAmount: x.listAmount + (o?.listAmount ?? 0), days: 1 + (o?.days ?? 0), net: x.net && (o?.net ?? true));
+      }
+    }
+    return sums.values.toList()..sort((a, b) => b.amount.compareTo(a.amount));
   }
 
   @override

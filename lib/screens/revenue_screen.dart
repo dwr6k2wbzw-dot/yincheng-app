@@ -8,6 +8,7 @@ import '../data/models.dart';
 import '../data/repository.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../widgets/item_sections.dart';
 import '../widgets/revenue_mix.dart';
 
 /// 每日營收：列表＋手動登記／修改。老闆／店長／正職可手動登記暫記（source=app）；
@@ -56,8 +57,12 @@ class _RevenueScreenState extends State<RevenueScreen> {
   Future<List<ItemSale>> _itemsFor(DateTime d) =>
       _items[d] ??= AppScope.of(context).repo.itemSales(widget.membership.storeId, d);
 
+  /// 每次重新載入 +1：月累計卡跟著重新查詢（審查 P2）
+  int _version = 0;
+
   void _reload() => setState(() {
         _items.clear();
+        _version++;
         _future = _load();
       });
 
@@ -92,7 +97,7 @@ class _RevenueScreenState extends State<RevenueScreen> {
             ];
             final banner = _excelSynced ? _SyncBanner(last: last, canWrite: _canWrite) : null;
             if (list.isEmpty) {
-              return ListView(padding: const EdgeInsets.all(16), children: [
+              return ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 96), children: [
                 if (banner != null) banner,
                 const SizedBox(height: 120),
                 Text(
@@ -107,11 +112,22 @@ class _RevenueScreenState extends State<RevenueScreen> {
             final headers = <Widget>[
               if (banner != null) banner,
               _WeekdayStats(entries: list, multi: isMultiLineStore(widget.membership.storeName)),
+              // 當月銷售品項累計（老闆 2026-11-13）：只算有 iCHEF 的日子，沒有的列「未計入」
+              if (ichef.isNotEmpty)
+                MonthItemsSection(
+                  storeId: widget.membership.storeId,
+                  version: _version,
+                  load: AppScope.of(context).repo.monthItemSales,
+                  entries: list,
+                  ichef: ichef,
+                  wrap: (child) => SectionCard(child: child),
+                ),
             ];
             final offset = headers.length;
             return RefreshIndicator(
               onRefresh: () async => _reload(),
               child: ListView.separated(
+                // 底部留 96：浮動按鈕高 56＋邊距 16，再多一點，捲到底最後一列才不會被蓋住
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
                 itemCount: list.length + offset,
                 separatorBuilder: (_, __) => const SizedBox(height: 8),
@@ -638,87 +654,18 @@ class _Label extends StatelessWidget {
       );
 }
 
-/// 每日營收卡片裡的品項銷售（老闆 2026-11-11）：預設前 3 名，點「全部」展開。
-/// 金額為品項售價合計（不含服務費），所以加總會比上面的酒水＋餐食少一點。
-class _ItemSales extends StatefulWidget {
+/// 每日營收卡片裡的品項銷售（畫面在 item_sections.dart 的 DayItemsBlock，測試得到）
+class _ItemSales extends StatelessWidget {
   const _ItemSales({required this.items});
   final Future<List<ItemSale>> items;
-  @override
-  State<_ItemSales> createState() => _ItemSalesState();
-}
-
-class _ItemSalesState extends State<_ItemSales> {
-  bool _open = false;
-  static const _top = 3;
 
   @override
   Widget build(BuildContext context) => FutureBuilder<List<ItemSale>>(
-        future: widget.items,
+        future: items,
         builder: (context, snap) {
           final list = snap.data;
           if (list == null || list.isEmpty) return const SizedBox.shrink();
-          final shown = _open ? list : list.take(_top).toList();
-          final qty = list.fold<double>(0, (a, x) => a + x.qty);
-          final muted = TextStyle(color: AppColors.muted, fontSize: AppType.caption);
-          return Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Divider(height: 1, color: AppColors.muted.withValues(alpha: 0.18)),
-              const SizedBox(height: 10),
-              Text('品項銷售', style: muted.copyWith(letterSpacing: 1.2)),
-              const SizedBox(height: 6),
-              for (var i = 0; i < shown.length; i++) _row(i + 1, shown[i]),
-              if (list.length > _top)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton(
-                    style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 10),
-                        minimumSize: const Size(44, 44),
-                        foregroundColor: AppColors.muted),
-                    onPressed: () => setState(() => _open = !_open),
-                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                      Text(_open ? '收起' : '全部 ${list.length} 項・${_n(qty)} 份',
-                          style: const TextStyle(fontSize: AppType.small)),
-                      const SizedBox(width: 2),
-                      Icon(_open ? Icons.expand_less : Icons.expand_more, size: 18),
-                    ]),
-                  ),
-                ),
-            ]),
-          );
+          return DayItemsBlock(items: list);
         },
       );
-
-  Widget _row(int rank, ItemSale x) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(children: [
-          SizedBox(
-            width: 22,
-            child: Text('$rank',
-                style: TextStyle(
-                    color: AppColors.muted,
-                    fontSize: AppType.caption,
-                    fontFeatures: const [FontFeature.tabularFigures()])),
-          ),
-          Icon(Icons.circle, size: 6, color: x.isDrink ? AppColors.primary : ramenColor),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(x.name, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: AppType.small)),
-          ),
-          Text('× ${_n(x.qty)}',
-              style: TextStyle(
-                  color: AppColors.muted,
-                  fontSize: AppType.small,
-                  fontFeatures: const [FontFeature.tabularFigures()])),
-          SizedBox(
-            width: 76,
-            child: Text(ntd(x.amount),
-                textAlign: TextAlign.right,
-                style: const TextStyle(fontSize: AppType.small, fontFeatures: [FontFeature.tabularFigures()])),
-          ),
-        ]),
-      );
-
-  static String _n(double v) => v == v.roundToDouble() ? v.round().toString() : v.toStringAsFixed(1);
 }
