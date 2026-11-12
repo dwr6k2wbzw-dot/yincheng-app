@@ -844,7 +844,7 @@ class SupabaseRepository implements Repository {
     );
   }
 
-  /// 兩家店都有班的人，這個月在另一家店有班的日子（0098；只有老闆店長拿得到，其他人回空的）
+  /// 兩家店都有班的人，這個月在另一家店有班的日子（0098；只有老闆店長拿得到，沒有權限的人回空的）
   Future<Map<String, Set<int>>> _otherStoreDays(String storeId, DateTime month) async {
     try {
       final rows = await _db.rpc('shift_other_store_days', params: {'p_store': storeId, 'p_month': _day.format(month)}) as List;
@@ -853,8 +853,11 @@ class SupabaseRepository implements Repository {
         out.putIfAbsent(x['person_id'] as String, () => {}).add((x['day'] as num).toInt());
       }
       return out;
-    } catch (_) {
-      return const {};
+    } on PostgrestException catch (e) {
+      // 不是老闆店長（員工填指休時也會讀排班設定）→ 資料庫回「沒有權限」，這種才當成空的。
+      // 其他失敗要往外丟：查不到就當成「另一家店都沒班」的話，會排出撞班的班表卻沒有提醒（Codex P2）
+      if (e.code == '42501') return const {};
+      rethrow;
     }
   }
 
