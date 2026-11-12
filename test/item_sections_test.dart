@@ -45,8 +45,39 @@ void main() {
     expect([a.amount, a.listAmount], [448, 420]);
     final b = ItemSale.fromRow({'name': 'B', 'grp': 'food', 'qty': 1, 'amount': 280});
     expect([b.amount, b.listAmount, b.isDrink], [280, 280, false]);
-    final m = ItemSale.fromRow({'name': 'C', 'grp': 'drink', 'qty': 9, 'amount': 4000, 'amount_list': 3700, 'days': 4});
-    expect([m.amount, m.listAmount, m.days], [4000, 3700, 4]);
+    expect([a.net, b.net], [true, false]);
+    final m = ItemSale.fromRow({'name': 'C', 'grp': 'drink', 'qty': 9, 'amount': 3700, 'amount_net': 4000, 'days': 4});
+    expect([m.amount, m.listAmount, m.days, m.net], [4000, 3700, 4, true]);
+    // 鎖帳月份（審查 P2）：月累計 amount_net 是 null
+    final l = ItemSale.fromRow({'name': 'D', 'grp': 'drink', 'qty': 2, 'amount': 600, 'amount_net': null, 'days': 1});
+    expect([l.amount, l.listAmount, l.net], [600, 600, false]);
+  });
+
+  // 審查 P2：鎖帳月份沒回填含服務費金額，不能跟有分攤的混在一起、也不能標「含服務費」
+  const mixed = [
+    ItemSale(name: 'A', qty: 1, amount: 1100, listAmount: 1000),
+    ItemSale(name: 'B', qty: 1, amount: 700, listAmount: 700, net: false),
+    ItemSale(name: 'C', isDrink: false, qty: 1, amount: 330, listAmount: 300),
+  ];
+
+  test('pricedItems：有一項沒分攤就整份改原價、重新排序；全部有才用含服務費', () {
+    final p = pricedItems(mixed);
+    expect(p.net, false);
+    expect([for (final x in p.items) '${x.name}=${x.amount}'], ['A=1000.0', 'B=700.0', 'C=300.0']);
+    final q = pricedItems([mixed[0], mixed[2]]);
+    expect(q.net, true);
+    expect([for (final x in q.items) x.amount], [1100, 330]);
+  });
+
+  testWidgets('單日品項：沒分攤的日子標「原價／尚未分攤」，小計是原價', (tester) async {
+    await tester.pumpWidget(_app(const DayItemsBlock(items: mixed)));
+    expect(find.text('品項銷售・原價／尚未分攤'), findsOneWidget);
+    expect(find.text('品項銷售・含服務費'), findsNothing);
+    expect(find.text(r'小計 $1,700'), findsOneWidget);
+    expect(find.text(r'小計 $300'), findsOneWidget);
+    await tester.pumpWidget(_app(DayItemsBlock(items: [mixed[0], mixed[2]])));
+    expect(find.text('品項銷售・含服務費'), findsOneWidget);
+    expect(find.text(r'小計 $1,100'), findsOneWidget);
   });
 
   testWidgets('金額有角分時顯示到分，各列加起來＝小計（0101 以分分配）', (tester) async {
@@ -81,6 +112,14 @@ void main() {
       expect(find.text('小計 ${ntd(1438 + 959 + 895 + 895)}'), findsOneWidget);
       expect(MonthItemsCard.ranges([DateTime(2026, 11, 1), DateTime(2026, 11, 2), DateTime(2026, 11, 3), DateTime(2026, 11, 5)]),
           '11/1～11/3、11/5');
+    });
+
+    testWidgets('鎖帳月份（審查 P2）：整張卡改原價、標「原價／尚未分攤」並說明', (tester) async {
+      await tester.pumpWidget(_app(MonthItemsCard(month: DateTime(2026, 11), items: mixed, ichefDays: ichef)));
+      expect(find.text('iCHEF 2 天・到 11/12・金額原價／尚未分攤・每天早上更新'), findsOneWidget);
+      expect(find.textContaining('金額含服務費'), findsNothing);
+      expect(find.textContaining('已鎖帳的月份不回填'), findsOneWidget);
+      expect(find.text(r'小計 $1,700'), findsOneWidget);
     });
 
     testWidgets('下拉更新：資料庫回傳不同金額後，月累計跟著更新', (tester) async {

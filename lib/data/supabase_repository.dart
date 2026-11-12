@@ -298,7 +298,7 @@ class SupabaseRepository implements Repository {
     try {
       final rows = await _db
           .from('v_ichef_item_month')
-          .select('name, category, grp, qty, amount, amount_list, days')
+          .select('name, category, grp, qty, amount, amount_net, days')
           .eq('store_id', storeId)
           .eq('period_month', _day.format(DateTime(month.year, month.month, 1)));
       return _sortItems(rows.map(ItemSale.fromRow));

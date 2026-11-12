@@ -1224,16 +1224,32 @@ class ItemSale {
   final double listAmount;
   /// 當月累計（ops 0102 v_ichef_item_month）：這個月有賣的天數；單日品項為 1
   final int days;
+  /// [amount] 是不是含服務費（審查 P2）：鎖帳月份沒回填 amount_net（ops 0101）、舊資料庫沒有這欄時是 false，
+  /// 這時 [amount] 只是原價。畫面用 [pricedItems] 決定整份用哪一種，不混著加。
+  final bool net;
   const ItemSale(
-      {required this.name, this.category = '', this.isDrink = true, required this.qty, required this.amount, double? listAmount, this.days = 1})
+      {required this.name,
+      this.category = '',
+      this.isDrink = true,
+      required this.qty,
+      required this.amount,
+      double? listAmount,
+      this.days = 1,
+      this.net = true})
       : listAmount = listAmount ?? amount;
+  /// ichef_item_sales（單日）與 v_ichef_item_month（月累計）欄位相同：amount_net 含服務費（可能是 null）、amount 原價
   factory ItemSale.fromRow(Map<String, dynamic> r) => ItemSale(
         name: r['name'] as String,
         category: (r['category'] as String?) ?? '',
         isDrink: r['grp'] == 'drink',
         qty: _d(r['qty']),
         amount: _d(r['amount_net'] ?? r['amount']),
-        listAmount: _d(r['amount_list'] ?? r['amount']),
+        listAmount: _d(r['amount']),
         days: (r['days'] as num?)?.toInt() ?? 1,
+        net: r['amount_net'] != null,
       );
+
+  /// 改用原價顯示
+  ItemSale atListPrice() =>
+      ItemSale(name: name, category: category, isDrink: isDrink, qty: qty, amount: listAmount, days: days, net: false);
 }

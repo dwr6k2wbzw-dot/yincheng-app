@@ -654,8 +654,7 @@ class _Label extends StatelessWidget {
       );
 }
 
-/// 每日營收卡片裡的品項銷售（老闆 2026-11-11；11-13 分酒水／餐食兩區、金額含服務費）：
-/// 每區小計＝上面的酒水／餐食（ops 0101 分配，分毫不差），各自前 3 名，點「全部」展開。
+/// 每日營收卡片裡的品項銷售（畫面在 item_sections.dart 的 DayItemsBlock，測試得到）
 class _ItemSales extends StatelessWidget {
   const _ItemSales({required this.items});
   final Future<List<ItemSale>> items;
@@ -666,16 +665,7 @@ class _ItemSales extends StatelessWidget {
         builder: (context, snap) {
           final list = snap.data;
           if (list == null || list.isEmpty) return const SizedBox.shrink();
-          return Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Divider(height: 1, color: AppColors.muted.withValues(alpha: 0.18)),
-              const SizedBox(height: 10),
-              Text('品項銷售・含服務費',
-                  style: TextStyle(color: AppColors.muted, fontSize: AppType.caption, letterSpacing: 1.2)),
-              ItemSections(items: list, top: 3),
-            ]),
-          );
+          return DayItemsBlock(items: list);
         },
       );
 }

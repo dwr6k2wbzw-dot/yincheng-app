@@ -7,6 +7,44 @@ import '../theme.dart';
 import 'format.dart';
 import 'revenue_colors.dart';
 
+/// 審查 P2：鎖帳月份的品項沒有含服務費金額（ops 0101 不回填）。只要有一項沒有，整份都改用原價、
+/// 標「原價／尚未分攤」，不讓同一張卡混到兩種算法；全部都有才用含服務費。
+({List<ItemSale> items, bool net}) pricedItems(List<ItemSale> xs) {
+  if (xs.every((x) => x.net)) return (items: xs, net: true);
+  final list = [for (final x in xs) x.atListPrice()]
+    ..sort((a, b) {
+      final c = b.amount.compareTo(a.amount);
+      return c != 0 ? c : a.name.compareTo(b.name);
+    });
+  return (items: list, net: false);
+}
+
+/// 金額說明：含服務費／原價（尚未分攤）
+String priceLabel(bool net) => net ? '含服務費' : '原價／尚未分攤';
+
+/// 每日營收卡片裡的品項銷售（老闆 2026-11-11；11-13 分酒水／餐食兩區、金額含服務費）：
+/// 每區小計＝上面的酒水／餐食（ops 0101 分配，分毫不差），各自前 3 名，點「全部」展開。
+/// 鎖帳月份沒有分攤的日子改顯示原價，標「品項銷售・原價／尚未分攤」。
+class DayItemsBlock extends StatelessWidget {
+  const DayItemsBlock({super.key, required this.items});
+  final List<ItemSale> items;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = pricedItems(items);
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Divider(height: 1, color: AppColors.muted.withValues(alpha: 0.18)),
+        const SizedBox(height: 10),
+        Text('品項銷售・${priceLabel(p.net)}',
+            style: TextStyle(color: p.net ? AppColors.muted : AppColors.warn, fontSize: AppType.caption, letterSpacing: 1.2)),
+        ItemSections(items: p.items, top: 3),
+      ]),
+    );
+  }
+}
+
 /// 品項分「酒水」「餐食」兩區：每區標題列有小計與份數，區內依金額排序，前 [top] 名、可展開全部。
 /// 每日營收卡片與「當月銷售品項累計」共用。
 class ItemSections extends StatelessWidget {
@@ -155,19 +193,25 @@ class MonthItemsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final days = ichefDays.where((d) => d.year == month.year && d.month == month.month).toList()..sort();
     final muted = TextStyle(color: AppColors.muted, fontSize: AppType.small);
+    final p = pricedItems(items);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Text('${month.month} 月銷售品項累計', style: const TextStyle(fontWeight: FontWeight.w600)),
           const SizedBox(height: 4),
           Text(
               'iCHEF ${days.length} 天${days.isEmpty ? '' : '・到 ${DateFormat('M/d').format(days.last)}'}'
-              '・金額含服務費・每天早上更新',
+              '・金額${priceLabel(p.net)}・每天早上更新',
               style: muted),
+          if (!p.net) ...[
+            const SizedBox(height: 4),
+            Text('有日子沒有分攤服務費（已鎖帳的月份不回填），整張卡改用原價，小計跟每日營收的酒水／餐食對不上',
+                style: TextStyle(color: AppColors.warn, fontSize: AppType.small)),
+          ],
           if (missing.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text('未計入（那天沒有 iCHEF 資料）：${ranges(missing)}',
                 style: TextStyle(color: AppColors.warn, fontSize: AppType.small)),
           ],
-          ItemSections(items: items, top: 5),
+          ItemSections(items: p.items, top: 5),
         ]);
   }
 }

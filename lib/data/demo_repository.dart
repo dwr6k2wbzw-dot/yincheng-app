@@ -529,7 +529,7 @@ class DemoRepository implements Repository {
         sums[x.name] = ItemSale(
             name: x.name, category: x.category, isDrink: x.isDrink,
             qty: x.qty + (o?.qty ?? 0), amount: x.amount + (o?.amount ?? 0),
-            listAmount: x.listAmount + (o?.listAmount ?? 0), days: 1 + (o?.days ?? 0));
+            listAmount: x.listAmount + (o?.listAmount ?? 0), days: 1 + (o?.days ?? 0), net: x.net && (o?.net ?? true));
       }
     }
     return sums.values.toList()..sort((a, b) => b.amount.compareTo(a.amount));
