@@ -97,7 +97,7 @@ class _RevenueScreenState extends State<RevenueScreen> {
             ];
             final banner = _excelSynced ? _SyncBanner(last: last, canWrite: _canWrite) : null;
             if (list.isEmpty) {
-              return ListView(padding: const EdgeInsets.all(16), children: [
+              return ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 96), children: [
                 if (banner != null) banner,
                 const SizedBox(height: 120),
                 Text(
@@ -127,6 +127,7 @@ class _RevenueScreenState extends State<RevenueScreen> {
             return RefreshIndicator(
               onRefresh: () async => _reload(),
               child: ListView.separated(
+                // 底部留 96：浮動按鈕高 56＋邊距 16，再多一點，捲到底最後一列才不會被蓋住
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
                 itemCount: list.length + offset,
                 separatorBuilder: (_, __) => const SizedBox(height: 8),
