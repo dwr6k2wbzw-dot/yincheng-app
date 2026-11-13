@@ -6,7 +6,20 @@
 <title>線上訂位</title>
 <meta name="theme-color" content="#0A0A09">
 <link rel="icon" id="fav" href="data:,">
+<script>
+// 主圖優先下載（2026-11-13，Modern Web Guidance：optimize-image-priority）：
+// 照片原本等下面的程式跑完才設成背景，瀏覽器太晚發現；這裡在 <head> 先依店家預載，網址和背景用的一樣（部署會一起加版本號）
+(function () {
+  var s = new URLSearchParams(location.search).get('s') || document.documentElement.dataset.slug || '';
+  var h = { yincheng: 'hero-yincheng.jpg', xcw: 'hero-xcw.jpg' }[s];
+  if (!h) return;
+  var l = document.createElement('link');
+  l.rel = 'preload'; l.as = 'image'; l.href = h; l.fetchPriority = 'high';
+  document.head.appendChild(l);
+})();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600&amp;display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 <!--OG-->
