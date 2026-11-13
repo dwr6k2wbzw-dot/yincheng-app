@@ -1299,12 +1299,17 @@ class SupabaseRepository implements Repository {
 
   @override
   Future<List<QuoteEdit>> purchaseQuoteEdits(String storeId) async {
+    Future<List<Map<String, dynamic>>> read(String cols) =>
+        _db.from('purchase_quote_edits').select(cols).eq('store_id', storeId).limit(5000);
+    const base = 'item_key, name, unit, unit_price, as_of, as_of_at, hidden, updated_name';
     try {
-      final rows = await _db
-          .from('purchase_quote_edits')
-          .select('item_key, name, unit, unit_price, as_of, as_of_at, hidden, updated_name')
-          .eq('store_id', storeId)
-          .limit(5000);
+      List<Map<String, dynamic>> rows;
+      try {
+        rows = await read('$base, grp, manual');
+      } on PostgrestException catch (e) {
+        if (e.code != '42703' && e.code != 'PGRST204') rethrow; // 資料庫還沒有 grp、manual（0107 之前）
+        rows = await read(base);
+      }
       return [
         for (final r in rows)
           QuoteEdit(
@@ -1316,6 +1321,8 @@ class SupabaseRepository implements Repository {
             asOfAt: r['as_of_at'] == null ? null : DateTime.parse(r['as_of_at'] as String),
             hidden: r['hidden'] as bool? ?? false,
             by: r['updated_name'] as String?,
+            group: r['grp'] as String?,
+            manual: r['manual'] as bool? ?? false,
           ),
       ];
     } on PostgrestException catch (e) {
@@ -1335,6 +1342,9 @@ class SupabaseRepository implements Repository {
       'as_of': edit.asOf == null ? null : _day.format(edit.asOf!),
       'as_of_at': edit.asOfAt?.toUtc().toIso8601String(),
       'hidden': edit.hidden,
+      // 0107 之前的資料庫沒有這兩欄：沒用到時不送，舊資料庫照樣能改價
+      if (edit.group != null || edit.manual) 'grp': edit.group,
+      if (edit.manual) 'manual': true,
     }, onConflict: 'store_id,item_key').select('item_key');
     if (rows.isEmpty) throw Exception('message: 只有老闆或店長可以修改進貨報價,');
   }
