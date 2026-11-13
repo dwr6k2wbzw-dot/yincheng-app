@@ -4,13 +4,6 @@
 // - 待確認清單（只有老闆、店長）：App 有記、跟日報表對不太上的進貨
 part of 'purchases_screen.dart';
 
-String _plainAmount(double v) => v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(2);
-
-/// 複製成日報表那一列：日期、類別、摘要、金額（用 Tab 分開，貼到日報表「日期」那一格會自動分到四格）。
-/// 兩家店的日報表 9 月起都是 B 日期、C 類別、D 摘要、E 金額（月結、零用金相同）。
-String dailyReportRow(DateTime date, String category, String memo, double amount) =>
-    [DateFormat('M/d').format(date), category, memo.trim(), _plainAmount(amount)].join('\t');
-
 Future<void> copyDailyReportRow(BuildContext context, DateTime date, String category, String memo, double amount) async {
   await Clipboard.setData(ClipboardData(text: dailyReportRow(date, category, memo, amount)));
   if (context.mounted) showMessage(context, '已複製。到日報表點「日期」那一格貼上，會填好日期、類別、摘要、金額');

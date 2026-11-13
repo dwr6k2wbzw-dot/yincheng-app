@@ -142,3 +142,25 @@ List<ItemQuote> buildQuotes(Iterable<QuoteLine> lines, Iterable<QuoteEdit> edits
   out.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
   return out;
 }
+
+/// 進貨類別代碼 → 報價表的分區（drink 酒類／food 餐食；其他不列）。照進貨頁合併後的類別判斷（0047／0048）
+String? Function(String) quoteGroupOf(List<CostCategory> cats) {
+  final by = {for (final c in cats) c.code: c};
+  return (code) {
+    final c = by[by[code]?.displayAs ?? code] ?? by[code];
+    return switch (c?.costGroup) {
+      'drink' => 'drink',
+      'food' || 'coffee' || 'ramen' => 'food',
+      _ => null,
+    };
+  };
+}
+
+/// 複製成日報表那一列：日期、類別、摘要、金額（用 Tab 分開，貼到日報表「日期」那一格會分到四格）。
+/// 兩家店的日報表 9 月起都是 B 日期、C 類別、D 摘要、E 金額（月結、零用金相同）。
+String dailyReportRow(DateTime date, String category, String memo, double amount) => [
+      '${date.month}/${date.day}',
+      category,
+      memo.trim(),
+      amount == amount.roundToDouble() ? amount.toInt().toString() : amount.toStringAsFixed(2),
+    ].join('\t');

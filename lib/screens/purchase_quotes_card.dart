@@ -12,19 +12,6 @@ import '../data/repository.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 
-/// 進貨類別代碼 → 報價表的分區（drink 酒類／food 餐食；其他不列）。照進貨頁合併後的類別判斷（0047／0048）
-String? Function(String) quoteGroupOf(List<CostCategory> cats) {
-  final by = {for (final c in cats) c.code: c};
-  return (code) {
-    final c = by[by[code]?.displayAs ?? code] ?? by[code];
-    return switch (c?.costGroup) {
-      'drink' => 'drink',
-      'food' || 'coffee' || 'ramen' => 'food',
-      _ => null,
-    };
-  };
-}
-
 class PurchaseQuotesCard extends StatefulWidget {
   const PurchaseQuotesCard({super.key, required this.membership});
   final Membership membership;

@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 import '../app_state.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
+import '../data/stock_math.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 
@@ -35,28 +36,6 @@ List<Product> _sorted(List<Product> list) => [...list]
     final c = _catOrder(a.category).compareTo(_catOrder(b.category));
     return c != 0 ? c : a.name.compareTo(b.name);
   });
-
-int _daysSince(DateTime d) => bizToday().difference(DateTime(d.year, d.month, d.day)).inDays;
-
-/// 「昨天盤・小明」「6 天前盤」「還沒盤過」
-String countAge(LastCount? s, {bool who = true}) {
-  if (s == null) return '還沒盤過';
-  final n = _daysSince(s.date);
-  final when = n <= 0 ? '今天盤' : (n == 1 ? '昨天盤' : '$n 天前盤');
-  return !who || (s.by ?? '').isEmpty ? when : '$when・${s.by}';
-}
-
-/// 重點品項該盤了沒：每天盤的今天（營業日）還沒盤、每週盤的超過 7 天沒盤
-bool isCountDue(Product p, LastCount? s) => switch (p.countCycle) {
-      'daily' => s == null || _daysSince(s.date) >= 1,
-      'weekly' => s == null || _daysSince(s.date) >= 7,
-      _ => false,
-    };
-
-/// 很久沒盤（超過兩週）：數字可能不準，用淡色提醒
-bool _isStale(LastCount? s) => s != null && _daysSince(s.date) > 14;
-
-String cycleLabel(String? c) => switch (c) { 'daily' => '每天盤', 'weekly' => '每週盤', _ => '' };
 
 bool _isLow(Product p, LastCount? s) => p.parLevel != null && s != null && s.qty < p.parLevel!;
 
@@ -289,7 +268,7 @@ class _StockCountsScreenState extends State<StockCountsScreen> {
     final s = last[p.id];
     final low = _isLow(p, s);
     final due = isCountDue(p, s);
-    final stale = _isStale(s);
+    final stale = isStaleCount(s);
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -343,13 +322,6 @@ DateTime? _latestAt(Iterable<LastCount> all) {
     if (c.at != null && (t == null || c.at!.isAfter(t))) t = c.at;
   }
   return t;
-}
-
-/// 打數量：可以打小數（3.4＝3 瓶又剩 4 成），四捨五入到 0.1。不合理的回傳 null
-double? parseQty(String text) {
-  final v = double.tryParse(text.trim());
-  if (v == null || v < 0 || v > 9999) return null;
-  return (v * 10).round() / 10;
 }
 
 /// 只盤一項

@@ -1,8 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yincheng_ops/data/models.dart';
-import 'package:yincheng_ops/screens/purchase_quotes_card.dart';
-import 'package:yincheng_ops/screens/purchases_screen.dart';
-import 'package:yincheng_ops/screens/stock_counts_screen.dart';
+import 'package:yincheng_ops/data/purchase_items_math.dart';
+import 'package:yincheng_ops/data/stock_math.dart';
 
 void main() {
   test('複製成日報表那一列：日期、類別、摘要、金額用 Tab 分開', () {
