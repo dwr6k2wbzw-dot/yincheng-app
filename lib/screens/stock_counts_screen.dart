@@ -408,7 +408,9 @@ class _StockCountScreenState extends State<StockCountScreen> {
   // 草稿裡不在這次清單的品項（例：整張盤到一半，先去盤「重點品項」那幾項）：原樣留著，不能被這次蓋掉（Codex 審查）
   final _otherDraft = <String, double>{};
 
-  String get _draftKey => 'stock_draft_${widget.membership.storeId}';
+  // 草稿照「店＋登入的人」分開：同一支手機換人登入，不會帶到別人盤到一半的（Codex 審查）
+  String _draftKey = '';
+  bool _draftStarted = false;
 
   void _put(String id, double qty) {
     // 先四捨五入到 0.1 再拆整數與幾成（0.96 → 1.0，不會變成 0.9；Codex 審查）
@@ -423,6 +425,14 @@ class _StockCountScreenState extends State<StockCountScreen> {
     for (final p in widget.products) {
       _put(p.id, widget.last[p.id]?.qty ?? 0);
     }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_draftStarted) return;
+    _draftStarted = true;
+    _draftKey = 'stock_draft_${widget.membership.storeId}_${AppScope.of(context).repo.currentUserId ?? ''}';
     _restoreDraft();
   }
 

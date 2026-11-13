@@ -637,6 +637,8 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   String _requestId = const Uuid().v4();
   // 新增到一半離開（按到返回、切到別頁）：內容先留著，下次進來帶回（只留在這次開著的 App 裡，重開 App 就沒了）
   static final _drafts = <String, _PurchaseDraft>{};
+  // 留著的內容照「登入的人＋店」分開：同一支手機換人登入，不會帶到別人填到一半的（Codex 審查）
+  String _draftKey = '';
   bool _restored = false;
   bool _saved = false;
   bool _ready = false; // 資料讀完、填到一半的內容也帶回來了；在這之前離開不能動到留著的內容（Codex 審查）
@@ -688,6 +690,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
     super.didChangeDependencies();
     if (_started) return;
     _started = true;
+    _draftKey = '${AppScope.of(context).repo.currentUserId ?? ''}|${widget.membership.storeId}';
     _future = _load();
   }
 
@@ -729,7 +732,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
     }
     // 填表人預設帶入自己的名字（可以改成請款人）
     if (_memo.text.isEmpty && e == null) _memo.text = widget.membership.displayName;
-    final d = e == null ? _drafts[id] : null;
+    final d = e == null ? _drafts[_draftKey] : null;
     if (d != null) {
       _requestId = d.requestId;
       _paidBy = d.paidBy;
@@ -752,7 +755,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   final _vendorFocus = FocusNode();
 
   void _clearDraft() {
-    _drafts.remove(widget.membership.storeId);
+    _drafts.remove(_draftKey);
     setState(() {
       _restored = false;
       _requestId = const Uuid().v4();
@@ -779,12 +782,12 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
     if (widget.editing == null && !_saved && _ready) {
       final has = _photo != null || _amount.text.trim().isNotEmpty || _vendor.text.trim().isNotEmpty;
       if (has) {
-        _drafts[widget.membership.storeId] = _PurchaseDraft(
+        _drafts[_draftKey] = _PurchaseDraft(
           requestId: _requestId, paidBy: _paidBy, date: _date, dateTouched: _dateTouched, category: _category,
           vendor: _vendor.text, amount: _amount.text, isReturn: _isReturn, memo: _memo.text, photo: _photo,
           noReceipt: _noReceipt, items: _items);
       } else {
-        _drafts.remove(widget.membership.storeId);
+        _drafts.remove(_draftKey);
       }
     }
     _amount.dispose();
@@ -1218,7 +1221,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
       if (mounted) {
         _saved = true;
         // 只有存好「新增」才清掉填到一半的內容；修改別筆不能把它吃掉（Codex 審查）
-        if (widget.editing == null) _drafts.remove(widget.membership.storeId);
+        if (widget.editing == null) _drafts.remove(_draftKey);
         showMessage(context, widget.editing != null ? '已修改' : '已新增');
         Navigator.pop(context, true);
       }
