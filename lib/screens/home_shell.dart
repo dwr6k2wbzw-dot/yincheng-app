@@ -240,31 +240,47 @@ class _StoreSwitcher extends StatelessWidget {
       ),
     ]);
     if (state.memberships.length <= 1) return title;
-    return InkWell(
-      borderRadius: BorderRadius.circular(AppRadius.sm),
-      onTap: () => showModalBottomSheet(
-        context: context,
-        backgroundColor: AppColors.card,
-        builder: (c) => SafeArea(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Padding(padding: EdgeInsets.all(16), child: Text('切換店家', style: TextStyle(fontSize: AppType.title))),
-            for (final x in state.memberships)
-              ListTile(
-                leading: storeLogo(x.storeName) != null
-                    ? Image.asset(storeLogo(x.storeName)!, width: 32, height: 32, filterQuality: FilterQuality.medium)
-                    : Icon(Icons.storefront_outlined, color: AppColors.primary),
-                trailing: x.storeId == m.storeId ? Icon(Icons.check, color: AppColors.primary) : null,
-                title: Text(x.storeName),
-                subtitle: Text(roleLabel(x.role)),
-                onTap: () {
-                  state.switchStore(x);
-                  Navigator.pop(c);
-                },
-              ),
-            const SizedBox(height: 8),
-          ]),
-        ),
+    // 切換店家：從左上角店名正下方展開選單（老闆 2026-11-13，原本是從底部彈出）
+    return PopupMenuButton<String>(
+      tooltip: '切換店家',
+      position: PopupMenuPosition.under,
+      offset: const Offset(0, 6),
+      color: AppColors.card,
+      elevation: 8,
+      constraints: const BoxConstraints(minWidth: 240, maxWidth: 320),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        side: BorderSide(color: AppColors.line),
       ),
+      onSelected: (id) {
+        final x = state.memberships.where((x) => x.storeId == id).firstOrNull;
+        if (x != null && x.storeId != m.storeId) state.switchStore(x);
+      },
+      itemBuilder: (c) => [
+        for (final x in state.memberships)
+          PopupMenuItem<String>(
+            value: x.storeId,
+            height: 60,
+            child: Row(children: [
+              storeLogo(x.storeName) != null
+                  ? Image.asset(storeLogo(x.storeName)!, width: 32, height: 32, filterQuality: FilterQuality.medium)
+                  : Icon(Icons.storefront_outlined, color: AppColors.primary),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(x.storeName,
+                      style: TextStyle(
+                          fontSize: AppType.body,
+                          fontWeight: x.storeId == m.storeId ? AppFont.heading : AppFont.label,
+                          color: AppColors.text)),
+                  const SizedBox(height: 2),
+                  Text(roleLabel(x.role), style: TextStyle(fontSize: AppType.caption, color: AppColors.muted)),
+                ]),
+              ),
+              if (x.storeId == m.storeId) Icon(Icons.check, size: 20, color: AppColors.primary),
+            ]),
+          ),
+      ],
       child: Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: title),
     );
   }
