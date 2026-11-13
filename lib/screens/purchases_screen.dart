@@ -12,9 +12,10 @@ import '../theme.dart';
 import '../services/slip_scan.dart';
 import '../widgets/common.dart';
 import '../widgets/photo_thumb.dart';
-import 'month_items_card.dart';
-import 'purchase_items_editor.dart';
+import 'purchase_quotes_card.dart';
 import 'vendor_contacts_screen.dart';
+
+part 'purchase_extras.dart';
 
 /// 進貨管理：本月進貨分成「月結廠商」與「零用金支出」兩大類，
 /// 點大類展開各進貨類別的小計，點類別看該類別依廠商分組的明細（老闆／店長可在明細核銷）
@@ -27,8 +28,10 @@ class PurchasesScreen extends StatefulWidget {
 
 class _PurchasesScreenState extends State<PurchasesScreen> {
   late Future<(List<Purchase>, Map<String, String>, DateTime?)> _future;
-  // 本月進貨總表（老闆 2026-11-01）：品項明細合成的總表；讀不到不影響上面的進貨
-  late Future<List<ItemSummary>> _itemsFuture;
+  // 進貨報價（老闆 2026-11-13，取代本月進貨總表）：自己讀資料，跟月份無關；讀不到不影響上面的進貨
+  final _quotesKey = GlobalKey<PurchaseQuotesCardState>();
+  // 待確認清單（0104，只有老闆、店長）：App 有記、跟日報表對不太上的進貨
+  Future<List<PurchaseMatch>>? _queueFuture;
   DateTime _month = DateTime(DateTime.now().year, DateTime.now().month);
   final _open = <String>{}; // 已展開的大類
   bool _started = false;
@@ -41,19 +44,16 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     if (_started) return;
     _started = true;
     _future = _load();
-    _itemsFuture = _loadItems();
+    _queueFuture = _loadQueue();
   }
 
-  Future<List<ItemSummary>> _loadItems() async {
-    final repo = AppScope.of(context).repo;
-    final id = widget.membership.storeId;
-    final items = await repo.monthPurchaseItems(id, _month);
-    if (items.isEmpty) return const [];
-    var names = <String, String>{};
+  Future<List<PurchaseMatch>> _loadQueue() async {
+    if (!widget.membership.isManager) return const [];
     try {
-      names = {for (final p in await repo.products(id)) p.id: p.name};
-    } catch (_) {} // 讀不到品項名稱就用送貨單上的品名
-    return summarizeItems(items, names);
+      return await AppScope.of(context).repo.purchaseMatchQueue(widget.membership.storeId);
+    } catch (_) {
+      return const []; // 讀不到就不顯示，不影響進貨頁
+    }
   }
 
   /// 進貨以 Dropbox 日報表為準的店：只能看，不能新增或核銷（核銷也以 Excel 的「核銷」欄為準）
@@ -81,13 +81,33 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     return (r[0] as List<Purchase>, cats, last);
   }
 
-  void _reload() => setState(() {
-        _future = _load();
-        _itemsFuture = _loadItems();
-      });
+  void _reload({bool quotes = true}) {
+    setState(() {
+      _future = _load();
+      _queueFuture = _loadQueue();
+    });
+    if (quotes) _quotesKey.currentState?.reload();
+  }
 
   void _shiftMonth(int d) {
     _month = DateTime(_month.year, _month.month + d);
+    _reload(quotes: false); // 進貨報價跟月份無關
+  }
+
+  Future<void> _openQueue() async {
+    await Navigator.push(
+        context, MaterialPageRoute(builder: (_) => PurchaseMatchScreen(membership: widget.membership)));
+    _reload(quotes: false);
+  }
+
+  Future<void> _openDateList(List<Purchase> all, Map<String, String> cats) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PurchaseListScreen(
+            membership: widget.membership, month: _month, items: all, categoryNames: cats, today: _today),
+      ),
+    );
     _reload();
   }
 
@@ -163,6 +183,15 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                     ),
                   ),
                 const SizedBox(height: 4),
+                FutureBuilder<List<PurchaseMatch>>(
+                  future: _queueFuture,
+                  builder: (context, q) => (q.data ?? const []).isEmpty
+                      ? const SizedBox.shrink()
+                      : Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: _PendingCard(queue: q.data!, onTap: _openQueue),
+                        ),
+                ),
                 if (_synced) ...[
                   // 進貨以日報表為準（老闆 2026-10-13 晚上，0049）；說明收成一行＋ⓘ（老闆 2026-10-29）
                   InfoLine(
@@ -178,7 +207,16 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                 const SizedBox(height: 12),
                 Text('本月進貨合計 ${ntd(list.fold<double>(0, (t, p) => t + p.amount))}，共 ${list.length} 筆',
                     textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
-                if (_synced && (replaced > 0 || covered.isNotEmpty))
+                if (all.isNotEmpty)
+                  Center(
+                    child: TextButton.icon(
+                      onPressed: () => _openDateList(all, cats),
+                      icon: const Icon(Icons.format_list_bulleted, size: 18),
+                      label: const Text('依日期看每一筆'),
+                    ),
+                  ),
+                // 老闆、店長改看最上面的「待確認」和「依日期看每一筆」，這兩行只留給正職看（2026-11-13）
+                if (!widget.membership.isManager && _synced && (replaced > 0 || covered.isNotEmpty))
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
                     child: Text(
@@ -190,7 +228,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                       style: TextStyle(color: AppColors.warn, fontSize: AppType.small),
                     ),
                   ),
-                if (covered.isNotEmpty)
+                if (!widget.membership.isManager && covered.isNotEmpty)
                   Center(
                     child: TextButton(
                       onPressed: () => _openCategory('以日報表為準（不計入）的暫記', covered, cats),
@@ -198,12 +236,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                     ),
                   ),
                 const SizedBox(height: 16),
-                FutureBuilder<List<ItemSummary>>(
-                  future: _itemsFuture,
-                  builder: (context, s) => s.connectionState != ConnectionState.done
-                      ? const SizedBox(height: 80, child: Center(child: CircularProgressIndicator(strokeWidth: 2)))
-                      : MonthItemsCard(rows: s.data ?? const [], error: s.hasError),
-                ),
+                PurchaseQuotesCard(key: _quotesKey, membership: widget.membership),
               ]),
             );
           },
@@ -422,75 +455,12 @@ class _CategoryPurchasesScreenState extends State<_CategoryPurchasesScreen> {
     }
   }
 
-  /// 點一筆：日報表的 → 說明要改日報表；App 暫記 → 修改／刪除
+  /// 點一筆：看內容（照片、日期、類別…）；App 登記的可以修改／刪除（老闆 2026-11-13：日報表那筆也能點開看）
   Future<void> _actions(Purchase p) async {
-    final repo = AppScope.of(context).repo;
-    final mine = p.createdBy != null && p.createdBy == repo.currentUserId;
-    if (p.fromExcel) {
-      showMessage(context, '這筆是從日報表匯入的進貨，不能在 App 修改或刪除');
-      return;
-    }
-    if (!widget.membership.isManager && !mine) {
-      showMessage(context, '只有建立這筆的人或老闆、店長可以修改、刪除');
-      return;
-    }
-    if (p.reconciled) {
-      showMessage(context, '已核銷的進貨不能修改或刪除，請先由老闆或店長取消核銷');
-      return;
-    }
-    final locked = !p.counted; // 已被取代或以日報表為準：只能刪
-    final act = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: AppColors.card,
-      builder: (c) => SafeArea(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          ListTile(
-            title: Text('${p.supplierName ?? p.memo ?? '進貨'}・${ntd(p.amount)}',
-                style: const TextStyle(fontWeight: FontWeight.w700)),
-            subtitle: Text(locked ? '這筆已以日報表為準（不計入），只能刪除' : 'App 新增的進貨：可以修改或刪除'),
-          ),
-          if (!locked)
-            ListTile(leading: const Icon(Icons.edit_outlined), title: const Text('修改'), onTap: () => Navigator.pop(c, 'edit')),
-          ListTile(
-            leading: Icon(Icons.delete_outline, color: AppColors.bad),
-            title: Text('刪除', style: TextStyle(color: AppColors.bad)),
-            onTap: () => Navigator.pop(c, 'delete'),
-          ),
-        ]),
-      ),
-    );
-    if (!mounted || act == null) return;
-    if (act == 'edit') {
-      final saved = await Navigator.push<bool>(
-          context, MaterialPageRoute(builder: (_) => PurchaseFormScreen(membership: widget.membership, editing: p)));
-      if (saved == true && mounted) Navigator.pop(context);
-      return;
-    }
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: const Text('刪除這筆進貨？'),
-        content: Text('${DateFormat('M/d').format(p.purchaseDate)}　${p.supplierName ?? p.memo ?? ''}　${ntd(p.amount)}'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.bad),
-            onPressed: () => Navigator.pop(c, true),
-            child: const Text('刪除'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || !mounted) return;
-    try {
-      await repo.deletePurchase(p.id);
-      AppScope.of(context).stockRevision.value++; // 刪掉的進貨若有加進庫存，庫存頁要重算（Codex 審查）
-      if (!mounted) return;
-      showMessage(context, '已刪除');
-      setState(() => _items.removeWhere((x) => x.id == p.id));
-    } catch (e) {
-      if (mounted) showMessage(context, friendlyError(e), error: true);
-    }
+    final r = await purchaseTapped(context, widget.membership, p, widget.categoryNames[p.categoryCode] ?? p.categoryCode);
+    if (!mounted) return;
+    if (r == 'edited') Navigator.pop(context);
+    if (r == 'deleted') setState(() => _items.removeWhere((x) => x.id == p.id));
   }
 
   @override
@@ -633,6 +603,25 @@ class PurchaseFormScreen extends StatefulWidget {
   State<PurchaseFormScreen> createState() => _PurchaseFormScreenState();
 }
 
+/// 新增進貨填到一半的內容
+class _PurchaseDraft {
+  const _PurchaseDraft({required this.requestId, required this.paidBy, this.date, required this.dateTouched, this.category,
+      required this.vendor, required this.amount, required this.isReturn, required this.memo, this.photo,
+      required this.noReceipt, required this.items});
+  final String requestId;
+  final String paidBy;
+  final DateTime? date;
+  final bool dateTouched;
+  final String? category;
+  final String vendor;
+  final String amount;
+  final bool isReturn;
+  final String memo;
+  final String? photo;
+  final bool noReceipt;
+  final List<PurchaseItem> items;
+}
+
 /// 隱城新增進貨：各付款方式不提供的進貨類別（老闆 2026-10-11 決定）
 const _hiddenCatsByPaidBy = <String, Set<String>>{
   // 月結廠商不出現：零用金-其他雜支、現結酒商
@@ -644,8 +633,15 @@ const _hiddenCatsByPaidBy = <String, Set<String>>{
 class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   final _amount = TextEditingController();
   final _memo = TextEditingController();
-  // 同一張表單只產生一次：網路重送時資料庫會以這個 id 擋下重複
-  final _requestId = const Uuid().v4();
+  // 同一張表單只產生一次：網路重送時資料庫會以這個 id 擋下重複（帶回沒存的內容時沿用原本那個）
+  String _requestId = const Uuid().v4();
+  // 新增到一半離開（按到返回、切到別頁）：內容先留著，下次進來帶回（只留在這次開著的 App 裡，重開 App 就沒了）
+  static final _drafts = <String, _PurchaseDraft>{};
+  // 留著的內容照「登入的人＋店」分開：同一支手機換人登入，不會帶到別人填到一半的（Codex 審查）
+  String _draftKey = '';
+  bool _restored = false;
+  bool _saved = false;
+  bool _ready = false; // 資料讀完、填到一半的內容也帶回來了；在這之前離開不能動到留著的內容（Codex 審查）
   DateTime? _date;
   String? _category;
   final _vendor = TextEditingController(); // 廠商名稱：自行輸入（和既有廠商同名就自動對應）
@@ -694,6 +690,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
     super.didChangeDependencies();
     if (_started) return;
     _started = true;
+    _draftKey = '${AppScope.of(context).repo.currentUserId ?? ''}|${widget.membership.storeId}';
     _future = _load();
   }
 
@@ -735,10 +732,70 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
     }
     // 填表人預設帶入自己的名字（可以改成請款人）
     if (_memo.text.isEmpty && e == null) _memo.text = widget.membership.displayName;
+    final d = e == null ? _drafts[_draftKey] : null;
+    if (d != null) {
+      _requestId = d.requestId;
+      _paidBy = d.paidBy;
+      _date = d.date ?? _date;
+      _dateTouched = d.dateTouched;
+      _category = d.category;
+      _vendor.text = d.vendor;
+      _amount.text = d.amount;
+      _isReturn = d.isReturn;
+      _memo.text = d.memo;
+      _photo = d.photo;
+      _noReceipt = d.noReceipt;
+      _items = d.items;
+      _restored = true;
+    }
+    _ready = true;
     return (r[0] as List<CostCategory>, r[1] as List<Supplier>);
   }
 
   final _vendorFocus = FocusNode();
+
+  void _clearDraft() {
+    _drafts.remove(_draftKey);
+    setState(() {
+      _restored = false;
+      _requestId = const Uuid().v4();
+      _paidBy = 'vendor';
+      _dateTouched = false;
+      _category = null;
+      _vendor.clear();
+      _amount.clear();
+      _isReturn = false;
+      _memo.text = widget.membership.displayName;
+      _photo = null;
+      _noReceipt = false;
+      _items = [];
+      _readSeq++;
+      _reading = false;
+      _readMsg = null;
+      _date = bizToday(); // 日期回到今天的營業日
+    });
+  }
+
+  @override
+  void dispose() {
+    // 新增到一半（有照片、金額或廠商）就離開：留著，下次帶回
+    if (widget.editing == null && !_saved && _ready) {
+      final has = _photo != null || _amount.text.trim().isNotEmpty || _vendor.text.trim().isNotEmpty;
+      if (has) {
+        _drafts[_draftKey] = _PurchaseDraft(
+          requestId: _requestId, paidBy: _paidBy, date: _date, dateTouched: _dateTouched, category: _category,
+          vendor: _vendor.text, amount: _amount.text, isReturn: _isReturn, memo: _memo.text, photo: _photo,
+          noReceipt: _noReceipt, items: _items);
+      } else {
+        _drafts.remove(_draftKey);
+      }
+    }
+    _amount.dispose();
+    _memo.dispose();
+    _vendor.dispose();
+    _vendorFocus.dispose();
+    super.dispose();
+  }
 
   /// 本月＋前兩個月的月結廠商（名稱照進貨區塊的合併規則），依出現筆數多到少。
   /// 老闆 2026-10-29：只列月結廠商，零用金的店家不要列入：
@@ -907,29 +964,12 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
     }
   }
 
-  /// 把辨識結果填進表單：已經填了的欄位不蓋掉（品項例外：先問）
+  /// 把辨識結果填進表單：已經填了的欄位不蓋掉。
+  /// 老闆 2026-11-13：畫面不再顯示品項明細；照片讀到的品項留在背後，存檔時一起存，用來更新「進貨報價」。
   Future<void> _applyReading(SlipReading r) async {
-    if (r.items.isNotEmpty && _items.isNotEmpty) {
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (c) => AlertDialog(
-          title: const Text('換成這張照片的品項？'),
-          content: Text('目前的 ${_items.length} 行品項會換成照片讀到的 ${r.items.length} 行。'),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('保留目前的')),
-            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('換掉')),
-          ],
-        ),
-      );
-      if (!mounted) return;
-      if (ok == true) _items = [];
-    }
     final filled = <String>[];
     setState(() {
-      if (r.items.isNotEmpty && _items.isEmpty) {
-        _items = r.items;
-        filled.add('${r.items.length} 個品項');
-      }
+      if (r.items.isNotEmpty) _items = r.items; // 換照片就換成新照片讀到的
       if (r.vendor != null && _vendor.text.trim().isEmpty) {
         _vendor.text = _matchVendor(r.vendor!);
         filled.add('廠商');
@@ -962,6 +1002,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
       _readFailed = r.items.isEmpty && filled.isEmpty;
       _readMsg = [
         if (filled.isNotEmpty) '已帶入${filled.join('、')}，請對照單據核對。' else if (!_readFailed) '欄位都已經填了，沒有更動。',
+        if (r.items.isNotEmpty) '讀到 ${r.items.length} 個品項的單價，存檔後會更新進貨報價。',
         if (dateNote != null) dateNote,
         if (r.notes != null && r.notes!.trim().isNotEmpty) r.notes!.trim(),
         if (_readFailed && (r.notes == null || r.notes!.trim().isEmpty)) '這張照片讀不出內容，請手動輸入或重拍。',
@@ -985,45 +1026,6 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
         (c.storeName == null || c.storeName == store) && c.selectable && !_hiddenCats.contains(c.code));
     return ok.where((c) => c.name == label).firstOrNull?.code ??
         ok.where((c) => c.name.contains(label)).firstOrNull?.code;
-  }
-
-  Future<void> _editItem(int? index) async {
-    final isNew = index == null;
-    final r = await editPurchaseItem(
-      context,
-      item: isNew ? PurchaseItem(name: '', qty: 1) : _items[index],
-      isNew: isNew,
-    );
-    if (r == null || !mounted) return;
-    setState(() {
-      switch (r) {
-        case ItemSaved(:final item):
-          if (isNew) {
-            _items = [..._items, item];
-          } else {
-            _items = [..._items]..[index] = item;
-          }
-        case ItemDeleted():
-          if (!isNew) _items = [..._items]..removeAt(index);
-      }
-    });
-  }
-
-  Widget _itemsCard() {
-    if (!_itemsLoaded) {
-      return SectionCard(
-        child: Text('品項明細讀取失敗，這次修改不會動到明細。',
-            style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
-      );
-    }
-    return PurchaseItemsCard(
-      items: _items,
-      total: double.tryParse(_amount.text.replaceAll(',', '')),
-      isReturn: _isReturn,
-      enabled: !_saving && !_reading,
-      onTap: (i) => _editItem(i),
-      onAdd: () => _editItem(null),
-    );
   }
 
   Widget _scanCard(List<Supplier> sups) => SectionCard(
@@ -1056,7 +1058,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
           ]),
           Padding(
             padding: EdgeInsets.only(top: 6),
-            child: Text('拍好會自動讀出廠商、日期、金額和品項，請對照單據核對後再存。',
+            child: Text('拍好會自動帶入廠商、日期、金額，請對照單據核對後再存。',
                 style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
           ),
           if (_reading)
@@ -1102,11 +1104,12 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
             const SizedBox(height: 8),
             ClipRRect(
               borderRadius: BorderRadius.circular(AppRadius.sm),
-              child: Image.memory(dataUrlBytes(_photo!), height: _items.isEmpty ? 220 : 140, fit: BoxFit.contain),
+              child: Image.memory(dataUrlBytes(_photo!), height: 220, fit: BoxFit.contain),
             ),
             TextButton(
               onPressed: () => setState(() {
                 _photo = null;
+                _items = []; // 那張照片讀到的品項也不要了
                 _readSeq++; // 丟掉還在讀的結果
                 _reading = false;
                 _readMsg = null;
@@ -1125,6 +1128,18 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
             ),
         ]),
       );
+
+  /// 同一天、同付款方式、同金額的 App 進貨（還沒被日報表取代的）；查不到或讀取失敗回傳 null
+  Future<Purchase?> _findDuplicate(double amount) async {
+    try {
+      final list = await AppScope.of(context).repo.monthPurchases(widget.membership.storeId, _date!);
+      return list
+          .where((p) => !p.fromExcel && isSameDay(p.purchaseDate, _date!) && p.paidBy == _paidBy && p.amount == amount)
+          .firstOrNull;
+    } catch (_) {
+      return null;
+    }
+  }
 
   Future<void> _save() async {
     final raw = double.tryParse(_amount.text.replaceAll(',', ''));
@@ -1145,20 +1160,31 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
       showMessage(context, '照片還在讀取中，請稍等', error: true);
       return;
     }
-    final unsure = _items.where((it) => !it.sure).length;
-    if (unsure > 0) {
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (c) => AlertDialog(
-          title: const Text('已經對照單據核對了嗎？'),
-          content: Text('有 $unsure 行品項的字看不清楚（標黃色的），建議點開對照單據再確認。'),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('回去核對')),
-            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('已核對，儲存')),
-          ],
-        ),
-      );
-      if (ok != true || !mounted) return;
+    // 同一天、同付款方式、同金額已經有一筆 App 進貨：先問是不是重複登記（2026-11 查到重複登記的例子）
+    // 查的這段時間先把表單鎖住（跟存檔中一樣），不然查到一半又改欄位、又按一次儲存，會存到不一致的內容（Codex 審查）
+    if (widget.editing == null) {
+      setState(() => _saving = true);
+      final dup = await _findDuplicate(_isReturn ? -raw : raw);
+      if (!mounted) return;
+      if (dup != null) {
+        final ok = await showDialog<bool>(
+          context: context,
+          builder: (c) => AlertDialog(
+            title: const Text('這筆是不是登記過了？'),
+            content: Text('${DateFormat('M/d').format(_date!)} 已經有一筆一樣金額的${_paidBy == 'petty_cash' ? '零用金' : '月結'}進貨：\n'
+                '「${dup.supplierName ?? '沒寫廠商'}」${ntd(dup.amount)}${(dup.memo ?? '').trim().isEmpty ? '' : '（${dup.memo!.trim()} 登記）'}'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('回去看看')),
+              FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('不是同一筆，照樣新增')),
+            ],
+          ),
+        );
+        if (!mounted) return;
+        if (ok != true) {
+          setState(() => _saving = false);
+          return;
+        }
+      }
     }
     final rows = itemsForSave(_items, raw);
     final name = _vendor.text.trim();
@@ -1193,11 +1219,10 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
       );
       if (itemsToSave != null) app.stockRevision.value++;
       if (mounted) {
-        showMessage(context, widget.editing != null
-            ? '已修改'
-            : withoutDiffLine(rows).isEmpty
-                ? '已新增'
-                : '已新增，${withoutDiffLine(rows).length} 個品項已列進本月進貨總表');
+        _saved = true;
+        // 只有存好「新增」才清掉填到一半的內容；修改別筆不能把它吃掉（Codex 審查）
+        if (widget.editing == null) _drafts.remove(_draftKey);
+        showMessage(context, widget.editing != null ? '已修改' : '已新增');
         Navigator.pop(context, true);
       }
     } catch (e) {
@@ -1213,7 +1238,8 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
         onPopInvokedWithResult: (didPop, _) {
           if (!didPop && !_saving) Navigator.pop(context, true);
         },
-        child: _scaffold(context),
+        // 存檔中（含存檔前查重複）整張表單不能點、不能改
+        child: AbsorbPointer(absorbing: _saving, child: _scaffold(context)),
       );
 
   Widget _scaffold(BuildContext context) => Scaffold(
@@ -1237,7 +1263,24 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                       style: TextStyle(color: AppColors.warn, fontSize: AppType.small, height: 1.45)),
                 ),
               Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              // 付款方式放第一排（老闆 2026-10-12）：先選月結廠商／零用金，下面的類別選項才會對
+              if (_restored)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                  ),
+                  child: Row(children: [
+                    Expanded(
+                      child: Text('已帶回上次還沒存的內容', style: TextStyle(color: AppColors.primary, fontSize: AppType.small)),
+                    ),
+                    TextButton(onPressed: _saving ? null : _clearDraft, child: const Text('清掉重填')),
+                  ]),
+                ),
+              // 照片放最上面（2026-11-13）：先拍照，下面的欄位會自動帶入，只要核對
+              if (widget.editing == null) ...[_scanCard(sups), const SizedBox(height: 16)],
+              // 付款方式：先選月結廠商／零用金，下面的類別選項才會對（老闆 2026-10-12）
               SegmentedButton<String>(
                 segments: const [
                   ButtonSegment(value: 'vendor', label: Text('月結廠商'), icon: Icon(Icons.storefront)),
@@ -1392,9 +1435,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              if (widget.editing == null) ...[_scanCard(sups), const SizedBox(height: 12)],
               ]),
-              _itemsCard(),
               const SizedBox(height: 24),
               FilledButton(
                 onPressed: _saving ? null : _save,

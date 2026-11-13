@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' hide toDouble;
 
 import '../config.dart';
 import 'models.dart';
+import 'purchase_items_math.dart';
 import 'row_cache.dart';
 import 'repository.dart';
 
@@ -1264,33 +1265,83 @@ class SupabaseRepository implements Repository {
   }
 
   @override
-  Future<List<PurchaseItem>> monthPurchaseItems(String storeId, DateTime month) async {
-    final from = DateTime(month.year, month.month, 1);
-    final to = DateTime(month.year, month.month + 1, 1);
-    final out = <PurchaseItem>[];
+  Future<List<QuoteLine>> purchaseQuoteLines(String storeId) async {
+    final now = DateTime.now();
+    final from = DateTime(now.year - 1, now.month, 1);
+    final out = <QuoteLine>[];
     const page = 1000;
     for (var start = 0; start < page * 20; start += page) {
       final rows = await _db
           .from('purchase_items')
-          .select('item_name, qty, unit, unit_price, product_id, purchases!inner(store_id, purchase_date)')
+          .select('item_name, qty, unit, unit_price, '
+              'purchases!inner(store_id, purchase_date, created_at, category_code, vendor_name, suppliers!purchases_supplier_same_store(name))')
           .eq('purchases.store_id', storeId)
           .gte('purchases.purchase_date', _day.format(from))
-          .lt('purchases.purchase_date', _day.format(to))
           .order('id')
           .range(start, start + page - 1);
       for (final r in rows) {
-        out.add(PurchaseItem(
+        final p = r['purchases'] as Map;
+        out.add(QuoteLine(
           name: r['item_name'] as String,
           qty: toDouble(r['qty']), // 退貨是負數
           unit: r['unit'] as String?,
           unitPrice: r['unit_price'] == null ? null : toDouble(r['unit_price']),
-          productId: r['product_id'] as String?,
-          decided: true,
+          date: DateTime.parse(p['purchase_date'] as String),
+          at: p['created_at'] == null ? null : DateTime.parse(p['created_at'] as String),
+          vendor: (p['suppliers'] as Map?)?['name'] as String? ?? p['vendor_name'] as String?,
+          categoryCode: p['category_code'] as String,
         ));
       }
       if (rows.length < page) break;
     }
     return out;
+  }
+
+  @override
+  Future<List<QuoteEdit>> purchaseQuoteEdits(String storeId) async {
+    try {
+      final rows = await _db
+          .from('purchase_quote_edits')
+          .select('item_key, name, unit, unit_price, as_of, as_of_at, hidden, updated_name')
+          .eq('store_id', storeId)
+          .limit(5000);
+      return [
+        for (final r in rows)
+          QuoteEdit(
+            key: r['item_key'] as String,
+            name: r['name'] as String?,
+            unit: r['unit'] as String?,
+            unitPrice: r['unit_price'] == null ? null : toDouble(r['unit_price']),
+            asOf: r['as_of'] == null ? null : DateTime.parse(r['as_of'] as String),
+            asOfAt: r['as_of_at'] == null ? null : DateTime.parse(r['as_of_at'] as String),
+            hidden: r['hidden'] as bool? ?? false,
+            by: r['updated_name'] as String?,
+          ),
+      ];
+    } on PostgrestException catch (e) {
+      if (e.code == 'PGRST205' || e.code == '42P01') return const []; // 資料庫還沒更新（0105 之前）
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> savePurchaseQuoteEdit(String storeId, QuoteEdit edit) async {
+    final rows = await _db.from('purchase_quote_edits').upsert({
+      'store_id': storeId,
+      'item_key': edit.key,
+      'name': edit.name,
+      'unit': edit.unit,
+      'unit_price': edit.unitPrice,
+      'as_of': edit.asOf == null ? null : _day.format(edit.asOf!),
+      'as_of_at': edit.asOfAt?.toUtc().toIso8601String(),
+      'hidden': edit.hidden,
+    }, onConflict: 'store_id,item_key').select('item_key');
+    if (rows.isEmpty) throw Exception('message: 只有老闆或店長可以修改進貨報價,');
+  }
+
+  @override
+  Future<void> deletePurchaseQuoteEdit(String storeId, String key) async {
+    await _db.from('purchase_quote_edits').delete().eq('store_id', storeId).eq('item_key', key);
   }
 
   @override
@@ -1332,18 +1383,97 @@ class SupabaseRepository implements Repository {
   @override
   Future<List<Product>> products(String storeId) async {
     // 只列出員工有權限的欄位（cost_price 員工不可讀，不能用 select *）
-    final rows = await _db
-        .from('products')
-        .select('id, name, category, unit, par_level')
-        .eq('store_id', storeId)
-        .eq('active', true)
-        .order('category')
-        .order('name');
+    Future<List<Map<String, dynamic>>> read(String cols) =>
+        _db.from('products').select(cols).eq('store_id', storeId).eq('active', true).order('category').order('name');
+    List<Map<String, dynamic>> rows;
+    try {
+      rows = await read('id, name, category, unit, par_level, count_cycle');
+    } on PostgrestException catch (e) {
+      if (e.code != '42703' && e.code != 'PGRST204') rethrow; // 資料庫還沒有 count_cycle（0104 之前）
+      rows = await read('id, name, category, unit, par_level');
+    }
     return rows
         .map((r) => Product(r['id'] as String, r['name'] as String, r['category'] as String, r['unit'] as String,
-            parLevel: r['par_level'] == null ? null : toDouble(r['par_level'])))
+            parLevel: r['par_level'] == null ? null : toDouble(r['par_level']),
+            countCycle: r['count_cycle'] as String?))
         .toList();
   }
+
+  @override
+  Future<Map<String, LastCount>> stockLastCounts(String storeId) async {
+    try {
+      final rows = await _db.rpc('stock_last_counts', params: {'p_store': storeId}) as List;
+      return {
+        for (final r in rows)
+          r['product_id'] as String: LastCount(
+            toDouble(r['qty']),
+            DateTime.parse(r['counted_on'] as String),
+            at: r['counted_at'] == null ? null : DateTime.parse(r['counted_at'] as String),
+            by: r['counted_name'] as String?,
+          ),
+      };
+    } on PostgrestException catch (e) {
+      if (e.code != 'PGRST202' && e.code != '42883') rethrow;
+    }
+    // 資料庫還沒更新（0104 之前）：用舊的算法，只取盤點那一部分
+    final old = await latestStock(storeId);
+    return {
+      for (final e in old.entries)
+        if (e.value.date != null) e.key: LastCount(e.value.counted ?? e.value.qty, e.value.date!),
+    };
+  }
+
+  @override
+  Future<StockSubmitResult> submitStockCount(String storeId, Map<String, double> lines,
+      {required String requestId, DateTime? seenAt}) async {
+    try {
+      final r = await _db.rpc('submit_stock_count', params: {
+        'p_store': storeId,
+        'p_lines': lines,
+        'p_request': requestId,
+        'p_loaded_at': seenAt?.toUtc().toIso8601String(),
+      }) as Map;
+      return StockSubmitResult(
+        (r['lines'] as num?)?.toInt() ?? lines.length,
+        overlapped: [for (final x in (r['overlapped'] as List? ?? const [])) x as String],
+        repeat: r['repeat'] as bool? ?? false,
+      );
+    } on PostgrestException catch (e) {
+      if (e.code != 'PGRST202' && e.code != '42883') rethrow;
+    }
+    // 資料庫還沒更新（0104 之前）：照舊一項一項存
+    final id = await createStockCount(storeId, null);
+    for (final e in lines.entries) {
+      await upsertCountLine(id, e.key, e.value);
+    }
+    await setCountStatus(id, CountStatus.submitted);
+    return StockSubmitResult(lines.length);
+  }
+
+  @override
+  Future<List<PurchaseMatch>> purchaseMatchQueue(String storeId) async {
+    try {
+      final rows = await _db.rpc('purchase_match_queue', params: {'p_store': storeId}) as List;
+      return [for (final r in rows) PurchaseMatch.fromRow(Map<String, dynamic>.from(r as Map))];
+    } on PostgrestException catch (e) {
+      // 資料庫還沒更新、或不是老闆店長：當作沒有待確認的
+      if (e.code == 'PGRST202' || e.code == '42883' || e.code == '42501') return const [];
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> confirmPurchaseMatches(List<String> appIds) async {
+    if (appIds.isEmpty) return;
+    await _db.rpc('purchase_match_confirm', params: {'p_apps': appIds});
+  }
+
+  @override
+  Future<void> rejectPurchaseMatch(String appId) => _db.rpc('purchase_match_reject', params: {'p_app': appId});
+
+  @override
+  Future<void> dismissUnmatchedPurchase(String appId) =>
+      _db.rpc('purchase_unmatched_dismiss', params: {'p_app': appId});
 
   @override
   Future<Map<String, StockLevel>> latestStock(String storeId) async {
@@ -1389,8 +1519,14 @@ class SupabaseRepository implements Repository {
   }
 
   @override
-  Future<String> saveProduct(String storeId, Product p) async {
-    final row = {'name': p.name.trim(), 'category': p.category, 'unit': p.unit.trim(), 'par_level': p.parLevel};
+  Future<String> saveProduct(String storeId, Product p, {bool setCycle = false}) async {
+    final row = {
+      'name': p.name.trim(),
+      'category': p.category,
+      'unit': p.unit.trim(),
+      'par_level': p.parLevel,
+      if (setCycle) 'count_cycle': p.countCycle,
+    };
     if (p.id.isEmpty) {
       // 同名的品項以前停用過（清單上看不到）：直接恢復那一個，不另外新增（老闆 2026-10-25：新增時一直說已有相同名稱）
       final old = await _db
