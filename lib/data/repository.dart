@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'change_request_models.dart';
 import 'models.dart';
+import 'purchase_items_math.dart';
 import 'reservation_models.dart';
 import 'shift_planner.dart';
 export 'change_request_models.dart';
@@ -99,9 +100,15 @@ abstract class Repository {
   Future<List<Purchase>> monthPurchases(String storeId, DateTime month);
   /// 拍照辨識送貨單（0087，Claude 讀圖；每店每天有次數上限）。image＝JPEG data URL
   Future<SlipReading> readSlip(String storeId, String image);
-  /// 某個月所有進貨的品項明細（本月進貨總表用；退貨的數量是負數）
-  Future<List<PurchaseItem>> monthPurchaseItems(String storeId, DateTime month);
-  /// 進貨的品項明細（0087）
+  /// 進貨報價用：最近一年進貨的品項明細，帶進貨日期、廠商、類別（退貨的數量是負數）
+  Future<List<QuoteLine>> purchaseQuoteLines(String storeId);
+  /// 手動改過的進貨報價（0105；資料庫還沒更新時回傳空清單）
+  Future<List<QuoteEdit>> purchaseQuoteEdits(String storeId);
+  /// 改報價（品名、單位、單價）或把那一項拿掉（hidden）；只有老闆、店長
+  Future<void> savePurchaseQuoteEdit(String storeId, QuoteEdit edit);
+  /// 還原成進貨資料（刪掉手動修改）
+  Future<void> deletePurchaseQuoteEdit(String storeId, String key);
+  /// 進貨的品項明細（0087；畫面不再顯示，存檔時在背後一起存，用來更新進貨報價）
   Future<List<PurchaseItem>> purchaseItems(String purchaseId);
   /// 新增或修改進貨主檔＋品項明細，一次存完，全部成功才算（0089 修復：原本分兩次存，中途斷線會變成
   /// 帳改了、庫存沒改）。purchaseId＝null 表示新增（日報表匯入的進貨不能改：以日報表為準，資料庫 0035）；
@@ -112,6 +119,14 @@ abstract class Repository {
       {String? purchaseId, required NewPurchase purchase, List<PurchaseItem>? items, bool negate = false});
   Future<void> setReconciled(String purchaseId, bool reconciled);
   Future<void> deletePurchase(String purchaseId);
+  /// 進貨待確認清單（0104，只有老闆、店長；資料庫還沒更新或沒權限時回傳空清單）
+  Future<List<PurchaseMatch>> purchaseMatchQueue(String storeId);
+  /// 確認「是同一筆」（可以一次好幾筆）
+  Future<void> confirmPurchaseMatches(List<String> appIds);
+  /// 「不是同一筆」：後台幾分鐘內拆開、重新比對
+  Future<void> rejectPurchaseMatch(String appId);
+  /// 日報表沒有這一筆：「知道了」（那筆仍然不計入，只是從清單拿掉）
+  Future<void> dismissUnmatchedPurchase(String appId);
 
   // 廠商銷貨單明細（小城外）
   Future<List<VendorSlip>> vendorSlips(String storeId, DateTime month);
@@ -197,9 +212,15 @@ abstract class Repository {
   Future<void> setCountStatus(String countId, CountStatus status, {String? voidReason});
   /// 每個品項目前的庫存：最近一次盤點（草稿、作廢、退回不算）＋之後進貨明細加進來的（0087）
   Future<Map<String, StockLevel>> latestStock(String storeId);
+  /// 每個品項最後一次盤點的數量、哪天、誰盤的（0104：庫存只看最後盤點量）
+  Future<Map<String, LastCount>> stockLastCounts(String storeId);
+  /// 盤點一次存完（0104）：建立＋每一項＋送出同一個交易；requestId 相同的重送不會存兩張。
+  /// seenAt＝開始盤時看到的最新一次盤點時間（之後別人也盤過的品項會回報）
+  Future<StockSubmitResult> submitStockCount(String storeId, Map<String, double> lines,
+      {required String requestId, DateTime? seenAt});
   /// 新增或修改品項（老闆／店長）；id 為空字串＝新增
-  /// 回傳品項 id
-  Future<String> saveProduct(String storeId, Product p);
+  /// 回傳品項 id。setCycle＝true 才會寫入「多久盤一次」（只有老闆、店長能改，0104）
+  Future<String> saveProduct(String storeId, Product p, {bool setCycle = false});
   /// 停用品項（不刪除，歷史盤點照常顯示）
   Future<void> deactivateProduct(String productId);
 

@@ -226,7 +226,84 @@ class Product {
   final String category; // 酒水／餐食／雜項（舊資料可能是其他字）
   final String unit;
   final double? parLevel; // 安全量：低於就提醒（老闆 2026-10-16）
-  Product(this.id, this.name, this.category, this.unit, {this.parLevel});
+  /// 重點品項多久盤一次（0104，老闆 2026-11-13）：daily 每天／weekly 每週／null 不追蹤；只有老闆、店長能設
+  final String? countCycle;
+  Product(this.id, this.name, this.category, this.unit, {this.parLevel, this.countCycle});
+}
+
+/// 某品項最後一次盤點（0104，老闆 2026-11-13：庫存只看「最後盤點量」，不加之後的進貨、不扣銷售）
+class LastCount {
+  final double qty;
+  final DateTime date; // 盤點的營業日
+  final DateTime? at; // 盤點時間（資料庫的時間）
+  final String? by; // 誰盤的
+  const LastCount(this.qty, this.date, {this.at, this.by});
+}
+
+/// 盤點送出的結果（0104：一次存完）
+class StockSubmitResult {
+  final int lines;
+  final List<String> overlapped; // 開始盤之後別人也盤過的品項（仍以這次送出的為準）
+  final bool repeat; // 同一次重送（之前其實已經存好了）
+  const StockSubmitResult(this.lines, {this.overlapped = const [], this.repeat = false});
+}
+
+/// 進貨待確認清單的一筆（0104，只有老闆、店長）：
+/// pair＝App 那筆已經配到日報表某一筆，但日期、名稱或類別不一樣；unmatched＝日報表已經記過那幾天，卻沒有這一筆
+class PurchaseMatch {
+  final String kind; // pair / unmatched
+  final String appId;
+  final DateTime appDate;
+  final double amount;
+  final String paidBy;
+  final String appName;
+  final String appCategory;
+  final String? photoPath;
+  final String? createdName;
+  final String? importId;
+  final DateTime? importDate;
+  final String? importName;
+  final String? importCategory;
+  final List<String> reasons;
+  final bool waiting; // 已經按了「不是同一筆」，等後台重新比對
+  const PurchaseMatch({
+    required this.kind,
+    required this.appId,
+    required this.appDate,
+    required this.amount,
+    required this.paidBy,
+    required this.appName,
+    required this.appCategory,
+    this.photoPath,
+    this.createdName,
+    this.importId,
+    this.importDate,
+    this.importName,
+    this.importCategory,
+    this.reasons = const [],
+    this.waiting = false,
+  });
+  bool get isPair => kind == 'pair';
+  /// 只差日期（名稱、類別都對得上）：風險最低，可以一次確認
+  bool get dateOnly => isPair && !waiting && reasons.length == 1 && reasons.first == '日期不同';
+
+  factory PurchaseMatch.fromRow(Map<String, dynamic> r) => PurchaseMatch(
+        kind: r['kind'] as String,
+        appId: r['app_id'] as String,
+        appDate: _date(r['app_date'])!,
+        amount: _d(r['amount']),
+        paidBy: r['paid_by'] as String? ?? 'vendor',
+        appName: r['app_name'] as String? ?? '',
+        appCategory: r['app_category'] as String? ?? '',
+        photoPath: r['photo_path'] as String?,
+        createdName: r['created_name'] as String?,
+        importId: r['import_id'] as String?,
+        importDate: _date(r['import_date']),
+        importName: r['import_name'] as String?,
+        importCategory: r['import_category'] as String?,
+        reasons: [for (final x in (r['reasons'] as List? ?? const [])) x as String],
+        waiting: r['waiting'] as bool? ?? false,
+      );
 }
 
 /// 某品項目前的庫存（老闆 2026-10-16：盤點只看庫存、缺貨提醒）

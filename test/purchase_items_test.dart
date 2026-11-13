@@ -78,36 +78,52 @@ void main() {
     expect(r.items.every((i) => i.source == 'ai'), isTrue);
   });
 
-  group('本月進貨總表 summarizeItems', () {
-    test('同一個庫存品項合在一起，單價不同用平均', () {
-      final rows = summarizeItems([
-        PurchaseItem(name: '琴酒 700ml', qty: 2, unit: '瓶', unitPrice: 500, productId: 'p1'),
-        PurchaseItem(name: 'Gordon 琴酒', qty: 1, unit: '瓶', unitPrice: 560, productId: 'p1'),
-        PurchaseItem(name: '檸檬', qty: 3, unit: '斤', unitPrice: 100),
-      ], {'p1': '琴酒 Gordon'});
-      expect(rows.first.name, '琴酒 Gordon');
-      expect(rows.first.qty, 3);
-      expect(rows.first.total, 1560);
-      expect(rows.first.priceVaries, isTrue);
-      expect(rows.first.unitPrice, 520);
-      expect(rows.last.unitPrice, 100);
+  group('進貨報價 buildQuotes', () {
+    String? group(String c) => {'d': 'drink', 'f': 'food', 'm': 'other'}[c];
+    QuoteLine line(String name, double price, int day, {String cat = 'd', String? unit = '瓶', double qty = 1, String? vendor}) =>
+        QuoteLine(name: name, unit: unit, unitPrice: price, qty: qty, date: DateTime(2026, 11, day), vendor: vendor, categoryCode: cat);
+
+    test('每個品項取最近一次的單價，帶上一次不同的價錢；分酒類、餐食，雜項不列', () {
+      final rows = buildQuotes([
+        line('琴酒 700ml', 500, 2, vendor: '甲'),
+        line('琴酒700ML', 560, 9, vendor: '乙'),
+        line('檸檬', 100, 5, cat: 'f', unit: '斤'),
+        line('塑膠袋', 30, 5, cat: 'm', unit: '包'),
+      ], const [], group);
+      expect(rows.map((r) => r.name), ['檸檬', '琴酒700ML']);
+      final gin = rows.last;
+      expect([gin.group, gin.price, gin.previous, gin.vendor, gin.date.day], ['drink', 560, 500, '乙', 9]);
+      expect(rows.first.group, 'food');
+      expect(rows.first.previous, isNull);
     });
-    test('退貨扣回、其他差額不算品項', () {
-      final rows = summarizeItems([
-        PurchaseItem(name: '檸檬', qty: 5, unit: '斤', unitPrice: 100),
-        PurchaseItem(name: '檸檬', qty: -1, unit: '斤', unitPrice: 100),
-        PurchaseItem(name: diffItemName, qty: 1, unitPrice: 80),
-      ], {});
-      expect(rows, hasLength(1));
-      expect(rows.single.qty, 4);
-      expect(rows.single.total, 400);
+    test('退貨、沒單價、其他差額不算；單位不同分開列', () {
+      final rows = buildQuotes([
+        line('可樂', 20, 3, unit: '罐'),
+        line('可樂', 450, 4, unit: '箱'),
+        line('可樂', 25, 5, unit: '罐', qty: -2),
+        line('萊姆', 0, 5),
+        line(diffItemName, 80, 5, unit: null),
+      ], const [], group);
+      expect(rows.map((r) => '${r.name}${r.unit}:${r.price}'), ['可樂罐:20.0', '可樂箱:450.0']);
     });
-    test('依金額大到小', () {
-      final rows = summarizeItems([
-        PurchaseItem(name: 'A', qty: 1, unitPrice: 10),
-        PurchaseItem(name: 'B', qty: 1, unitPrice: 99),
-      ], {});
-      expect(rows.map((r) => r.name), ['B', 'A']);
+    test('手動改單價：之後沒有更新的進貨才算數；改的品名、單位一直保留', () {
+      final lines = [line('琴酒', 500, 2), line('琴酒', 560, 9)];
+      final key = quoteKey('琴酒', '瓶');
+      final still = buildQuotes(lines, [QuoteEdit(key: key, name: 'Gordon 琴酒', unitPrice: 540, asOf: DateTime(2026, 11, 9))], group).single;
+      expect([still.name, still.price, still.manual, still.previous, still.edited], ['Gordon 琴酒', 540, true, 560, true]);
+      final newer = buildQuotes(lines, [QuoteEdit(key: key, name: 'Gordon 琴酒', unitPrice: 540, asOf: DateTime(2026, 11, 2))], group).single;
+      expect([newer.name, newer.price, newer.manual, newer.previous], ['Gordon 琴酒', 560, false, 500]);
+      expect([newer.rawName, newer.rawPrice], ['琴酒', 560]);
+    });
+    test('手動拿掉的標成 hidden（畫面另外收起來），還原後照進貨資料', () {
+      final lines = [line('琴酒', 500, 2)];
+      final hidden = buildQuotes(lines, [QuoteEdit(key: quoteKey('琴酒', '瓶'), hidden: true)], group).single;
+      expect([hidden.hidden, hidden.edited], [true, false]);
+      expect(buildQuotes(lines, const [], group).single.hidden, isFalse);
+    });
+    test('同一天進兩次，取後面那一行', () {
+      final rows = buildQuotes([line('琴酒', 500, 2), line('琴酒', 520, 2)], const [], group);
+      expect([rows.single.price, rows.single.previous], [520, 500]);
     });
   });
 }

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'models.dart';
+import 'purchase_items_math.dart';
 import 'repository.dart';
 
 /// 示範資料：不連線，數字全部是虛構的示範值（不是真實營收），只用來看畫面與操作流程。
@@ -34,12 +35,24 @@ class DemoRepository implements Repository {
     Supplier('s5', '示範食材行', 'food'),
   ];
   final _products = [
-    Product('p1', "Hendrick's Gin", '酒水', '瓶', parLevel: 2),
-    Product('p2', 'Bombay Sapphire', '酒水', '瓶'),
-    Product('p3', 'Campari', '酒水', '瓶'),
+    Product('p1', "Hendrick's Gin", '酒水', '瓶', parLevel: 2, countCycle: 'daily'),
+    Product('p2', 'Bombay Sapphire', '酒水', '瓶', countCycle: 'weekly'),
+    Product('p3', 'Campari', '酒水', '瓶', parLevel: 1),
     Product('p4', 'Chartreuse', '酒水', '瓶'),
-    Product('p5', '檸檬', '餐食', '顆', parLevel: 20),
+    Product('p5', '檸檬', '餐食', '顆', parLevel: 20, countCycle: 'daily'),
+    Product('p6', '薄荷葉', '餐食', '盒', countCycle: 'daily'),
   ];
+  // 示範：之前盤過的（幾天前、誰盤的）
+  late final Map<String, LastCount> _demoLast = {
+    'p1': LastCount(1.4, _daysAgo(1), at: DateTime.now().subtract(const Duration(days: 1)), by: '示範正職'),
+    'p2': LastCount(3, _daysAgo(9), at: DateTime.now().subtract(const Duration(days: 9)), by: '示範店長'),
+    'p3': LastCount(0.6, _daysAgo(3), at: DateTime.now().subtract(const Duration(days: 3)), by: '示範正職'),
+    'p5': LastCount(34, _daysAgo(0), at: DateTime.now().subtract(const Duration(hours: 2)), by: '示範兼職'),
+  };
+  static DateTime _daysAgo(int n) {
+    final t = DateTime.now().subtract(Duration(hours: 6, days: n));
+    return DateTime(t.year, t.month, t.day);
+  }
   late final List<Purchase> _purchases = [
     Purchase(id: 'x1', purchaseDate: DateTime(2026, 9, 25), categoryCode: 'liquor_monthly', supplierName: '示範酒商', amount: 2000, paidBy: 'vendor', reconciled: true, source: 'import'),
     Purchase(id: 'x2', purchaseDate: DateTime(2026, 9, 24), categoryCode: 'food', supplierName: null, memo: '示範食材', amount: 3000, paidBy: 'vendor', reconciled: true, source: 'import'),
@@ -50,6 +63,12 @@ class DemoRepository implements Repository {
     Purchase(id: 'x6', purchaseDate: DateTime(2026, 9, 18), categoryCode: 'liquor_monthly', supplierName: '示範酒商', amount: 5400, paidBy: 'vendor', reconciled: false, source: 'import'),
     Purchase(id: 'x8', purchaseDate: DateTime(2026, 9, 20), categoryCode: 'liquor_monthly', supplierName: '示範酒商(退酒)', amount: -580, paidBy: 'vendor', reconciled: true, source: 'import'),
     Purchase(id: 'x7', purchaseDate: DateTime(2026, 9, 20), categoryCode: 'food', supplierName: '示範肉品行', amount: 4600, paidBy: 'vendor', reconciled: false, source: 'import'),
+    // 這個月的示範（依日期看每一筆、待確認用）
+    Purchase(id: 'y1', purchaseDate: _daysAgo(1), categoryCode: 'yc_drink', supplierName: '示範酒商A', memo: '示範正職', amount: 6300, paidBy: 'vendor', reconciled: false, source: 'app'),
+    Purchase(id: 'y2', purchaseDate: _daysAgo(1), categoryCode: 'yc_food', supplierName: '全聯 檸檬', memo: '示範正職', amount: 186, paidBy: 'petty_cash', reconciled: false, source: 'app', noReceipt: true),
+    Purchase(id: 'y3', purchaseDate: _daysAgo(4), categoryCode: 'yc_drink', supplierName: '示範酒商B', amount: 4200, paidBy: 'vendor', reconciled: true, source: 'import'),
+    Purchase(id: 'y4', purchaseDate: _daysAgo(5), categoryCode: 'yc_food', supplierName: '示範水果行', amount: 1260, paidBy: 'vendor', reconciled: false, source: 'import'),
+    Purchase(id: 'y5', purchaseDate: _daysAgo(9), categoryCode: 'yc_misc', supplierName: '衛生廚房用品', memo: '示範正職', amount: 628, paidBy: 'petty_cash', reconciled: false, source: 'app', excelCovered: true),
   ];
   final _counts = <StockCount>[];
   final _lines = <String, Map<String, double>>{};
@@ -765,13 +784,41 @@ class DemoRepository implements Repository {
   }
 
   @override
-  Future<List<PurchaseItem>> monthPurchaseItems(String storeId, DateTime month) async => [
-        for (final e in _items.entries)
-          if (_purchaseMeta[e.key] case final m? when m.$1.year == month.year && m.$1.month == month.month)
-            for (final it in e.value)
-              PurchaseItem(name: it.name, qty: _itemNegate[e.key] == true ? -it.qty : it.qty, unit: it.unit,
-                  unitPrice: it.unitPrice, productId: it.productId, decided: true),
-      ];
+  Future<List<QuoteLine>> purchaseQuoteLines(String storeId) async {
+    QuoteLine q(String n, String? u, double price, int daysAgo, String v, String cat) => QuoteLine(
+        name: n, unit: u, unitPrice: price, qty: 1, date: _daysAgo(daysAgo), vendor: v, categoryCode: cat);
+    return [
+      q("Hendrick's Gin 700ml", '瓶', 1050, 20, '示範酒商A', 'yc_drink'),
+      q("Hendrick's Gin 700ml", '瓶', 1080, 3, '示範酒商A', 'yc_drink'),
+      q('Bombay Sapphire', '瓶', 620, 9, '示範酒商B', 'yc_drink'),
+      q('Campari', '瓶', 590, 12, '示範酒商A', 'yc_drink'),
+      q('Campari', '瓶', 560, 2, '示範酒商B', 'yc_drink'),
+      q('通寧水', '箱', 480, 5, '示範酒商B', 'yc_drink'),
+      q('檸檬', '斤', 65, 6, '示範水果行', 'yc_food'),
+      q('檸檬', '斤', 72, 1, '示範水果行', 'yc_food'),
+      q('薯條', '包', 135, 4, '示範冷凍食品', 'yc_food'),
+      q('垃圾袋', '包', 89, 4, '示範雜貨', 'yc_misc'),
+      // 新增進貨時照片讀到的（示範）
+      for (final e in _items.entries)
+        if (_purchaseMeta[e.key] case final m?)
+          for (final it in e.value)
+            QuoteLine(name: it.name, unit: it.unit, unitPrice: it.unitPrice, qty: _itemNegate[e.key] == true ? -it.qty : it.qty,
+                date: m.$1, vendor: _purchases.where((p) => p.id == e.key).firstOrNull?.supplierName,
+                categoryCode: _purchases.where((p) => p.id == e.key).firstOrNull?.categoryCode ?? 'yc_misc'),
+    ];
+  }
+
+  final _quoteEdits = <String, QuoteEdit>{};
+  @override
+  Future<List<QuoteEdit>> purchaseQuoteEdits(String storeId) async => _quoteEdits.values.toList();
+  @override
+  Future<void> savePurchaseQuoteEdit(String storeId, QuoteEdit edit) async {
+    if (_isStaff) throw Exception('message: 只有老闆或店長可以修改進貨報價,');
+    _quoteEdits[edit.key] = edit;
+  }
+
+  @override
+  Future<void> deletePurchaseQuoteEdit(String storeId, String key) async => _quoteEdits.remove(key);
 
   @override
   Future<List<PurchaseItem>> purchaseItems(String purchaseId) async => [
@@ -835,6 +882,33 @@ class DemoRepository implements Repository {
   @override
   Future<void> deletePurchase(String purchaseId) async => _purchases.removeWhere((x) => x.id == purchaseId);
 
+  // 進貨待確認（示範）
+  late final List<PurchaseMatch> _matches = [
+    PurchaseMatch(kind: 'pair', appId: 'm1', appDate: _daysAgo(3), amount: 290, paidBy: 'petty_cash', appName: '小北 3M手套',
+        appCategory: '雜項', createdName: '示範正職', importId: 'i1', importDate: _daysAgo(8), importName: '豆芽菜.蒜仁',
+        importCategory: '餐食', reasons: const ['日期不同', '名稱對不上', '類別不同']),
+    PurchaseMatch(kind: 'pair', appId: 'm2', appDate: _daysAgo(5), amount: 1260, paidBy: 'vendor', appName: '示範水果行',
+        appCategory: '餐食', createdName: '示範店長', importId: 'i2', importDate: _daysAgo(4), importName: '示範水果行',
+        importCategory: '餐食', reasons: const ['日期不同']),
+    PurchaseMatch(kind: 'unmatched', appId: 'm3', appDate: _daysAgo(9), amount: 628, paidBy: 'petty_cash', appName: '衛生廚房用品',
+        appCategory: '雜項', createdName: '示範正職', reasons: const ['日報表沒有這一筆']),
+  ];
+  @override
+  Future<List<PurchaseMatch>> purchaseMatchQueue(String storeId) async => _isStaff ? const [] : List.of(_matches);
+  @override
+  Future<void> confirmPurchaseMatches(List<String> appIds) async => _matches.removeWhere((m) => appIds.contains(m.appId));
+  @override
+  Future<void> rejectPurchaseMatch(String appId) async {
+    final i = _matches.indexWhere((m) => m.appId == appId);
+    final m = _matches[i];
+    _matches[i] = PurchaseMatch(kind: m.kind, appId: m.appId, appDate: m.appDate, amount: m.amount, paidBy: m.paidBy,
+        appName: m.appName, appCategory: m.appCategory, createdName: m.createdName, importId: m.importId,
+        importDate: m.importDate, importName: m.importName, importCategory: m.importCategory, reasons: m.reasons, waiting: true);
+  }
+
+  @override
+  Future<void> dismissUnmatchedPurchase(String appId) async => _matches.removeWhere((m) => m.appId == appId);
+
   @override
   Future<void> setReconciled(String purchaseId, bool reconciled) async {
     if (_isStaff) throw Exception('message: 只有老闆或店長可以核銷,');
@@ -880,15 +954,39 @@ class DemoRepository implements Repository {
   final _countedAt = <String, DateTime>{};
 
   @override
-  Future<String> saveProduct(String storeId, Product p) async {
+  Future<Map<String, LastCount>> stockLastCounts(String storeId) async {
+    final out = Map.of(_demoLast);
+    for (final c in _counts) {
+      if (c.status != CountStatus.submitted && c.status != CountStatus.approved) continue;
+      for (final e in (_lines[c.id] ?? {}).entries) {
+        out[e.key] = LastCount(e.value, c.bizDate, at: _countedAt[c.id], by: '示範使用者');
+      }
+    }
+    return out;
+  }
+
+  final _stockRequests = <String>{};
+  @override
+  Future<StockSubmitResult> submitStockCount(String storeId, Map<String, double> lines,
+      {required String requestId, DateTime? seenAt}) async {
+    if (!_stockRequests.add(requestId)) return StockSubmitResult(lines.length, repeat: true);
+    final id = await createStockCount(storeId, null);
+    _lines[id]!.addAll(lines);
+    await setCountStatus(id, CountStatus.submitted);
+    return StockSubmitResult(lines.length);
+  }
+
+  @override
+  Future<String> saveProduct(String storeId, Product p, {bool setCycle = false}) async {
     // 同名的停用品項：恢復那一個（與正式資料庫一致）
     final old = p.id.isEmpty ? _products.where((x) => x.name == p.name.trim() && _inactive.contains(x.id)).firstOrNull : null;
     if (old != null) {
       _inactive.remove(old.id);
-      p = Product(old.id, p.name, p.category, p.unit, parLevel: p.parLevel);
+      p = Product(old.id, p.name, p.category, p.unit, parLevel: p.parLevel, countCycle: p.countCycle);
     }
     final i = _products.indexWhere((x) => x.id == p.id);
-    final np = Product(p.id.isEmpty ? 'p${_seq++}' : p.id, p.name, p.category, p.unit, parLevel: p.parLevel);
+    final np = Product(p.id.isEmpty ? 'p${_seq++}' : p.id, p.name, p.category, p.unit,
+        parLevel: p.parLevel, countCycle: setCycle || i < 0 ? p.countCycle : _products[i].countCycle);
     if (i < 0) {
       _products.add(np);
     } else {

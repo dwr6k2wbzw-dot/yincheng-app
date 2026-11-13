@@ -1,6 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 
 import '../app_state.dart';
 import '../data/models.dart';
@@ -13,6 +17,10 @@ import '../widgets/common.dart';
 /// - 品項由老闆／店長／正職在 App 新增（名稱、類別、單位、安全量）
 /// - 酒類開過的：整瓶＋剩幾成（0.1 為單位）
 /// - 誰盤都直接算數：盤完直接更新庫存，不用核准
+/// 老闆 2026-11-13（進貨與庫存改善第一版）：
+/// - 這裡的數字是「最後盤點量」：不加之後的進貨、不扣銷售，盤了才會更新；每一項標出幾天前盤的、誰盤的
+/// - 重點品項（老闆、店長設定每天／每週盤）：該盤的列在最上面
+/// - 盤點可以直接打數字、只盤一項、盤到一半離開會留著；送出一次存完（0104）
 const stockCategories = ['酒水', '餐食', '雜項'];
 
 String fmtQty(double q) => q == q.roundToDouble() ? q.toInt().toString() : q.toStringAsFixed(1);
@@ -28,16 +36,29 @@ List<Product> _sorted(List<Product> list) => [...list]
     return c != 0 ? c : a.name.compareTo(b.name);
   });
 
-/// 「・10/28 盤 ＋進貨 12」：庫存＝盤點＋之後進貨（0087）
-String _stockNote(StockLevel? s, String unit) {
-  if (s == null) return '';
-  final d = s.date == null ? '・還沒盤點' : '・${DateFormat('M/d').format(s.date!)} 盤';
-  if (s.purchased == 0) return d;
-  final sign = s.purchased > 0 ? '＋' : '−';
-  return '$d $sign進貨 ${fmtQty(s.purchased.abs())}';
+int _daysSince(DateTime d) => bizToday().difference(DateTime(d.year, d.month, d.day)).inDays;
+
+/// 「昨天盤・小明」「6 天前盤」「還沒盤過」
+String countAge(LastCount? s, {bool who = true}) {
+  if (s == null) return '還沒盤過';
+  final n = _daysSince(s.date);
+  final when = n <= 0 ? '今天盤' : (n == 1 ? '昨天盤' : '$n 天前盤');
+  return !who || (s.by ?? '').isEmpty ? when : '$when・${s.by}';
 }
 
-bool _isLow(Product p, StockLevel? s) => p.parLevel != null && s != null && s.qty < p.parLevel!;
+/// 重點品項該盤了沒：每天盤的今天（營業日）還沒盤、每週盤的超過 7 天沒盤
+bool isCountDue(Product p, LastCount? s) => switch (p.countCycle) {
+      'daily' => s == null || _daysSince(s.date) >= 1,
+      'weekly' => s == null || _daysSince(s.date) >= 7,
+      _ => false,
+    };
+
+/// 很久沒盤（超過兩週）：數字可能不準，用淡色提醒
+bool _isStale(LastCount? s) => s != null && _daysSince(s.date) > 14;
+
+String cycleLabel(String? c) => switch (c) { 'daily' => '每天盤', 'weekly' => '每週盤', _ => '' };
+
+bool _isLow(Product p, LastCount? s) => p.parLevel != null && s != null && s.qty < p.parLevel!;
 
 class StockCountsScreen extends StatefulWidget {
   const StockCountsScreen({super.key, required this.membership});
@@ -47,7 +68,7 @@ class StockCountsScreen extends StatefulWidget {
 }
 
 class _StockCountsScreenState extends State<StockCountsScreen> {
-  late Future<(List<Product>, Map<String, StockLevel>)> _future;
+  late Future<(List<Product>, Map<String, LastCount>)> _future;
   bool _started = false;
   String _cat = '全部';
 
@@ -73,11 +94,32 @@ class _StockCountsScreenState extends State<StockCountsScreen> {
     super.dispose();
   }
 
-  Future<(List<Product>, Map<String, StockLevel>)> _load() async {
+  Future<(List<Product>, Map<String, LastCount>)> _load() async {
     final repo = AppScope.of(context).repo;
     final r = await Future.wait<dynamic>(
-        [repo.products(widget.membership.storeId), repo.latestStock(widget.membership.storeId)]);
-    return (_sorted(r[0] as List<Product>), r[1] as Map<String, StockLevel>);
+        [repo.products(widget.membership.storeId), repo.stockLastCounts(widget.membership.storeId)]);
+    return (_sorted(r[0] as List<Product>), r[1] as Map<String, LastCount>);
+  }
+
+  /// 只盤這一項：點品項 → 打數量 → 送出（不用進整張盤點）
+  Future<void> _quick(Product p, Map<String, LastCount> last) async {
+    final qty = await showModalBottomSheet<double>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      backgroundColor: AppColors.card,
+      builder: (_) => _QuickCountSheet(product: p, last: last[p.id]),
+    );
+    if (qty == null || !mounted) return;
+    try {
+      final r = await AppScope.of(context).repo.submitStockCount(widget.membership.storeId, {p.id: qty},
+          requestId: const Uuid().v4(), seenAt: _latestAt(last.values));
+      if (!mounted) return;
+      showMessage(context, r.overlapped.isEmpty ? '已更新「${p.name}」：${fmtQty(qty)} ${p.unit}' : '已更新；剛剛也有人盤過「${p.name}」，以你這次的為準');
+      _reload();
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+    }
   }
 
   void _reload() => setState(() => _future = _load());
@@ -88,7 +130,7 @@ class _StockCountsScreenState extends State<StockCountsScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => FutureBuilder<(List<Product>, Map<String, StockLevel>)>(
+  Widget build(BuildContext context) => FutureBuilder<(List<Product>, Map<String, LastCount>)>(
         future: _future,
         builder: (context, snap) {
           final data = snap.data;
@@ -109,15 +151,17 @@ class _StockCountsScreenState extends State<StockCountsScreen> {
         },
       );
 
-  Widget _body(List<Product> products, Map<String, StockLevel> last) {
+  Widget _body(List<Product> products, Map<String, LastCount> last) {
     // 品項管理：老闆、店長、正職（0051，老闆 2026-10-16）＋兼職（0067，老闆 2026-10-26）
     final isMgr = widget.membership.isManager || widget.membership.role == Role.staff || widget.membership.isPartTime;
     final low = products.where((p) => _isLow(p, last[p.id])).toList();
+    final key = products.where((p) => p.countCycle != null).toList();
+    final due = key.where((p) => isCountDue(p, last[p.id])).toList();
     final cats = ['全部', ...stockCategories, ...{for (final p in products) p.category}.where((c) => !stockCategories.contains(c))];
     final shown = products.where((p) => _cat == '全部' || p.category == _cat).toList();
     return ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 96), children: [
       Row(children: [
-        Expanded(child: Text('庫存', style: TextStyle(fontSize: AppType.small, color: AppColors.muted, letterSpacing: 2))),
+        Expanded(child: Text('最後盤點量', style: TextStyle(fontSize: AppType.small, color: AppColors.muted, letterSpacing: 2))),
         if (isMgr)
           TextButton.icon(
             onPressed: () => _open(ProductsScreen(membership: widget.membership)),
@@ -143,6 +187,57 @@ class _StockCountsScreenState extends State<StockCountsScreen> {
           ]),
         )
       else ...[
+        InfoLine(
+          icon: Icons.inventory_2_outlined,
+          text: '每一項是最後一次盤到的數量，盤了才會更新',
+          detail: '這裡不會自動加上之後的進貨、也不會扣掉賣掉的，所以越久沒盤越不準。'
+              '每一項都標了幾天前盤的。點品項可以只盤那一項；老闆、店長可以在品項管理把常用的設成重點品項（每天或每週盤）。',
+        ),
+        const SizedBox(height: 8),
+        // 重點品項：該盤的排最上面（老闆 2026-11-13：正職盤、店長追蹤）
+        if (key.isNotEmpty) ...[
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+            decoration: BoxDecoration(
+              color: (due.isEmpty ? AppColors.good : AppColors.primary).withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+              border: Border.all(color: (due.isEmpty ? AppColors.good : AppColors.primary).withValues(alpha: 0.4)),
+            ),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Row(children: [
+                Icon(due.isEmpty ? Icons.task_alt : Icons.flag_outlined,
+                    color: due.isEmpty ? AppColors.good : AppColors.primary, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(due.isEmpty ? '重點品項都盤了' : '重點品項・${due.length} 項該盤了',
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                ),
+                Text('${key.length - due.length} / ${key.length}',
+                    style: TextStyle(color: AppColors.muted, fontSize: AppType.small, fontFeatures: tabular)),
+              ]),
+              if (due.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                for (final p in due)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(children: [
+                      Expanded(child: Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                      Text('${cycleLabel(p.countCycle)}・${countAge(last[p.id])}',
+                          style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+                    ]),
+                  ),
+                const SizedBox(height: 10),
+                FilledButton.tonalIcon(
+                  onPressed: () => _open(StockCountScreen(membership: widget.membership, products: due, last: last)),
+                  icon: const Icon(Icons.fact_check_outlined, size: 18),
+                  label: Text('盤這 ${due.length} 項'),
+                  style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                ),
+              ],
+            ]),
+          ),
+          const SizedBox(height: 12),
+        ],
         // 缺貨提醒
         if (low.isNotEmpty) ...[
           Container(
@@ -166,7 +261,8 @@ class _StockCountsScreenState extends State<StockCountsScreen> {
                     Expanded(child: Text(p.name)),
                     Text('剩 ${fmtQty(last[p.id]!.qty)} ${p.unit}',
                         style: TextStyle(color: AppColors.bad, fontWeight: FontWeight.w600, fontFeatures: tabular)),
-                    Text('（安全量 ${fmtQty(p.parLevel!)}）', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+                    Text('（安全量 ${fmtQty(p.parLevel!)}・${countAge(last[p.id], who: false)}）',
+                        style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
                   ]),
                 ),
             ]),
@@ -184,38 +280,132 @@ class _StockCountsScreenState extends State<StockCountsScreen> {
           ]),
         ),
         const SizedBox(height: 10),
-        for (final p in shown) ...[_stockRow(p, last[p.id]), const SizedBox(height: 8)],
+        for (final p in shown) ...[_stockRow(p, last), const SizedBox(height: 8)],
       ],
     ]);
   }
 
-  Widget _stockRow(Product p, StockLevel? s) {
+  Widget _stockRow(Product p, Map<String, LastCount> last) {
+    final s = last[p.id];
     final low = _isLow(p, s);
-    return SectionCard(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(children: [
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(p.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 2),
-            Text(
-              '${p.category}${_stockNote(s, p.unit)}'
-              '${p.parLevel == null ? '' : '・安全量 ${fmtQty(p.parLevel!)}'}',
-              style: TextStyle(color: AppColors.muted, fontSize: AppType.small),
+    final due = isCountDue(p, s);
+    final stale = _isStale(s);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        onTap: () => _quick(p, last),
+        child: SectionCard(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(children: [
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(p.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 2),
+                Text.rich(
+                  TextSpan(children: [
+                    TextSpan(text: '${p.category}・'),
+                    TextSpan(
+                        text: countAge(s),
+                        style: TextStyle(color: due ? AppColors.primary : (stale ? AppColors.warn : null))),
+                    if (p.countCycle != null) TextSpan(text: '・${cycleLabel(p.countCycle)}'),
+                    if (p.parLevel != null) TextSpan(text: '・安全量 ${fmtQty(p.parLevel!)}'),
+                  ]),
+                  style: TextStyle(color: AppColors.muted, fontSize: AppType.small),
+                ),
+              ]),
             ),
+            // 沒盤過：淡色「尚未盤點」，不顯示「— 瓶」（2026-10-29）
+            if (s == null)
+              Text('尚未盤點', style: TextStyle(fontSize: AppType.small, color: AppColors.muted))
+            else
+              Text.rich(TextSpan(children: [
+                TextSpan(
+                    text: fmtQty(s.qty),
+                    style: TextStyle(
+                        fontSize: AppType.heading,
+                        fontWeight: AppFont.figure,
+                        color: low ? AppColors.bad : (stale ? AppColors.muted : null),
+                        fontFeatures: tabular)),
+                TextSpan(text: ' ${p.unit}', style: TextStyle(fontSize: AppType.small, color: AppColors.muted)),
+              ])),
           ]),
         ),
-        // 沒盤過：淡色「尚未盤點」，不顯示「— 瓶」（2026-10-29）
-        if (s == null)
-          Text('尚未盤點', style: TextStyle(fontSize: AppType.small, color: AppColors.muted))
-        else
-          Text.rich(TextSpan(children: [
-            TextSpan(
-                text: fmtQty(s.qty),
-                style: TextStyle(fontSize: AppType.heading, fontWeight: AppFont.figure, color: low ? AppColors.bad : null, fontFeatures: tabular)),
-            TextSpan(text: ' ${p.unit}', style: TextStyle(fontSize: AppType.small, color: AppColors.muted)),
-          ])),
-      ]),
+      ),
+    );
+  }
+}
+
+/// 開始盤之前看到的最新一次盤點時間（送出時帶給資料庫，之後別人也盤過的品項會回報）
+DateTime? _latestAt(Iterable<LastCount> all) {
+  DateTime? t;
+  for (final c in all) {
+    if (c.at != null && (t == null || c.at!.isAfter(t))) t = c.at;
+  }
+  return t;
+}
+
+/// 打數量：可以打小數（3.4＝3 瓶又剩 4 成），四捨五入到 0.1。不合理的回傳 null
+double? parseQty(String text) {
+  final v = double.tryParse(text.trim());
+  if (v == null || v < 0 || v > 9999) return null;
+  return (v * 10).round() / 10;
+}
+
+/// 只盤一項
+class _QuickCountSheet extends StatefulWidget {
+  const _QuickCountSheet({required this.product, this.last});
+  final Product product;
+  final LastCount? last;
+  @override
+  State<_QuickCountSheet> createState() => _QuickCountSheetState();
+}
+
+class _QuickCountSheetState extends State<_QuickCountSheet> {
+  final _ctrl = TextEditingController();
+  String? _error;
+
+  void _submit() {
+    final v = parseQty(_ctrl.text);
+    if (v == null) return setState(() => _error = '請打數量，例如 3 或 3.4');
+    Navigator.pop(context, v);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = widget.product;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 0, 20, 16 + MediaQuery.of(context).viewInsets.bottom),
+      child: SafeArea(
+        top: false,
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text(p.name, style: const TextStyle(fontSize: AppType.title, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 4),
+          Text(widget.last == null ? '還沒盤過' : '上次 ${fmtQty(widget.last!.qty)} ${p.unit}・${countAge(widget.last)}',
+              style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _ctrl,
+            autofocus: true,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+            style: const TextStyle(fontSize: AppType.display, fontFeatures: tabular),
+            decoration: InputDecoration(
+              labelText: '現在有多少',
+              suffixText: p.unit,
+              helperText: _error == null ? '開過的打小數：3 瓶又剩 4 成＝3.4' : null,
+              errorText: _error,
+            ),
+            onSubmitted: (_) => _submit(),
+          ),
+          const SizedBox(height: 16),
+          FilledButton(
+            onPressed: _submit,
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+            child: const Text('只更新這一項'),
+          ),
+        ]),
+      ),
     );
   }
 }
@@ -225,7 +415,7 @@ class StockCountScreen extends StatefulWidget {
   const StockCountScreen({super.key, required this.membership, required this.products, required this.last});
   final Membership membership;
   final List<Product> products;
-  final Map<String, StockLevel> last;
+  final Map<String, LastCount> last;
   @override
   State<StockCountScreen> createState() => _StockCountScreenState();
 }
@@ -237,25 +427,142 @@ class _StockCountScreenState extends State<StockCountScreen> {
   String _q = '';
   String _cat = '全部'; // 盤點時只看某一類（老闆 2026-10-27）
   bool _saving = false;
+  // 同一次盤點只產生一次：網路重送時資料庫用它擋下重複（0104）
+  final _requestId = const Uuid().v4();
+  int _restored = 0; // 帶回上次沒送出的幾項
+
+  String get _draftKey => 'stock_draft_${widget.membership.storeId}';
+
+  void _put(String id, double qty) {
+    // 先四捨五入到 0.1 再拆整數與幾成（0.96 → 1.0，不會變成 0.9；Codex 審查）
+    final tenths = (qty * 10).round();
+    _whole[id] = tenths ~/ 10;
+    _tenth[id] = tenths % 10;
+  }
 
   @override
   void initState() {
     super.initState();
     for (final p in widget.products) {
-      // 先四捨五入到 0.1 再拆整數與幾成（0.96 → 1.0，不會變成 0.9；Codex 審查）
-      final tenths = ((widget.last[p.id]?.qty ?? 0) * 10).round();
-      _whole[p.id] = tenths ~/ 10;
-      _tenth[p.id] = tenths % 10;
+      _put(p.id, widget.last[p.id]?.qty ?? 0);
     }
+    _restoreDraft();
+  }
+
+  /// 盤到一半離開（切去看訊息、被叫去忙）：已經盤的留在這支手機裡，18 小時內再進來會帶回
+  Future<void> _restoreDraft() async {
+    try {
+      final raw = (await SharedPreferences.getInstance()).getString(_draftKey);
+      if (raw == null) return;
+      final d = jsonDecode(raw) as Map<String, dynamic>;
+      final at = DateTime.fromMillisecondsSinceEpoch((d['t'] as num).toInt());
+      if (DateTime.now().difference(at) > const Duration(hours: 18)) {
+        await _dropDraft();
+        return;
+      }
+      final lines = (d['lines'] as Map).cast<String, dynamic>();
+      final mine = {for (final p in widget.products) p.id};
+      if (!mounted) return;
+      setState(() {
+        for (final e in lines.entries) {
+          if (!mine.contains(e.key)) continue;
+          _put(e.key, (e.value as num).toDouble());
+          _done.add(e.key);
+        }
+        _restored = _done.length;
+      });
+    } catch (_) {} // 讀不到就當作沒有
+  }
+
+  Future<void> _saveDraft() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (_done.isEmpty) {
+        await prefs.remove(_draftKey);
+      } else {
+        await prefs.setString(_draftKey,
+            jsonEncode({'t': DateTime.now().millisecondsSinceEpoch, 'lines': {for (final id in _done) id: _qty(id)}}));
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _dropDraft() async {
+    try {
+      await (await SharedPreferences.getInstance()).remove(_draftKey);
+    } catch (_) {}
+  }
+
+  void _clearAll() {
+    setState(() {
+      _done.clear();
+      _restored = 0;
+      for (final p in widget.products) {
+        _put(p.id, widget.last[p.id]?.qty ?? 0);
+      }
+    });
+    _dropDraft();
   }
 
   double _qty(String id) => _whole[id]! + _tenth[id]! / 10;
 
-  void _set(String id, {int? whole, int? tenth}) => setState(() {
-        if (whole != null) _whole[id] = whole.clamp(0, 9999);
-        if (tenth != null) _tenth[id] = tenth;
-        _done.add(id);
-      });
+  void _set(String id, {int? whole, int? tenth, double? qty}) {
+    setState(() {
+      if (whole != null) _whole[id] = whole.clamp(0, 9999);
+      if (tenth != null) _tenth[id] = tenth;
+      if (qty != null) _put(id, qty);
+      _done.add(id);
+    });
+    _saveDraft();
+  }
+
+  /// 直接打數量（數量多的時候不用一直按 ＋）
+  Future<void> _type(Product p) async {
+    final ctrl = TextEditingController();
+    String? error;
+    final v = await showDialog<double>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setD) {
+          void ok() {
+            final q = parseQty(ctrl.text);
+            if (q == null) return setD(() => error = '請打數量，例如 3 或 3.4');
+            Navigator.pop(c, q);
+          }
+
+          return AlertDialog(
+            title: Text(p.name),
+            content: TextField(
+              controller: ctrl,
+              autofocus: true,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+              decoration: InputDecoration(
+                labelText: '現在有多少',
+                suffixText: p.unit,
+                helperText: error == null ? '開過的打小數：3 瓶又剩 4 成＝3.4' : null,
+                errorText: error,
+              ),
+              onSubmitted: (_) => ok(),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(c), child: const Text('取消')),
+              FilledButton(onPressed: ok, child: const Text('確定')),
+            ],
+          );
+        },
+      ),
+    );
+    if (v != null && mounted) _set(p.id, qty: v);
+  }
+
+  /// 跟上次差很多的（差 3 以上、而且超過上次的一半）：送出前請盤的人再看一眼，多半是按錯
+  List<Product> _bigChanges() => [
+        for (final p in widget.products)
+          if (_done.contains(p.id) && widget.last[p.id] != null)
+            if ((_qty(p.id) - widget.last[p.id]!.qty).abs() >= 3 &&
+                (_qty(p.id) - widget.last[p.id]!.qty).abs() >= widget.last[p.id]!.qty * 0.5)
+              p
+      ];
 
   Future<void> _save() async {
     if (_done.isEmpty) {
@@ -263,15 +570,28 @@ class _StockCountScreenState extends State<StockCountScreen> {
       return;
     }
     final left = widget.products.length - _done.length;
-    if (left > 0) {
+    final big = _bigChanges();
+    if (left > 0 || big.isNotEmpty) {
       final ok = await showDialog<bool>(
         context: context,
         builder: (c) => AlertDialog(
-          title: const Text('完成盤點？'),
-          content: Text('已盤 ${_done.length} 項，還有 $left 項沒盤。\n只會更新已盤的品項，沒盤的維持上次的數量。'),
+          title: Text(big.isEmpty ? '完成盤點？' : '這幾項跟上次差很多'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              for (final p in big)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text('${p.name}：上次 ${fmtQty(widget.last[p.id]!.qty)} → 這次 ${fmtQty(_qty(p.id))} ${p.unit}',
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                ),
+              if (big.isNotEmpty) const Text('確定沒有按錯再送出。'),
+              if (big.isNotEmpty && left > 0) const SizedBox(height: 10),
+              if (left > 0) Text('已盤 ${_done.length} 項，還有 $left 項沒盤。\n只會更新已盤的品項，沒盤的維持上次的數量。'),
+            ]),
+          ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('繼續盤')),
-            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('完成')),
+            TextButton(onPressed: () => Navigator.pop(c, false), child: Text(big.isEmpty ? '繼續盤' : '回去看看')),
+            FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(big.isEmpty ? '完成' : '沒錯，送出')),
           ],
         ),
       );
@@ -281,14 +601,16 @@ class _StockCountScreenState extends State<StockCountScreen> {
     setState(() => _saving = true);
     final repo = AppScope.of(context).repo;
     try {
-      final id = await repo.createStockCount(widget.membership.storeId, null);
-      for (final e in lines.entries) {
-        await repo.upsertCountLine(id, e.key, e.value);
-      }
-      // 誰盤都直接算數（老闆 2026-10-16）：送出就是最新庫存
-      await repo.setCountStatus(id, CountStatus.submitted);
+      // 一次存完（0104）：建立、每一項、送出在同一個交易；斷線重送不會存兩張。誰盤都直接算數（老闆 2026-10-16）
+      final r = await repo.submitStockCount(widget.membership.storeId, lines,
+          requestId: _requestId, seenAt: _latestAt(widget.last.values));
+      await _dropDraft();
       if (!mounted) return;
-      showMessage(context, '已完成盤點（${lines.length} 項）');
+      showMessage(
+          context,
+          r.overlapped.isEmpty
+              ? '已完成盤點（${lines.length} 項）'
+              : '已完成盤點（${lines.length} 項）。${r.overlapped.join('、')} 剛剛也有人盤過，以你這次的為準');
       Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {
@@ -317,22 +639,13 @@ class _StockCountScreenState extends State<StockCountScreen> {
       groups.putIfAbsent(p.category, () => []).add(p);
     }
     return PopScope(
-      // 儲存中不能離開（Codex 審查：避免伺服器已存但畫面沒更新、重複盤點）
-      canPop: _done.isEmpty && !_saving,
-      onPopInvokedWithResult: (didPop, _) async {
-        if (didPop || _saving) return;
-        final leave = await showDialog<bool>(
-          context: context,
-          builder: (c) => AlertDialog(
-            title: const Text('離開盤點？'),
-            content: const Text('已填的數量不會儲存。'),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('繼續盤')),
-              TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('離開')),
-            ],
-          ),
-        );
-        if (leave == true && context.mounted) Navigator.of(context).pop(false);
+      // 儲存中不能離開（Codex 審查：避免伺服器已存但畫面沒更新、重複盤點）；其他時候可以直接離開，已盤的會留著
+      canPop: !_saving,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop && _done.isNotEmpty && !_saving) {
+          ScaffoldMessenger.maybeOf(context)
+              ?.showSnackBar(SnackBar(content: Text('已盤的 ${_done.length} 項先留著，再進來「開始盤點」會帶回'), behavior: SnackBarBehavior.floating));
+        }
       },
       child: Scaffold(
         appBar: AppBar(title: Text('盤點・${DateFormat('M/d').format(bizToday())}')),
@@ -341,6 +654,21 @@ class _StockCountScreenState extends State<StockCountScreen> {
             decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: '搜尋品項'),
             onChanged: (v) => setState(() => _q = v.trim()),
           ),
+          if (_restored > 0)
+            Container(
+              margin: const EdgeInsets.only(top: 10),
+              padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(AppRadius.md),
+              ),
+              child: Row(children: [
+                Expanded(
+                  child: Text('已帶回上次盤到一半的 $_restored 項', style: TextStyle(color: AppColors.primary, fontSize: AppType.small)),
+                ),
+                TextButton(onPressed: _saving ? null : _clearAll, child: const Text('清掉重盤')),
+              ]),
+            ),
           const SizedBox(height: 10),
           // 類別：點一下只看那一類，數字是「已盤／總數」
           SingleChildScrollView(
@@ -360,7 +688,7 @@ class _StockCountScreenState extends State<StockCountScreen> {
             for (final p in groups[cat]!) ...[_countRow(p), const SizedBox(height: 8)],
           ],
           const SizedBox(height: 10),
-          Text('數量＝整數＋剩幾成（例如 3 瓶又剩 4 成＝3.4）。沒變的按「同上次」。',
+          Text('數量＝整數＋剩幾成（例如 3 瓶又剩 4 成＝3.4）。點數字可以直接打；沒變的按「同上次」。',
               style: TextStyle(color: AppColors.muted, fontSize: AppType.small, height: 1.5)),
         ]),
         bottomNavigationBar: SafeArea(
@@ -394,7 +722,8 @@ class _StockCountScreenState extends State<StockCountScreen> {
         Row(children: [
           if (done) ...[Icon(Icons.check_circle, size: 16, color: AppColors.primary), const SizedBox(width: 6)],
           Expanded(child: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w600))),
-          Text(last == null ? '上次：沒盤過' : '上次 ${fmtQty(last.qty)}', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+          Text(last == null ? '上次：沒盤過' : '上次 ${fmtQty(last.qty)}・${countAge(last, who: false)}',
+              style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
         ]),
         const SizedBox(height: 4),
         Row(children: [
@@ -403,9 +732,20 @@ class _StockCountScreenState extends State<StockCountScreen> {
             onPressed: w > 0 ? () => _set(p.id, whole: w - 1) : null,
             icon: const Icon(Icons.remove_circle_outline),
           ),
-          SizedBox(
-            width: 44,
-            child: Text('$w', textAlign: TextAlign.center, style: const TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w600, fontFeatures: tabular)),
+          // 點數字直接打數量
+          InkWell(
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+            onTap: () => _type(p),
+            child: Container(
+              width: 56,
+              height: 44,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                border: Border.all(color: AppColors.line),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+              ),
+              child: Text('$w', style: const TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w600, fontFeatures: tabular)),
+            ),
           ),
           IconButton(tooltip: '加 1', onPressed: () => _set(p.id, whole: w + 1), icon: const Icon(Icons.add_circle_outline)),
           const SizedBox(width: 4),
@@ -496,7 +836,7 @@ Future<CategoryDeleteResult?> deleteStockCategory(
   try {
     for (final p in list) {
       if (action == 'move') {
-        await repo.saveProduct(membership.storeId, Product(p.id, p.name, target, p.unit, parLevel: p.parLevel));
+        await repo.saveProduct(membership.storeId, Product(p.id, p.name, target, p.unit, parLevel: p.parLevel, countCycle: p.countCycle));
       } else {
         await repo.deactivateProduct(p.id);
       }
@@ -619,7 +959,9 @@ class _ProductsScreenState extends State<ProductsScreen> {
                       child: ListTile(
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.lg)),
                         title: Text(p.name),
-                        subtitle: Text('${p.category}・${p.unit}${p.parLevel == null ? '' : '・安全量 ${fmtQty(p.parLevel!)}'}',
+                        subtitle: Text(
+                            '${p.category}・${p.unit}${p.parLevel == null ? '' : '・安全量 ${fmtQty(p.parLevel!)}'}'
+                            '${p.countCycle == null ? '' : '・${cycleLabel(p.countCycle)}'}',
                             style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => _edit(p),
@@ -651,6 +993,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   late final _par = TextEditingController(text: widget.product?.parLevel == null ? '' : fmtQty(widget.product!.parLevel!));
   // 舊類別（例如「水果」）保留原本的，除非使用者自己改（Codex 審查）
   late String _cat = widget.product?.category ?? widget.category ?? '酒水';
+  // 重點品項多久盤一次（0104）：只有老闆、店長能設
+  late String? _cycle = widget.product?.countCycle;
   late final List<String> _cats = [
     ...{...widget.categories, ...stockCategories, _cat}
   ];
@@ -717,9 +1061,10 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     if (parText.isNotEmpty && (par == null || par < 0)) return showMessage(context, '安全量請填數字', error: true);
     setState(() => _saving = true);
     try {
-      await AppScope.of(context)
-          .repo
-          .saveProduct(widget.membership.storeId, Product(widget.product?.id ?? '', name, _cat, unit, parLevel: par));
+      await AppScope.of(context).repo.saveProduct(
+          widget.membership.storeId, Product(widget.product?.id ?? '', name, _cat, unit, parLevel: par, countCycle: _cycle),
+          // 只有老闆、店長、而且真的改了才寫入（正職、兼職照舊可以改其他欄位）
+          setCycle: widget.membership.isManager && _cycle != widget.product?.countCycle);
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {
@@ -799,6 +1144,20 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
             inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
             decoration: const InputDecoration(labelText: '安全量（選填，低於這個數量就提醒）'),
           ),
+          if (widget.membership.isManager) ...[
+            const SizedBox(height: 18),
+            Text('重點品項（多久盤一次）', style: TextStyle(color: AppColors.muted)),
+            const SizedBox(height: 6),
+            Wrap(spacing: 8, children: [
+              for (final o in const [(null, '不追蹤'), ('daily', '每天盤'), ('weekly', '每週盤')])
+                SelectChip(label: Text(o.$2), selected: _cycle == o.$1, onSelected: (_) => setState(() => _cycle = o.$1)),
+            ]),
+            const SizedBox(height: 6),
+            Text('設成重點品項後，該盤的時候會列在庫存頁最上面。', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+          ] else if (_cycle != null) ...[
+            const SizedBox(height: 14),
+            Text('重點品項：${cycleLabel(_cycle)}（老闆、店長設定）', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+          ],
           const SizedBox(height: 24),
           FilledButton(
             onPressed: _saving ? null : _save,
