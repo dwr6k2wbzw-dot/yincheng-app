@@ -44,24 +44,27 @@ String quoteKey(String name, String? unit) => '${_norm(name)}|${(unit ?? '').tri
 /// 進貨品項明細的一行（帶上那筆進貨的日期、廠商、類別）
 class QuoteLine {
   const QuoteLine({required this.name, this.unit, required this.unitPrice, required this.qty, required this.date,
-      this.vendor, required this.categoryCode});
+      this.at, this.vendor, required this.categoryCode});
   final String name;
   final String? unit;
   final double? unitPrice;
   final double qty; // 退貨是負數（不拿來當報價）
   final DateTime date;
+  final DateTime? at; // 那筆進貨登記的時間（同一天進兩次時分先後）
   final String? vendor;
   final String categoryCode;
 }
 
 /// 手動改過的報價（purchase_quote_edits）
 class QuoteEdit {
-  const QuoteEdit({required this.key, this.name, this.unit, this.unitPrice, this.asOf, this.hidden = false, this.by});
+  const QuoteEdit(
+      {required this.key, this.name, this.unit, this.unitPrice, this.asOf, this.asOfAt, this.hidden = false, this.by});
   final String key;
   final String? name;
   final String? unit;
   final double? unitPrice;
   final DateTime? asOf; // 改價當時最新一筆進貨的日期
+  final DateTime? asOfAt; // …和那筆進貨登記的時間（同一天後來又進一次，手動改的單價也要讓位；Codex 審查）
   final bool hidden;
   final String? by;
 }
@@ -69,7 +72,7 @@ class QuoteEdit {
 /// 報價表的一列
 class ItemQuote {
   ItemQuote({required this.key, required this.name, required this.unit, required this.group, required this.price,
-      required this.date, this.vendor, this.previous, this.manual = false, this.edited = false, this.hidden = false,
+      required this.date, this.at, this.vendor, this.previous, this.manual = false, this.edited = false, this.hidden = false,
       required this.rawName, required this.rawUnit, required this.rawPrice});
   final String key;
   final String name;
@@ -77,6 +80,7 @@ class ItemQuote {
   final String group; // drink 酒類／food 餐食
   final double price;
   final DateTime date; // 最近一次進貨的日期
+  final DateTime? at; // 最近一次進貨登記的時間
   final String? vendor;
   final double? previous; // 上一次不同的進貨單價（漲跌用）
   final bool manual; // 現在顯示的單價是手動改的
@@ -88,7 +92,8 @@ class ItemQuote {
 }
 
 /// 把品項明細整理成報價表。groupOf：進貨類別代碼 → drink／food／其他（其他不列）。
-/// 單價：最近一次進貨（同一天取後面那一行）；手動改的單價在「之後沒有更新的進貨」時才算數。
+/// 單價：最近一次進貨（同一天照登記時間，取後面那一行）；手動改的單價在「之後沒有更新的進貨」時才算數
+/// （之後＝進貨日期比較新，或同一天但登記得比較晚）。
 /// 回傳含已拿掉的（hidden），畫面自己分開顯示；依品名排序。
 List<ItemQuote> buildQuotes(Iterable<QuoteLine> lines, Iterable<QuoteEdit> edits, String? Function(String code) groupOf) {
   final byKey = <String, List<QuoteLine>>{};
@@ -102,11 +107,12 @@ List<ItemQuote> buildQuotes(Iterable<QuoteLine> lines, Iterable<QuoteEdit> edits
   final editOf = {for (final e in edits) e.key: e};
   final out = <ItemQuote>[];
   for (final e in byKey.entries) {
-    final list = e.value; // 依日期舊→新（同一天照原本順序）
+    final list = e.value; // 依日期舊→新（同一天照登記時間，再照原本順序）
     final sorted = [
       for (var i = 0; i < list.length; i++) (i, list[i])
     ]..sort((a, b) {
-        final c = a.$2.date.compareTo(b.$2.date);
+        var c = a.$2.date.compareTo(b.$2.date);
+        if (c == 0 && a.$2.at != null && b.$2.at != null) c = a.$2.at!.compareTo(b.$2.at!);
         return c != 0 ? c : a.$1.compareTo(b.$1);
       });
     final last = sorted.last.$2;
@@ -119,7 +125,10 @@ List<ItemQuote> buildQuotes(Iterable<QuoteLine> lines, Iterable<QuoteEdit> edits
       }
     }
     final ed = editOf[e.key];
-    final manual = ed?.unitPrice != null && (ed!.asOf == null || !last.date.isAfter(ed.asOf!));
+    final newer = ed?.asOf != null &&
+        (last.date.isAfter(ed!.asOf!) ||
+            (!last.date.isBefore(ed.asOf!) && ed.asOfAt != null && last.at != null && last.at!.isAfter(ed.asOfAt!)));
+    final manual = ed?.unitPrice != null && !newer;
     final unit = last.unit?.trim().isEmpty ?? true ? null : last.unit!.trim();
     final edUnit = ed?.unit?.trim().isEmpty ?? true ? null : ed!.unit!.trim();
     out.add(ItemQuote(
@@ -127,10 +136,11 @@ List<ItemQuote> buildQuotes(Iterable<QuoteLine> lines, Iterable<QuoteEdit> edits
       name: ed?.name?.trim().isNotEmpty ?? false ? ed!.name!.trim() : last.name.trim(),
       unit: edUnit ?? unit,
       group: groupOf(last.categoryCode)!,
-      price: manual ? round2(ed.unitPrice!) : lastPrice,
+      price: manual ? round2(ed!.unitPrice!) : lastPrice,
       date: last.date,
+      at: last.at,
       vendor: last.vendor,
-      previous: manual ? (round2(ed.unitPrice!) == lastPrice ? null : lastPrice) : prev,
+      previous: manual ? (round2(ed!.unitPrice!) == lastPrice ? null : lastPrice) : prev,
       manual: manual,
       edited: ed != null && !ed.hidden && (ed.name != null || ed.unit != null || manual),
       hidden: ed?.hidden ?? false,

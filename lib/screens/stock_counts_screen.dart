@@ -400,8 +400,11 @@ class _StockCountScreenState extends State<StockCountScreen> {
   String _cat = '全部'; // 盤點時只看某一類（老闆 2026-10-27）
   bool _saving = false;
   // 同一次盤點只產生一次：網路重送時資料庫用它擋下重複（0104）
-  final _requestId = const Uuid().v4();
+  String _requestId = const Uuid().v4();
   int _restored = 0; // 帶回上次沒送出的幾項
+  // 草稿裡不在這次清單的品項（例：整張盤到一半，先去盤「重點品項」那幾項）：原樣留著，不能被這次蓋掉（Codex 審查）
+  final _otherDraft = <String, double>{};
+  bool _attempted = false; // 送出失敗過：之後再改數量就換一個送出編號（資料庫不會把改過的內容當成重送）
 
   String get _draftKey => 'stock_draft_${widget.membership.storeId}';
 
@@ -429,7 +432,7 @@ class _StockCountScreenState extends State<StockCountScreen> {
       final d = jsonDecode(raw) as Map<String, dynamic>;
       final at = DateTime.fromMillisecondsSinceEpoch((d['t'] as num).toInt());
       if (DateTime.now().difference(at) > const Duration(hours: 18)) {
-        await _dropDraft();
+        await _dropDraft(all: true);
         return;
       }
       final lines = (d['lines'] as Map).cast<String, dynamic>();
@@ -437,7 +440,10 @@ class _StockCountScreenState extends State<StockCountScreen> {
       if (!mounted) return;
       setState(() {
         for (final e in lines.entries) {
-          if (!mine.contains(e.key)) continue;
+          if (!mine.contains(e.key)) {
+            _otherDraft[e.key] = (e.value as num).toDouble();
+            continue;
+          }
           _put(e.key, (e.value as num).toDouble());
           _done.add(e.key);
         }
@@ -449,18 +455,22 @@ class _StockCountScreenState extends State<StockCountScreen> {
   Future<void> _saveDraft() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      if (_done.isEmpty) {
-        await prefs.remove(_draftKey);
-      } else {
-        await prefs.setString(_draftKey,
-            jsonEncode({'t': DateTime.now().millisecondsSinceEpoch, 'lines': {for (final id in _done) id: _qty(id)}}));
-      }
+      await _writeDraft(prefs, {..._otherDraft, for (final id in _done) id: _qty(id)});
     } catch (_) {}
   }
 
-  Future<void> _dropDraft() async {
+  Future<void> _writeDraft(SharedPreferences prefs, Map<String, double> lines) async {
+    if (lines.isEmpty) {
+      await prefs.remove(_draftKey);
+    } else {
+      await prefs.setString(_draftKey, jsonEncode({'t': DateTime.now().millisecondsSinceEpoch, 'lines': lines}));
+    }
+  }
+
+  /// 這次清單的草稿不要了（送出了、或清掉重盤）；不在這次清單的照樣留著。all＝整份過期，全部丟掉
+  Future<void> _dropDraft({bool all = false}) async {
     try {
-      await (await SharedPreferences.getInstance()).remove(_draftKey);
+      await _writeDraft(await SharedPreferences.getInstance(), all ? const {} : _otherDraft);
     } catch (_) {}
   }
 
@@ -483,6 +493,10 @@ class _StockCountScreenState extends State<StockCountScreen> {
       if (tenth != null) _tenth[id] = tenth;
       if (qty != null) _put(id, qty);
       _done.add(id);
+      if (_attempted) {
+        _requestId = const Uuid().v4();
+        _attempted = false;
+      }
     });
     _saveDraft();
   }
@@ -585,6 +599,7 @@ class _StockCountScreenState extends State<StockCountScreen> {
               : '已完成盤點（${lines.length} 項）。${r.overlapped.join('、')} 剛剛也有人盤過，以你這次的為準');
       Navigator.pop(context, true);
     } catch (e) {
+      _attempted = true;
       if (mounted) {
         showMessage(context, friendlyError(e), error: true);
         setState(() => _saving = false);

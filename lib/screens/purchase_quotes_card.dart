@@ -328,6 +328,7 @@ class _QuoteEditSheetState extends State<_QuoteEditSheet> {
         unit: unit == (q.rawUnit ?? '') ? null : unit,
         unitPrice: round2(price) == q.rawPrice ? null : round2(price),
         asOf: q.date,
+        asOfAt: q.at,
       ),
     );
   }

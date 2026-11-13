@@ -121,6 +121,15 @@ void main() {
       expect([hidden.hidden, hidden.edited], [true, false]);
       expect(buildQuotes(lines, const [], group).single.hidden, isFalse);
     });
+    test('手動改價後，同一天後來又進一次：改看新的進貨單價', () {
+      QuoteLine at(double price, int hour) => QuoteLine(
+          name: '琴酒', unit: '瓶', unitPrice: price, qty: 1, date: DateTime(2026, 11, 9), at: DateTime(2026, 11, 9, hour), categoryCode: 'd');
+      final edit = QuoteEdit(key: quoteKey('琴酒', '瓶'), unitPrice: 540, asOf: DateTime(2026, 11, 9), asOfAt: DateTime(2026, 11, 9, 15));
+      expect(buildQuotes([at(560, 15)], [edit], group).single.price, 540);
+      // 登記順序跟讀回來的順序相反也一樣：照登記時間
+      final later = buildQuotes([at(580, 21), at(560, 15)], [edit], group).single;
+      expect([later.price, later.manual, later.previous], [580, false, 560]);
+    });
     test('同一天進兩次，取後面那一行', () {
       final rows = buildQuotes([line('琴酒', 500, 2), line('琴酒', 520, 2)], const [], group);
       expect([rows.single.price, rows.single.previous], [520, 500]);

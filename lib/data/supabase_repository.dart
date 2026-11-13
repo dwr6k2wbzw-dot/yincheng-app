@@ -1274,7 +1274,7 @@ class SupabaseRepository implements Repository {
       final rows = await _db
           .from('purchase_items')
           .select('item_name, qty, unit, unit_price, '
-              'purchases!inner(store_id, purchase_date, category_code, vendor_name, suppliers!purchases_supplier_same_store(name))')
+              'purchases!inner(store_id, purchase_date, created_at, category_code, vendor_name, suppliers!purchases_supplier_same_store(name))')
           .eq('purchases.store_id', storeId)
           .gte('purchases.purchase_date', _day.format(from))
           .order('id')
@@ -1287,6 +1287,7 @@ class SupabaseRepository implements Repository {
           unit: r['unit'] as String?,
           unitPrice: r['unit_price'] == null ? null : toDouble(r['unit_price']),
           date: DateTime.parse(p['purchase_date'] as String),
+          at: p['created_at'] == null ? null : DateTime.parse(p['created_at'] as String),
           vendor: (p['suppliers'] as Map?)?['name'] as String? ?? p['vendor_name'] as String?,
           categoryCode: p['category_code'] as String,
         ));
@@ -1301,7 +1302,7 @@ class SupabaseRepository implements Repository {
     try {
       final rows = await _db
           .from('purchase_quote_edits')
-          .select('item_key, name, unit, unit_price, as_of, hidden, updated_name')
+          .select('item_key, name, unit, unit_price, as_of, as_of_at, hidden, updated_name')
           .eq('store_id', storeId)
           .limit(5000);
       return [
@@ -1312,6 +1313,7 @@ class SupabaseRepository implements Repository {
             unit: r['unit'] as String?,
             unitPrice: r['unit_price'] == null ? null : toDouble(r['unit_price']),
             asOf: r['as_of'] == null ? null : DateTime.parse(r['as_of'] as String),
+            asOfAt: r['as_of_at'] == null ? null : DateTime.parse(r['as_of_at'] as String),
             hidden: r['hidden'] as bool? ?? false,
             by: r['updated_name'] as String?,
           ),
@@ -1331,6 +1333,7 @@ class SupabaseRepository implements Repository {
       'unit': edit.unit,
       'unit_price': edit.unitPrice,
       'as_of': edit.asOf == null ? null : _day.format(edit.asOf!),
+      'as_of_at': edit.asOfAt?.toUtc().toIso8601String(),
       'hidden': edit.hidden,
     }, onConflict: 'store_id,item_key').select('item_key');
     if (rows.isEmpty) throw Exception('message: 只有老闆或店長可以修改進貨報價,');
