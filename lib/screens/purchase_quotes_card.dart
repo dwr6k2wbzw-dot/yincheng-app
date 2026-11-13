@@ -197,7 +197,8 @@ class PurchaseQuotesCardState extends State<PurchaseQuotesCard> {
                 ),
               ),
           ]),
-          if (rows.length > _fold) ...[
+          // 有搜尋字時搜尋欄一定留著：搬走、刪掉、拿掉之後品項變少，也還能清掉搜尋字（Codex 審查）
+          if (rows.length > _fold || _q.isNotEmpty) ...[
             const SizedBox(height: 10),
             TextField(
               controller: _search,
