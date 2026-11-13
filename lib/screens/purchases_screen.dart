@@ -1158,7 +1158,9 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
       return;
     }
     // 同一天、同付款方式、同金額已經有一筆 App 進貨：先問是不是重複登記（2026-11 查到重複登記的例子）
+    // 查的這段時間先把表單鎖住（跟存檔中一樣），不然查到一半又改欄位、又按一次儲存，會存到不一致的內容（Codex 審查）
     if (widget.editing == null) {
+      setState(() => _saving = true);
       final dup = await _findDuplicate(_isReturn ? -raw : raw);
       if (!mounted) return;
       if (dup != null) {
@@ -1174,7 +1176,11 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
             ],
           ),
         );
-        if (ok != true || !mounted) return;
+        if (!mounted) return;
+        if (ok != true) {
+          setState(() => _saving = false);
+          return;
+        }
       }
     }
     final rows = itemsForSave(_items, raw);
@@ -1229,7 +1235,8 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
         onPopInvokedWithResult: (didPop, _) {
           if (!didPop && !_saving) Navigator.pop(context, true);
         },
-        child: _scaffold(context),
+        // 存檔中（含存檔前查重複）整張表單不能點、不能改
+        child: AbsorbPointer(absorbing: _saving, child: _scaffold(context)),
       );
 
   Widget _scaffold(BuildContext context) => Scaffold(
