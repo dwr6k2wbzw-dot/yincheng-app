@@ -113,7 +113,15 @@ class PurchaseQuotesCardState extends State<PurchaseQuotesCard> {
     if (r == null || r.edit == null || !mounted) return;
     final repo = AppScope.of(context).repo;
     await _run(() => repo.savePurchaseQuoteEdit(widget.membership.storeId, r.edit!), '已新增「${r.edit!.name}」');
-    if (mounted && r.edit!.group != null) setState(() => _group = r.edit!.group!);
+    if (mounted && r.edit!.group != null && r.edit!.group != _group) {
+      // 換到新增的那一類：搜尋字一起清掉（跟點類別一樣，Codex 審查）
+      setState(() {
+        _group = r.edit!.group!;
+        _q = '';
+        _search.clear();
+        _all = false;
+      });
+    }
   }
 
   @override
