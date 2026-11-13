@@ -90,11 +90,11 @@ void main() {
         line('檸檬', 100, 5, cat: 'f', unit: '斤'),
         line('塑膠袋', 30, 5, cat: 'm', unit: '包'),
       ], const [], group);
-      expect(rows.map((r) => r.name), ['檸檬', '琴酒700ML']);
-      final gin = rows.last;
+      expect(rows.map((r) => r.name), ['琴酒700ML', '檸檬']); // 單價高的在上面
+      final gin = rows.first;
       expect([gin.group, gin.price, gin.previous, gin.vendor, gin.date.day], ['drink', 560, 500, '乙', 9]);
-      expect(rows.first.group, 'food');
-      expect(rows.first.previous, isNull);
+      expect(rows.last.group, 'food');
+      expect(rows.last.previous, isNull);
     });
     test('退貨、沒單價、其他差額不算；單位不同分開列', () {
       final rows = buildQuotes([
@@ -104,7 +104,7 @@ void main() {
         line('萊姆', 0, 5),
         line(diffItemName, 80, 5, unit: null),
       ], const [], group);
-      expect(rows.map((r) => '${r.name}${r.unit}:${r.price}'), ['可樂罐:20.0', '可樂箱:450.0']);
+      expect(rows.map((r) => '${r.name}${r.unit}:${r.price}'), ['可樂箱:450.0', '可樂罐:20.0']);
     });
     test('手動改單價：之後沒有更新的進貨才算數；改的品名、單位一直保留', () {
       final lines = [line('琴酒', 500, 2), line('琴酒', 560, 9)];
@@ -129,6 +129,18 @@ void main() {
       // 登記順序跟讀回來的順序相反也一樣：照登記時間
       final later = buildQuotes([at(580, 21), at(560, 15)], [edit], group).single;
       expect([later.price, later.manual, later.previous], [580, false, 560]);
+    });
+    test('搬到別的類別（可以搬到雜項），其他修改照舊', () {
+      final key = quoteKey('琴酒', '瓶');
+      final moved = buildQuotes([line('琴酒', 500, 2)], [QuoteEdit(key: key, name: 'Gordon 琴酒', group: 'misc')], group).single;
+      expect([moved.group, moved.name, moved.edited, moved.price], ['misc', 'Gordon 琴酒', true, 500]);
+    });
+    test('手動新增的品項列進來；從進貨來的雜項仍然不列', () {
+      final rows = buildQuotes([line('塑膠袋', 30, 5, cat: 'm', unit: '包')], [
+        QuoteEdit(key: 'manual:1', name: '冰塊', unit: '包', unitPrice: 120, asOf: DateTime(2026, 11, 13), group: 'misc', manual: true),
+        QuoteEdit(key: 'manual:2', name: '沒有單價', group: 'food', manual: true),
+      ], group);
+      expect(rows.map((r) => '${r.name}:${r.group}:${r.price}:${r.custom}'), ['冰塊:misc:120.0:true']);
     });
     test('同一天進兩次，取後面那一行', () {
       final rows = buildQuotes([line('琴酒', 500, 2), line('琴酒', 520, 2)], const [], group);

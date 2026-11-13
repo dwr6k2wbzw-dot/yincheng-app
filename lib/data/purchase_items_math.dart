@@ -58,7 +58,16 @@ class QuoteLine {
 /// 手動改過的報價（purchase_quote_edits）
 class QuoteEdit {
   const QuoteEdit(
-      {required this.key, this.name, this.unit, this.unitPrice, this.asOf, this.asOfAt, this.hidden = false, this.by});
+      {required this.key,
+      this.name,
+      this.unit,
+      this.unitPrice,
+      this.asOf,
+      this.asOfAt,
+      this.hidden = false,
+      this.by,
+      this.group,
+      this.manual = false});
   final String key;
   final String? name;
   final String? unit;
@@ -67,17 +76,33 @@ class QuoteEdit {
   final DateTime? asOfAt; // …和那筆進貨登記的時間（同一天後來又進一次，手動改的單價也要讓位；Codex 審查）
   final bool hidden;
   final String? by;
+  final String? group; // 搬到哪一類（drink／food／misc；null＝照進貨類別，0107）
+  final bool manual; // 手動新增的品項（品項鍵 manual: 開頭，0107）
+
+  /// 拿掉（hidden）：品名、單位、類別這些修改照樣留著，放回去時還在
+  QuoteEdit copyWithHidden([bool hidden = true]) => QuoteEdit(
+      key: key, name: name, unit: unit, unitPrice: unitPrice, asOf: asOf, asOfAt: asOfAt,
+      hidden: hidden, by: by, group: group, manual: manual);
+  /// 除了「拿掉」以外有沒有其他修改
+  bool get hasChanges => name != null || unit != null || unitPrice != null || group != null;
+
+  QuoteEdit copyWith({String? group}) => QuoteEdit(
+      key: key, name: name, unit: unit, unitPrice: unitPrice, asOf: asOf, asOfAt: asOfAt,
+      hidden: hidden, by: by, group: group ?? this.group, manual: manual);
 }
+
+const quoteGroups = [('drink', '酒類'), ('food', '餐食'), ('misc', '雜項')];
+String quoteGroupLabel(String g) => quoteGroups.firstWhere((x) => x.$1 == g, orElse: () => (g, g)).$2;
 
 /// 報價表的一列
 class ItemQuote {
   ItemQuote({required this.key, required this.name, required this.unit, required this.group, required this.price,
       required this.date, this.at, this.vendor, this.previous, this.manual = false, this.edited = false, this.hidden = false,
-      required this.rawName, required this.rawUnit, required this.rawPrice});
+      required this.rawName, required this.rawUnit, required this.rawPrice, this.custom = false, this.edit});
   final String key;
   final String name;
   final String? unit;
-  final String group; // drink 酒類／food 餐食
+  final String group; // drink 酒類／food 餐食／misc 雜項
   final double price;
   final DateTime date; // 最近一次進貨的日期
   final DateTime? at; // 最近一次進貨登記的時間
@@ -89,12 +114,16 @@ class ItemQuote {
   final String rawName; // 進貨資料上的品名、單位、單價（還原用）
   final String? rawUnit;
   final double rawPrice;
+  final bool custom; // 手動新增的（不是從進貨算出來的）
+  final QuoteEdit? edit; // 目前的手動修改（搬移類別時保留其他修改用）
 }
 
 /// 把品項明細整理成報價表。groupOf：進貨類別代碼 → drink／food／其他（其他不列）。
 /// 單價：最近一次進貨（同一天照登記時間，取後面那一行）；手動改的單價在「之後沒有更新的進貨」時才算數
 /// （之後＝進貨日期比較新，或同一天但登記得比較晚）。
-/// 回傳含已拿掉的（hidden），畫面自己分開顯示；依品名排序。
+/// 回傳含已拿掉的（hidden），畫面自己分開顯示；單價高到低排（一樣價錢照品名）。
+/// 0107：手動搬過的照搬過去的類別（可以搬到雜項）；手動新增的品項（manual）也列進來。
+/// 從進貨自動帶進來的只有酒類、餐食（老闆 2026-11-13「雜項品項不用列」）。
 List<ItemQuote> buildQuotes(Iterable<QuoteLine> lines, Iterable<QuoteEdit> edits, String? Function(String code) groupOf) {
   final byKey = <String, List<QuoteLine>>{};
   for (final l in lines) {
@@ -135,21 +164,42 @@ List<ItemQuote> buildQuotes(Iterable<QuoteLine> lines, Iterable<QuoteEdit> edits
       key: e.key,
       name: ed?.name?.trim().isNotEmpty ?? false ? ed!.name!.trim() : last.name.trim(),
       unit: edUnit ?? unit,
-      group: groupOf(last.categoryCode)!,
+      group: ed?.group ?? groupOf(last.categoryCode)!,
       price: manual ? round2(ed!.unitPrice!) : lastPrice,
       date: last.date,
       at: last.at,
       vendor: last.vendor,
       previous: manual ? (round2(ed!.unitPrice!) == lastPrice ? null : lastPrice) : prev,
       manual: manual,
-      edited: ed != null && !ed.hidden && (ed.name != null || ed.unit != null || manual),
+      edited: ed != null && !ed.hidden && (ed.name != null || ed.unit != null || manual || ed.group != null),
       hidden: ed?.hidden ?? false,
       rawName: last.name.trim(),
       rawUnit: unit,
       rawPrice: lastPrice,
+      edit: ed,
     ));
   }
-  out.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+  for (final ed in edits) {
+    if (!ed.manual || ed.name == null || ed.unitPrice == null) continue;
+    final day = ed.asOf ?? DateTime(2000);
+    final unit = ed.unit?.trim().isEmpty ?? true ? null : ed.unit!.trim();
+    out.add(ItemQuote(
+      key: ed.key,
+      name: ed.name!.trim(),
+      unit: unit,
+      group: ed.group ?? 'misc',
+      price: round2(ed.unitPrice!),
+      date: day,
+      at: ed.asOfAt,
+      rawName: ed.name!.trim(),
+      rawUnit: unit,
+      rawPrice: round2(ed.unitPrice!),
+      custom: true,
+      edit: ed,
+    ));
+  }
+  // 單價高的在上面（老闆 2026-11-13 18:37）；一樣價錢照品名
+  out.sort((a, b) => a.price != b.price ? b.price.compareTo(a.price) : a.name.toLowerCase().compareTo(b.name.toLowerCase()));
   return out;
 }
 
