@@ -639,6 +639,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   static final _drafts = <String, _PurchaseDraft>{};
   bool _restored = false;
   bool _saved = false;
+  bool _ready = false; // 資料讀完、填到一半的內容也帶回來了；在這之前離開不能動到留著的內容（Codex 審查）
   DateTime? _date;
   String? _category;
   final _vendor = TextEditingController(); // 廠商名稱：自行輸入（和既有廠商同名就自動對應）
@@ -744,6 +745,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
       _items = d.items;
       _restored = true;
     }
+    _ready = true;
     return (r[0] as List<CostCategory>, r[1] as List<Supplier>);
   }
 
@@ -774,7 +776,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   @override
   void dispose() {
     // 新增到一半（有照片、金額或廠商）就離開：留著，下次帶回
-    if (widget.editing == null && !_saved && _started) {
+    if (widget.editing == null && !_saved && _ready) {
       final has = _photo != null || _amount.text.trim().isNotEmpty || _vendor.text.trim().isNotEmpty;
       if (has) {
         _drafts[widget.membership.storeId] = _PurchaseDraft(

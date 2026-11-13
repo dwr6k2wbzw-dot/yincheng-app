@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -399,12 +400,13 @@ class _StockCountScreenState extends State<StockCountScreen> {
   String _q = '';
   String _cat = '全部'; // 盤點時只看某一類（老闆 2026-10-27）
   bool _saving = false;
-  // 同一次盤點只產生一次：網路重送時資料庫用它擋下重複（0104）
-  String _requestId = const Uuid().v4();
+  // 送出失敗（可能其實已經存好、只是沒收到回應）時記下那次的編號和內容，跟草稿一起留著：
+  // 內容沒變再送一次就用同一個編號（資料庫認得是重送，不會存兩張）；內容變了就換新編號（Codex 審查）
+  String? _triedRid;
+  Map<String, double>? _triedLines;
   int _restored = 0; // 帶回上次沒送出的幾項
   // 草稿裡不在這次清單的品項（例：整張盤到一半，先去盤「重點品項」那幾項）：原樣留著，不能被這次蓋掉（Codex 審查）
   final _otherDraft = <String, double>{};
-  bool _attempted = false; // 送出失敗過：之後再改數量就換一個送出編號（資料庫不會把改過的內容當成重送）
 
   String get _draftKey => 'stock_draft_${widget.membership.storeId}';
 
@@ -437,6 +439,10 @@ class _StockCountScreenState extends State<StockCountScreen> {
       }
       final lines = (d['lines'] as Map).cast<String, dynamic>();
       final mine = {for (final p in widget.products) p.id};
+      if (d['rid'] is String && d['tried'] is Map) {
+        _triedRid = d['rid'] as String;
+        _triedLines = {for (final e in (d['tried'] as Map).entries) e.key as String: (e.value as num).toDouble()};
+      }
       if (!mounted) return;
       setState(() {
         for (final e in lines.entries) {
@@ -463,7 +469,13 @@ class _StockCountScreenState extends State<StockCountScreen> {
     if (lines.isEmpty) {
       await prefs.remove(_draftKey);
     } else {
-      await prefs.setString(_draftKey, jsonEncode({'t': DateTime.now().millisecondsSinceEpoch, 'lines': lines}));
+      await prefs.setString(
+          _draftKey,
+          jsonEncode({
+            't': DateTime.now().millisecondsSinceEpoch,
+            'lines': lines,
+            if (_triedRid != null && _triedLines != null) ...{'rid': _triedRid, 'tried': _triedLines},
+          }));
     }
   }
 
@@ -493,10 +505,6 @@ class _StockCountScreenState extends State<StockCountScreen> {
       if (tenth != null) _tenth[id] = tenth;
       if (qty != null) _put(id, qty);
       _done.add(id);
-      if (_attempted) {
-        _requestId = const Uuid().v4();
-        _attempted = false;
-      }
     });
     _saveDraft();
   }
@@ -584,12 +592,16 @@ class _StockCountScreenState extends State<StockCountScreen> {
       if (ok != true || !mounted) return;
     }
     final lines = {for (final id in _done) id: _qty(id)};
+    final rid = _triedRid != null && mapEquals(_triedLines, lines) ? _triedRid! : const Uuid().v4();
     setState(() => _saving = true);
     final repo = AppScope.of(context).repo;
     try {
       // 一次存完（0104）：建立、每一項、送出在同一個交易；斷線重送不會存兩張。誰盤都直接算數（老闆 2026-10-16）
-      final r = await repo.submitStockCount(widget.membership.storeId, lines,
-          requestId: _requestId, seenAt: _latestAt(widget.last.values));
+      final r = await repo.submitStockCount(widget.membership.storeId, lines, requestId: rid, seenAt: _latestAt(widget.last.values));
+      if (rid == _triedRid) {
+        _triedRid = null;
+        _triedLines = null;
+      }
       await _dropDraft();
       if (!mounted) return;
       showMessage(
@@ -599,7 +611,9 @@ class _StockCountScreenState extends State<StockCountScreen> {
               : '已完成盤點（${lines.length} 項）。${r.overlapped.join('、')} 剛剛也有人盤過，以你這次的為準');
       Navigator.pop(context, true);
     } catch (e) {
-      _attempted = true;
+      _triedRid = rid;
+      _triedLines = lines;
+      await _saveDraft();
       if (mounted) {
         showMessage(context, friendlyError(e), error: true);
         setState(() => _saving = false);
