@@ -1209,7 +1209,8 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
       if (itemsToSave != null) app.stockRevision.value++;
       if (mounted) {
         _saved = true;
-        _drafts.remove(widget.membership.storeId);
+        // 只有存好「新增」才清掉填到一半的內容；修改別筆不能把它吃掉（Codex 審查）
+        if (widget.editing == null) _drafts.remove(widget.membership.storeId);
         showMessage(context, widget.editing != null ? '已修改' : '已新增');
         Navigator.pop(context, true);
       }
