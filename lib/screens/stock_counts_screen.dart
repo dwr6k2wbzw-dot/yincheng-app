@@ -81,6 +81,9 @@ class _StockCountsScreenState extends State<StockCountsScreen> {
     return (_sorted(r[0] as List<Product>), r[1] as Map<String, LastCount>);
   }
 
+  // 只盤一項送出失敗時記下（送出編號, 數量），同樣數量再送就沿用
+  final _quickTried = <String, (String, double)>{};
+
   /// 只盤這一項：點品項 → 打數量 → 送出（不用進整張盤點）
   Future<void> _quick(Product p, Map<String, LastCount> last) async {
     final qty = await showModalBottomSheet<double>(
@@ -91,14 +94,21 @@ class _StockCountsScreenState extends State<StockCountsScreen> {
       builder: (_) => _QuickCountSheet(product: p, last: last[p.id]),
     );
     if (qty == null || !mounted) return;
+    // 上次送這一項失敗（可能其實已經存好）而且數量一樣：用同一個編號，資料庫認得是重送、不會存兩張（Codex 審查）
+    final tried = _quickTried[p.id];
+    final rid = tried != null && tried.$2 == qty ? tried.$1 : const Uuid().v4();
     try {
       final r = await AppScope.of(context).repo.submitStockCount(widget.membership.storeId, {p.id: qty},
-          requestId: const Uuid().v4(), seenAt: _latestAt(last.values));
+          requestId: rid, seenAt: _latestAt(last.values));
+      _quickTried.remove(p.id);
       if (!mounted) return;
       showMessage(context, r.overlapped.isEmpty ? '已更新「${p.name}」：${fmtQty(qty)} ${p.unit}' : '已更新；剛剛也有人盤過「${p.name}」，以你這次的為準');
       _reload();
     } catch (e) {
-      if (mounted) showMessage(context, friendlyError(e), error: true);
+      _quickTried[p.id] = (rid, qty);
+      if (!mounted) return;
+      showMessage(context, friendlyError(e), error: true);
+      _reload(); // 可能其實已經存好了：重讀一次，畫面上的數量才是真的
     }
   }
 
