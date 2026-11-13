@@ -83,9 +83,15 @@ class _StockCountsScreenState extends State<StockCountsScreen> {
 
   // 只盤一項送出失敗時記下（送出編號, 數量），同樣數量再送就沿用
   final _quickTried = <String, (String, double)>{};
+  // 正在送出的品項：送完之前不能再盤同一項（網路慢時舊的晚到會蓋掉新的；Codex 審查）
+  final _quickPending = <String>{};
 
   /// 只盤這一項：點品項 → 打數量 → 送出（不用進整張盤點）
   Future<void> _quick(Product p, Map<String, LastCount> last) async {
+    if (_quickPending.contains(p.id)) {
+      showMessage(context, '「${p.name}」還在送出，請稍等');
+      return;
+    }
     final qty = await showModalBottomSheet<double>(
       context: context,
       isScrollControlled: true,
@@ -97,6 +103,7 @@ class _StockCountsScreenState extends State<StockCountsScreen> {
     // 上次送這一項失敗（可能其實已經存好）而且數量一樣：用同一個編號，資料庫認得是重送、不會存兩張（Codex 審查）
     final tried = _quickTried[p.id];
     final rid = tried != null && tried.$2 == qty ? tried.$1 : const Uuid().v4();
+    setState(() => _quickPending.add(p.id));
     try {
       final r = await AppScope.of(context).repo.submitStockCount(widget.membership.storeId, {p.id: qty},
           requestId: rid, seenAt: _latestAt(last.values));
@@ -109,6 +116,8 @@ class _StockCountsScreenState extends State<StockCountsScreen> {
       if (!mounted) return;
       showMessage(context, friendlyError(e), error: true);
       _reload(); // 可能其實已經存好了：重讀一次，畫面上的數量才是真的
+    } finally {
+      if (mounted) setState(() => _quickPending.remove(p.id));
     }
   }
 
@@ -305,8 +314,10 @@ class _StockCountsScreenState extends State<StockCountsScreen> {
                 ),
               ]),
             ),
+            if (_quickPending.contains(p.id))
+              const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
             // 沒盤過：淡色「尚未盤點」，不顯示「— 瓶」（2026-10-29）
-            if (s == null)
+            else if (s == null)
               Text('尚未盤點', style: TextStyle(fontSize: AppType.small, color: AppColors.muted))
             else
               Text.rich(TextSpan(children: [
