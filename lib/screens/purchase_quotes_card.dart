@@ -24,6 +24,7 @@ class PurchaseQuotesCardState extends State<PurchaseQuotesCard> {
   Future<List<ItemQuote>>? _future;
   String _group = 'drink';
   String _q = '';
+  final _search = TextEditingController();
   bool _all = false;
   bool _showHidden = false;
 
@@ -43,6 +44,12 @@ class PurchaseQuotesCardState extends State<PurchaseQuotesCard> {
     ]);
     return buildQuotes(r[0] as List<QuoteLine>, r[1] as List<QuoteEdit>,
         quoteGroupOf(r[2] as List<CostCategory>));
+  }
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
   }
 
   /// 進貨頁下拉重新整理、新增進貨後呼叫
@@ -146,6 +153,9 @@ class PurchaseQuotesCardState extends State<PurchaseQuotesCard> {
                   selected: _group == g.$1,
                   onSelected: (_) => setState(() {
                     _group = g.$1;
+                    // 換分區時清掉搜尋字：另一區品項少的時候搜尋欄不會出現，留著會把東西藏起來清不掉（Codex 審查）
+                    _q = '';
+                    _search.clear();
                     _all = false;
                   }),
                 ),
@@ -154,6 +164,7 @@ class PurchaseQuotesCardState extends State<PurchaseQuotesCard> {
           if (rows.length > _fold) ...[
             const SizedBox(height: 10),
             TextField(
+              controller: _search,
               decoration: const InputDecoration(
                   prefixIcon: Icon(Icons.search, size: 20),
                   hintText: '搜尋品項或廠商',
