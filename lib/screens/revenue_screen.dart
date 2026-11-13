@@ -180,7 +180,9 @@ class _RevenueTile extends StatelessWidget {
           Row(children: [
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(DateFormat('M/d（E）', 'zh_TW').format(e.bizDate), style: const TextStyle(fontWeight: FontWeight.w600)),
+                // 日期放大一級並用主題金色（老闆 2026-11-13），原本是預設 14、白字
+                Text(DateFormat('M/d（E）', 'zh_TW').format(e.bizDate),
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: AppType.title, color: AppColors.primary)),
                 const SizedBox(height: 4),
                 Text(
                   '${e.guests} 位${avg == null ? '' : '・客單 ${ntd(avg.round())}'}'
