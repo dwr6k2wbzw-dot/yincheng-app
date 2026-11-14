@@ -361,6 +361,7 @@ class _RevenueFormScreenState extends State<RevenueFormScreen> {
   final _c = {for (final f in _fields) f: TextEditingController()};
   final _note = TextEditingController();
   RevenueEntry? _existing; // 這一天已有的紀錄（修改模式）
+  double? _ichefCash; // 小城外這天的 iCHEF 現金（沒有 iCHEF 資料是 null），見 _cashAuto
   DateTime? _date;
   bool _loading = true;
   bool _saving = false;
@@ -391,6 +392,7 @@ class _RevenueFormScreenState extends State<RevenueFormScreen> {
     try {
       if (widget.entry != null) {
         _fill(widget.entry!);
+        await _loadIchefCash(widget.entry!.bizDate);
       } else {
         final d = await AppScope.of(context).repo.businessDate(widget.membership.storeId);
         await _loadDate(d);
@@ -415,7 +417,18 @@ class _RevenueFormScreenState extends State<RevenueFormScreen> {
       }
       _note.text = '';
     }
+    await _loadIchefCash(d);
     if (mounted) setState(() {});
+  }
+
+  /// 只有小城外需要：有 iCHEF 的日子現金自動算。讀不到就照舊手動填（資料庫寫入時仍會重算）
+  Future<void> _loadIchefCash(DateTime d) async {
+    _ichefCash = null;
+    if (!_multi || !mounted) return;
+    final repo = AppScope.of(context).repo;
+    try {
+      _ichefCash = await repo.ichefCash(widget.membership.storeId, d);
+    } catch (_) {}
   }
 
   void _fill(RevenueEntry e) {
@@ -440,12 +453,16 @@ class _RevenueFormScreenState extends State<RevenueFormScreen> {
   /// Excel 匯入的那筆，只有老闆／店長能改；正職打開只能看
   bool get _readOnly => _existing?.source == 'import' && !widget.membership.isManager;
 
+  /// 小城外有 iCHEF 的日子：現金＝iCHEF 現金＋咖啡＋拉麵（老闆 2026-11-14），不用手動填。
+  /// 資料庫 0096 每次寫入都從 iCHEF 現金重算，所以重存、改、清空咖啡拉麵都不會重複加
+  bool get _cashAuto => _ichefCash != null;
+
   double _v(String f) => double.tryParse(_c[f]!.text.replaceAll(',', '')) ?? 0;
 
   RevenueEntry get _draft => RevenueEntry(
         id: _existing?.id,
         bizDate: _date!,
-        cash: _v('cash'),
+        cash: _cashAuto ? _ichefCash! + _v('coffee') + _v('ramen') : _v('cash'),
         creditCard: _v('card'),
         amex: _v('amex'),
         deposit: _v('deposit'),
@@ -524,6 +541,13 @@ class _RevenueFormScreenState extends State<RevenueFormScreen> {
         decoration: InputDecoration(labelText: label, prefixText: money ? '\$ ' : null, suffixText: money ? null : '位'),
       );
 
+  /// 自動算的現金：只顯示，不能改
+  Widget _autoCash(double cash) => InputDecorator(
+        key: const Key('auto-cash'),
+        decoration: const InputDecoration(labelText: '現金（自動）', prefixText: '\$ ', enabled: false),
+        child: Text(NumberFormat('#,##0.##').format(cash)),
+      );
+
   Widget _pair(Widget a, Widget b) => Row(children: [Expanded(child: a), const SizedBox(width: 12), Expanded(child: b)]);
 
   @override
@@ -595,9 +619,21 @@ class _RevenueFormScreenState extends State<RevenueFormScreen> {
                     style: TextStyle(fontSize: AppType.small))),
           ]),
         ),
+      if (_cashAuto && !_readOnly) ...[
+        const SizedBox(height: 8),
+        SectionCard(
+          child: Row(children: [
+            Icon(Icons.auto_awesome_outlined, color: AppColors.primary, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+                child: Text('這天有 iCHEF 資料：現金會自動算成 iCHEF 現金 ${ntd(_ichefCash!)}＋咖啡＋拉麵，只要填咖啡、拉麵。',
+                    style: const TextStyle(fontSize: AppType.small))),
+          ]),
+        ),
+      ],
       const SizedBox(height: 8),
       const _Label('收款方式'),
-      _pair(_num('cash', '現金'), _num('card', '信用卡')),
+      _pair(_cashAuto ? _autoCash(d.cash) : _num('cash', '現金'), _num('card', '信用卡')),
       const SizedBox(height: 12),
       _pair(_num('amex', 'AMEX'), _num('deposit', '訂金')),
       const SizedBox(height: 12),

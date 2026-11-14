@@ -500,6 +500,15 @@ class DemoRepository implements Repository {
     };
   }
 
+  // 示範：iCHEF 現金＝那天記的現金扣掉咖啡、拉麵（表單會再加回去，跟正式資料庫一樣）
+  @override
+  Future<double?> ichefCash(String storeId, DateTime bizDate) async {
+    final day = DateTime(bizDate.year, bizDate.month, bizDate.day);
+    if (!(await ichefDays(storeId)).contains(day)) return null;
+    final e = await revenueEntryFor(storeId, day);
+    return e == null ? null : (e.cash - e.coffee - e.ramen).clamp(0, double.infinity).toDouble();
+  }
+
   @override
   Future<List<ItemSale>> itemSales(String storeId, DateTime bizDate) async {
     const base = [
