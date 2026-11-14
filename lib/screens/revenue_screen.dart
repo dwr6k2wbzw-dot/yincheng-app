@@ -368,6 +368,7 @@ class _RevenueFormScreenState extends State<RevenueFormScreen> {
   bool _wrote = false; // 已經寫進資料庫（留在這頁時，離開要通知列表重新載入）
   bool _newRowUnread = false; // 新增成功但沒讀回那筆（不知道 id）：再存前要先讀回，免得再新增一筆撞同日唯一索引
   DateTime? _date;
+  int _dayGen = 0; // 每換一次營業日就加 1：換日前送出、換日後才回來的回應一律丟掉，見 _stale
   bool _loading = true;
   bool _saving = false;
   String? _error;
@@ -409,10 +410,15 @@ class _RevenueFormScreenState extends State<RevenueFormScreen> {
     }
   }
 
+  /// 送出請求後營業日換了（或頁面關了）：回來的是舊回應，不能套到現在畫面上
+  bool _stale(int gen) => !mounted || gen != _dayGen;
+
   /// 選了日期：那天已有紀錄就帶入（改成修改），沒有就清空
   Future<void> _loadDate(DateTime d) async {
+    final gen = ++_dayGen;
     _savedCheck = null;
     final e = await AppScope.of(context).repo.revenueEntryFor(widget.membership.storeId, d);
+    if (_stale(gen)) return;
     _newRowUnread = false;
     if (e != null) {
       _fill(e);
@@ -432,6 +438,7 @@ class _RevenueFormScreenState extends State<RevenueFormScreen> {
   /// 沒有 iCHEF 資料（null）→ 照舊手動填；讀取失敗 → 記下錯誤、暫停儲存，避免把錯的現金存進去
   /// 讀完才換掉舊值：重試讀取中畫面仍維持「讀不到」（不會短暫變成手動填現金）
   Future<void> _loadIchefCash(DateTime d) async {
+    final gen = _dayGen;
     double? cash;
     String? error;
     if (_multi && mounted) {
@@ -442,6 +449,7 @@ class _RevenueFormScreenState extends State<RevenueFormScreen> {
         error = friendlyError(e);
       }
     }
+    if (_stale(gen)) return;
     _ichefCash = cash;
     _ichefError = error;
   }
@@ -530,8 +538,9 @@ class _RevenueFormScreenState extends State<RevenueFormScreen> {
       showMessage(context, '還沒讀到這天的 iCHEF 現金，請先按「重試」', error: true);
       return;
     }
+    final gen = _dayGen;
     if (_newRowUnread && !await _rereadNewRow()) return;
-    if (!mounted) return;
+    if (!mounted || _stale(gen)) return;
     final d = _draft;
     if (d.received <= 0) {
       showMessage(context, '請至少填一種收款金額', error: true);
@@ -550,12 +559,13 @@ class _RevenueFormScreenState extends State<RevenueFormScreen> {
             '這天是從日報表 Excel 匯入的。在 App 修改後，之後重新匯入 Excel 時會先停下來，避免蓋掉你的修改。')) {
       return;
     }
-    if (!mounted) return;
+    if (!mounted || _stale(gen)) return;
     setState(() => _saving = true);
     try {
       final repo = AppScope.of(context).repo;
       await repo.saveRevenueEntry(widget.membership.storeId, d);
       _wrote = true;
+      if (_stale(gen)) return;
       _newRowUnread = d.id == null;
       // 小城外：資料庫寫入時會依 iCHEF 重算現金、刷卡（0096），讀回來確認實際存進去的數字
       if (_multi && await _checkSaved(repo, d)) return;
@@ -572,9 +582,12 @@ class _RevenueFormScreenState extends State<RevenueFormScreen> {
 
   /// 讀回存檔結果；現金或刷卡跟畫面不同（例如存檔前 iCHEF 剛更新）就留在這頁顯示實際數字，回傳 true
   Future<bool> _checkSaved(Repository repo, RevenueEntry d) async {
+    final gen = _dayGen;
     RevenueEntry? saved;
     try {
       saved = await repo.revenueEntryFor(widget.membership.storeId, d.bizDate);
+      if (_stale(gen)) return true;
+      if (saved != null && !DateUtils.isSameDay(saved.bizDate, d.bizDate)) throw StateError('讀回的營業日不同');
       if (saved != null) _newRowUnread = false;
     } catch (_) {
       if (mounted) setState(() => _savedCheck = '已儲存，但讀不回存檔結果，請回營收列表確認這天的現金。');
@@ -599,9 +612,13 @@ class _RevenueFormScreenState extends State<RevenueFormScreen> {
   /// 剛新增的那筆沒讀回來：先讀回取得 id（只記下那筆，不改畫面上的數字），之後改成更新而不是再新增。
   /// 讀不到就不存，回傳 false
   Future<bool> _rereadNewRow() async {
+    final gen = _dayGen;
+    final day = _date!;
     setState(() => _saving = true);
     try {
-      final e = await AppScope.of(context).repo.revenueEntryFor(widget.membership.storeId, _date!);
+      final e = await AppScope.of(context).repo.revenueEntryFor(widget.membership.storeId, day);
+      if (_stale(gen)) return false;
+      if (e != null && !DateUtils.isSameDay(e.bizDate, day)) throw StateError('讀回的營業日不同');
       if (e != null) _existing = e;
       _newRowUnread = false;
       return true;
@@ -634,10 +651,16 @@ class _RevenueFormScreenState extends State<RevenueFormScreen> {
   Widget build(BuildContext context) {
     final editing = _existing != null;
     // 已寫入但留在這頁（讀回不同或讀回失敗）：離開時一樣回傳 true，讓列表重新載入
+    // 儲存／讀回中不能離開：等結果回來，才知道列表要不要重新載入
     return PopScope<bool>(
-      canPop: !_wrote,
+      canPop: !_wrote && !_saving,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) Navigator.pop(context, true);
+        if (didPop) return;
+        if (_saving) {
+          showMessage(context, '正在儲存，請稍候', error: true);
+        } else {
+          Navigator.pop(context, true);
+        }
       },
       child: Scaffold(
         appBar: AppBar(title: Text(editing ? '修改營收' : '登記營收')),
@@ -666,7 +689,8 @@ class _RevenueFormScreenState extends State<RevenueFormScreen> {
           style: TextStyle(fontSize: AppType.small, color: editing ? AppColors.warn : null),
         ),
         trailing: Text(DateFormat('yyyy/M/d（E）', 'zh_TW').format(_date!), style: const TextStyle(fontSize: AppType.title)),
-        onTap: widget.entry != null
+        // 儲存、讀回、重試 iCHEF 中不能換日：回應回來時要對得上同一天
+        onTap: widget.entry != null || _saving || _ichefRetrying
             ? null
             : () async {
                 final p = await showDatePicker(

@@ -27,13 +27,22 @@ class _Repo extends DemoRepository {
   bool readFails = false; // 模擬讀回失敗
   Completer<void>? ichefGate; // 模擬讀 iCHEF 很慢：完成前不回應
   int inserts = 0;
-  final day = DateTime(2026, 1, 5);
+  Completer<void>? readGate; // 模擬讀紀錄很慢
+  Completer<void>? saveGate; // 模擬存檔很慢
+  final saves = <RevenueEntry>[]; // 每次送出的，依序
+  final day = DateTime(2026, 1, 5); // A 日
+  final dayB = DateTime(2026, 1, 6); // B 日：已有自己的紀錄 b1
+  late RevenueEntry rowB = RevenueEntry(
+      id: 'b1', bizDate: dayB, cash: 2000, creditCard: 0, guests: 3, drinks: 3000, food: 0, source: 'app');
 
   @override
   Future<DateTime> businessDate(String storeId) async => day;
   @override
   Future<RevenueEntry?> revenueEntryFor(String storeId, DateTime bizDate) async {
+    final gate = readGate;
+    if (gate != null) await gate.future;
     if (readFails) throw Exception('read timeout');
+    if (DateUtils.isSameDay(bizDate, dayB)) return rowB;
     return stored ??
         (empty
             ? null
@@ -51,6 +60,14 @@ class _Repo extends DemoRepository {
 
   @override
   Future<void> saveRevenueEntry(String storeId, RevenueEntry e) async {
+    final gate = saveGate;
+    if (gate != null) await gate.future;
+    saves.add(e);
+    if (DateUtils.isSameDay(e.bizDate, dayB)) {
+      saved = e;
+      rowB = e;
+      return;
+    }
     // 同一天只能有一筆（資料庫唯一索引）
     if (e.id == null && (stored != null || !empty)) throw Exception('duplicate key value violates unique constraint');
     if (e.id == null) inserts++;
@@ -125,6 +142,23 @@ Future<(_Repo, List<bool?>)> _openFromList(WidgetTester tester, _Repo repo) asyn
   await tester.tap(find.text('打開'));
   await tester.pumpAndSettle();
   return (repo, results);
+}
+
+/// 打開日期選擇，選 B 日（1/6）
+Future<void> _pickDayB(WidgetTester tester) async {
+  await tester.tap(find.text('營業日'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.descendant(of: find.byType(DatePickerDialog), matching: find.text('6')));
+  await tester.tap(find.text('OK'));
+  await tester.pumpAndSettle();
+}
+
+/// 每筆送出的 id 都要屬於它自己那天（A 日：r1／new1，B 日：b1），不能拿 A 日的 id 寫 B 日的欄位
+void _expectNoCrossDay(_Repo repo) {
+  for (final e in repo.saves) {
+    final isB = DateUtils.isSameDay(e.bizDate, repo.dayB);
+    expect(e.id == 'b1' || (isB && e.id == null), isB, reason: '送出 id=${e.id}、營業日=${e.bizDate}：跨日混寫');
+  }
 }
 
 Finder _saveButton() => find.widgetWithText(FilledButton, '更新');
@@ -301,6 +335,127 @@ void main() {
     expect(repo.saved?.id, 'new1');
     expect(repo.saved?.coffee, 600, reason: '用畫面上新填的數字，不被讀回的舊值蓋掉');
     expect(repo.stored?.cash, 3600);
+  });
+
+  testWidgets('A 日新增後讀回失敗，重存時讀回很慢：不能切到 B 日，回應回來後只更新 A 日那筆', (tester) async {
+    final repo = await _open(tester, store: '小城外', ichef: 3000, empty: true);
+    await tester.enterText(_field('咖啡'), '500');
+    await tester.enterText(_field('酒水'), '3000');
+    await tester.enterText(_field('來客數'), '2');
+    repo.readFails = true;
+    await tester.tap(find.text('儲存'));
+    await tester.pumpAndSettle();
+    expect(repo.inserts, 1);
+
+    // 重存：先讀回剛新增那筆，這次讀回很慢
+    repo
+      ..readFails = false
+      ..readGate = Completer<void>();
+    await tester.enterText(_field('咖啡'), '600');
+    await tester.tap(find.text('儲存'));
+    await tester.pump();
+    // 等候中想切到 B 日：不能開日期選擇
+    await tester.tap(find.text('營業日'));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byType(DatePickerDialog), findsNothing, reason: '儲存／讀回中換日，A 日的回應會套到 B 日畫面');
+
+    repo.readGate!.complete();
+    await tester.pumpAndSettle();
+    expect(repo.inserts, 1);
+    expect(repo.saves.last.id, 'new1');
+    expect(DateUtils.isSameDay(repo.saves.last.bizDate, repo.day), isTrue);
+    expect(repo.saves.last.coffee, 600, reason: '用 A 日畫面上的數字');
+    expect(repo.rowB.cash, 2000, reason: 'B 日那筆沒被動到');
+    _expectNoCrossDay(repo);
+  });
+
+  testWidgets('存檔很慢：等候中不能換日，也不能離開；存完列表照常重新載入', (tester) async {
+    final (repo, results) = await _openFromList(tester, _Repo(3000));
+    repo.saveGate = Completer<void>();
+    await tester.enterText(_field('咖啡'), '600');
+    await tester.tap(find.text('更新'));
+    await tester.pump();
+    await tester.tap(find.text('營業日'));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byType(DatePickerDialog), findsNothing);
+    await tester.pageBack();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byType(RevenueFormScreen), findsOneWidget, reason: '還不知道有沒有寫進去，不能先離開');
+    expect(find.text('正在儲存，請稍候'), findsOneWidget);
+    expect(results, isEmpty);
+
+    repo.saveGate!.complete();
+    await tester.pumpAndSettle();
+    expect(find.byType(RevenueFormScreen), findsNothing);
+    expect(results, [true]);
+    expect(repo.saves.single.id, 'r1');
+    _expectNoCrossDay(repo);
+  });
+
+  testWidgets('重試 iCHEF 中不能換日', (tester) async {
+    final repo = await _open(tester, store: '小城外', ichef: 3000, fails: true);
+    repo
+      ..ichefFails = false
+      ..ichefGate = Completer<void>();
+    await tester.tap(find.text('重試'));
+    await tester.pump();
+    await tester.tap(find.text('營業日'));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byType(DatePickerDialog), findsNothing);
+    repo.ichefGate!.complete();
+    await tester.pumpAndSettle();
+    expect(_autoCashText('3,000'), findsOneWidget);
+  });
+
+  testWidgets('切到 B 日：B 日用自己的紀錄更新，A 日那筆不受影響', (tester) async {
+    final repo = await _open(tester, store: '小城外', ichef: 2700);
+    await _pickDayB(tester);
+    expect(tester.widget<TextField>(_field('酒水')).controller!.text, '3000', reason: '帶入 B 日自己的紀錄');
+    await tester.enterText(_field('拉麵'), '300');
+    await tester.enterText(_field('酒水'), '2700'); // 假資料：現金 2700＋300＝酒水 2700＋拉麵 300
+    await tester.tap(find.text('更新'));
+    await tester.pumpAndSettle();
+    expect(repo.saves.single.id, 'b1');
+    expect(repo.saves.single.cash, 3000);
+    expect(repo.stored, isNull, reason: 'A 日那筆沒被動到');
+    _expectNoCrossDay(repo);
+  });
+
+  testWidgets('打開表單還在讀資料就離開：之後回來的回應不會出錯', (tester) async {
+    final repo = _Repo(3000)..readGate = Completer<void>();
+    tester.view.physicalSize = const Size(800, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final results = <bool?>[];
+    final m = Membership(storeId: 's', storeName: '小城外', role: Role.staff, displayName: '測試');
+    await tester.pumpWidget(AppScope(
+      state: AppState(repo),
+      child: MaterialApp(
+        theme: buildTheme(StorePalette.gold),
+        home: Builder(
+          builder: (c) => Scaffold(
+            body: TextButton(
+              onPressed: () async =>
+                  results.add(await Navigator.push<bool>(c, MaterialPageRoute(builder: (_) => RevenueFormScreen(membership: m)))),
+              child: const Text('打開'),
+            ),
+          ),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('打開'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byType(RevenueFormScreen), findsOneWidget);
+    await tester.pageBack();
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(RevenueFormScreen), findsNothing);
+    repo.readGate!.complete();
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(results, [null]);
+    expect(repo.saves, isEmpty);
   });
 
   testWidgets('存檔後讀回一致：照常關閉', (tester) async {
