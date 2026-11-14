@@ -279,6 +279,17 @@ class SupabaseRepository implements Repository {
   }
 
   @override
+  Future<double?> ichefCash(String storeId, DateTime bizDate) async {
+    final r = await _db
+        .from('ichef_daily')
+        .select('cash')
+        .eq('store_id', storeId)
+        .eq('biz_date', _day.format(bizDate))
+        .maybeSingle();
+    return r == null ? null : (r['cash'] as num).toDouble();
+  }
+
+  @override
   Future<List<ItemSale>> itemSales(String storeId, DateTime bizDate) async {
     Future<List<Map<String, dynamic>>> q(String cols) => _db
         .from('ichef_item_sales')
