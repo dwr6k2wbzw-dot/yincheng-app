@@ -84,7 +84,7 @@
       storeName: { yincheng: 'Hidden City', xcw: 'Bar CityNorth' },
       storeIntro: { xcw: 'A bar in a historic old house in Dadaocheng', yincheng: 'Bar CityNorth\'s second bar, in Da\'an District' },
       // 英文地址（顯示用；地圖連結仍用中文地址查）
-      addr: { xcw: '2F, No. 15, Lane 362, Minsheng W. Rd., Datong Dist., Taipei', yincheng: 'No. 160, Sec. 3, Xinyi Rd., Da\'an Dist., Taipei' },
+      addr: { xcw: '2F, No. 15, Lane 362, Minsheng W. Rd., Datong Dist., Taipei', yincheng: '2F., No. 160, Sec. 3, Xinyi Rd., Da\'an Dist., Taipei' },
       addrNote: { xcw: '(walk through the ground-floor passage to the courtyard, then take the stairs to 2F)', yincheng: '(enter beside the Hidden City ticket booth on the ground floor, then take the stairs to 2F)' },
       dayFull: 'This day is fully booked. Please choose another day or call us.',
       dayLeft: (n) => 'Only ' + n + ' seats left on this day. Please adjust the party size or choose another day.',
