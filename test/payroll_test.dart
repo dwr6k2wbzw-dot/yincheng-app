@@ -124,6 +124,20 @@ void main() {
       expect(html, contains('2026 年 9 月薪資單'));
     });
 
+    test('草稿在標題旁標「草稿／尚未發布」；金額欄標新臺幣（元）；已發布的不標草稿', () {
+      final draft = payslipHtml([slip]);
+      expect(draft, contains('<span class="draft">草稿／尚未發布</span></h1>'));
+      expect(draft, contains('<title>【草稿】'));
+      expect(draft, contains('金額・新臺幣（元）'));
+      final pub = payslipHtml([
+        PayrollSlip(
+            month: slip.month, storeName: '示範店', personName: '阿明', payType: 'hourly', baseAmount: 200, hours: 10,
+            gross: 2000, publishedAt: DateTime(2026, 10, 5))
+      ]);
+      expect(pub, isNot(contains('草稿')));
+      expect(pub, contains('金額・新臺幣（元）'));
+    });
+
     test('一次印多人：一人一頁', () {
       final html = payslipHtml([slip, slip]);
       expect('<section class="slip">'.allMatches(html).length, 2);
@@ -184,6 +198,24 @@ void main() {
       final rows = await repo.payrollMonth('yc', m);
       expect(rows.any((r) => r.personId == skip), isFalse);
       expect(rows.where((r) => r.personId != 'demo-no-rate').length, people.length - 1);
+    });
+
+    test('店長（示範）：看不到自己那一列、沒有總計與成本率；不能改自己、不能設不計薪', () async {
+      final repo = DemoRepository();
+      await repo.signIn('manager@x', 'x');
+      expect((await repo.myMemberships()).first.role.name, 'manager');
+      final m = DateTime(2026, 7, 1);
+      await repo.preparePayroll('yc', m);
+      final rows = await repo.payrollMonth('yc', m);
+      final self = rows.first;
+      expect(self.hidden, isTrue);
+      expect(self.gross, isNull);
+      final report = await repo.payrollReport('yc', m);
+      expect(report.total, isNull);
+      expect(report.costRate, isNull);
+      expect(report.visibleTotal, rows.where((r) => !r.hidden && r.gross != null).fold<double>(0, (a, r) => a + r.gross!));
+      await expectLater(repo.savePayrollEntry('yc', self.personId, m, bonus: 1), throwsA(anything));
+      await expectLater(repo.setPayrollExempt('yc', 'demo-no-rate', true), throwsA(anything));
     });
 
     test('員工：不能看薪資清單；綁定沒確認就沒有薪資單', () async {

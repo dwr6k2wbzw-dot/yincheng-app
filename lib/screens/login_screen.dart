@@ -102,7 +102,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 4),
                   Text(
                       AppConfig.demo
-                          ? '示範模式：任意帳密即可登入（帳號含 staff 以員工身分登入）'
+                          ? '示範模式：任意帳密即可登入（帳號含 staff 以員工、含 manager 以店長身分登入）'
                           : _signUp
                               ? '第一次使用：用你的 Email 建立帳號，並輸入老闆給你的邀請碼'
                               : '以店家提供的帳號登入',

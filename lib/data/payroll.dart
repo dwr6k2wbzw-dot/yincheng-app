@@ -147,6 +147,10 @@ class PayrollRow {
   /// 勞基法第 3 小時起的加班時薪（資料庫給的；舊資料沒有就自己算）
   double? get _lsa2 => lsaRate2 ?? (payType == 'monthly' && baseAmount != null ? lsaOtRate2(baseAmount!) : null);
 
+  /// 依勞基法比較用的加班時薪：前 2 小時（×1.34）、第 3 小時起（×1.67）
+  double? get lsaFirst2 => lsaRate ?? (payType == 'monthly' && baseAmount != null ? lsaOtRate(baseAmount!) : null);
+  double? get lsaFrom3 => _lsa2;
+
   /// 固定加班時薪低於勞基法：固定時薪每小時同價，第 3、4 小時要 1.67 倍，所以跟 1.67 倍比
   /// （例：月薪 36,000，第 3 小時起 250.5，固定 210 就偏低）
   bool get otBelowLaw => payType == 'monthly' && otMode == 'fixed' && _lsa2 != null && otRate < _lsa2! - 0.005;

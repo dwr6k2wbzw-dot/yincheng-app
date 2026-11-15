@@ -13,16 +13,17 @@ String payslipHtml(List<PayrollSlip> slips) {
   final pages = StringBuffer();
   for (final s in slips) {
     final title = '${s.storeName} ${s.month.year} 年 ${s.month.month} 月薪資單';
+    final draft = s.publishedAt == null;
     final rows = StringBuffer();
     for (final l in s.lines()) {
       rows.write('<tr><td>${_esc(l.label)}</td><td class="d">${_esc(l.detail)}</td><td class="n">${_m(l.amount.round())}</td></tr>');
     }
     pages.write('''
 <section class="slip">
-  <h1>${_esc(title)}</h1>
+  <h1>${_esc(title)}${draft ? ' <span class="draft">草稿／尚未發布</span>' : ''}</h1>
   <div class="who"><span>姓名：${_esc(s.personName)}</span><span>計薪方式：${payrollTypeLabel(s.payType)}</span></div>
   <table>
-    <thead><tr><th>項目</th><th>說明</th><th class="n">金額</th></tr></thead>
+    <thead><tr><th>項目</th><th>說明</th><th class="n">金額・新臺幣（元）</th></tr></thead>
     <tbody>$rows</tbody>
     <tfoot><tr><td>實發金額</td><td></td><td class="n">${s.gross == null ? '—' : _m(s.gross!.round())}</td></tr></tfoot>
   </table>
@@ -31,8 +32,8 @@ String payslipHtml(List<PayrollSlip> slips) {
 </section>''');
   }
   final docTitle = slips.length == 1
-      ? '${slips.first.personName} ${slips.first.month.year}-${slips.first.month.month.toString().padLeft(2, '0')} 薪資單'
-      : '薪資單';
+      ? '${slips.first.publishedAt == null ? '【草稿】' : ''}${slips.first.personName} ${slips.first.month.year}-${slips.first.month.month.toString().padLeft(2, '0')} 薪資單'
+      : slips.any((s) => s.publishedAt == null) ? '【草稿】薪資單' : '薪資單';
   return '''<!doctype html>
 <html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${_esc(docTitle)}</title>
@@ -44,6 +45,7 @@ String payslipHtml(List<PayrollSlip> slips) {
   .slip { max-width: 520px; margin: 24px auto; padding: 0 16px; page-break-after: always; }
   .slip:last-child { page-break-after: auto; }
   h1 { font-size: 18px; margin: 0 0 12px; }
+  .draft { display: inline-block; margin-left: 8px; padding: 2px 8px; border: 2px solid #b00020; color: #b00020; font-size: 14px; font-weight: 700; vertical-align: middle; }
   .who { display: flex; gap: 24px; font-size: 14px; margin-bottom: 12px; }
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
   th, td { border-bottom: 1px solid #ccc; padding: 8px 4px; text-align: left; vertical-align: top; }

@@ -126,7 +126,15 @@ class _AttendanceCardState extends State<AttendanceCard> {
         if (me.canManage)
           OutlinedButton(
             onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-                builder: (_) => PayrollScreen(membership: widget.membership, attendanceEnabled: me.enabled))),
+                builder: (_) => PayrollScreen(
+                    membership: widget.membership,
+                    attendanceEnabled: me.enabled,
+                    onOpenStaff: () => Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => AttendanceManageScreen(
+                            membership: widget.membership,
+                            data: widget.data,
+                            codeTimes: widget.codeTimes,
+                            staffOnly: true)))))),
             child: const Text('薪資'),
           ),
         if (me.personId != null && !me.bindingPending)

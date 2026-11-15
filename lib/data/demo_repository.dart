@@ -74,6 +74,7 @@ class DemoRepository implements Repository {
   final _lines = <String, Map<String, double>>{};
 
   bool get _isStaff => _email.contains('staff');
+  bool get _isManager => !_isStaff && _email.contains('manager'); // 示範店長：看不到自己那列（薪資第一列假裝是他）
 
   @override
   Stream<bool> get signedInChanges => _auth.stream;
@@ -435,7 +436,11 @@ class DemoRepository implements Repository {
 
   @override
   Future<List<Membership>> myMemberships() async => [
-        Membership(storeId: 'yc', storeName: '隱城', role: _isStaff ? Role.staff : Role.owner, displayName: '示範'),
+        Membership(
+            storeId: 'yc',
+            storeName: '隱城',
+            role: _isStaff ? Role.staff : (_isManager ? Role.manager : Role.owner),
+            displayName: '示範'),
         Membership(storeId: 'xc', storeName: '小城外', role: Role.staff, displayName: '示範'),
       ];
 
@@ -1564,6 +1569,7 @@ class DemoRepository implements Repository {
   // 已發布的月份用發布當時的名單：之後才出現的人不算缺漏、也不列出
   bool _payNoRateShown(String k, String storeId) => storeId == 'yc' && _payStatus[k] == 'draft';
   String _payKey(String storeId, DateTime m) => '$storeId|${m.year}-${m.month}';
+  String? _paySelf(String k) => _isManager ? _payRows[k]?.keys.firstOrNull : null;
   void _payNeedManager() {
     if (_isStaff) throw Exception('message: 只有老闆、店長能看薪資,');
   }
@@ -1624,9 +1630,10 @@ class DemoRepository implements Repository {
   @override
   Future<List<PayrollRow>> payrollMonth(String storeId, DateTime month) async {
     _payNeedManager();
-    final k = _payKey(storeId, month);
+    final k = _payKey(storeId, month), self = _paySelf(k);
     return [
-      ...?_payRows[k]?.values,
+      for (final r in _payRows[k]?.values ?? const <PayrollRow>[])
+        r.personId == self ? PayrollRow(personId: r.personId, name: r.name, payType: r.payType, hidden: true) : r,
       if (_payNoRateShown(k, storeId))
         PayrollRow(
             personId: _payNoRateId, name: _payNoRateName, payType: 'hourly',
@@ -1636,7 +1643,7 @@ class DemoRepository implements Repository {
 
   @override
   Future<void> setPayrollExempt(String storeId, String personId, bool exempt) async {
-    if (_isStaff) throw Exception('message: 不計薪只有老闆能設,');
+    if (_isStaff || _isManager) throw Exception('message: 不計薪只有老闆能設,');
     exempt ? _payExempt.add(personId) : _payExempt.remove(personId);
   }
 
@@ -1646,13 +1653,15 @@ class DemoRepository implements Repository {
     final k = _payKey(storeId, month), rows = _payRows[k]?.values.toList() ?? const <PayrollRow>[];
     if (_payStatus[k] == null) return const PayrollReport();
     final names = [for (final r in rows) if (r.gross == null) r.name, if (_payNoRateShown(k, storeId) && _payNoRateMissing(storeId)) _payNoRateName];
-    final missing = names.length;
+    final missing = names.length, self = _paySelf(k);
     final total = rows.fold<double>(0, (a, r) => a + (r.gross ?? 0));
+    final visible = rows.fold<double>(0, (a, r) => a + (r.personId == self ? 0 : r.gross ?? 0));
     const revenue = 600000.0;
+    final show = missing == 0 && self == null; // 店長少了自己那一列：不給總計、成本率
     return PayrollReport(
-        status: _payStatus[k], people: rows.length, total: missing == 0 ? total : null, revenue: revenue,
-        costRate: missing == 0 ? (total / revenue * 10000).round() / 10000 : null, complete: true, missingRate: missing,
-        visibleTotal: total, missingNames: names);
+        status: _payStatus[k], people: rows.length, total: show ? total : null, revenue: revenue,
+        costRate: show ? (total / revenue * 10000).round() / 10000 : null, complete: true, missingRate: missing,
+        visibleTotal: visible, missingNames: names);
   }
 
   @override
@@ -1662,6 +1671,7 @@ class DemoRepository implements Repository {
     _payNeedManager();
     final k = _payKey(storeId, month), r = _payRows[k]?[personId];
     if (r == null) throw Exception('message: 這個人這個月還沒有薪資，請先帶入,');
+    if (personId == _paySelf(k)) throw Exception('message: 你自己的薪資由老闆處理,');
     if (_payStatus[k] == 'published') throw Exception('message: 這個月已經發布，不能再改,');
     if (r.payType != 'monthly' && otHours + otHours2 > 0) throw Exception('message: 只有月薪制可以填加班時數,');
     if (r.payType == 'daily' && insurance != 0) throw Exception('message: 日薪制不扣勞健保,');
@@ -1689,7 +1699,7 @@ class DemoRepository implements Repository {
 
   @override
   Future<void> reopenPayroll(String storeId, DateTime month, String reason) async {
-    if (_isStaff) throw Exception('message: 只有老闆能重新開啟,');
+    if (_isStaff || _isManager) throw Exception('message: 只有老闆能重新開啟,');
     final k = _payKey(storeId, month);
     _payStatus[k] = 'draft';
     _payRows[k]?.updateAll((_, r) => _payCalc(r, status: 'draft'));
