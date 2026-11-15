@@ -25,6 +25,17 @@ String _taipeiMdHm(DateTime t) => _mdHm.format(toTaipei(t));
 /// 從網址帶進來、還沒打的卡（沒登入時先放著，登入後打）
 PunchLink? pendingPunch;
 
+/// 掃碼後去收信再登入：那次的碼沒帶過來，打卡沒打到
+Future<void> showMissedPunch(BuildContext context) => showDialog<void>(
+      context: context,
+      builder: (c) => AlertDialog(
+        icon: Icon(Icons.error_outline, color: AppColors.bad, size: 44),
+        title: const Text('這次沒打到卡'),
+        content: const Text('剛剛掃的打卡 QR 碼在登入（收確認信）的過程中沒有送出，這次打卡沒有記錄。\n請回打卡機重新掃碼。'),
+        actions: [FilledButton(onPressed: () => Navigator.pop(c), child: const Text('知道了'))],
+      ),
+    );
+
 Future<void> punchAndShow(BuildContext context, PunchLink link) async {
   final repo = AppScope.of(context).repo;
   PunchResult r;
@@ -127,7 +138,10 @@ class _AttendanceCardState extends State<AttendanceCard> {
                         style: TextStyle(color: me.onShift ? AppColors.good : AppColors.muted, fontSize: AppType.small)),
                 ]),
                 const SizedBox(height: 6),
-                if (me.personId == null)
+                if (me.bindingPending)
+                  Text('你選的班表名字還在等老闆確認，確認後才能打卡、看自己的出勤（老闆：出勤管理 → 員工資料）',
+                      style: TextStyle(color: AppColors.warn, fontSize: AppType.small))
+                else if (me.personId == null)
                   Text('先在下面「排班」卡片選你是班表上的誰，才能打卡', style: TextStyle(color: AppColors.warn, fontSize: AppType.small))
                 else
                   Text(

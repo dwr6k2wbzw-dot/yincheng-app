@@ -43,6 +43,7 @@ class AttendanceMe {
   final DateTime? lastPunchedAt;
   final bool onShift;
   final DateTime serverTime;
+  final bool bindingPending; // 選了班表上的名字，但老闆還沒確認 → 不能打卡
   const AttendanceMe({
     required this.enabled,
     required this.canManage,
@@ -52,6 +53,7 @@ class AttendanceMe {
     this.lastPunchedAt,
     this.onShift = false,
     required this.serverTime,
+    this.bindingPending = false,
   });
   factory AttendanceMe.fromRow(Map<String, dynamic> r) => AttendanceMe(
         enabled: r['enabled'] as bool? ?? false,
@@ -62,6 +64,7 @@ class AttendanceMe {
         lastPunchedAt: _tsOrNull(r['last_punched_at']),
         onShift: r['on_shift'] as bool? ?? false,
         serverTime: _ts(r['server_time']),
+        bindingPending: r['binding_pending'] as bool? ?? false,
       );
 }
 
@@ -135,7 +138,11 @@ class KioskCode {
     required this.serverTime,
     required this.validUntil,
   });
-  factory KioskCode.fromRow(Map<String, dynamic> r) => KioskCode(
+  factory KioskCode.fromRow(Map<String, dynamic> r) {
+    // 密鑰錯、嘗試太多次：資料庫回一列 error（才記得住失敗次數），不是丟錯誤
+    final err = r['error'] as String?;
+    if (err != null) throw KioskCodeError(err);
+    return KioskCode(
         storeName: r['store_name'] as String? ?? '',
         kioskName: r['kiosk_name'] as String? ?? '',
         window: (r['win'] as num).toInt(),
@@ -143,6 +150,15 @@ class KioskCode {
         serverTime: _ts(r['server_time']),
         validUntil: _ts(r['valid_until']),
       );
+  }
+}
+
+/// 打卡機拿碼被拒（密鑰不對、嘗試太多次）
+class KioskCodeError implements Exception {
+  final String message;
+  const KioskCodeError(this.message);
+  @override
+  String toString() => message;
 }
 
 class KioskInfo {
@@ -169,7 +185,8 @@ class AttendanceSession {
   final DateTime? inAt;
   final DateTime? outAt;
   final int? minutes;
-  final bool pending;
+  final bool pending; // 有一筆還在待確認 → 確認前不計入工時
+  final int countedMinutes; // 計入工時的分鐘（待確認的段＝0）
   const AttendanceSession({
     required this.personId,
     required this.personName,
@@ -178,7 +195,8 @@ class AttendanceSession {
     this.outAt,
     this.minutes,
     this.pending = false,
-  });
+    int? countedMinutes,
+  }) : countedMinutes = countedMinutes ?? (pending ? 0 : minutes ?? 0);
   factory AttendanceSession.fromRow(Map<String, dynamic> r) => AttendanceSession(
         personId: r['person_id'] as String,
         personName: r['person_name'] as String? ?? '',
@@ -187,6 +205,7 @@ class AttendanceSession {
         outAt: _tsOrNull(r['out_at']),
         minutes: (r['minutes'] as num?)?.toInt(),
         pending: r['pending'] as bool? ?? false,
+        countedMinutes: (r['counted_minutes'] as num?)?.toInt(),
       );
 }
 
@@ -309,6 +328,9 @@ class AttendanceExportRow {
     required this.counted,
     required this.punchId,
   });
+  /// 待確認：確認前不計入工時（老闆 2026-11-15）
+  bool get awaitingReview => status == 'pending' && review == null;
+  String get countedLabel => counted ? '算' : awaitingReview ? '待確認（不算）' : '不算';
   factory AttendanceExportRow.fromRow(Map<String, dynamic> r) => AttendanceExportRow(
         businessDate: _date(r['business_date']),
         personName: r['person_name'] as String? ?? '',
@@ -349,6 +371,8 @@ class StaffEntry {
   final double? insuredSalary;
   final double? pensionSelfRate;
   final bool canSeePay;
+  final bool userVerified; // 帳號綁定老闆確認過了沒（沒確認＝不算本人）
+  final String? userName; // 綁定的 App 帳號名稱
   const StaffEntry({
     required this.personId,
     required this.name,
@@ -371,6 +395,8 @@ class StaffEntry {
     this.insuredSalary,
     this.pensionSelfRate,
     this.canSeePay = false,
+    this.userVerified = false,
+    this.userName,
   });
   factory StaffEntry.fromRow(Map<String, dynamic> r) => StaffEntry(
         personId: r['person_id'] as String,
@@ -394,6 +420,8 @@ class StaffEntry {
         insuredSalary: _numOrNull(r['insured_salary']),
         pensionSelfRate: _numOrNull(r['pension_self_rate']),
         canSeePay: r['can_see_pay'] as bool? ?? false,
+        userVerified: r['user_verified'] as bool? ?? false,
+        userName: r['user_name'] as String?,
       );
 }
 
@@ -441,4 +469,48 @@ DateTime taipeiInstant(DateTime bizDate, int hour, int minute) =>
   final v = [for (var i = 1; i <= 4; i++) int.parse(m.group(i)!)];
   if (v[0] > 23 || v[2] > 23 || v[1] > 59 || v[3] > 59) return null;
   return (inH: v[0], inM: v[1], outH: v[2], outM: v[3]);
+}
+
+/// 一筆打卡的歷程（attendance_punch_history：補登申請、打卡、核准、每一次審核）
+class PunchHistoryEntry {
+  final DateTime at;
+  final String action; // amendment_request／punch／amendment_punch／amendment_approve／review…
+  final String? decision;
+  final String? reason;
+  final String? actorName;
+  const PunchHistoryEntry({required this.at, required this.action, this.decision, this.reason, this.actorName});
+  factory PunchHistoryEntry.fromRow(Map<String, dynamic> r) => PunchHistoryEntry(
+        at: _ts(r['at']),
+        action: r['action'] as String? ?? '',
+        decision: r['decision'] as String?,
+        reason: r['reason'] as String?,
+        actorName: r['actor_name'] as String?,
+      );
+
+  String get label => switch (action) {
+        'punch' => '掃碼打卡',
+        'amendment_punch' => '補登產生',
+        'amendment_request' => '申請補登',
+        'amendment_approve' => '核准補登',
+        'amendment_reject' => '退回補登',
+        'amendment_cancel' => '取消補登',
+        'review' => decision == 'confirmed' ? '確認' : decision == 'rejected' ? '不採用' : '審核',
+        _ => action,
+      };
+}
+
+/// 補登可以選的人（attendance_people：這家店的人＋來支援過的別家店員工）
+class AttendancePerson {
+  final String personId;
+  final String name;
+  final String? homeStoreName;
+  final bool crossStore;
+  const AttendancePerson({required this.personId, required this.name, this.homeStoreName, this.crossStore = false});
+  factory AttendancePerson.fromRow(Map<String, dynamic> r) => AttendancePerson(
+        personId: r['person_id'] as String,
+        name: r['name'] as String? ?? '',
+        homeStoreName: r['home_store_name'] as String?,
+        crossStore: r['cross_store'] as bool? ?? false,
+      );
+  String get label => crossStore ? '$name（${homeStoreName ?? '別家店'}支援）' : name;
 }

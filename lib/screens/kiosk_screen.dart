@@ -26,6 +26,7 @@ class _KioskScreenState extends State<KioskScreen> {
   Duration _offset = Duration.zero; // 伺服器時間 − 這台時間
   String? _error;
   bool _loading = false, _noSetup = false;
+  bool _halted = false; // 密鑰錯、嘗試太多次：不自動重試（重試會一直累積失敗次數），等人按「重試」
   Timer? _tick;
 
   Repository get _repo => AppScope.of(context).repo;
@@ -45,6 +46,14 @@ class _KioskScreenState extends State<KioskScreen> {
 
   Future<void> _start() async {
     final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    // 打卡機一律不留登入：老闆、店長設定完、或有人直接開 #/kiosk，都先登出，
+    // 這台放在吧台誰都碰得到，按返回、重新整理只會回到登入頁，進不了管理後台。
+    if (_repo.isSignedIn) {
+      try {
+        await _repo.signOut();
+      } catch (_) {}
+    }
     _id = prefs.getString(kioskIdPref);
     _secret = prefs.getString(kioskSecretPref);
     if (_id == null || _secret == null) {
@@ -56,7 +65,7 @@ class _KioskScreenState extends State<KioskScreen> {
       if (!mounted) return;
       final c = _code;
       // 碼到期就換；拿不到（斷線）時每 5 秒重試
-      if (!_loading && (c == null ? DateTime.now().second % 5 == 0 : !_serverNow.isBefore(c.validUntil))) {
+      if (!_loading && !_halted && (c == null ? DateTime.now().second % 5 == 0 : !_serverNow.isBefore(c.validUntil))) {
         _fetch();
       } else {
         setState(() {});
@@ -76,6 +85,14 @@ class _KioskScreenState extends State<KioskScreen> {
         setState(() {
           _code = c;
           _error = null;
+        });
+      }
+    } on KioskCodeError catch (e) {
+      if (mounted) {
+        setState(() {
+          _code = null;
+          _halted = true;
+          _error = '!${e.message}';
         });
       }
     } catch (e) {
@@ -135,7 +152,14 @@ class _KioskScreenState extends State<KioskScreen> {
                         style: TextStyle(color: AppColors.muted, fontSize: AppType.small, fontFeatures: tabular)),
                   if (_error != null) ...[
                     const SizedBox(height: 8),
-                    Text('連不上伺服器，重試中：$_error', textAlign: TextAlign.center, style: TextStyle(color: AppColors.bad)),
+                    Text(_error!.startsWith('!') ? _error!.substring(1) : '連不上伺服器，重試中：$_error', textAlign: TextAlign.center, style: TextStyle(color: AppColors.bad)),
+                    if (_halted)
+                      TextButton(
+                          onPressed: () {
+                            setState(() => _halted = false);
+                            _fetch();
+                          },
+                          child: const Text('重試')),
                   ],
                   const SizedBox(height: 8),
                   Text('用手機相機掃，或在 App「班表」按「掃碼打卡」', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
@@ -143,8 +167,14 @@ class _KioskScreenState extends State<KioskScreen> {
               ]),
             ),
           ),
-          if (Navigator.of(context).canPop())
-            Positioned(top: 4, left: 4, child: IconButton(tooltip: '離開打卡機畫面', onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close))),
+          // 離開打卡機＝回登入頁（已經登出，要重新登入才進得了後台）
+          Positioned(
+              top: 4,
+              left: 4,
+              child: IconButton(
+                  tooltip: '離開打卡機（回登入頁）',
+                  onPressed: () => Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false),
+                  icon: const Icon(Icons.close))),
         ]),
       ),
     );

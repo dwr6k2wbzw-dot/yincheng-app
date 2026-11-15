@@ -1951,6 +1951,14 @@ class SupabaseRepository implements Repository {
   Future<void> reviewPunch(String punchId, bool confirm, String reason) => _db.rpc('attendance_review_punch',
       params: {'p_punch': punchId, 'p_decision': confirm ? 'confirmed' : 'rejected', 'p_reason': reason});
 
+  @override
+  Future<List<PunchHistoryEntry>> punchHistory(String punchId) async =>
+      _rpcRows(await _db.rpc('attendance_punch_history', params: {'p_punch': punchId})).map(PunchHistoryEntry.fromRow).toList();
+
+  @override
+  Future<List<AttendancePerson>> attendancePeople(String storeId, DateTime from, DateTime to) async =>
+      _rpcRows(await _db.rpc('attendance_people', params: _range(storeId, from, to))).map(AttendancePerson.fromRow).toList();
+
   Map<String, dynamic> _range(String storeId, DateTime from, DateTime to) =>
       {'p_store': storeId, 'p_from': _day.format(from), 'p_to': _day.format(to)};
 
@@ -1986,6 +1994,10 @@ class SupabaseRepository implements Repository {
   @override
   Future<List<StaffEntry>> staffDirectory(String storeId) async =>
       _rpcRows(await _db.rpc('staff_directory', params: {'p_store': storeId})).map(StaffEntry.fromRow).toList();
+
+  @override
+  Future<void> verifyBinding(String personId, String userId, {bool verify = true}) =>
+      _db.rpc('staff_verify_binding', params: {'p_person': personId, 'p_user': userId, 'p_verify': verify});
 
   @override
   Future<void> saveStaffHr(String storeId, String personId,

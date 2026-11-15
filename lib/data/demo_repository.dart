@@ -1309,6 +1309,11 @@ class DemoRepository implements Repository {
   final _hr = <String, Map<String, dynamic>>{};
   final _rates = <String, List<PayRate>>{};
   final _ident = <String, Map<String, String?>>{};
+  // 班表名字綁定的帳號：f0＝示範帳號（老闆已確認）、f1＝小安的帳號（還沒確認）
+  final _bound = <String, ({String user, String name})>{'f0': (user: 'demo-user', name: '示範'), 'f1': (user: 'demo-f1', name: '小安')};
+  final _verified = <String>{'f0'};
+  final _reviews = <String, List<PunchHistoryEntry>>{};
+  bool get _bindingPending => _email.contains('unverified');
 
   @override
   Future<AttendanceMe?> attendanceMe(String storeId) async {
@@ -1316,17 +1321,19 @@ class DemoRepository implements Repository {
     return AttendanceMe(
       enabled: storeId == 'yc',
       canManage: !_isStaff && storeId == 'yc',
-      personId: 'f0',
-      personName: '阿明',
+      personId: _bindingPending ? null : 'f0',
+      personName: _bindingPending ? null : '阿明',
       lastPunchType: last?.punchType,
       lastPunchedAt: last?.at,
       onShift: last?.punchType == 'in',
       serverTime: DateTime.now(),
+      bindingPending: _bindingPending,
     );
   }
 
   @override
   Future<PunchResult> punch(PunchLink link) async {
+    if (_bindingPending) throw Exception('message: 你在班表上的名字還沒經老闆確認，這次沒有打到卡,');
     final now = DateTime.now();
     final last = _att.where((r) => r.isPunch).lastOrNull;
     final dup = last != null && now.difference(last.at).inMinutes < 2;
@@ -1371,7 +1378,30 @@ class DemoRepository implements Repository {
   Future<void> decideAmendment(String id, bool approve, {String? note}) async => _setAmendment(id, approve ? 'approved' : 'rejected');
 
   @override
-  Future<void> reviewPunch(String punchId, bool confirm, String reason) async {}
+  Future<void> reviewPunch(String punchId, bool confirm, String reason) async => (_reviews[punchId] ??= []).add(PunchHistoryEntry(
+      at: DateTime.now(), action: 'review', decision: confirm ? 'confirmed' : 'rejected', reason: reason, actorName: '示範'));
+
+  String? _lastReview(String id) => _reviews[id]?.lastOrNull?.decision;
+
+  @override
+  Future<List<PunchHistoryEntry>> punchHistory(String punchId) async {
+    final r = (await attendanceExport('yc', _daysAgo(31), _daysAgo(0))).where((e) => e.punchId == punchId).firstOrNull;
+    return [
+      if (r != null)
+        PunchHistoryEntry(at: r.punchedAt, action: r.source == 'amendment' ? 'amendment_punch' : 'punch', decision: r.status, reason: r.flags, actorName: r.personName),
+      ...?_reviews[punchId],
+    ];
+  }
+
+  @override
+  Future<List<AttendancePerson>> attendancePeople(String storeId, DateTime from, DateTime to) async {
+    final m = await shiftMonth(storeId, DateTime.now());
+    return [
+      for (final p in m.people)
+        if (p.active) AttendancePerson(personId: p.id, name: p.name),
+      const AttendancePerson(personId: 'xc-demo', name: '阿傑', homeStoreName: '小城外', crossStore: true),
+    ];
+  }
 
   @override
   Future<List<AttendanceAnomaly>> attendanceAnomalies(String storeId, DateTime from, DateTime to) async => [
@@ -1384,11 +1414,27 @@ class DemoRepository implements Repository {
       ];
 
   @override
-  Future<List<AttendanceSession>> attendanceSessions(String storeId, DateTime from, DateTime to) async => [];
+  Future<List<AttendanceSession>> attendanceSessions(String storeId, DateTime from, DateTime to) async {
+    final d = _daysAgo(1);
+    DateTime at(int h, int m) => DateTime(d.year, d.month, d.day, h, m);
+    final demo2 = _lastReview('demo2') == 'confirmed';
+    return [
+      AttendanceSession(personId: 'f0', personName: '阿明', businessDate: d, inAt: at(18, 0), outAt: at(23, 30), minutes: 330),
+      AttendanceSession(
+          personId: 'p0', personName: '小魚', businessDate: d, inAt: at(19, 2), outAt: at(23, 0), minutes: 238, pending: !demo2),
+    ];
+  }
 
   @override
-  Future<List<AttendanceExportRow>> attendanceExport(String storeId, DateTime from, DateTime to) async => [
-        for (final r in _att.where((r) => r.isPunch))
+  Future<List<AttendanceExportRow>> attendanceExport(String storeId, DateTime from, DateTime to) async {
+    final d = _daysAgo(1);
+    final demo2 = _lastReview('demo2');
+    return [
+      AttendanceExportRow(businessDate: d, personName: '阿明', punchType: 'in', punchedAt: DateTime(d.year, d.month, d.day, 18), storeName: '隱城',
+          source: 'qr', status: 'ok', flags: '', review: _lastReview('demo0'), counted: _lastReview('demo0') != 'rejected', punchId: 'demo0'),
+      AttendanceExportRow(businessDate: d, personName: '小魚', punchType: 'in', punchedAt: DateTime(d.year, d.month, d.day, 19, 2), storeName: '隱城',
+          source: 'qr', status: 'pending', flags: 'code_expired', review: demo2, counted: demo2 == 'confirmed', punchId: 'demo2'),
+      for (final r in _att.where((r) => r.isPunch))
           AttendanceExportRow(
               businessDate: r.businessDate ?? r.at,
               personName: '阿明',
@@ -1398,9 +1444,11 @@ class DemoRepository implements Repository {
               source: 'qr',
               status: r.status,
               flags: r.flags.join(' '),
-              counted: r.status == 'ok',
+              review: _lastReview(r.id),
+              counted: _lastReview(r.id) == 'confirmed' || (r.status == 'ok' && _lastReview(r.id) != 'rejected'),
               punchId: r.id),
-      ];
+    ];
+  }
 
   @override
   Future<List<KioskInfo>> kiosks(String storeId) async => List.of(_kiosks);
@@ -1454,8 +1502,18 @@ class DemoRepository implements Repository {
             ratePayType: _rates[p.id]?.firstOrNull?.payType,
             rateAmount: _rates[p.id]?.firstOrNull?.amount,
             canSeePay: !_isStaff,
+            userId: _bound[p.id]?.user,
+            userName: _bound[p.id]?.name,
+            userVerified: _verified.contains(p.id),
           ),
     ];
+  }
+
+  @override
+  Future<void> verifyBinding(String personId, String userId, {bool verify = true}) async {
+    if (_isStaff) throw Exception('message: 只有老闆能確認帳號綁定,');
+    if (_bound[personId]?.user != userId) throw Exception('message: 這個名字綁定的帳號已經換了，請重新整理,');
+    verify ? _verified.add(personId) : _verified.remove(personId);
   }
 
   @override

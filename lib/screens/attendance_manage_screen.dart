@@ -24,15 +24,16 @@ class AttendanceManageScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => DefaultTabController(
-        length: 4,
+        length: 5,
         child: Scaffold(
           appBar: AppBar(
             title: Text('出勤管理・${membership.storeName}'),
-            bottom: const TabBar(isScrollable: true, tabAlignment: TabAlignment.start, tabs: [Tab(text: '異常'), Tab(text: '出勤'), Tab(text: '打卡機'), Tab(text: '員工資料')]),
+            bottom: const TabBar(isScrollable: true, tabAlignment: TabAlignment.start, tabs: [Tab(text: '異常'), Tab(text: '出勤'), Tab(text: '原始紀錄'), Tab(text: '打卡機'), Tab(text: '員工資料')]),
           ),
           body: TabBarView(children: [
             _AnomalyTab(membership: membership, data: data, codeTimes: codeTimes),
             _SessionTab(membership: membership),
+            _RawTab(membership: membership),
             _KioskTab(membership: membership),
             _StaffTab(membership: membership),
           ]),
@@ -148,6 +149,41 @@ class _AnomalyTabState extends State<_AnomalyTab> {
     }
   }
 
+  /// 替人補登：這家店的人＋來支援過的別家店員工（依這家店的出勤紀錄）
+  Future<void> _amendAnyone() async {
+    final t = bizToday();
+    final List<AttendancePerson> people;
+    try {
+      people = await _repo.attendancePeople(widget.membership.storeId, t.subtract(const Duration(days: 62)), t);
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+      return;
+    }
+    if (!mounted) return;
+    final p = await showModalBottomSheet<AttendancePerson>(
+      context: context,
+      isScrollControlled: true,
+      builder: (c) => SafeArea(
+        child: ListView(shrinkWrap: true, children: [
+          const ListTile(title: Text('替誰補登？'), subtitle: Text('別家店的人：最近在這家店打過卡（來支援）才列出')),
+          for (final x in people)
+            ListTile(
+              title: Text(x.name),
+              subtitle: x.crossStore ? Text('${x.homeStoreName ?? '別家店'}・來支援') : null,
+              onTap: () => Navigator.pop(c, x),
+            ),
+        ]),
+      ),
+    );
+    if (p == null || !mounted) return;
+    final ok = await showAmendmentForm(context,
+        storeId: widget.membership.storeId, personId: p.personId, personName: p.label, data: widget.data, codeTimes: widget.codeTimes);
+    if (ok == true && mounted) {
+      showMessage(context, '已送出補登，要另一位店長或老闆核准');
+      _reload();
+    }
+  }
+
   List<Widget> _actions(AttendanceAnomaly a) => switch (a.kind) {
         'pending' || 'duplicate' when a.punchId != null => [
             TextButton(onPressed: () => _review(a, true), child: const Text('確認')),
@@ -177,7 +213,11 @@ class _AnomalyTabState extends State<_AnomalyTab> {
               const InfoLine(
                   text: '店長每天看一次：漏打、待確認、待審補登',
                   icon: Icons.info_outline,
-                  detail: '確認／不採用都要寫原因，會記在異動紀錄。店長不能審自己的打卡和補登（老闆可以）。原始打卡不會被改掉，「不採用」只是不算。'),
+                  detail: '確認／不採用都要寫原因，會記在異動紀錄。店長不能審自己的打卡和補登（老闆可以）。原始打卡不會被改掉，「不採用」只是不算。已經審過的要改，到「原始紀錄」點那一筆重新審核。'),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(onPressed: _amendAnyone, icon: const Icon(Icons.edit_calendar, size: 18), label: const Text('替人補登（含來支援的）')),
+              ),
               if (snap.hasError) ErrorView(message: friendlyError(snap.error!), onRetry: _reload),
               if (!snap.hasData && !snap.hasError) const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator())),
               if (snap.hasData && snap.data!.isEmpty)
@@ -252,6 +292,18 @@ class _SessionTabState extends State<_SessionTab> {
 
   String _dur(int? m) => m == null ? '—' : '${m ~/ 60} 小時 ${m % 60} 分';
 
+  Widget _totals(List<AttendanceSession> rows) {
+    final counted = rows.fold<int>(0, (a, s) => a + s.countedMinutes);
+    final pending = rows.where((s) => s.pending).length;
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 4),
+      child: Text.rich(TextSpan(children: [
+        TextSpan(text: '計入工時合計 ${_dur(counted)}', style: const TextStyle(fontWeight: AppFont.label, fontFeatures: tabular)),
+        if (pending > 0) TextSpan(text: '・$pending 段待確認不計入', style: TextStyle(color: AppColors.warn)),
+      ])),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => FutureBuilder<List<AttendanceSession>>(
         future: _future,
@@ -266,9 +318,10 @@ class _SessionTabState extends State<_SessionTab> {
                 onPressed: _exporting ? null : _export, icon: const Icon(Icons.download, size: 18), label: const Text('匯出 CSV')),
           ]),
           const InfoLine(
-              text: '上班配 14 小時內的下班・營業日早上 6 點換日',
+              text: '待確認的打卡，確認前不計入工時',
               icon: Icons.info_outline,
-              detail: '待確認或不採用的打卡不算進這裡；匯出 CSV 會列出每一筆原始打卡（含不算的、原因、補登）。這階段不算薪資。'),
+              detail: '上班配 14 小時內的下班，營業日早上 6 點換日。有一筆還在待確認的段會標「待確認・不計入」，工時合計不算它；到「異常」或「原始紀錄」確認後才算。不採用的打卡不算。匯出 CSV 會列出每一筆原始打卡，「算不算」一欄標「待確認（不算）」。這階段不算薪資。'),
+          if (snap.hasData && snap.data!.isNotEmpty) _totals(snap.data!),
           if (snap.hasError) ErrorView(message: friendlyError(snap.error!), onRetry: () => setState(() => _future = _load())),
           if (!snap.hasData && !snap.hasError) const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator())),
           if (snap.hasData && snap.data!.isEmpty) const Padding(padding: EdgeInsets.all(24), child: Center(child: Text('這段期間沒有出勤'))),
@@ -277,11 +330,168 @@ class _SessionTabState extends State<_SessionTab> {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: Text('${s.personName}・${_md.format(s.businessDate)}'),
-                subtitle: Text('${s.inAt == null ? '沒有上班' : _mdHm(s.inAt!)} → ${s.outAt == null ? '沒有下班' : _mdHm(s.outAt!)}'),
-                trailing: Text(_dur(s.minutes), style: const TextStyle(fontFeatures: tabular)),
+                subtitle: Text.rich(TextSpan(children: [
+                  TextSpan(text: '${s.inAt == null ? '沒有上班' : _mdHm(s.inAt!)} → ${s.outAt == null ? '沒有下班' : _mdHm(s.outAt!)}'),
+                  if (s.pending) TextSpan(text: '\n待確認・不計入工時', style: TextStyle(color: AppColors.warn)),
+                ])),
+                trailing: Text(_dur(s.minutes),
+                    style: TextStyle(
+                        fontFeatures: tabular,
+                        color: s.pending ? AppColors.muted : null,
+                        decoration: s.pending && s.minutes != null ? TextDecoration.lineThrough : null)),
               ),
         ]),
       );
+}
+
+// ---------------- 原始紀錄（每一筆打卡；可以重新審核） ----------------
+
+class _RawTab extends StatefulWidget {
+  const _RawTab({required this.membership});
+  final Membership membership;
+  @override
+  State<_RawTab> createState() => _RawTabState();
+}
+
+class _RawTabState extends State<_RawTab> {
+  _Range _range = _Range.week;
+  late Future<List<AttendanceExportRow>> _future = _load();
+
+  Future<List<AttendanceExportRow>> _load() {
+    final d = _rangeDates(_range);
+    return AppScope.of(context).repo.attendanceExport(widget.membership.storeId, d.from, d.to);
+  }
+
+  @override
+  Widget build(BuildContext context) => RefreshIndicator(
+        onRefresh: () async => setState(() => _future = _load()),
+        child: FutureBuilder<List<AttendanceExportRow>>(
+          future: _future,
+          builder: (context, snap) => ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [
+            _rangeChips(_range, (r) => setState(() {
+                  _range = r;
+                  _future = _load();
+                })),
+            const InfoLine(
+                text: '每一筆原始打卡；點一筆看歷程、重新審核',
+                icon: Icons.info_outline,
+                detail: '已確認、不採用的也可以再改，每一次都要寫原因，舊的審核留在歷程裡，以最新一次為準。原始打卡本身不能改。'),
+            if (snap.hasError) ErrorView(message: friendlyError(snap.error!), onRetry: () => setState(() => _future = _load())),
+            if (!snap.hasData && !snap.hasError) const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator())),
+            if (snap.hasData && snap.data!.isEmpty) const Padding(padding: EdgeInsets.all(24), child: Center(child: Text('這段期間沒有打卡'))),
+            if (snap.hasData)
+              for (final r in snap.data!.reversed)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(r.source == 'amendment' ? Icons.edit_calendar : Icons.qr_code_2,
+                      color: r.awaitingReview ? AppColors.warn : (r.counted ? AppColors.good : AppColors.muted)),
+                  title: Text('${r.personName}・${punchTypeLabel(r.punchType)} ${_mdHm(r.punchedAt)}'),
+                  subtitle: Text([
+                    if (r.storeName != widget.membership.storeName) r.storeName,
+                    if (!r.awaitingReview) rawReviewLabel(r), // 待確認已寫在最後的「待確認（不算）」
+                    if (r.flags.isNotEmpty) r.flags.split(' ').where((f) => f.isNotEmpty).map(punchFlagLabel).join('、'),
+                    r.countedLabel,
+                  ].join('・')),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () async {
+                    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => PunchDetailScreen(row: r)));
+                    if (mounted) setState(() => _future = _load());
+                  },
+                ),
+          ]),
+        ),
+      );
+}
+
+String rawReviewLabel(AttendanceExportRow r) => switch (r.review) {
+      'confirmed' => '已確認',
+      'rejected' => '不採用',
+      _ => r.status == 'pending' ? '待確認' : (r.source == 'amendment' ? '補登' : '正常'),
+    };
+
+/// 一筆打卡：歷程（打卡、補登、每一次審核）＋重新審核
+class PunchDetailScreen extends StatefulWidget {
+  const PunchDetailScreen({super.key, required this.row});
+  final AttendanceExportRow row;
+  @override
+  State<PunchDetailScreen> createState() => _PunchDetailScreenState();
+}
+
+class _PunchDetailScreenState extends State<PunchDetailScreen> {
+  late Future<List<PunchHistoryEntry>> _future = _load();
+  String? _decision; // 這次審核後的結果（畫面上先更新）
+
+  Repository get _repo => AppScope.of(context).repo;
+  Future<List<PunchHistoryEntry>> _load() => _repo.punchHistory(widget.row.punchId);
+
+  Future<void> _review(bool confirm) async {
+    final reason = await _askReason(context, confirm ? '確認這筆打卡算數' : '這筆打卡不採用');
+    if (reason == null || !mounted) return;
+    try {
+      await _repo.reviewPunch(widget.row.punchId, confirm, reason);
+      if (!mounted) return;
+      showMessage(context, confirm ? '已確認' : '已標不採用');
+      setState(() {
+        _decision = confirm ? 'confirmed' : 'rejected';
+        _future = _load();
+      });
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final r = widget.row;
+    final current = _decision ?? r.review;
+    return Scaffold(
+      appBar: AppBar(title: const Text('打卡紀錄')),
+      body: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [
+        Text('${r.personName}・${punchTypeLabel(r.punchType)}', style: const TextStyle(fontSize: AppType.title, fontWeight: AppFont.heading)),
+        Text('${_mdHm(r.punchedAt)}・${r.storeName}・營業日 ${_md.format(r.businessDate)}', style: TextStyle(color: AppColors.muted)),
+        const SizedBox(height: 8),
+        Text(switch (current) {
+          'confirmed' => '目前：已確認（計入工時）',
+          'rejected' => '目前：不採用（不計入）',
+          _ => r.status == 'pending' ? '目前：待確認（確認前不計入工時）' : '目前：正常（計入工時）',
+        }, style: TextStyle(color: current == null && r.status == 'pending' ? AppColors.warn : null, fontWeight: AppFont.label)),
+        const SizedBox(height: 8),
+        Wrap(spacing: 8, children: [
+          FilledButton.tonal(onPressed: current == 'confirmed' ? null : () => _review(true), child: Text(current == null ? '確認' : '改成確認')),
+          OutlinedButton(onPressed: current == 'rejected' ? null : () => _review(false), child: Text(current == null ? '不採用' : '改成不採用')),
+        ]),
+        const SizedBox(height: 4),
+        Text('要寫原因；店長不能審自己的打卡（老闆可以）', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+        const Divider(height: 24),
+        Text('歷程', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+        FutureBuilder<List<PunchHistoryEntry>>(
+          future: _future,
+          builder: (context, snap) {
+            if (snap.hasError) return Text(friendlyError(snap.error!), style: TextStyle(color: AppColors.bad));
+            if (!snap.hasData) return const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator()));
+            return Column(children: [
+              for (final h in snap.data!)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  leading: Icon(
+                      h.action == 'review' ? (h.decision == 'confirmed' ? Icons.check_circle_outline : Icons.block) : Icons.history,
+                      size: 20,
+                      color: AppColors.muted),
+                  title: Text('${h.label}・${h.actorName ?? '—'}'),
+                  subtitle: Text([
+                    _mdHm(h.at),
+                    if (h.action.endsWith('punch') && h.decision == 'pending') '待確認',
+                    if (h.reason != null && h.reason!.isNotEmpty)
+                      h.action.endsWith('punch') ? h.reason!.split(' ').map(punchFlagLabel).join('、') : h.reason!,
+                  ].join('・')),
+                ),
+            ]);
+          },
+        ),
+      ]),
+    );
+  }
 }
 
 // ---------------- 打卡機 ----------------
@@ -312,7 +522,7 @@ class _KioskTabState extends State<_KioskTab> {
       builder: (d) => AlertDialog(
         title: const Text('把這台設成打卡機'),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('這台裝置會一直顯示 QR 碼，不用登入。請在店裡固定的平板或手機上按這個。'),
+          const Text('這台裝置會一直顯示 QR 碼，不用登入。請在店裡固定的平板或手機上按這個。\n設定完這台會自動登出你的帳號，之後要回後台得重新登入。'),
           TextField(controller: c, maxLength: 40, decoration: const InputDecoration(labelText: '名稱')),
         ]),
         actions: [
@@ -329,11 +539,32 @@ class _KioskTabState extends State<_KioskTab> {
       await prefs.setString(kioskIdPref, k.id);
       await prefs.setString(kioskSecretPref, k.secret);
       if (!mounted) return;
-      await Navigator.of(context).pushNamed('/kiosk');
-      if (mounted) setState(() => _future = _load());
+      await _openKiosk();
     } catch (e) {
       if (mounted) showMessage(context, friendlyError(e), error: true);
     }
+  }
+
+  /// 換成打卡機畫面：先登出（打卡機畫面自己也會再登出一次），清掉整個頁面堆疊，按返回回不到後台
+  Future<void> _openKiosk() async {
+    final nav = Navigator.of(context, rootNavigator: true);
+    await _repo.signOut();
+    nav.pushNamedAndRemoveUntil('/kiosk', (_) => false);
+  }
+
+  Future<void> _confirmOpenKiosk() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (d) => AlertDialog(
+        title: const Text('打開打卡畫面'),
+        content: const Text('打開後這台會登出你的帳號，之後要回後台得重新登入。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('登出並打開')),
+        ],
+      ),
+    );
+    if (ok == true && mounted) await _openKiosk();
   }
 
   Future<void> _disable(KioskInfo k) async {
@@ -369,7 +600,7 @@ class _KioskTabState extends State<_KioskTab> {
             FilledButton.icon(onPressed: _register, icon: const Icon(Icons.add), label: const Text('把這台設成打卡機')),
             if (_thisDevice != null)
               OutlinedButton.icon(
-                onPressed: () => Navigator.of(context).pushNamed('/kiosk'),
+                onPressed: _confirmOpenKiosk,
                 icon: const Icon(Icons.qr_code_2),
                 label: const Text('打開這台的打卡畫面'),
               ),
@@ -425,6 +656,7 @@ class _StaffTabState extends State<_StaffTab> {
                   s.kind == 'full' ? '正職' : '兼職',
                   if (s.phone != null) s.phone!,
                   if (s.canSeePay && s.rateAmount != null) '${payTypeLabel(s.ratePayType)} ${ntd(s.rateAmount!)}',
+                  bindingLabel(s),
                 ].join('・')),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () async {
@@ -437,6 +669,10 @@ class _StaffTabState extends State<_StaffTab> {
         },
       );
 }
+
+String bindingLabel(StaffEntry s) => s.userId == null
+    ? '沒綁 App 帳號'
+    : '帳號 ${s.userName ?? '—'}（${s.userVerified ? '已確認' : '待老闆確認'}）';
 
 class StaffEditScreen extends StatefulWidget {
   const StaffEditScreen({super.key, required this.membership, required this.entry});
@@ -455,6 +691,7 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
   late final _acct = TextEditingController(text: widget.entry.identityMasked ? '' : widget.entry.bankAccount);
   late DateTime? _leave = widget.entry.leaveDate;
   late String? _payType = widget.entry.payType;
+  late bool _verified = widget.entry.userVerified;
   Future<List<PayRate>>? _rates;
   bool _saving = false;
 
@@ -474,6 +711,55 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
       c.dispose();
     }
     super.dispose();
+  }
+
+  /// 帳號綁定：只有老闆能確認（確認後那個帳號才算「本人」，看得到自己的個資、出勤、能打卡）
+  Future<void> _verify(bool verify) async {
+    final e = widget.entry;
+    if (verify) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (d) => AlertDialog(
+          title: const Text('確認帳號綁定'),
+          content: Text('確定「${e.userName ?? '這個帳號'}」就是 ${e.name} 本人？確認後這個帳號看得到 ${e.name} 的身分證、銀行帳號、薪率，也能用這個名字打卡。'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('取消')),
+            FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('是本人，確認')),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
+    }
+    try {
+      await _repo.verifyBinding(e.personId, e.userId!, verify: verify);
+      if (!mounted) return;
+      setState(() => _verified = verify);
+      showMessage(context, verify ? '已確認' : '已取消確認');
+    } catch (err) {
+      if (mounted) showMessage(context, friendlyError(err), error: true);
+    }
+  }
+
+  Widget _binding() {
+    final e = widget.entry;
+    if (e.userId == null) {
+      return const InfoLine(text: '沒綁 App 帳號', icon: Icons.link_off, detail: '員工登入後在班表選自己的名字，老闆確認後才算綁定完成。');
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      InfoLine(
+          text: 'App 帳號 ${e.userName ?? '—'}・${_verified ? '已確認是本人' : '待老闆確認'}',
+          icon: _verified ? Icons.verified_user_outlined : Icons.hourglass_empty,
+          detail: '確認前這個帳號不算本人：看不到這個人的個資和薪率，也不能用這個名字打卡。店長、員工自己選的綁定都要老闆確認。'),
+      if (_owner)
+        Align(
+          alignment: Alignment.centerLeft,
+          child: _verified
+              ? TextButton(onPressed: () => _verify(false), child: const Text('取消確認'))
+              : FilledButton.tonal(onPressed: () => _verify(true), child: const Text('確認是本人')),
+        )
+      else if (!_verified)
+        Text('只有老闆能確認', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+    ]);
   }
 
   Future<void> _save() async {
@@ -579,6 +865,8 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(e.name)),
       body: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [
+        _binding(),
+        const Divider(),
         TextField(controller: _phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: '電話')),
         TextField(controller: _ec, decoration: const InputDecoration(labelText: '緊急聯絡人')),
         TextField(controller: _ep, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: '緊急聯絡電話')),

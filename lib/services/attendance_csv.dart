@@ -38,7 +38,7 @@ String buildAttendanceCsv(List<AttendanceExportRow> rows) {
         switch (r.review) { 'confirmed' => '已確認', 'rejected' => '不採用', _ => '' },
         r.reviewReason,
         r.amendmentReason,
-        r.counted ? '算' : '不算',
+        r.countedLabel,
         r.punchId,
       ].map(csvCell).join(','))
       ..write('\r\n');

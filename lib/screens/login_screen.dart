@@ -53,7 +53,8 @@ class _LoginScreenState extends State<LoginScreen> {
           context: context,
           builder: (c) => AlertDialog(
             title: const Text('請到信箱確認'),
-            content: Text('確認信已寄到 $email。\n請點信裡的連結，再回到這裡用剛剛的 Email 和密碼登入，就會自動加入店家。'),
+            content: Text('確認信已寄到 $email。\n請點信裡的連結，再回到這裡用剛剛的 Email 和密碼登入，就會自動加入店家。'
+                '${pendingPunch != null ? '\n\n注意：這次打卡沒有打到。登入後請回打卡機重新掃碼。' : ''}'),
             actions: [FilledButton(onPressed: () => Navigator.pop(c), child: const Text('知道了'))],
           ),
         );

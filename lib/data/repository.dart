@@ -285,6 +285,10 @@ abstract class Repository {
   Future<void> decideAmendment(String id, bool approve, {String? note});
   /// 待確認的打卡：確認或不採用（要原因，可以再改）
   Future<void> reviewPunch(String punchId, bool confirm, String reason);
+  /// 一筆打卡的完整歷程（老闆、店長）：補登、每一次確認／不採用
+  Future<List<PunchHistoryEntry>> punchHistory(String punchId);
+  /// 補登可以選的人（老闆、店長）：這家店的人＋期間前後 31 天內來支援過的別家店員工
+  Future<List<AttendancePerson>> attendancePeople(String storeId, DateTime from, DateTime to);
   Future<List<AttendanceAnomaly>> attendanceAnomalies(String storeId, DateTime from, DateTime to);
   Future<List<AttendanceSession>> attendanceSessions(String storeId, DateTime from, DateTime to);
   Future<List<AttendanceExportRow>> attendanceExport(String storeId, DateTime from, DateTime to);
@@ -296,6 +300,8 @@ abstract class Repository {
   Future<KioskCode> kioskCode(String kioskId, String secret);
   /// 員工資料一覽：老闆全部；店長身分證、帳號遮罩、沒有薪率；其他人只有自己
   Future<List<StaffEntry>> staffDirectory(String storeId);
+  /// 老闆確認（或取消確認）班表名字綁定的 App 帳號；userId＝畫面上看到的那個帳號，對不上就失敗
+  Future<void> verifyBinding(String personId, String userId, {bool verify = true});
   /// 聯絡資料（老闆、店長）；payType 只有老闆能改，店長傳 null＝不動
   Future<void> saveStaffHr(String storeId, String personId,
       {String? phone, String? emergencyContact, String? emergencyPhone, DateTime? leaveDate, String? payType});
