@@ -227,6 +227,13 @@ window.ycSaveFile = async function (bytes, name, mime) {
   setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
   return 'downloaded';
 };
+// 薪資單：另開一頁排好版，自動跳出列印（可選「儲存為 PDF」）；被擋彈出視窗回 blocked
+window.ycPrintHtml = function (html) {
+  var url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
+  var w = window.open(url, '_blank');
+  setTimeout(function () { URL.revokeObjectURL(url); }, 120000);
+  return w ? 'opened' : 'blocked';
+};
 window.ycOcr = async function (dataUrl) {
   if (!window.Tesseract) {
     await new Promise(function (ok, bad) {

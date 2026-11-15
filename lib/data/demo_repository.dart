@@ -1552,4 +1552,131 @@ class DemoRepository implements Repository {
   Future<void> saveStaffIdentity(String storeId, String personId, {String? nationalId, String? bankCode, String? bankAccount}) async {
     _ident[personId] = {'id': nationalId, 'bank': bankCode, 'acct': bankAccount};
   }
+
+  // ---------------- 薪資（示範：人名、金額都是虛構的） ----------------
+  var _payOt = const PayrollSettings();
+  final _payRows = <String, Map<String, PayrollRow>>{}; // 'store|yyyy-mm' → 人 → 列
+  final _payStatus = <String, String>{};
+  String _payKey(String storeId, DateTime m) => '$storeId|${m.year}-${m.month}';
+  void _payNeedManager() {
+    if (_isStaff) throw Exception('message: 只有老闆、店長能看薪資,');
+  }
+
+  PayrollRow _payCalc(PayrollRow r, {String? status}) {
+    final days = r.daysOverride ?? r.autoDays, hours = r.hoursOverride ?? r.autoHours;
+    final g = payrollTotal(
+        payType: r.payType, base: r.baseAmount, days: days, hours: hours, otHours: r.otHours, otHours2: r.otHours2,
+        otMode: r.otMode, otRate: r.otRate, bonus: r.bonus, insurance: r.insurance);
+    return PayrollRow(
+        personId: r.personId, name: r.name, kind: r.kind, status: status ?? r.status, payType: r.payType,
+        baseAmount: r.baseAmount, autoDays: r.autoDays, autoHours: r.autoHours, daysOverride: r.daysOverride,
+        hoursOverride: r.hoursOverride, days: days, hours: hours, otHours: r.otHours, otHours2: r.otHours2,
+        otMode: r.otMode, otRate: r.otRate, bonus: r.bonus, insurance: r.insurance, note: r.note,
+        gross: g?.toDouble(), lsaRate: r.payType == 'monthly' && r.baseAmount != null ? lsaOtRate(r.baseAmount!) : null,
+        editable: (status ?? r.status) == 'draft', missingRate: r.baseAmount == null, updatedAt: DateTime.now());
+  }
+
+  @override
+  Future<PayrollSettings> payrollSettings(String storeId) async {
+    _payNeedManager();
+    return _payOt;
+  }
+
+  @override
+  Future<void> setPayrollOvertime(String storeId, String mode, double rate) async {
+    _payNeedManager();
+    _payOt = PayrollSettings(otMode: mode, otRate: rate);
+  }
+
+  @override
+  Future<int> preparePayroll(String storeId, DateTime month) async {
+    _payNeedManager();
+    final k = _payKey(storeId, month);
+    if (_payStatus[k] == 'published') throw Exception('message: 這個月已經發布，要先由老闆重新開啟,');
+    final people = (await shiftMonth(storeId, month)).people;
+    final rows = _payRows.putIfAbsent(k, () => {});
+    for (final (i, p) in people.indexed) {
+      final old = rows[p.id];
+      // 示範：正職月薪、兼職時薪，第一位是日薪；隱城的時數假裝從打卡帶入
+      final type = i == 0 ? 'daily' : (p.kind == 'part' ? 'hourly' : 'monthly');
+      final base = switch (type) { 'daily' => 1800.0, 'monthly' => 36000.0 + i * 1000, _ => 200.0 };
+      final auto = storeId == 'yc';
+      rows[p.id] = _payCalc(PayrollRow(
+          personId: p.id, name: p.name, kind: p.kind, payType: type, baseAmount: base,
+          autoDays: auto && type == 'daily' ? 10 : null, autoHours: auto && type == 'hourly' ? 60.0 + i * 4.5 : null,
+          daysOverride: old?.daysOverride, hoursOverride: old?.hoursOverride,
+          otHours: type == 'monthly' ? old?.otHours ?? 0 : 0, otHours2: type == 'monthly' ? old?.otHours2 ?? 0 : 0,
+          otMode: _payOt.otMode, otRate: _payOt.otRate, bonus: old?.bonus ?? 0,
+          insurance: type == 'daily' ? 0 : old?.insurance ?? (type == 'monthly' ? 1200 : 300), note: old?.note), status: 'draft');
+    }
+    _payStatus[k] = 'draft';
+    return rows.length;
+  }
+
+  @override
+  Future<List<PayrollRow>> payrollMonth(String storeId, DateTime month) async {
+    _payNeedManager();
+    return [...?_payRows[_payKey(storeId, month)]?.values];
+  }
+
+  @override
+  Future<PayrollReport> payrollReport(String storeId, DateTime month) async {
+    _payNeedManager();
+    final k = _payKey(storeId, month), rows = _payRows[k]?.values.toList() ?? const <PayrollRow>[];
+    if (_payStatus[k] == null) return const PayrollReport();
+    final missing = rows.where((r) => r.gross == null).length;
+    final total = rows.fold<double>(0, (a, r) => a + (r.gross ?? 0));
+    const revenue = 600000.0;
+    return PayrollReport(
+        status: _payStatus[k], people: rows.length, total: missing == 0 ? total : null, revenue: revenue,
+        costRate: missing == 0 ? (total / revenue * 10000).round() / 10000 : null, complete: true, missingRate: missing,
+        visibleTotal: total);
+  }
+
+  @override
+  Future<double?> savePayrollEntry(String storeId, String personId, DateTime month,
+      {double? days, double? hours, double otHours = 0, double otHours2 = 0, double bonus = 0, double insurance = 0,
+      String? note, String? reason}) async {
+    _payNeedManager();
+    final k = _payKey(storeId, month), r = _payRows[k]?[personId];
+    if (r == null) throw Exception('message: 這個人這個月還沒有薪資，請先帶入,');
+    if (_payStatus[k] == 'published') throw Exception('message: 這個月已經發布，不能再改,');
+    if (r.payType != 'monthly' && otHours + otHours2 > 0) throw Exception('message: 只有月薪制可以填加班時數,');
+    if (r.payType == 'daily' && insurance != 0) throw Exception('message: 日薪制不扣勞健保,');
+    final n = _payCalc(PayrollRow(
+        personId: r.personId, name: r.name, kind: r.kind, status: r.status, payType: r.payType, baseAmount: r.baseAmount,
+        autoDays: r.autoDays, autoHours: r.autoHours, daysOverride: days, hoursOverride: hours, otHours: otHours,
+        otHours2: otHours2, otMode: r.otMode, otRate: r.otRate, bonus: bonus, insurance: insurance, note: note));
+    _payRows[k]![personId] = n;
+    return n.gross;
+  }
+
+  @override
+  Future<void> publishPayroll(String storeId, DateTime month) async {
+    _payNeedManager();
+    final k = _payKey(storeId, month), rows = _payRows[k];
+    if (rows == null) throw Exception('message: 這個月還沒有薪資,');
+    if (rows.values.any((r) => r.gross == null)) throw Exception('message: 還有人沒有薪率，不能發布,');
+    _payStatus[k] = 'published';
+    rows.updateAll((_, r) => _payCalc(r, status: 'published'));
+  }
+
+  @override
+  Future<void> reopenPayroll(String storeId, DateTime month, String reason) async {
+    if (_isStaff) throw Exception('message: 只有老闆能重新開啟,');
+    final k = _payKey(storeId, month);
+    _payStatus[k] = 'draft';
+    _payRows[k]?.updateAll((_, r) => _payCalc(r, status: 'draft'));
+  }
+
+  @override
+  Future<List<PayrollSlip>> myPayslips(String storeId) async {
+    if (_bindingPending) return const [];
+    final m = DateTime(DateTime.now().year, DateTime.now().month - 1, 1);
+    return [
+      PayrollSlip(
+          month: m, storeName: storeId == 'yc' ? '隱城' : '小城外', personName: '阿明', payType: 'hourly', baseAmount: 200,
+          hours: 82.5, bonus: 500, insurance: 300, gross: 16700, publishedAt: DateTime(m.year, m.month + 1, 5)),
+    ];
+  }
 }
