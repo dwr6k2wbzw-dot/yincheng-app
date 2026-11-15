@@ -1561,6 +1561,8 @@ class DemoRepository implements Repository {
   static const _payNoRateId = 'demo-no-rate', _payNoRateName = '新來的（示範）';
   final _payExempt = <String>{};
   bool _payNoRateMissing(String storeId) => storeId == 'yc' && !_payExempt.contains(_payNoRateId);
+  // 已發布的月份用發布當時的名單：之後才出現的人不算缺漏、也不列出
+  bool _payNoRateShown(String k, String storeId) => storeId == 'yc' && _payStatus[k] == 'draft';
   String _payKey(String storeId, DateTime m) => '$storeId|${m.year}-${m.month}';
   void _payNeedManager() {
     if (_isStaff) throw Exception('message: 只有老闆、店長能看薪資,');
@@ -1602,6 +1604,7 @@ class DemoRepository implements Repository {
     final rows = _payRows.putIfAbsent(k, () => {});
     for (final (i, p) in people.indexed) {
       final old = rows[p.id];
+      if (old == null && _payExempt.contains(p.id)) continue; // 不計薪的人不帶入（已有的列保留）
       // 示範：正職月薪、兼職時薪，第一位是日薪；隱城的時數假裝從打卡帶入
       final type = i == 0 ? 'daily' : (p.kind == 'part' ? 'hourly' : 'monthly');
       final base = switch (type) { 'daily' => 1800.0, 'monthly' => 36000.0 + i * 1000, _ => 200.0 };
@@ -1624,7 +1627,7 @@ class DemoRepository implements Repository {
     final k = _payKey(storeId, month);
     return [
       ...?_payRows[k]?.values,
-      if (_payStatus[k] != null && storeId == 'yc')
+      if (_payNoRateShown(k, storeId))
         PayrollRow(
             personId: _payNoRateId, name: _payNoRateName, payType: 'hourly',
             missingRate: _payNoRateMissing(storeId), exempt: !_payNoRateMissing(storeId)),
@@ -1642,7 +1645,7 @@ class DemoRepository implements Repository {
     _payNeedManager();
     final k = _payKey(storeId, month), rows = _payRows[k]?.values.toList() ?? const <PayrollRow>[];
     if (_payStatus[k] == null) return const PayrollReport();
-    final names = [for (final r in rows) if (r.gross == null) r.name, if (_payNoRateMissing(storeId)) _payNoRateName];
+    final names = [for (final r in rows) if (r.gross == null) r.name, if (_payNoRateShown(k, storeId) && _payNoRateMissing(storeId)) _payNoRateName];
     final missing = names.length;
     final total = rows.fold<double>(0, (a, r) => a + (r.gross ?? 0));
     const revenue = 600000.0;

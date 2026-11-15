@@ -161,9 +161,29 @@ void main() {
       expect(report.total,
           (await repo.payrollMonth('yc', m)).where((r) => !r.exempt).fold<double>(0, (a, r) => a + r.gross!));
       await repo.publishPayroll('yc', m);
+      // 已發布的月份用發布當時的名單：之後名單有變（取消不計薪）也不會讓總計變空白
+      final publishedTotal = (await repo.payrollReport('yc', m)).total;
+      await repo.setPayrollExempt('yc', missing.personId, false);
+      report = await repo.payrollReport('yc', m);
+      expect(report.missingNames, isEmpty);
+      expect(report.total, publishedTotal);
+      expect((await repo.payrollMonth('yc', m)).any((r) => r.personId == missing.personId), isFalse);
       await expectLater(repo.savePayrollEntry('yc', hourly.personId, m, hours: 11), throwsA(anything));
       await repo.reopenPayroll('yc', m, '補獎金');
       expect((await repo.payrollReport('yc', m)).published, isFalse);
+    });
+
+    test('先設不計薪的人，帶入時不建立他的薪資列，總額不含他', () async {
+      final repo = DemoRepository();
+      await repo.signIn('owner@x', 'x');
+      final m = DateTime(2026, 8, 1);
+      final people = (await repo.shiftMonth('yc', m)).people;
+      final skip = people[1].id;
+      await repo.setPayrollExempt('yc', skip, true);
+      expect(await repo.preparePayroll('yc', m), people.length - 1);
+      final rows = await repo.payrollMonth('yc', m);
+      expect(rows.any((r) => r.personId == skip), isFalse);
+      expect(rows.where((r) => r.personId != 'demo-no-rate').length, people.length - 1);
     });
 
     test('員工：不能看薪資清單；綁定沒確認就沒有薪資單', () async {
