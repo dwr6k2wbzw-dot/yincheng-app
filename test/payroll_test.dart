@@ -37,12 +37,34 @@ void main() {
       expect(roundYuan(0.1 + 0.2 + 0.2), 1);
     });
 
-    test('固定加班時薪低於勞基法 → 標示', () {
+    test('固定加班時薪低於勞基法 → 標示（前 2 小時比 1.34 倍、第 3 小時起比 1.67 倍）', () {
       const r = PayrollRow(personId: 'x', name: '虛構', payType: 'monthly', baseAmount: 48000, otRate: 200, lsaRate: 268);
       expect(r.otBelowLaw, isTrue);
-      const ok = PayrollRow(personId: 'x', name: '虛構', payType: 'monthly', baseAmount: 30000, otRate: 200, lsaRate: 167.5);
+      expect(r.otBelowLawText, contains('前 2 小時'));
+      // 月薪 36,000：×1.34＝201、×1.67＝250.5；固定 210 高於前 2 小時、低於第 3 小時起 → 仍要警告
+      const mid = PayrollRow(personId: 'x', name: '虛構', payType: 'monthly', baseAmount: 36000, otRate: 210);
+      expect(mid.otBelowLaw, isTrue);
+      expect(mid.otBelowLawText, allOf(contains('第 3 小時起 250.50'), contains('有達到')));
+      // 月薪 30,000：×1.67＝208.75；固定 210 都不低於
+      const ok = PayrollRow(personId: 'x', name: '虛構', payType: 'monthly', baseAmount: 30000, otRate: 210, lsaRate: 167.5);
       expect(ok.otBelowLaw, isFalse);
+      // 以前只比 1.34 倍會漏掉：30,000＋固定 200（低於 208.75）
+      const old = PayrollRow(personId: 'x', name: '虛構', payType: 'monthly', baseAmount: 30000, otRate: 200, lsaRate: 167.5);
+      expect(old.otBelowLaw, isTrue);
       expect(lsaOtRate(30000), closeTo(167.5, 1e-9));
+      expect(lsaOtRate2(36000), closeTo(250.5, 1e-9));
+      // 依勞基法模式本身不會低於
+      const lsa = PayrollRow(personId: 'x', name: '虛構', payType: 'monthly', baseAmount: 36000, otMode: 'lsa', otRate: 0);
+      expect(lsa.otBelowLaw, isFalse);
+    });
+
+    test('時數只能 0.5 的倍數', () {
+      for (final v in [0.0, 4.0, 4.5, 82.5, 160.0]) {
+        expect(isHalfHour(v), isTrue, reason: '$v');
+      }
+      for (final v in [4.25, 16.3, 0.1, 82.75]) {
+        expect(isHalfHour(v), isFalse, reason: '$v');
+      }
     });
   });
 
@@ -64,6 +86,25 @@ void main() {
       final lines = slip.lines();
       expect(lines.map((l) => l.label), ['底薪', '加班費', '獎金', '勞健保自付額']);
       expect(lines.fold<double>(0, (a, l) => a + l.amount), slip.gross);
+    });
+
+    test('每一項先四捨五入到元；和實發對不上時多一行「進位調整」，加總一定＝實發', () {
+      expect(slip.lines().any((l) => l.label == '進位調整'), isFalse); // 整數的不會多一行
+      // 時薪 183 × 10.25＝1875.75 → 1876；獎金 100.5 → 101；合計 1976.25 → 實發 1976
+      expect(payrollTotal(payType: 'hourly', base: 183, hours: 10.25, bonus: 100.5), 1976);
+      final odd = PayrollSlip(
+          month: DateTime(2026, 9, 1), storeName: 's', personName: 'p', payType: 'hourly', baseAmount: 183, hours: 10.25,
+          bonus: 100.5, gross: 1976);
+      final lines = odd.lines();
+      expect(lines.map((l) => l.amount), [1876, 101, -1]);
+      expect(lines.last.label, '進位調整');
+      expect(lines.fold<double>(0, (a, l) => a + l.amount), odd.gross);
+      for (final l in lines) {
+        expect(l.amount, l.amount.roundToDouble(), reason: '${l.label} 要是整數元');
+      }
+      final html = payslipHtml([odd]);
+      expect(html, contains('進位調整'));
+      expect(html, contains('1,976'));
     });
 
     test('時薪、日薪的說明寫出單價 × 數量', () {
@@ -92,7 +133,7 @@ void main() {
   group('示範資料', () {
     setUp(() => SharedPreferences.setMockInitialValues({}));
 
-    test('老闆：建立 → 改一個人 → 發布後不能改 → 重新開啟', () async {
+    test('老闆：建立 → 改一個人 → 缺人不能發布 → 設不計薪 → 發布後不能改 → 重新開啟', () async {
       final repo = DemoRepository();
       await repo.signIn('owner@x', 'x');
       final m = DateTime(2026, 9, 1);
@@ -100,11 +141,25 @@ void main() {
       final n = await repo.preparePayroll('yc', m);
       expect(n, greaterThan(0));
       final rows = await repo.payrollMonth('yc', m);
-      final hourly = rows.firstWhere((r) => r.payType == 'hourly');
+      final hourly = rows.firstWhere((r) => r.payType == 'hourly' && r.gross != null);
+      // 時數只能 0.5 的倍數
+      await expectLater(repo.savePayrollEntry('yc', hourly.personId, m, hours: 10.25), throwsA(anything));
       final g = await repo.savePayrollEntry('yc', hourly.personId, m, hours: 10, bonus: 100, insurance: 50);
       expect(g, 200 * 10 + 100 - 50);
-      final report = await repo.payrollReport('yc', m);
-      expect(report.total, (await repo.payrollMonth('yc', m)).fold<double>(0, (a, r) => a + r.gross!));
+      // 應計薪名單缺一位沒有薪率的人：總計不算、畫面列出名字、不能發布
+      var report = await repo.payrollReport('yc', m);
+      expect(report.missingNames, hasLength(1));
+      expect(report.total, isNull);
+      final missing = (await repo.payrollMonth('yc', m)).singleWhere((r) => r.missingRate);
+      expect(missing.name, report.missingNames.single);
+      await expectLater(repo.publishPayroll('yc', m), throwsA(anything));
+      // 老闆把他設成不計薪 → 名單補齊、可以發布
+      await repo.setPayrollExempt('yc', missing.personId, true);
+      report = await repo.payrollReport('yc', m);
+      expect(report.missingNames, isEmpty);
+      expect((await repo.payrollMonth('yc', m)).singleWhere((r) => r.personId == missing.personId).exempt, isTrue);
+      expect(report.total,
+          (await repo.payrollMonth('yc', m)).where((r) => !r.exempt).fold<double>(0, (a, r) => a + r.gross!));
       await repo.publishPayroll('yc', m);
       await expectLater(repo.savePayrollEntry('yc', hourly.personId, m, hours: 11), throwsA(anything));
       await repo.reopenPayroll('yc', m, '補獎金');
@@ -115,6 +170,7 @@ void main() {
       final staff = DemoRepository();
       await staff.signIn('staff@x', 'x');
       await expectLater(staff.payrollMonth('yc', DateTime(2026, 9, 1)), throwsA(anything));
+      await expectLater(staff.setPayrollExempt('yc', 'someone', true), throwsA(anything));
       expect(await staff.myPayslips('yc'), isNotEmpty);
 
       final pending = DemoRepository();

@@ -46,6 +46,12 @@ int? payrollTotal({
 /// 依勞基法第 24 條，月薪制前 2 小時的加班時薪（月薪÷240×1.34）
 double lsaOtRate(double monthly) => monthly / 240 * 1.34;
 
+/// 依勞基法第 24 條，月薪制第 3 小時起的加班時薪（月薪÷240×1.67）
+double lsaOtRate2(double monthly) => monthly / 240 * 1.67;
+
+/// 時數只能是 0.5 小時的倍數（老闆 2026-11-15：打卡每段取整到半小時，手動輸入也一樣）
+bool isHalfHour(double v) => (v * 2 - (v * 2).roundToDouble()).abs() < 1e-9;
+
 /// 這個月薪資清單的一列（payroll_month）
 class PayrollRow {
   final String personId;
@@ -68,10 +74,12 @@ class PayrollRow {
   final double insurance;
   final String? note;
   final double? gross;
-  final double? lsaRate; // 依勞基法前 2 小時加班時薪（月薪制）
+  final double? lsaRate; // 依勞基法前 2 小時加班時薪（月薪制，×1.34）
+  final double? lsaRate2; // 依勞基法第 3 小時起加班時薪（月薪制，×1.67）
   final bool editable;
   final bool hidden; // 店長自己的那一列：只有名字
-  final bool missingRate;
+  final bool missingRate; // 應計薪名單上、還沒有這個月薪資列（沒有薪率，或薪率是帶入之後才加的）
+  final bool exempt; // 老闆標了不計薪（不在應計薪名單上）
   final DateTime? updatedAt;
   const PayrollRow({
     required this.personId,
@@ -95,9 +103,11 @@ class PayrollRow {
     this.note,
     this.gross,
     this.lsaRate,
+    this.lsaRate2,
     this.editable = false,
     this.hidden = false,
     this.missingRate = false,
+    this.exempt = false,
     this.updatedAt,
   });
   factory PayrollRow.fromRow(Map<String, dynamic> r) => PayrollRow(
@@ -122,9 +132,11 @@ class PayrollRow {
         note: r['note'] as String?,
         gross: _numOrNull(r['gross']),
         lsaRate: _numOrNull(r['lsa_ot_rate']),
+        lsaRate2: _numOrNull(r['lsa_ot_rate2']),
         editable: r['editable'] as bool? ?? false,
         hidden: r['hidden'] as bool? ?? false,
         missingRate: r['missing_rate'] as bool? ?? false,
+        exempt: r['exempt'] as bool? ?? false,
         updatedAt: _tsOrNull(r['updated_at']),
       );
 
@@ -132,8 +144,22 @@ class PayrollRow {
   bool get daysEdited => daysOverride != null;
   bool get hoursEdited => hoursOverride != null;
 
-  /// 固定加班時薪低於勞基法（月薪÷240×1.34）
-  bool get otBelowLaw => payType == 'monthly' && otMode == 'fixed' && lsaRate != null && otRate < lsaRate! - 0.005;
+  /// 勞基法第 3 小時起的加班時薪（資料庫給的；舊資料沒有就自己算）
+  double? get _lsa2 => lsaRate2 ?? (payType == 'monthly' && baseAmount != null ? lsaOtRate2(baseAmount!) : null);
+
+  /// 固定加班時薪低於勞基法：固定時薪每小時同價，第 3、4 小時要 1.67 倍，所以跟 1.67 倍比
+  /// （例：月薪 36,000，第 3 小時起 250.5，固定 210 就偏低）
+  bool get otBelowLaw => payType == 'monthly' && otMode == 'fixed' && _lsa2 != null && otRate < _lsa2! - 0.005;
+
+  /// 偏低時的說明：連前 2 小時（1.34 倍）都不到，或只是第 3 小時起（1.67 倍）不到
+  String? get otBelowLawText {
+    if (!otBelowLaw) return null;
+    final l1 = lsaRate ?? lsaOtRate(baseAmount ?? 0);
+    String f(double v) => v.toStringAsFixed(v % 1 == 0 ? 0 : 2);
+    return otRate < l1 - 0.005
+        ? '固定加班時薪 ${f(otRate)} 低於前 2 小時 ${f(l1)}、第 3 小時起 ${f(_lsa2!)}'
+        : '固定加班時薪 ${f(otRate)} 低於第 3 小時起 ${f(_lsa2!)}（前 2 小時 ${f(l1)} 有達到）';
+  }
 }
 
 /// 月報（payroll_report）。total／costRate：店長少了自己那一列時是 null（避免反推自己的薪水）
@@ -146,6 +172,7 @@ class PayrollReport {
   final bool complete;
   final int missingRate;
   final double? visibleTotal;
+  final List<String> missingNames; // 應計薪名單缺的人（不是空的就不能發布）
   const PayrollReport({
     this.status,
     this.people = 0,
@@ -155,6 +182,7 @@ class PayrollReport {
     this.complete = false,
     this.missingRate = 0,
     this.visibleTotal,
+    this.missingNames = const [],
   });
   factory PayrollReport.fromRow(Map<String, dynamic> r) => PayrollReport(
         status: r['status'] as String?,
@@ -165,6 +193,7 @@ class PayrollReport {
         complete: r['complete'] as bool? ?? false,
         missingRate: (r['missing_rate'] as num?)?.toInt() ?? 0,
         visibleTotal: _numOrNull(r['visible_total']),
+        missingNames: [for (final n in (r['missing_names'] as List? ?? const [])) n as String],
       );
   bool get published => status == 'published';
 }
@@ -257,15 +286,18 @@ class PayrollSlip {
       ? 0
       : roundYuan(otMode == 'lsa' ? baseAmount! / 240 * (1.34 * otHours + 1.67 * otHours2) : (otHours + otHours2) * otRate);
 
-  /// 薪資單上的每一行：項目、說明、金額（正＝加、負＝扣）
+  /// 薪資單上的每一行：項目、說明、金額（正＝加、負＝扣）。
+  /// 每一行都先四捨五入到元；實發是整筆算完才四捨五入（和資料庫一樣），
+  /// 兩邊差幾塊錢時多一行「進位調整」，讓每一行加起來一定等於實發。
   List<({String label, String detail, double amount})> lines() {
     final b = baseAmount ?? 0;
     String n(double v) => v % 1 == 0 ? v.toStringAsFixed(0) : v.toString();
-    return [
+    double r(double v) => roundYuan(v).toDouble();
+    final items = [
       switch (payType) {
-        'daily' => (label: '日薪', detail: '${n(b)} × ${n(days ?? 0)} 天', amount: b * (days ?? 0)),
-        'hourly' => (label: '時薪', detail: '${n(b)} × ${n(hours ?? 0)} 小時', amount: b * (hours ?? 0)),
-        _ => (label: '底薪', detail: '月薪', amount: b),
+        'daily' => (label: '日薪', detail: '${n(b)} × ${n(days ?? 0)} 天', amount: r(b * (days ?? 0))),
+        'hourly' => (label: '時薪', detail: '${n(b)} × ${n(hours ?? 0)} 小時', amount: r(b * (hours ?? 0))),
+        _ => (label: '底薪', detail: '月薪', amount: r(b)),
       },
       if (payType == 'monthly' && otHours + otHours2 > 0)
         (
@@ -275,8 +307,13 @@ class PayrollSlip {
               : '${n(otHours + otHours2)} 小時 × ${n(otRate)}',
           amount: otPay().toDouble()
         ),
-      if (bonus != 0) (label: '獎金', detail: '', amount: bonus),
-      if (insurance != 0) (label: '勞健保自付額', detail: '', amount: -insurance),
+      if (bonus != 0) (label: '獎金', detail: '', amount: r(bonus)),
+      if (insurance != 0) (label: '勞健保自付額', detail: '', amount: -r(insurance)),
+    ];
+    final diff = gross == null ? 0.0 : gross!.roundToDouble() - items.fold<double>(0, (a, l) => a + l.amount);
+    return [
+      ...items,
+      if (diff != 0) (label: '進位調整', detail: '各項四捨五入到元後與實發的差額', amount: diff),
     ];
   }
 }

@@ -20,23 +20,27 @@ class PayrollScreen extends StatefulWidget {
 
 String _n(double v) => v % 1 == 0 ? v.toStringAsFixed(0) : v.toStringAsFixed(v * 10 % 1 == 0 ? 1 : 2);
 
+/// 載入的結果和它是哪個月份綁在一起：切月時畫面上還是舊月份的資料，所有操作都用這個 month，不用 [_PayrollScreenState._month]
+typedef _MonthData = ({DateTime month, PayrollSettings settings, PayrollReport report, List<PayrollRow> rows});
+
 class _PayrollScreenState extends State<PayrollScreen> {
-  late DateTime _month = DateTime(bizToday().year, bizToday().month - 1, 1); // 預設上個月
-  late Future<({PayrollSettings settings, PayrollReport report, List<PayrollRow> rows})> _future = _load();
+  late DateTime _month = DateTime(bizToday().year, bizToday().month - 1, 1); // 預設上個月（正在看／正在載入的月份）
+  late Future<_MonthData> _future = _load();
   bool _busy = false;
 
   Repository get _repo => AppScope.of(context).repo;
   bool get _owner => widget.membership.role == Role.owner;
   String get _store => widget.membership.storeId;
 
-  Future<({PayrollSettings settings, PayrollReport report, List<PayrollRow> rows})> _load() async {
+  Future<_MonthData> _load() async {
     final repo = AppScope.of(context).repo;
+    final m = _month;
     final r = await Future.wait([
       repo.payrollSettings(_store),
-      repo.payrollReport(_store, _month),
-      repo.payrollMonth(_store, _month),
+      repo.payrollReport(_store, m),
+      repo.payrollMonth(_store, m),
     ]);
-    return (settings: r[0] as PayrollSettings, report: r[1] as PayrollReport, rows: r[2] as List<PayrollRow>);
+    return (month: m, settings: r[0] as PayrollSettings, report: r[1] as PayrollReport, rows: r[2] as List<PayrollRow>);
   }
 
   void _reload() => setState(() => _future = _load());
@@ -75,20 +79,32 @@ class _PayrollScreenState extends State<PayrollScreen> {
       ) ==
       true;
 
-  Future<void> _prepare(bool again) async {
+  Future<void> _prepare(DateTime month, bool again) async {
     if (again &&
         !await _confirm('重新帶入', '重新帶入薪率、計薪方式${widget.attendanceEnabled ? '和打卡時數' : ''}。手動填的天數、時數、獎金、勞健保、加班時數都不會動。', '重新帶入')) {
       return;
     }
-    await _run(() => _repo.preparePayroll(_store, _month), again ? '已重新帶入' : '已建立 ${_month.month} 月薪資');
+    await _run(() => _repo.preparePayroll(_store, month), again ? '已重新帶入' : '已建立 ${month.month} 月薪資');
   }
 
-  Future<void> _publish(PayrollReport r) async {
-    if (!await _confirm('發布 ${_month.month} 月薪資', '發布後員工看得到自己的薪資單，而且不能再改（要改得請老闆重新開啟）。', '發布')) return;
-    await _run(() => _repo.publishPayroll(_store, _month), '已發布');
+  Future<void> _publish(DateTime month) async {
+    if (!await _confirm('發布 ${month.month} 月薪資', '發布後員工看得到自己的薪資單，而且不能再改（要改得請老闆重新開啟）。', '發布')) return;
+    await _run(() => _repo.publishPayroll(_store, month), '已發布');
   }
 
-  Future<void> _reopen() async {
+  /// 不計薪（只有老闆）：不領薪的人從應計薪名單拿掉，才能發布
+  Future<void> _setExempt(PayrollRow r, bool exempt) async {
+    final ok = await _confirm(
+        exempt ? '${r.name} 設為不計薪' : '${r.name} 取消不計薪',
+        exempt
+            ? '這個人不領薪（例如老闆自己），不會出現在應計薪名單上。要領薪的人請到「員工資料」新增薪率，再按重新帶入。'
+            : '取消後這個人回到應計薪名單，要有薪率、重新帶入後才能發布。',
+        exempt ? '設為不計薪' : '取消不計薪');
+    if (!ok) return;
+    await _run(() => _repo.setPayrollExempt(_store, r.personId, exempt), exempt ? '已設為不計薪' : '已取消不計薪');
+  }
+
+  Future<void> _reopen(DateTime month) async {
     final c = TextEditingController();
     final reason = await showDialog<String>(
       context: context,
@@ -110,7 +126,7 @@ class _PayrollScreenState extends State<PayrollScreen> {
       ),
     );
     if (reason == null) return;
-    await _run(() => _repo.reopenPayroll(_store, _month, reason), '已重新開啟');
+    await _run(() => _repo.reopenPayroll(_store, month, reason), '已重新開啟');
   }
 
   Future<void> _editOvertime(PayrollSettings s) async {
@@ -154,23 +170,26 @@ class _PayrollScreenState extends State<PayrollScreen> {
     await _run(() => _repo.setPayrollOvertime(_store, mode, mode == 'fixed' ? r! : s.otRate), '已儲存加班費算法');
   }
 
-  void _print(List<PayrollRow> rows) {
+  void _print(DateTime month, List<PayrollRow> rows) {
     final slips = [
       for (final r in rows)
-        if (!r.hidden && r.gross != null) PayrollSlip.fromPayrollRow(r, _month, widget.membership.storeName),
+        if (!r.hidden && r.gross != null) PayrollSlip.fromPayrollRow(r, month, widget.membership.storeName),
     ];
     if (slips.isEmpty) return;
     if (!printPayslips(slips)) showMessage(context, '瀏覽器擋住了新視窗，請允許這個網站開啟彈出視窗', error: true);
   }
 
-  Widget _summary(PayrollReport r, PayrollSettings s, List<PayrollRow> rows) {
+  /// locked：載入中（切月、重新整理）或正在做事，所有按鈕都先停用
+  Widget _summary(_MonthData d, bool locked) {
+    final r = d.report, s = d.settings, rows = d.rows, month = d.month;
     final below = rows.where((x) => x.otBelowLaw).toList();
     final hidden = rows.any((x) => x.hidden);
+    final missing = r.missingNames.isNotEmpty || r.missingRate > 0;
     return SectionCard(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Expanded(
-              child: Text('${_month.year} 年 ${_month.month} 月・${r.people} 人',
+              child: Text('${month.year} 年 ${month.month} 月・${r.people} 人',
                   style: const TextStyle(fontSize: AppType.title, fontWeight: AppFont.heading))),
           Text(r.published ? '已發布' : '草稿', style: TextStyle(color: r.published ? AppColors.good : AppColors.warn)),
         ]),
@@ -186,10 +205,12 @@ class _PayrollScreenState extends State<PayrollScreen> {
             child: Text('不含你自己那一列，看不到總計和成本率；其他人合計 ${ntd(r.visibleTotal ?? 0)}',
                 style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
           ),
-        if (r.missingRate > 0)
+        if (missing)
           Padding(
             padding: const EdgeInsets.only(top: 6),
-            child: Text('${r.missingRate} 人沒有薪率，先到「員工資料」新增，再按重新帶入',
+            child: Text(
+                '還不能發布，應計薪名單缺 ${r.missingNames.isNotEmpty ? r.missingNames.join('、') : '${r.missingRate} 人'}：'
+                '沒有薪率的先到「員工資料」新增，薪率是之後才加的按「重新帶入」${_owner ? '；不領薪的人可以在下面點他設為不計薪' : '；不領薪的人請老闆設為不計薪'}',
                 style: TextStyle(color: AppColors.bad, fontSize: AppType.small)),
           ),
         const Divider(height: 24),
@@ -198,21 +219,22 @@ class _PayrollScreenState extends State<PayrollScreen> {
             child: Text('加班費：${otModeLabel(s.otMode)}${s.otMode == 'fixed' ? ' ${_n(s.otRate)} 元／小時' : '（月薪÷240，1.34／1.67）'}',
                 style: const TextStyle(fontSize: AppType.small)),
           ),
-          if (_owner) TextButton(onPressed: _busy ? null : () => _editOvertime(s), child: const Text('修改')),
+          if (_owner) TextButton(onPressed: locked ? null : () => _editOvertime(s), child: const Text('修改')),
         ]),
         if (below.isNotEmpty)
-          Text(
-              '可能低於勞基法第 24 條：${below.map((x) => '${x.name} 依勞基法前 2 小時約 ${x.lsaRate!.toStringAsFixed(0)} 元').join('、')}',
+          Text('可能低於勞基法第 24 條：${below.map((x) => '${x.name} ${x.otBelowLawText}').join('；')}',
               style: TextStyle(color: AppColors.warn, fontSize: AppType.small)),
         const SizedBox(height: 12),
         Wrap(spacing: 8, runSpacing: 8, children: [
           if (!r.published) ...[
-            FilledButton(onPressed: _busy || r.missingRate > 0 ? null : () => _publish(r), child: const Text('發布給員工')),
-            OutlinedButton(onPressed: _busy ? null : () => _prepare(true), child: const Text('重新帶入')),
+            FilledButton(onPressed: locked || missing ? null : () => _publish(month), child: const Text('發布給員工')),
+            OutlinedButton(onPressed: locked ? null : () => _prepare(month, true), child: const Text('重新帶入')),
           ],
-          if (r.published && _owner) OutlinedButton(onPressed: _busy ? null : _reopen, child: const Text('重新開啟')),
+          if (r.published && _owner) OutlinedButton(onPressed: locked ? null : () => _reopen(month), child: const Text('重新開啟')),
           OutlinedButton.icon(
-              onPressed: () => _print(rows), icon: const Icon(Icons.print_outlined, size: 18), label: const Text('列印全部薪資單')),
+              onPressed: locked ? null : () => _print(month, rows),
+              icon: const Icon(Icons.print_outlined, size: 18),
+              label: const Text('列印全部薪資單')),
         ]),
       ]),
     );
@@ -233,7 +255,8 @@ class _PayrollScreenState extends State<PayrollScreen> {
     };
   }
 
-  Widget _row(PayrollRow r) {
+  /// 已發布的月份不在這裡改應計薪名單（要改先重新開啟）
+  Widget _row(DateTime month, PayrollRow r, bool locked, bool published) {
     if (r.hidden) {
       return ListTile(
         contentPadding: EdgeInsets.zero,
@@ -245,20 +268,29 @@ class _PayrollScreenState extends State<PayrollScreen> {
     return ListTile(
       contentPadding: EdgeInsets.zero,
       title: Text(r.name),
-      subtitle: Text([
-        payrollTypeLabel(r.payType) + (r.baseAmount != null ? ' ${ntd(r.baseAmount!)}' : ''),
-        if (_qty(r).isNotEmpty) _qty(r),
-        if (r.bonus != 0) '獎金 ${ntd(r.bonus)}',
-        if (r.insurance != 0) '勞健保 −${ntd(r.insurance)}',
-        if (r.missingRate) '沒有薪率',
-      ].join('・')),
-      trailing: Text(r.gross == null ? '—' : ntd(r.gross!),
+      // 還沒有這個月薪資列的人（缺人、不計薪）只顯示狀態
+      subtitle: Text(r.missingRate
+          ? '應計薪但還沒帶入（沒有薪率，或薪率是之後才加的）${_owner && !published ? '・點這裡可設為不計薪' : ''}'
+          : r.exempt
+              ? '不計薪${_owner && !published ? '・點這裡取消' : ''}'
+              : [
+                  payrollTypeLabel(r.payType) + (r.baseAmount != null ? ' ${ntd(r.baseAmount!)}' : ''),
+                  if (_qty(r).isNotEmpty) _qty(r),
+                  if (r.bonus != 0) '獎金 ${ntd(r.bonus)}',
+                  if (r.insurance != 0) '勞健保 −${ntd(r.insurance)}',
+                ].join('・')),
+      trailing: Text(r.exempt ? '' : (r.gross == null ? '—' : ntd(r.gross!)),
           style: TextStyle(fontSize: AppType.title, color: r.gross == null ? AppColors.bad : AppColors.text)),
-      onTap: () async {
-        final changed = await Navigator.of(context).push<bool>(MaterialPageRoute(
-            builder: (_) => PayrollEditScreen(membership: widget.membership, month: _month, row: r)));
-        if (changed == true && mounted) _reload();
-      },
+      onTap: locked
+          ? null
+          : r.missingRate || r.exempt
+              // 還沒有這個月的薪資列：沒東西可改，老闆可以設／取消不計薪
+              ? (_owner && !published ? () => _setExempt(r, !r.exempt) : null)
+              : () async {
+                  final changed = await Navigator.of(context).push<bool>(MaterialPageRoute(
+                      builder: (_) => PayrollEditScreen(membership: widget.membership, month: month, row: r)));
+                  if (changed == true && mounted) _reload();
+                },
     );
   }
 
@@ -275,20 +307,31 @@ class _PayrollScreenState extends State<PayrollScreen> {
                       textAlign: TextAlign.center, style: const TextStyle(fontSize: AppType.title))),
               IconButton(tooltip: '下個月', onPressed: () => _shiftMonth(1), icon: const Icon(Icons.chevron_right)),
             ]);
-            if (snap.hasError) {
+            final loading = snap.connectionState != ConnectionState.done;
+            if (snap.hasError && !loading) {
               return ListView(padding: const EdgeInsets.all(16), children: [
                 header,
                 ErrorView(message: friendlyError(snap.error!), onRetry: _reload),
               ]);
             }
             if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+            // 切月時 FutureBuilder 先留著上一個月的資料：顯示「載入中」並停用所有操作，月份一律用資料自己的 d.month
             final d = snap.data!;
+            final locked = _busy || loading;
             return ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [
               header,
+              if (loading) ...[
+                const LinearProgressIndicator(),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Text('載入 ${_month.year} 年 ${_month.month} 月中，下面還是 ${d.month.year} 年 ${d.month.month} 月的資料',
+                      style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+                ),
+              ],
               if (d.report.status == null)
                 SectionCard(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('${_month.month} 月薪資還沒建立', style: const TextStyle(fontSize: AppType.title, fontWeight: AppFont.heading)),
+                    Text('${d.month.month} 月薪資還沒建立', style: const TextStyle(fontSize: AppType.title, fontWeight: AppFont.heading)),
                     const SizedBox(height: 6),
                     Text(
                         widget.attendanceEnabled
@@ -296,13 +339,14 @@ class _PayrollScreenState extends State<PayrollScreen> {
                             : '這家店還沒開打卡：建立後時數、天數要手動填。勞健保自付額預設帶上個月的。',
                         style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
                     const SizedBox(height: 12),
-                    FilledButton(onPressed: _busy ? null : () => _prepare(false), child: Text('建立 ${_month.month} 月薪資')),
+                    FilledButton(
+                        onPressed: locked ? null : () => _prepare(d.month, false), child: Text('建立 ${d.month.month} 月薪資')),
                   ]),
                 )
               else ...[
-                _summary(d.report, d.settings, d.rows),
+                _summary(d, locked),
                 const SizedBox(height: 8),
-                for (final r in d.rows) _row(r),
+                for (final r in d.rows) _row(d.month, r, locked, d.report.published),
               ],
             ]);
           },
@@ -350,6 +394,16 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
     final v = _parse(_qty);
     if (v == null) return _auto == null ? null : 0;
     return v == _auto ? null : v;
+  }
+
+  /// 時數、加班時數只能 0.5 的倍數（老闆 2026-11-15）
+  String? get _halfError {
+    final fields = [
+      if (r.payType == 'hourly') _parse(_qty),
+      if (r.payType == 'monthly') _parse(_ot1),
+      if (r.payType == 'monthly' && _lsa) _parse(_ot2),
+    ];
+    return fields.any((v) => v != null && !isHalfHour(v)) ? '時數只能填 0.5 小時的倍數（例如 4、4.5）' : null;
   }
 
   int? get _preview => payrollTotal(
@@ -411,7 +465,9 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
           Text('這個月已經發布，不能再改', style: TextStyle(color: AppColors.warn, fontSize: AppType.small)),
         if (r.payType != 'monthly')
           _num(_qty, r.payType == 'daily' ? '上班天數' : '上班時數',
-              helper: _auto == null ? '手動填' : '打卡帶入 ${_n(_auto!)} $unit（只算已確認的）；改了會保留原始值和修改紀錄'),
+              helper: _auto == null
+                  ? (r.payType == 'hourly' ? '手動填，0.5 小時的倍數' : '手動填')
+                  : '打卡帶入 ${_n(_auto!)} $unit（只算已確認的${r.payType == 'hourly' ? '，每段四捨五入到半小時' : ''}）；改了會保留原始值和修改紀錄'),
         if (r.payType != 'monthly' && _auto != null && _override != null && r.editable)
           Align(
             alignment: Alignment.centerLeft,
@@ -427,10 +483,14 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
           if (r.otBelowLaw)
             Padding(
               padding: const EdgeInsets.only(top: 6),
-              child: Text('可能低於勞基法第 24 條：依勞基法前 2 小時加班時薪約 ${r.lsaRate!.toStringAsFixed(0)} 元',
-                  style: TextStyle(color: AppColors.warn, fontSize: AppType.small)),
+              child: Text('可能低於勞基法第 24 條：${r.otBelowLawText}', style: TextStyle(color: AppColors.warn, fontSize: AppType.small)),
             ),
         ],
+        if (_halfError != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(_halfError!, style: TextStyle(color: AppColors.bad, fontSize: AppType.small)),
+          ),
         _num(_bonus, '獎金'),
         if (r.payType != 'daily') _num(_ins, '勞健保自付額', helper: '照投保單位的金額手動填；新月份會先帶上個月的'),
         TextField(controller: _note, enabled: r.editable, maxLength: 200, decoration: const InputDecoration(labelText: '備註（薪資單上看得到）')),
@@ -438,7 +498,8 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
         const SizedBox(height: 12),
         Text('實發金額 ${g == null ? '—' : ntd(g)}', style: const TextStyle(fontSize: AppType.heading, fontWeight: AppFont.heading)),
         const SizedBox(height: 16),
-        if (r.editable) FilledButton(onPressed: _saving ? null : _save, child: Text(_saving ? '儲存中…' : '儲存')),
+        if (r.editable)
+          FilledButton(onPressed: _saving || _halfError != null ? null : _save, child: Text(_saving ? '儲存中…' : '儲存')),
         if (!r.editable && r.gross != null)
           OutlinedButton.icon(
             onPressed: () {

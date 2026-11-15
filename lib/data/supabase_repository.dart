@@ -2108,6 +2108,10 @@ class SupabaseRepository implements Repository {
       _db.rpc('payroll_reopen', params: {'p_store': storeId, 'p_month': _month(month), 'p_reason': reason});
 
   @override
+  Future<void> setPayrollExempt(String storeId, String personId, bool exempt) =>
+      _db.rpc('payroll_set_exempt', params: {'p_store': storeId, 'p_person': personId, 'p_exempt': exempt});
+
+  @override
   Future<List<PayrollSlip>> myPayslips(String storeId) async =>
       _rpcRows(await _db.rpc('payroll_my_slips', params: {'p_store': storeId})).map(PayrollSlip.fromRow).toList();
 }

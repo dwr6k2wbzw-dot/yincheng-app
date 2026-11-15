@@ -1557,6 +1557,10 @@ class DemoRepository implements Repository {
   var _payOt = const PayrollSettings();
   final _payRows = <String, Map<String, PayrollRow>>{}; // 'store|yyyy-mm' → 人 → 列
   final _payStatus = <String, String>{};
+  // 示範：一位還沒有薪率的在職人員（應計薪名單會缺他，老闆設成不計薪或補薪率後才能發布）
+  static const _payNoRateId = 'demo-no-rate', _payNoRateName = '新來的（示範）';
+  final _payExempt = <String>{};
+  bool _payNoRateMissing(String storeId) => storeId == 'yc' && !_payExempt.contains(_payNoRateId);
   String _payKey(String storeId, DateTime m) => '$storeId|${m.year}-${m.month}';
   void _payNeedManager() {
     if (_isStaff) throw Exception('message: 只有老闆、店長能看薪資,');
@@ -1573,6 +1577,7 @@ class DemoRepository implements Repository {
         hoursOverride: r.hoursOverride, days: days, hours: hours, otHours: r.otHours, otHours2: r.otHours2,
         otMode: r.otMode, otRate: r.otRate, bonus: r.bonus, insurance: r.insurance, note: r.note,
         gross: g?.toDouble(), lsaRate: r.payType == 'monthly' && r.baseAmount != null ? lsaOtRate(r.baseAmount!) : null,
+        lsaRate2: r.payType == 'monthly' && r.baseAmount != null ? lsaOtRate2(r.baseAmount!) : null,
         editable: (status ?? r.status) == 'draft', missingRate: r.baseAmount == null, updatedAt: DateTime.now());
   }
 
@@ -1616,7 +1621,20 @@ class DemoRepository implements Repository {
   @override
   Future<List<PayrollRow>> payrollMonth(String storeId, DateTime month) async {
     _payNeedManager();
-    return [...?_payRows[_payKey(storeId, month)]?.values];
+    final k = _payKey(storeId, month);
+    return [
+      ...?_payRows[k]?.values,
+      if (_payStatus[k] != null && storeId == 'yc')
+        PayrollRow(
+            personId: _payNoRateId, name: _payNoRateName, payType: 'hourly',
+            missingRate: _payNoRateMissing(storeId), exempt: !_payNoRateMissing(storeId)),
+    ];
+  }
+
+  @override
+  Future<void> setPayrollExempt(String storeId, String personId, bool exempt) async {
+    if (_isStaff) throw Exception('message: 不計薪只有老闆能設,');
+    exempt ? _payExempt.add(personId) : _payExempt.remove(personId);
   }
 
   @override
@@ -1624,13 +1642,14 @@ class DemoRepository implements Repository {
     _payNeedManager();
     final k = _payKey(storeId, month), rows = _payRows[k]?.values.toList() ?? const <PayrollRow>[];
     if (_payStatus[k] == null) return const PayrollReport();
-    final missing = rows.where((r) => r.gross == null).length;
+    final names = [for (final r in rows) if (r.gross == null) r.name, if (_payNoRateMissing(storeId)) _payNoRateName];
+    final missing = names.length;
     final total = rows.fold<double>(0, (a, r) => a + (r.gross ?? 0));
     const revenue = 600000.0;
     return PayrollReport(
         status: _payStatus[k], people: rows.length, total: missing == 0 ? total : null, revenue: revenue,
         costRate: missing == 0 ? (total / revenue * 10000).round() / 10000 : null, complete: true, missingRate: missing,
-        visibleTotal: total);
+        visibleTotal: total, missingNames: names);
   }
 
   @override
@@ -1643,6 +1662,9 @@ class DemoRepository implements Repository {
     if (_payStatus[k] == 'published') throw Exception('message: 這個月已經發布，不能再改,');
     if (r.payType != 'monthly' && otHours + otHours2 > 0) throw Exception('message: 只有月薪制可以填加班時數,');
     if (r.payType == 'daily' && insurance != 0) throw Exception('message: 日薪制不扣勞健保,');
+    if ([hours, otHours, otHours2].any((v) => v != null && !isHalfHour(v))) {
+      throw Exception('message: 時數只能填 0.5 小時的倍數,');
+    }
     final n = _payCalc(PayrollRow(
         personId: r.personId, name: r.name, kind: r.kind, status: r.status, payType: r.payType, baseAmount: r.baseAmount,
         autoDays: r.autoDays, autoHours: r.autoHours, daysOverride: days, hoursOverride: hours, otHours: otHours,
@@ -1656,7 +1678,8 @@ class DemoRepository implements Repository {
     _payNeedManager();
     final k = _payKey(storeId, month), rows = _payRows[k];
     if (rows == null) throw Exception('message: 這個月還沒有薪資,');
-    if (rows.values.any((r) => r.gross == null)) throw Exception('message: 還有人沒有薪率，不能發布,');
+    final names = (await payrollReport(storeId, month)).missingNames;
+    if (names.isNotEmpty) throw Exception('message: 還有人沒有薪率或還沒帶入，不能發布：${names.join('、')},');
     _payStatus[k] = 'published';
     rows.updateAll((_, r) => _payCalc(r, status: 'published'));
   }

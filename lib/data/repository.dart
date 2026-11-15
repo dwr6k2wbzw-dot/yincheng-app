@@ -330,6 +330,8 @@ abstract class Repository {
   Future<void> publishPayroll(String storeId, DateTime month);
   /// 重新開啟已發布的月份（只有老闆，要寫原因）
   Future<void> reopenPayroll(String storeId, DateTime month, String reason);
+  /// 不計薪（只有老闆）：不領薪的人（例如老闆自己）從應計薪名單拿掉；有修改紀錄
+  Future<void> setPayrollExempt(String storeId, String personId, bool exempt);
   /// 我的薪資單（已發布、綁定經老闆確認）
   Future<List<PayrollSlip>> myPayslips(String storeId);
 }
