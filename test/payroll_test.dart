@@ -59,11 +59,29 @@ void main() {
     });
 
     test('數字欄位：格式不對（1..5、abc、負數）跟空白分開；0 和正數才算對', () {
+      String? e(String t) => payrollNumberError(t, decimals: 2);
       for (final t in ['1..5', 'abc', '-3', '-0.5', '.', '..', '4.5.', '1,500', 'NaN', 'Infinity', '1e999']) {
-        expect(isBadPayrollNumber(t), isTrue, reason: t);
+        expect(e(t), '格式不對：只能填 0 或正數（例如 4、4.5、1500）', reason: t);
       }
       for (final t in ['', '  ', '0', '4', '4.5', '.5', '5.', '1500', ' 73.5 ']) {
-        expect(isBadPayrollNumber(t), isFalse, reason: t);
+        expect(e(t), isNull, reason: t);
+      }
+    });
+
+    test('數字欄位小數位數照資料庫：天數 1 位、金額 2 位（多的會被資料庫四捨五入）；上限照欄位檢查', () {
+      // 天數 numeric(4,1)：1.25 天存進去會變 1.3 天，日薪 2,000 會從試算 2,500 變 2,600
+      expect(payrollNumberError('1.25', decimals: 1, max: 31), '最多 1 位小數（例如 1.5）');
+      for (final t in ['1.2', '1.20', '1.0', '12', '31', '31.0']) {
+        expect(payrollNumberError(t, decimals: 1, max: 31), isNull, reason: t);
+      }
+      expect(payrollNumberError('32', decimals: 1, max: 31), '不能超過 31');
+      expect(payrollNumberError('31.5', decimals: 1, max: 31), '不能超過 31');
+      // 金額 numeric(10,2)
+      for (final t in ['100.555', '0.001', '1500.125']) {
+        expect(payrollNumberError(t, decimals: 2), '最多 2 位小數（例如 1500.25）', reason: t);
+      }
+      for (final t in ['100.55', '100.550', '100.5', '0.01']) {
+        expect(payrollNumberError(t, decimals: 2), isNull, reason: t);
       }
     });
 

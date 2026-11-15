@@ -52,13 +52,20 @@ double lsaOtRate2(double monthly) => monthly / 240 * 1.67;
 /// 時數只能是 0.5 小時的倍數（老闆 2026-11-15：打卡每段取整到半小時，手動輸入也一樣）
 bool isHalfHour(double v) => (v * 2 - (v * 2).roundToDouble()).abs() < 1e-9;
 
-/// 薪資數字欄位格式不對（例 1..5、abc、負數）：不是空白、卻讀不成 0 或正數。
-/// 空白＝沒填；格式不對不能當成空白（不然會被當 0 存進去）
-bool isBadPayrollNumber(String text) {
+/// 薪資數字欄位的檢查：空白＝沒填（null）；有錯回傳要顯示的紅字。
+/// 格式不對（例 1..5、abc、負數）不能當成空白，不然會被當 0 存進去。
+/// 小數位數與上限照 ops 0110 欄位定義：天數 numeric(4,1)、金額 numeric(10,2)；
+/// 多的小數存進去會被資料庫四捨五入（1.25 天 → 1.3 天），和畫面試算不一樣，所以直接擋
+String? payrollNumberError(String text, {required int decimals, int? max}) {
   final t = text.trim();
-  if (t.isEmpty) return false;
-  final v = double.tryParse(t);
-  return v == null || !v.isFinite || v < 0;
+  if (t.isEmpty) return null;
+  if (!RegExp(r'^\d*\.?\d*$').hasMatch(t) || !RegExp(r'\d').hasMatch(t)) {
+    return '格式不對：只能填 0 或正數（例如 4、4.5、1500）';
+  }
+  final frac = t.contains('.') ? t.substring(t.indexOf('.') + 1).replaceFirst(RegExp(r'0+$'), '') : '';
+  if (frac.length > decimals) return decimals == 1 ? '最多 1 位小數（例如 1.5）' : '最多 $decimals 位小數（例如 1500.25）';
+  if (max != null && double.parse(t) > max) return '不能超過 $max';
+  return null;
 }
 
 /// 這個月薪資清單的一列（payroll_month）

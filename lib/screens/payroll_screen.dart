@@ -430,8 +430,12 @@ class PayrollEditScreen extends StatefulWidget {
 
 class _PayrollEditScreenState extends State<PayrollEditScreen> {
   PayrollRow get r => widget.row;
-  late final _qty = TextEditingController(
-      text: switch (r.payType) { 'daily' => _fmt(r.days), 'hourly' => _fmt(r.hours), _ => '' });
+  // 天數／時數：0 也照實顯示（空白代表「用打卡帶入的」，不能和 0 混在一起）
+  late final _qty = TextEditingController(text: switch (r.payType) {
+    'daily' => r.days == null ? '' : _n(r.days!),
+    'hourly' => r.hours == null ? '' : _n(r.hours!),
+    _ => '',
+  });
   late final _ot1 = TextEditingController(text: _fmt(r.otMode == 'lsa' ? r.otHours : r.otHours + r.otHours2));
   late final _ot2 = TextEditingController(text: _fmt(r.otHours2));
   late final _bonus = TextEditingController(text: _fmt(r.bonus));
@@ -443,7 +447,19 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
   static String _fmt(double? v) => v == null || v == 0 ? '' : _n(v);
   static double? _parse(TextEditingController c) => c.text.trim().isEmpty ? null : double.tryParse(c.text.trim());
 
-  static bool _bad(TextEditingController c) => isBadPayrollNumber(c.text);
+  /// 各欄位的小數位數與上限，照 ops 0110 payroll_entries 欄位定義：
+  /// 天數 numeric(4,1) 0–31；時數 0–744、加班 0–400（都要 0.5 的倍數，見 [_halfError]）；金額 numeric(10,2)
+  String? _error(TextEditingController c) {
+    final (decimals, max) = _rules[c]!;
+    return payrollNumberError(c.text, decimals: decimals, max: max);
+  }
+  Map<TextEditingController, (int, int)> get _rules => {
+    _qty: r.payType == 'daily' ? (1, 31) : (1, 744),
+    _ot1: (1, 400),
+    _ot2: (1, 400),
+    _bonus: (2, 99999999),
+    _ins: (2, 99999999),
+  };
 
   /// 這個人會用到的數字欄位（欄位、哪一類）
   List<(TextEditingController, String)> get _fields => [
@@ -455,10 +471,10 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
         if (r.payType != 'daily') (_ins, '金額'),
       ];
 
-  /// 有欄位格式不對或時數不是 0.5 的倍數：停止試算、不能存。回傳要顯示的哪一類（時數／天數／金額）
+  /// 有欄位格式、小數位數、上限不對或時數不是 0.5 的倍數：停止試算、不能存。回傳要顯示的哪一類（時數／天數／金額）
   String? get _blocked {
     for (final (c, kind) in _fields) {
-      if (_bad(c)) return kind;
+      if (_error(c) != null) return kind;
     }
     return _halfError != null ? '時數' : null;
   }
@@ -473,11 +489,10 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
     super.dispose();
   }
 
-  /// 天數／時數：跟打卡帶入的一樣＝不算手動改（存 null）
+  /// 天數／時數：留空或跟打卡帶入的一樣＝不算手動改（存 null，用帶入值；秘書 2026-11-15）
   double? get _override {
     final v = _parse(_qty);
-    if (v == null) return _auto == null ? null : 0;
-    return v == _auto ? null : v;
+    return v == null || v == _auto ? null : v;
   }
 
   /// 時數、加班時數只能 0.5 的倍數（老闆 2026-11-15）
@@ -533,7 +548,7 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
         inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
         onChanged: (_) => setState(() {}),
         decoration: InputDecoration(
-            labelText: label, helperText: helper, errorText: _bad(c) ? '格式不對：只能填 0 或正數（例如 4、4.5、1500）' : null),
+            labelText: label, helperText: helper, helperMaxLines: 3, errorText: _error(c), errorMaxLines: 2),
       );
 
   Widget _ro(String label, String value) => Padding(
@@ -610,7 +625,7 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
           _num(_qty, r.payType == 'daily' ? '上班天數' : '上班時數',
               helper: _auto == null
                   ? (r.payType == 'hourly' ? '手動填，0.5 小時的倍數' : '手動填')
-                  : '打卡帶入 ${_n(_auto!)} $unit（只算已確認的${r.payType == 'hourly' ? '，每段四捨五入到半小時' : ''}）；改了會保留原始值和修改紀錄'),
+                  : '留空會使用打卡帶入的 ${_n(_auto!)} $unit（只算已確認的${r.payType == 'hourly' ? '，每段四捨五入到半小時' : ''}）；改了會保留原始值和修改紀錄'),
         if (r.payType != 'monthly' && _auto != null && _override != null)
           Align(
             alignment: Alignment.centerLeft,

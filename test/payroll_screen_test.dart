@@ -2,6 +2,7 @@
 // 行銷審閱 2026-11-15 的 8 項畫面修改：不合法時數不試算、不計薪範圍、缺薪率提示、加班費比較、已手動調整、發布彙總、已發布唯讀；
 // 手機尺寸（360×780）跑過，版面溢出會讓測試失敗。
 // 程式審查 2026-11-15（05c90fd）：已發布的薪資單不能標草稿（走完整列印路徑）；數字欄位格式不對要停止試算、不能存。
+// 程式審查 2026-11-15（32aab98）＋秘書：小數位數照資料庫欄位（天數 1 位、金額 2 位）；時數／天數留空＝用打卡帶入值；「1,500」自動變 1500。
 // 人名、金額都是示範資料（虛構）。
 // 畫面會載入網頁專用的程式（列印、載入速度），要用瀏覽器跑：
 //   flutter test --platform chrome test/payroll_screen_test.dart
@@ -247,6 +248,136 @@ void main() {
       await pump(tester, PayrollEditScreen(membership: owner, month: month, row: m));
       await blocked('加班時數', '1..5', '時數');
       await ok('加班時數', '8.5');
+    });
+
+    testWidgets('小數位數照資料庫：1.25 天、100.555 元擋下；「1,500」自動變 1500', (tester) async {
+      await phone(tester);
+      final rows = await io(tester, () async {
+        await repo.signIn('owner@x', 'x');
+        await repo.preparePayroll('yc', month);
+        return repo.payrollMonth('yc', month);
+      });
+      FilledButton save() => tester.widget<FilledButton>(find.widgetWithText(FilledButton, '儲存'));
+      TextEditingController field(String label) => tester.widget<TextField>(find.widgetWithText(TextField, label)).controller!;
+      Future<void> type(String label, String text) async {
+        await tester.enterText(find.widgetWithText(TextField, label), text);
+        await tester.pump();
+      }
+
+      int preview() {
+        final t = tester.widgetList<Text>(find.textContaining('實發金額 \$')).single.data!;
+        return int.parse(t.replaceAll(RegExp(r'[^0-9]'), ''));
+      }
+
+      Future<void> blocked(String label, String text, String kind, String error) async {
+        await type(label, text);
+        expect(find.text(error), findsOneWidget, reason: '$label=$text');
+        expect(find.text('實發金額：$kind格式待修正，暫不計算'), findsOneWidget, reason: '$label=$text');
+        expect(find.textContaining('實發金額 \$'), findsNothing, reason: '$label=$text');
+        expect(save().onPressed, isNull, reason: '$label=$text');
+      }
+
+      // 日薪：天數最多 1 位小數、不超過 31
+      final d = rows.firstWhere((r) => r.payType == 'daily' && r.gross != null);
+      await pump(tester, PayrollEditScreen(membership: owner, month: month, row: d));
+      await blocked('上班天數', '1.25', '天數', '最多 1 位小數（例如 1.5）');
+      expect(find.textContaining(ntd(roundYuan(d.baseAmount! * 1.25))), findsNothing); // 不顯示會和資料庫不一樣的試算
+      await blocked('上班天數', '32', '天數', '不能超過 31');
+      await type('上班天數', '1.2');
+      expect(preview(), roundYuan(d.baseAmount! * 1.2));
+      expect(save().onPressed, isNotNull);
+
+      // 時薪：獎金、勞健保最多 2 位小數；時數最多 1 位
+      final h = rows.firstWhere((r) => r.payType == 'hourly' && r.gross != null);
+      await pump(tester, PayrollEditScreen(membership: owner, month: month, row: h));
+      await blocked('獎金', '100.555', '金額', '最多 2 位小數（例如 1500.25）');
+      await type('獎金', '');
+      await blocked('勞健保自付額', '300.125', '金額', '最多 2 位小數（例如 1500.25）');
+      await type('勞健保自付額', '300');
+      await blocked('上班時數', '73.25', '時數', '最多 1 位小數（例如 1.5）');
+      await type('上班時數', '73.5');
+      await type('獎金', '100.55');
+      expect(save().onPressed, isNotNull);
+
+      // 「1,500」：輸入框只收數字和小數點，逗點會被自動拿掉，當成 1500（不出紅字）
+      await type('獎金', '');
+      final before = preview();
+      await type('獎金', '1,500');
+      expect(field('獎金').text, '1500');
+      expect(find.textContaining('格式不對'), findsNothing);
+      expect(preview(), before + 1500);
+      expect(save().onPressed, isNotNull);
+    });
+
+    testWidgets('時數／天數留空＝取消手動修改、用打卡帶入值；加班、獎金、勞健保留空存 0', (tester) async {
+      await phone(tester);
+      String n(double v) => v == v.roundToDouble() ? v.toInt().toString() : '$v';
+      Future<PayrollRow> row(String id) async =>
+          (await io(tester, () => repo.payrollMonth('yc', month))).firstWhere((r) => r.personId == id);
+      // 從清單頁點進去再存（存完會返回上一頁）
+      Future<void> edit(PayrollRow r, Map<String, String> input) async {
+        await pump(
+            tester,
+            Builder(
+                builder: (ctx) => TextButton(
+                    onPressed: () => Navigator.push(ctx,
+                        MaterialPageRoute<bool>(builder: (_) => PayrollEditScreen(membership: owner, month: month, row: r))),
+                    child: const Text('開啟'))));
+        await tester.tap(find.text('開啟'));
+        await tester.pumpAndSettle();
+        for (final MapEntry(:key, :value) in input.entries) {
+          await tester.enterText(find.widgetWithText(TextField, key), value);
+          await tester.pump();
+        }
+        await tester.ensureVisible(find.widgetWithText(FilledButton, '儲存'));
+        await tester.tap(find.widgetWithText(FilledButton, '儲存'));
+        await tester.pumpAndSettle();
+        expect(find.text('開啟'), findsOneWidget); // 已存好並返回
+      }
+
+      final rows = await io(tester, () async {
+        await repo.signIn('owner@x', 'x');
+        await repo.preparePayroll('yc', month);
+        return repo.payrollMonth('yc', month);
+      });
+
+      // 時薪：先手動改成 80，再留空 → 回到打卡帶入值
+      final h = rows.firstWhere((r) => r.payType == 'hourly' && r.autoHours != null);
+      await edit(h, {'上班時數': '80', '獎金': '500', '勞健保自付額': '300'});
+      var saved = await row(h.personId);
+      expect(saved.hoursOverride, 80);
+      expect(saved.bonus, 500);
+
+      await pump(tester, PayrollEditScreen(membership: owner, month: month, row: saved));
+      await tester.enterText(find.widgetWithText(TextField, '上班時數'), '');
+      await tester.pump();
+      expect(find.text('留空會使用打卡帶入的 ${n(h.autoHours!)} 小時（只算已確認的，每段四捨五入到半小時）；改了會保留原始值和修改紀錄'),
+          findsOneWidget);
+      expect(find.text('實發金額 ${ntd(payrollTotal(payType: 'hourly', base: h.baseAmount, hours: h.autoHours, bonus: 500, insurance: 300)!)}'),
+          findsOneWidget); // 試算用帶入值，不是 0
+
+      await edit(saved, {'上班時數': '', '獎金': '', '勞健保自付額': ''});
+      saved = await row(h.personId);
+      expect(saved.hoursOverride, isNull); // 不是存 0 蓋掉
+      expect(saved.hours, h.autoHours);
+      expect(saved.bonus, 0);
+      expect(saved.insurance, 0);
+
+      // 日薪：天數留空同樣回到帶入值
+      final d = rows.firstWhere((r) => r.payType == 'daily' && r.autoDays != null);
+      await edit(d, {'上班天數': '3'});
+      expect((await row(d.personId)).daysOverride, 3);
+      await edit(await row(d.personId), {'上班天數': ''});
+      saved = await row(d.personId);
+      expect(saved.daysOverride, isNull);
+      expect(saved.days, d.autoDays);
+
+      // 月薪：加班時數留空存 0
+      final m = rows.firstWhere((r) => r.payType == 'monthly' && r.otMode == 'fixed');
+      await edit(m, {'加班時數': '8'});
+      expect((await row(m.personId)).otHours, 8);
+      await edit(await row(m.personId), {'加班時數': ''});
+      expect((await row(m.personId)).otHours, 0);
     });
 
     testWidgets('列印完整路徑：管理頁草稿標草稿；發布後管理頁（全部、單張）和員工自己的都不標草稿', (tester) async {
