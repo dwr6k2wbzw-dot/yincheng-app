@@ -307,6 +307,8 @@ abstract class Repository {
   /// 聯絡資料（老闆、店長）；payType 老闆、店長（不是自己）能改，傳 null＝不動
   Future<void> saveStaffHr(String storeId, String personId,
       {String? phone, String? emergencyContact, String? emergencyPhone, DateTime? leaveDate, String? payType});
+  /// 到職日（班表人員 shift_people.hire_date；老闆、店長能改，ops 0028）；null＝清掉
+  Future<void> saveHireDate(String storeId, String personId, DateTime? hireDate);
   Future<List<PayRate>> payRates(String personId);
   /// 新增薪率（老闆；店長只能替別人，ops 0110；生效日要晚於既有的）
   Future<void> addPayRate(String storeId, String personId, PayRate r);

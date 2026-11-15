@@ -1312,6 +1312,7 @@ class DemoRepository implements Repository {
   final _att = <MyAttendanceRecord>[];
   final _kiosks = <KioskInfo>[];
   final _hr = <String, Map<String, dynamic>>{};
+  final _hire = <String, DateTime?>{};
   final _rates = <String, List<PayRate>>{};
   final _ident = <String, Map<String, String?>>{};
   // 班表名字綁定的帳號：f0＝示範帳號（老闆已確認）、f1＝小安的帳號（還沒確認）
@@ -1487,18 +1488,21 @@ class DemoRepository implements Repository {
   @override
   Future<List<StaffEntry>> staffDirectory(String storeId) async {
     final m = await shiftMonth(storeId, DateTime.now());
+    // 示範一位已停用（離職）的人：員工資料頁只有停用或已填離職日的人才顯示離職日
+    final left = ShiftPerson(id: 'x0', name: '示範已離職', kind: 'part', sortOrder: 99, active: false);
     return [
-      for (final p in m.people)
+      for (final p in [...m.people, left])
         if (!_isStaff || p.id == 'f0')
           StaffEntry(
             personId: p.id,
             name: p.name,
             kind: p.kind,
             active: p.active,
+            hireDate: _hire.containsKey(p.id) ? _hire[p.id] : p.hireDate,
             phone: _hr[p.id]?['phone'] as String?,
             emergencyContact: _hr[p.id]?['ec'] as String?,
             emergencyPhone: _hr[p.id]?['ep'] as String?,
-            leaveDate: _hr[p.id]?['leave'] as DateTime?,
+            leaveDate: _hr.containsKey(p.id) ? _hr[p.id]!['leave'] as DateTime? : (p == left ? DateTime(2026, 10, 31) : null),
             payType: _hr[p.id]?['pay'] as String?,
             nationalId: _ident[p.id]?['id'],
             bankCode: _ident[p.id]?['bank'],
@@ -1531,6 +1535,12 @@ class DemoRepository implements Repository {
       'leave': leaveDate,
       'pay': payType ?? _hr[personId]?['pay'],
     };
+  }
+
+  @override
+  Future<void> saveHireDate(String storeId, String personId, DateTime? hireDate) async {
+    if (_isStaff) throw Exception('message: 沒有權限修改到職日,');
+    _hire[personId] = hireDate;
   }
 
   @override

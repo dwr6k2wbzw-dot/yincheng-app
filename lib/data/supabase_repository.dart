@@ -2014,6 +2014,17 @@ class SupabaseRepository implements Repository {
   }
 
   @override
+  Future<void> saveHireDate(String storeId, String personId, DateTime? hireDate) async {
+    final rows = await _db
+        .from('shift_people')
+        .update({'hire_date': hireDate == null ? null : _day.format(hireDate)})
+        .eq('id', personId)
+        .eq('store_id', storeId)
+        .select('id');
+    if (rows.isEmpty) throw Exception('message: 沒有權限修改到職日,');
+  }
+
+  @override
   Future<List<PayRate>> payRates(String personId) async => _rows(
           await _db.from('staff_pay_rates').select().eq('person_id', personId).order('effective_from', ascending: false))
       .map(PayRate.fromRow)
