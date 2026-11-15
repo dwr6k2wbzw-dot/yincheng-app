@@ -1320,7 +1320,7 @@ class DemoRepository implements Repository {
     final last = _att.where((r) => r.isPunch).lastOrNull;
     return AttendanceMe(
       enabled: storeId == 'yc',
-      canManage: !_isStaff && storeId == 'yc',
+      canManage: !_isStaff, // 小城外沒開打卡，老闆照樣管員工資料
       personId: _bindingPending ? null : 'f0',
       personName: _bindingPending ? null : '阿明',
       lastPunchType: last?.punchType,

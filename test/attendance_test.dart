@@ -195,6 +195,16 @@ void main() {
       expect((await owner.staffDirectory('yc')).firstWhere((s) => s.personId == 'f1').userVerified, isTrue);
     });
 
+    test('第二輪：沒開打卡的店，老闆仍可管理員工資料（員工沒有入口）', () async {
+      final owner = DemoRepository();
+      await owner.signIn('owner@x', 'x');
+      final me = await owner.attendanceMe('xc');
+      expect((me?.enabled, me?.canManage), (false, true));
+      final staff = DemoRepository();
+      await staff.signIn('staff@x', 'x');
+      expect((await staff.attendanceMe('xc'))?.canManage, isFalse);
+    });
+
     test('示範資料：已審過的可以重審，歷程留著每一次；補登人選有來支援的別家店員工', () async {
       final repo = DemoRepository();
       await repo.signIn('owner@x', 'x');

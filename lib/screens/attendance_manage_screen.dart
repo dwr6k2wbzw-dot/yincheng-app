@@ -16,29 +16,78 @@ import 'kiosk_screen.dart' show kioskIdPref, kioskSecretPref;
 
 /// 出勤管理（老闆、店長）：每天看異常清單、確認待確認的打卡、審補登、看出勤、匯出 CSV、設打卡機；
 /// 員工資料：老闆全部可改（含薪率、身分證、帳號）；店長看得到遮罩的身分證、帳號，看不到薪率。
-class AttendanceManageScreen extends StatelessWidget {
-  const AttendanceManageScreen({super.key, required this.membership, required this.data, required this.codeTimes});
+/// staffOnly：還沒開放打卡的店（小城外）只有員工資料，老闆照樣能確認帳號綁定，員工才能到隱城掃碼支援。
+class AttendanceManageScreen extends StatefulWidget {
+  const AttendanceManageScreen(
+      {super.key, required this.membership, required this.data, required this.codeTimes, this.staffOnly = false});
   final Membership membership;
   final ShiftMonth data;
   final Map<String, String> codeTimes;
+  final bool staffOnly;
 
   @override
-  Widget build(BuildContext context) => DefaultTabController(
-        length: 5,
-        child: Scaffold(
-          appBar: AppBar(
-            title: Text('出勤管理・${membership.storeName}'),
-            bottom: const TabBar(isScrollable: true, tabAlignment: TabAlignment.start, tabs: [Tab(text: '異常'), Tab(text: '出勤'), Tab(text: '原始紀錄'), Tab(text: '打卡機'), Tab(text: '員工資料')]),
-          ),
-          body: TabBarView(children: [
-            _AnomalyTab(membership: membership, data: data, codeTimes: codeTimes),
-            _SessionTab(membership: membership),
-            _RawTab(membership: membership),
-            _KioskTab(membership: membership),
-            _StaffTab(membership: membership),
-          ]),
+  State<AttendanceManageScreen> createState() => _AttendanceManageScreenState();
+}
+
+class _AttendanceManageScreenState extends State<AttendanceManageScreen> {
+  /// 審核、補登成功就加一；異常、出勤、原始紀錄分頁聽這個重新讀取，切回來不會看到舊的合計
+  final _changed = ValueNotifier<int>(0);
+
+  @override
+  void dispose() {
+    _changed.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final m = widget.membership;
+    if (widget.staffOnly) {
+      return Scaffold(appBar: AppBar(title: Text('員工資料・${m.storeName}')), body: _StaffTab(membership: m));
+    }
+    return DefaultTabController(
+      length: 5,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text('出勤管理・${m.storeName}'),
+          bottom: const TabBar(isScrollable: true, tabAlignment: TabAlignment.start, tabs: [Tab(text: '異常'), Tab(text: '出勤'), Tab(text: '原始紀錄'), Tab(text: '打卡機'), Tab(text: '員工資料')]),
         ),
-      );
+        body: TabBarView(children: [
+          _AnomalyTab(membership: m, data: widget.data, codeTimes: widget.codeTimes, changed: _changed),
+          _SessionTab(membership: m, changed: _changed),
+          _RawTab(membership: m, changed: _changed),
+          _KioskTab(membership: m),
+          _StaffTab(membership: m),
+        ]),
+      ),
+    );
+  }
+}
+
+/// 異常、出勤、原始紀錄分頁：切走也保留（選的期間不會跳回「今天」），
+/// 所以靠 [changed] 在別的分頁審核、補登成功後重新讀取
+mixin _ReloadOnChange<T extends StatefulWidget> on AutomaticKeepAliveClientMixin<T> {
+  ValueNotifier<int> get changed;
+  void reloadData();
+
+  @override
+  bool get wantKeepAlive => true;
+
+  void _onChanged() {
+    if (mounted) reloadData();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    changed.addListener(_onChanged);
+  }
+
+  @override
+  void dispose() {
+    changed.removeListener(_onChanged);
+    super.dispose();
+  }
 }
 
 final _md = DateFormat('M/d（E）', 'zh_TW');
@@ -79,22 +128,23 @@ Future<String?> _askReason(BuildContext context, String title, {bool required = 
       ],
     ),
   );
-  c.dispose();
+  // 不在這裡 dispose：對話框關閉動畫還在用這個 controller（關掉後馬上 dispose 會出錯）
   return r;
 }
 
 // ---------------- 異常清單 ----------------
 
 class _AnomalyTab extends StatefulWidget {
-  const _AnomalyTab({required this.membership, required this.data, required this.codeTimes});
+  const _AnomalyTab({required this.membership, required this.data, required this.codeTimes, required this.changed});
   final Membership membership;
   final ShiftMonth data;
   final Map<String, String> codeTimes;
+  final ValueNotifier<int> changed;
   @override
   State<_AnomalyTab> createState() => _AnomalyTabState();
 }
 
-class _AnomalyTabState extends State<_AnomalyTab> {
+class _AnomalyTabState extends State<_AnomalyTab> with AutomaticKeepAliveClientMixin, _ReloadOnChange {
   _Range _range = _Range.week;
   late Future<List<AttendanceAnomaly>> _future = _load();
 
@@ -106,13 +156,19 @@ class _AnomalyTabState extends State<_AnomalyTab> {
   }
 
   void _reload() => setState(() => _future = _load());
+  @override
+  ValueNotifier<int> get changed => widget.changed;
+  @override
+  void reloadData() => setState(() {
+        _future = _load();
+      });
 
   Future<void> _run(Future<void> Function() f, String done) async {
     try {
       await f();
       if (mounted) {
         showMessage(context, done);
-        _reload();
+        widget.changed.value++; // 這個分頁也會跟著重新讀取
       }
     } catch (e) {
       if (mounted) showMessage(context, friendlyError(e), error: true);
@@ -145,7 +201,7 @@ class _AnomalyTabState extends State<_AnomalyTab> {
         punchType: a.kind == 'missing_in' ? 'in' : 'out');
     if (ok == true && mounted) {
       showMessage(context, '已送出補登，到「待審補登」核准');
-      _reload();
+      widget.changed.value++;
     }
   }
 
@@ -180,7 +236,7 @@ class _AnomalyTabState extends State<_AnomalyTab> {
         storeId: widget.membership.storeId, personId: p.personId, personName: p.label, data: widget.data, codeTimes: widget.codeTimes);
     if (ok == true && mounted) {
       showMessage(context, '已送出補登，要另一位店長或老闆核准');
-      _reload();
+      widget.changed.value++;
     }
   }
 
@@ -200,7 +256,9 @@ class _AnomalyTabState extends State<_AnomalyTab> {
       };
 
   @override
-  Widget build(BuildContext context) => RefreshIndicator(
+  Widget build(BuildContext context) {
+    super.build(context); // 保留分頁
+    return RefreshIndicator(
         onRefresh: () async => _reload(),
         child: FutureBuilder<List<AttendanceAnomaly>>(
           future: _future,
@@ -251,21 +309,30 @@ class _AnomalyTabState extends State<_AnomalyTab> {
           },
         ),
       );
+  }
 }
 
 // ---------------- 出勤與匯出 ----------------
 
 class _SessionTab extends StatefulWidget {
-  const _SessionTab({required this.membership});
+  const _SessionTab({required this.membership, required this.changed});
   final Membership membership;
+  final ValueNotifier<int> changed;
   @override
   State<_SessionTab> createState() => _SessionTabState();
 }
 
-class _SessionTabState extends State<_SessionTab> {
+class _SessionTabState extends State<_SessionTab> with AutomaticKeepAliveClientMixin, _ReloadOnChange {
   _Range _range = _Range.today;
   late Future<List<AttendanceSession>> _future = _load();
   bool _exporting = false;
+
+  @override
+  ValueNotifier<int> get changed => widget.changed;
+  @override
+  void reloadData() => setState(() {
+        _future = _load();
+      });
 
   Repository get _repo => AppScope.of(context).repo;
 
@@ -305,7 +372,9 @@ class _SessionTabState extends State<_SessionTab> {
   }
 
   @override
-  Widget build(BuildContext context) => FutureBuilder<List<AttendanceSession>>(
+  Widget build(BuildContext context) {
+    super.build(context); // 保留分頁
+    return FutureBuilder<List<AttendanceSession>>(
         future: _future,
         builder: (context, snap) => ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [
           Row(children: [
@@ -342,20 +411,29 @@ class _SessionTabState extends State<_SessionTab> {
               ),
         ]),
       );
+  }
 }
 
 // ---------------- 原始紀錄（每一筆打卡；可以重新審核） ----------------
 
 class _RawTab extends StatefulWidget {
-  const _RawTab({required this.membership});
+  const _RawTab({required this.membership, required this.changed});
   final Membership membership;
+  final ValueNotifier<int> changed;
   @override
   State<_RawTab> createState() => _RawTabState();
 }
 
-class _RawTabState extends State<_RawTab> {
+class _RawTabState extends State<_RawTab> with AutomaticKeepAliveClientMixin, _ReloadOnChange {
   _Range _range = _Range.week;
   late Future<List<AttendanceExportRow>> _future = _load();
+
+  @override
+  ValueNotifier<int> get changed => widget.changed;
+  @override
+  void reloadData() => setState(() {
+        _future = _load();
+      });
 
   Future<List<AttendanceExportRow>> _load() {
     final d = _rangeDates(_range);
@@ -363,7 +441,9 @@ class _RawTabState extends State<_RawTab> {
   }
 
   @override
-  Widget build(BuildContext context) => RefreshIndicator(
+  Widget build(BuildContext context) {
+    super.build(context); // 保留分頁
+    return RefreshIndicator(
         onRefresh: () async => setState(() => _future = _load()),
         child: FutureBuilder<List<AttendanceExportRow>>(
           future: _future,
@@ -394,13 +474,15 @@ class _RawTabState extends State<_RawTab> {
                   ].join('・')),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () async {
-                    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => PunchDetailScreen(row: r)));
-                    if (mounted) setState(() => _future = _load());
+                    // 審核成功就通知出勤、異常分頁一起更新（這個分頁也會重新讀取）
+                    await Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => PunchDetailScreen(row: r, onReviewed: () => widget.changed.value++)));
                   },
                 ),
           ]),
         ),
       );
+  }
 }
 
 String rawReviewLabel(AttendanceExportRow r) => switch (r.review) {
@@ -411,8 +493,9 @@ String rawReviewLabel(AttendanceExportRow r) => switch (r.review) {
 
 /// 一筆打卡：歷程（打卡、補登、每一次審核）＋重新審核
 class PunchDetailScreen extends StatefulWidget {
-  const PunchDetailScreen({super.key, required this.row});
+  const PunchDetailScreen({super.key, required this.row, this.onReviewed});
   final AttendanceExportRow row;
+  final VoidCallback? onReviewed;
   @override
   State<PunchDetailScreen> createState() => _PunchDetailScreenState();
 }
@@ -429,6 +512,7 @@ class _PunchDetailScreenState extends State<PunchDetailScreen> {
     if (reason == null || !mounted) return;
     try {
       await _repo.reviewPunch(widget.row.punchId, confirm, reason);
+      widget.onReviewed?.call();
       if (!mounted) return;
       showMessage(context, confirm ? '已確認' : '已標不採用');
       setState(() {

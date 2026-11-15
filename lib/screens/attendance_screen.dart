@@ -118,12 +118,47 @@ class _AttendanceCardState extends State<AttendanceCard> {
     _reload();
   }
 
+  /// 還沒開放打卡的店：員工資料、確認本人跟打卡開關分開（程式審查 2026-11-15 第二輪）。
+  /// 老闆、店長照樣進得了員工資料（老闆在這裡確認帳號綁定）；員工確認後才能到隱城掃碼支援。
+  Widget _notEnabled(AttendanceMe me) {
+    if (!me.canManage && !me.bindingPending) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: SectionCard(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Icon(Icons.badge_outlined, color: AppColors.primary),
+            const SizedBox(width: 8),
+            const Expanded(child: Text('員工資料', style: TextStyle(fontSize: AppType.title, fontWeight: AppFont.heading))),
+          ]),
+          const SizedBox(height: 6),
+          if (me.canManage)
+            Text('這家店還沒開放打卡；員工資料、確認帳號綁定照常可以用。員工的綁定經老闆確認後，才能到別家店掃碼支援',
+                style: TextStyle(color: AppColors.muted, fontSize: AppType.small))
+          else
+            Text('你選的班表名字還在等老闆確認，確認後才能到別家店掃碼支援',
+                style: TextStyle(color: AppColors.warn, fontSize: AppType.small)),
+          if (me.canManage) ...[
+            const SizedBox(height: 10),
+            OutlinedButton(
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => AttendanceManageScreen(
+                      membership: widget.membership, data: widget.data, codeTimes: widget.codeTimes, staffOnly: true))),
+              child: const Text('員工資料'),
+            ),
+          ],
+        ]),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => FutureBuilder<AttendanceMe?>(
         future: _future,
         builder: (context, snap) {
           final me = snap.data;
-          if (me == null || !me.enabled) return const SizedBox.shrink();
+          if (me == null) return const SizedBox.shrink();
+          if (!me.enabled) return _notEnabled(me);
           final last = me.lastPunchedAt;
           return Padding(
             padding: const EdgeInsets.only(top: 8),
