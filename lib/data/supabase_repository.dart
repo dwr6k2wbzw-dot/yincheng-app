@@ -1898,4 +1898,155 @@ class SupabaseRepository implements Repository {
       // 派工失敗不影響畫面；下次打開許願頁會再試
     }
   }
+
+  // ---------------- 打卡、員工資料（ops 0109） ----------------
+  List<Map<String, dynamic>> _rpcRows(dynamic raw) => _rows(raw ?? const []);
+  Map<String, dynamic> _rpcOne(dynamic raw) {
+    final rows = _rpcRows(raw);
+    if (rows.isEmpty) throw Exception('message: 資料庫沒有回應,');
+    return rows.first;
+  }
+
+  @override
+  Future<AttendanceMe?> attendanceMe(String storeId) async {
+    try {
+      return AttendanceMe.fromRow(_rpcOne(await _db.rpc('attendance_me', params: {'p_store': storeId})));
+    } on PostgrestException catch (e) {
+      // 資料庫還沒有 0109（函式不存在）：不顯示打卡
+      if (e.code == 'PGRST202' || e.code == '42883') return null;
+      rethrow;
+    }
+  }
+
+  @override
+  Future<PunchResult> punch(PunchLink link) async => PunchResult.fromRow(_rpcOne(await _db.rpc('attendance_punch',
+      params: {'p_kiosk': link.kiosk, 'p_window': link.window, 'p_code': link.code})));
+
+  @override
+  Future<List<MyAttendanceRecord>> myAttendance(String storeId, DateTime from, DateTime to) async => _rpcRows(
+          await _db.rpc('attendance_my_records', params: {'p_store': storeId, 'p_from': _day.format(from), 'p_to': _day.format(to)}))
+      .map(MyAttendanceRecord.fromRow)
+      .toList();
+
+  @override
+  Future<String> requestAmendment(String storeId, String personId, String punchType, DateTime at, String reason,
+          {bool fromSchedule = false}) async =>
+      await _db.rpc('attendance_request_amendment', params: {
+        'p_store': storeId,
+        'p_person': personId,
+        'p_type': punchType,
+        'p_at': at.toUtc().toIso8601String(),
+        'p_reason': reason,
+        if (fromSchedule) 'p_prefill': 'schedule',
+      }) as String;
+
+  @override
+  Future<void> cancelAmendment(String id) => _db.rpc('attendance_cancel_amendment', params: {'p_id': id});
+
+  @override
+  Future<void> decideAmendment(String id, bool approve, {String? note}) => _db.rpc('attendance_decide_amendment',
+      params: {'p_id': id, 'p_approve': approve, if (note != null && note.isNotEmpty) 'p_note': note});
+
+  @override
+  Future<void> reviewPunch(String punchId, bool confirm, String reason) => _db.rpc('attendance_review_punch',
+      params: {'p_punch': punchId, 'p_decision': confirm ? 'confirmed' : 'rejected', 'p_reason': reason});
+
+  @override
+  Future<List<PunchHistoryEntry>> punchHistory(String punchId) async =>
+      _rpcRows(await _db.rpc('attendance_punch_history', params: {'p_punch': punchId})).map(PunchHistoryEntry.fromRow).toList();
+
+  @override
+  Future<List<AttendancePerson>> attendancePeople(String storeId, DateTime from, DateTime to) async =>
+      _rpcRows(await _db.rpc('attendance_people', params: _range(storeId, from, to))).map(AttendancePerson.fromRow).toList();
+
+  Map<String, dynamic> _range(String storeId, DateTime from, DateTime to) =>
+      {'p_store': storeId, 'p_from': _day.format(from), 'p_to': _day.format(to)};
+
+  @override
+  Future<List<AttendanceAnomaly>> attendanceAnomalies(String storeId, DateTime from, DateTime to) async =>
+      _rpcRows(await _db.rpc('attendance_anomalies', params: _range(storeId, from, to))).map(AttendanceAnomaly.fromRow).toList();
+
+  @override
+  Future<List<AttendanceSession>> attendanceSessions(String storeId, DateTime from, DateTime to) async =>
+      _rpcRows(await _db.rpc('attendance_sessions', params: _range(storeId, from, to))).map(AttendanceSession.fromRow).toList();
+
+  @override
+  Future<List<AttendanceExportRow>> attendanceExport(String storeId, DateTime from, DateTime to) async =>
+      _rpcRows(await _db.rpc('attendance_export', params: _range(storeId, from, to))).map(AttendanceExportRow.fromRow).toList();
+
+  @override
+  Future<List<KioskInfo>> kiosks(String storeId) async =>
+      _rpcRows(await _db.rpc('attendance_kiosk_list', params: {'p_store': storeId})).map(KioskInfo.fromRow).toList();
+
+  @override
+  Future<({String id, String secret})> registerKiosk(String storeId, String name) async {
+    final r = _rpcOne(await _db.rpc('attendance_kiosk_register', params: {'p_store': storeId, 'p_name': name}));
+    return (id: r['kiosk_id'] as String, secret: r['secret'] as String);
+  }
+
+  @override
+  Future<void> disableKiosk(String kioskId) => _db.rpc('attendance_kiosk_disable', params: {'p_kiosk': kioskId});
+
+  @override
+  Future<KioskCode> kioskCode(String kioskId, String secret) async =>
+      KioskCode.fromRow(_rpcOne(await _db.rpc('attendance_kiosk_code', params: {'p_kiosk': kioskId, 'p_secret': secret})));
+
+  @override
+  Future<List<StaffEntry>> staffDirectory(String storeId) async =>
+      _rpcRows(await _db.rpc('staff_directory', params: {'p_store': storeId})).map(StaffEntry.fromRow).toList();
+
+  @override
+  Future<void> verifyBinding(String personId, String userId, {bool verify = true}) =>
+      _db.rpc('staff_verify_binding', params: {'p_person': personId, 'p_user': userId, 'p_verify': verify});
+
+  @override
+  Future<void> saveStaffHr(String storeId, String personId,
+      {String? phone, String? emergencyContact, String? emergencyPhone, DateTime? leaveDate, String? payType}) async {
+    await _db.from('shift_people_hr').upsert({
+      'id': personId,
+      'store_id': storeId,
+      'phone': phone,
+      'emergency_contact': emergencyContact,
+      'emergency_phone': emergencyPhone,
+      'leave_date': leaveDate == null ? null : _day.format(leaveDate),
+      if (payType != null) 'pay_type': payType,
+    });
+  }
+
+  @override
+  Future<List<PayRate>> payRates(String personId) async => _rows(
+          await _db.from('staff_pay_rates').select().eq('person_id', personId).order('effective_from', ascending: false))
+      .map(PayRate.fromRow)
+      .toList();
+
+  @override
+  Future<void> addPayRate(String storeId, String personId, PayRate r) async {
+    await _db.from('staff_pay_rates').insert({
+      'person_id': personId,
+      'store_id': storeId,
+      'effective_from': _day.format(r.effectiveFrom),
+      'pay_type': r.payType,
+      'amount': r.amount,
+      'insured_salary': r.insuredSalary?.round(),
+      'pension_self_rate': r.pensionSelfRate,
+      'note': r.note,
+    });
+  }
+
+  @override
+  Future<void> deletePayRate(String id) async {
+    final rows = await _db.from('staff_pay_rates').delete().eq('id', id).select('id');
+    if (rows.isEmpty) throw Exception('message: 沒有權限刪除這筆薪率,');
+  }
+
+  @override
+  Future<void> saveStaffIdentity(String storeId, String personId, {String? nationalId, String? bankCode, String? bankAccount}) async {
+    await _db.from('staff_identity').upsert({
+      'id': personId,
+      'store_id': storeId,
+      'national_id': nationalId,
+      'bank_code': bankCode,
+      'bank_account': bankAccount,
+    });
+  }
 }

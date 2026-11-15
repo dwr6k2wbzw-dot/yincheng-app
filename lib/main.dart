@@ -11,9 +11,12 @@ import 'data/demo_repository.dart';
 import 'data/repository.dart';
 import 'data/row_cache.dart';
 import 'data/supabase_repository.dart';
+import 'screens/attendance_screen.dart';
 import 'screens/home_shell.dart';
+import 'screens/kiosk_screen.dart';
 import 'screens/login_screen.dart';
 import 'services/load_timing.dart';
+import 'services/missed_punch.dart';
 import 'theme.dart';
 import 'widgets/content_width_limit.dart';
 
@@ -50,6 +53,13 @@ Future<void> main() async {
     await RowCache.load(); // 上次讀到的資料（先顯示、背景更新）
     _ycStage = 'Supabase 完成，開始畫畫面';
     markLoad('連上資料庫');
+    // 員工用手機相機掃打卡機的 QR → 開 App 網址 #/punch?…：登入後自動打卡
+    pendingPunch = PunchLink.parse(Uri.base.toString());
+    if (pendingPunch != null && !repo.isSignedIn) {
+      try {
+        await markPunchStarted(); // 如果他去收信再登入，這次會沒打到：登入後要提醒重掃
+      } catch (_) {}
+    }
     runApp(YinchengApp(state: AppState(repo)));
   } catch (e) {
     runApp(MaterialApp(
@@ -90,11 +100,19 @@ class YinchengApp extends StatelessWidget {
             GlobalWidgetsLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
           ],
-          home: const AuthGate(),
+          // #/kiosk＝打卡機畫面（不用登入，重新整理也留在打卡機）；其他網址（含 #/punch?…）都回主畫面
+          // （有 onGenerateInitialRoutes 就不能再給 home，'/' 由 onGenerateRoute 產生）
+          onGenerateInitialRoutes: (name) => [_route(name.startsWith('/kiosk') ? '/kiosk' : '/')],
+          onGenerateRoute: appRoute,
         );
         }),
       );
 }
+
+Route<void>? appRoute(RouteSettings s) => s.name == '/kiosk' || s.name == '/' ? _route(s.name!) : null;
+
+Route<void> _route(String name) => MaterialPageRoute(
+    settings: RouteSettings(name: name), builder: (_) => name == '/kiosk' ? const KioskScreen() : const AuthGate());
 
 /// 依登入狀態切換：未登入 → 登入頁；已登入 → 主畫面
 class AuthGate extends StatefulWidget {
@@ -105,6 +123,7 @@ class AuthGate extends StatefulWidget {
 
 class _AuthGateState extends State<AuthGate> {
   bool? _signedIn;
+  bool _missedChecked = false;
 
   @override
   void didChangeDependencies() {
@@ -125,5 +144,25 @@ class _AuthGateState extends State<AuthGate> {
   }
 
   @override
-  Widget build(BuildContext context) => (_signedIn ?? false) ? const HomeShell() : const LoginScreen();
+  Widget build(BuildContext context) {
+    final link = pendingPunch;
+    if ((_signedIn ?? false) && link != null) {
+      pendingPunch = null;
+      _missedChecked = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        try {
+          await clearPunchStarted();
+        } catch (_) {}
+        if (mounted) punchAndShow(context, link);
+      });
+    } else if ((_signedIn ?? false) && !_missedChecked) {
+      // 掃碼後去收信再登入（新頁面沒有那次的碼）：明確說沒打到
+      _missedChecked = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        final missed = await takeMissedPunch().catchError((_) => false);
+        if (missed && mounted) showMissedPunch(context);
+      });
+    }
+    return (_signedIn ?? false) ? const HomeShell() : const LoginScreen();
+  }
 }

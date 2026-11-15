@@ -10,6 +10,7 @@ import '../services/shift_export.dart' deferred as sx;
 import '../services/slip_scan.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'attendance_screen.dart';
 import 'shift_plan_screen.dart';
 
 /// 班表（隱城、小城外）：一週一張表；最下面是每天人力。
@@ -463,6 +464,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 IconButton(tooltip: '下個月', onPressed: () => _shiftMonth(1), icon: const Icon(Icons.chevron_right)),
               ]),
               _todayCard(d),
+              AttendanceCard(membership: widget.membership, data: d, codeTimes: _codeTimes),
               _draftCard(d),
               if (d.people.any((p) => p.active))
                 ShiftPlanCard(membership: widget.membership, data: d, viewMonth: _month, markBg: _markBg, onChanged: _reload),
