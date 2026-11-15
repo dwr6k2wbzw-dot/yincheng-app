@@ -1,10 +1,12 @@
 import 'dart:typed_data';
 
+import 'attendance_models.dart';
 import 'change_request_models.dart';
 import 'models.dart';
 import 'purchase_items_math.dart';
 import 'reservation_models.dart';
 import 'shift_planner.dart';
+export 'attendance_models.dart';
 export 'change_request_models.dart';
 export 'reservation_models.dart';
 export 'shift_planner.dart';
@@ -267,6 +269,43 @@ abstract class Repository {
   /// 這些電話（只取數字）在這家店的紀錄：來過幾次、未到幾次（解除那天以後）、標籤備註
   Future<Map<String, GuestStats>> guestStats(String storeId, Set<String> phoneDigits);
   Future<void> saveGuestProfile(String storeId, GuestProfile g, {bool resetNoshow = false});
+
+  // ---------------- 打卡、員工資料（ops 0109，目前只開隱城） ----------------
+  /// 我在這家店的打卡狀態；資料庫還沒更新時回 null（畫面就不顯示打卡）
+  Future<AttendanceMe?> attendanceMe(String storeId);
+  /// 掃碼打卡（時間＝伺服器現在；上班／下班由伺服器判斷）
+  Future<PunchResult> punch(PunchLink link);
+  /// 我的打卡與補登（跨店都列；營業日 from～to）
+  Future<List<MyAttendanceRecord>> myAttendance(String storeId, DateTime from, DateTime to);
+  /// 補登申請（本人，或店長替店裡的人）；核准後才算數。fromSchedule＝時間是從班表帶入的
+  Future<String> requestAmendment(String storeId, String personId, String punchType, DateTime at, String reason,
+      {bool fromSchedule = false});
+  Future<void> cancelAmendment(String id);
+  /// 店長、老闆核准或退回（退回要寫原因）
+  Future<void> decideAmendment(String id, bool approve, {String? note});
+  /// 待確認的打卡：確認或不採用（要原因，可以再改）
+  Future<void> reviewPunch(String punchId, bool confirm, String reason);
+  Future<List<AttendanceAnomaly>> attendanceAnomalies(String storeId, DateTime from, DateTime to);
+  Future<List<AttendanceSession>> attendanceSessions(String storeId, DateTime from, DateTime to);
+  Future<List<AttendanceExportRow>> attendanceExport(String storeId, DateTime from, DateTime to);
+  // 打卡機（老闆、店長設定；打卡機畫面本身不登入）
+  Future<List<KioskInfo>> kiosks(String storeId);
+  /// 回傳打卡機 id 與密鑰（密鑰只有這次拿得到，存在那台裝置上）
+  Future<({String id, String secret})> registerKiosk(String storeId, String name);
+  Future<void> disableKiosk(String kioskId);
+  Future<KioskCode> kioskCode(String kioskId, String secret);
+  /// 員工資料一覽：老闆全部；店長身分證、帳號遮罩、沒有薪率；其他人只有自己
+  Future<List<StaffEntry>> staffDirectory(String storeId);
+  /// 聯絡資料（老闆、店長）；payType 只有老闆能改，店長傳 null＝不動
+  Future<void> saveStaffHr(String storeId, String personId,
+      {String? phone, String? emergencyContact, String? emergencyPhone, DateTime? leaveDate, String? payType});
+  Future<List<PayRate>> payRates(String personId);
+  /// 新增薪率（只有老闆；生效日要晚於既有的）
+  Future<void> addPayRate(String storeId, String personId, PayRate r);
+  /// 只能刪還沒生效的
+  Future<void> deletePayRate(String id);
+  /// 身分證、匯款帳號（只有老闆）
+  Future<void> saveStaffIdentity(String storeId, String personId, {String? nationalId, String? bankCode, String? bankAccount});
 }
 
 /// 把資料庫的錯誤訊息轉成店員看得懂的話（資料庫守衛的訊息本來就是中文）

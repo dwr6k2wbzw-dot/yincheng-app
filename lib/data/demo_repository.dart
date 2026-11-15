@@ -1302,4 +1302,196 @@ class DemoRepository implements Repository {
       _changeSet(requestId, (c) => c.copyWith(status: ChangeStatus.cancelled));
   @override
   Future<void> kickChangeRequests() async {}
+
+  // ---------------- 打卡、員工資料（示範：只有隱城開放；資料都是虛構的） ----------------
+  final _att = <MyAttendanceRecord>[];
+  final _kiosks = <KioskInfo>[];
+  final _hr = <String, Map<String, dynamic>>{};
+  final _rates = <String, List<PayRate>>{};
+  final _ident = <String, Map<String, String?>>{};
+
+  @override
+  Future<AttendanceMe?> attendanceMe(String storeId) async {
+    final last = _att.where((r) => r.isPunch).lastOrNull;
+    return AttendanceMe(
+      enabled: storeId == 'yc',
+      canManage: !_isStaff && storeId == 'yc',
+      personId: 'f0',
+      personName: '阿明',
+      lastPunchType: last?.punchType,
+      lastPunchedAt: last?.at,
+      onShift: last?.punchType == 'in',
+      serverTime: DateTime.now(),
+    );
+  }
+
+  @override
+  Future<PunchResult> punch(PunchLink link) async {
+    final now = DateTime.now();
+    final last = _att.where((r) => r.isPunch).lastOrNull;
+    final dup = last != null && now.difference(last.at).inMinutes < 2;
+    final type = dup ? last.punchType : (last?.punchType == 'in' ? 'out' : 'in');
+    final biz = DateTime(now.year, now.month, now.day - (now.hour < 6 ? 1 : 0));
+    final r = PunchResult(
+        punchId: 'pu${_seq++}',
+        storeName: '隱城',
+        punchType: type,
+        punchedAt: now,
+        businessDate: biz,
+        status: dup ? 'pending' : 'ok',
+        flags: dup ? const ['duplicate'] : const []);
+    _att.add(MyAttendanceRecord(
+        kind: 'punch', id: r.punchId, punchType: type, at: now, businessDate: biz, storeName: '隱城', status: r.status, flags: r.flags));
+    return r;
+  }
+
+  @override
+  Future<List<MyAttendanceRecord>> myAttendance(String storeId, DateTime from, DateTime to) async => _att.reversed.toList();
+
+  @override
+  Future<String> requestAmendment(String storeId, String personId, String punchType, DateTime at, String reason,
+      {bool fromSchedule = false}) async {
+    if (at.isAfter(DateTime.now())) throw Exception('message: 補登時間不能在未來,');
+    final id = 'am${_seq++}';
+    _att.add(MyAttendanceRecord(kind: 'amendment', id: id, punchType: punchType, at: at, storeName: '隱城', status: 'pending', note: reason));
+    return id;
+  }
+
+  void _setAmendment(String id, String status) {
+    final i = _att.indexWhere((r) => r.id == id);
+    if (i < 0) return;
+    final a = _att[i];
+    _att[i] = MyAttendanceRecord(kind: a.kind, id: a.id, punchType: a.punchType, at: a.at, storeName: a.storeName, status: status, note: a.note);
+  }
+
+  @override
+  Future<void> cancelAmendment(String id) async => _setAmendment(id, 'cancelled');
+
+  @override
+  Future<void> decideAmendment(String id, bool approve, {String? note}) async => _setAmendment(id, approve ? 'approved' : 'rejected');
+
+  @override
+  Future<void> reviewPunch(String punchId, bool confirm, String reason) async {}
+
+  @override
+  Future<List<AttendanceAnomaly>> attendanceAnomalies(String storeId, DateTime from, DateTime to) async => [
+        AttendanceAnomaly(kind: 'missing_out', businessDate: _daysAgo(1), personId: 'f1', personName: '小安',
+            punchId: 'demo1', at: DateTime.now().subtract(const Duration(hours: 30)), punchType: 'in', detail: '上班後 14 小時內沒有下班'),
+        AttendanceAnomaly(kind: 'pending', businessDate: _daysAgo(0), personId: 'p0', personName: '小魚',
+            punchId: 'demo2', at: DateTime.now().subtract(const Duration(hours: 3)), punchType: 'in', detail: 'QR 碼過期'),
+        for (final a in _att.where((r) => r.kind == 'amendment' && r.status == 'pending'))
+          AttendanceAnomaly(kind: 'amendment', personId: 'f0', personName: '阿明', amendmentId: a.id, at: a.at, punchType: a.punchType, detail: a.note),
+      ];
+
+  @override
+  Future<List<AttendanceSession>> attendanceSessions(String storeId, DateTime from, DateTime to) async => [];
+
+  @override
+  Future<List<AttendanceExportRow>> attendanceExport(String storeId, DateTime from, DateTime to) async => [
+        for (final r in _att.where((r) => r.isPunch))
+          AttendanceExportRow(
+              businessDate: r.businessDate ?? r.at,
+              personName: '阿明',
+              punchType: r.punchType,
+              punchedAt: r.at,
+              storeName: '隱城',
+              source: 'qr',
+              status: r.status,
+              flags: r.flags.join(' '),
+              counted: r.status == 'ok',
+              punchId: r.id),
+      ];
+
+  @override
+  Future<List<KioskInfo>> kiosks(String storeId) async => List.of(_kiosks);
+
+  @override
+  Future<({String id, String secret})> registerKiosk(String storeId, String name) async {
+    final id = '00000000-0000-4000-8000-${(_seq++).toString().padLeft(12, '0')}';
+    _kiosks.add(KioskInfo(id: id, name: name, active: true, createdAt: DateTime.now()));
+    return (id: id, secret: 'demo-secret');
+  }
+
+  @override
+  Future<void> disableKiosk(String kioskId) async {
+    final i = _kiosks.indexWhere((k) => k.id == kioskId);
+    if (i >= 0) _kiosks[i] = KioskInfo(id: kioskId, name: _kiosks[i].name, active: false, createdAt: _kiosks[i].createdAt);
+  }
+
+  @override
+  Future<KioskCode> kioskCode(String kioskId, String secret) async {
+    final now = DateTime.now();
+    final w = now.millisecondsSinceEpoch ~/ 30000;
+    return KioskCode(
+        storeName: '隱城',
+        kioskName: '示範打卡機',
+        window: w,
+        code: w.toRadixString(16).padLeft(16, '0'),
+        serverTime: now,
+        validUntil: DateTime.fromMillisecondsSinceEpoch((w + 1) * 30000));
+  }
+
+  @override
+  Future<List<StaffEntry>> staffDirectory(String storeId) async {
+    final m = await shiftMonth(storeId, DateTime.now());
+    return [
+      for (final p in m.people)
+        if (!_isStaff || p.id == 'f0')
+          StaffEntry(
+            personId: p.id,
+            name: p.name,
+            kind: p.kind,
+            active: p.active,
+            phone: _hr[p.id]?['phone'] as String?,
+            emergencyContact: _hr[p.id]?['ec'] as String?,
+            emergencyPhone: _hr[p.id]?['ep'] as String?,
+            leaveDate: _hr[p.id]?['leave'] as DateTime?,
+            payType: _hr[p.id]?['pay'] as String?,
+            nationalId: _ident[p.id]?['id'],
+            bankCode: _ident[p.id]?['bank'],
+            bankAccount: _ident[p.id]?['acct'],
+            rateEffectiveFrom: _rates[p.id]?.firstOrNull?.effectiveFrom,
+            ratePayType: _rates[p.id]?.firstOrNull?.payType,
+            rateAmount: _rates[p.id]?.firstOrNull?.amount,
+            canSeePay: !_isStaff,
+          ),
+    ];
+  }
+
+  @override
+  Future<void> saveStaffHr(String storeId, String personId,
+      {String? phone, String? emergencyContact, String? emergencyPhone, DateTime? leaveDate, String? payType}) async {
+    _hr[personId] = {
+      'phone': phone,
+      'ec': emergencyContact,
+      'ep': emergencyPhone,
+      'leave': leaveDate,
+      'pay': payType ?? _hr[personId]?['pay'],
+    };
+  }
+
+  @override
+  Future<List<PayRate>> payRates(String personId) async => List.of(_rates[personId] ?? const []);
+
+  @override
+  Future<void> addPayRate(String storeId, String personId, PayRate r) async {
+    final list = _rates.putIfAbsent(personId, () => []);
+    if (list.any((x) => !x.effectiveFrom.isBefore(r.effectiveFrom))) {
+      throw Exception('message: 薪率只能往後加：生效日要晚於已有的生效日（已生效的不能改）,');
+    }
+    list.insert(0, PayRate(id: 'r${_seq++}', effectiveFrom: r.effectiveFrom, payType: r.payType, amount: r.amount,
+        insuredSalary: r.insuredSalary, pensionSelfRate: r.pensionSelfRate, note: r.note));
+  }
+
+  @override
+  Future<void> deletePayRate(String id) async {
+    for (final l in _rates.values) {
+      l.removeWhere((r) => r.id == id);
+    }
+  }
+
+  @override
+  Future<void> saveStaffIdentity(String storeId, String personId, {String? nationalId, String? bankCode, String? bankAccount}) async {
+    _ident[personId] = {'id': nationalId, 'bank': bankCode, 'acct': bankAccount};
+  }
 }

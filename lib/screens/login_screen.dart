@@ -6,6 +6,7 @@ import '../data/repository.dart';
 import '../app_state.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'attendance_screen.dart' show pendingPunch;
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -105,6 +106,11 @@ class _LoginScreenState extends State<LoginScreen> {
                               ? '第一次使用：用你的 Email 建立帳號，並輸入老闆給你的邀請碼'
                               : '以店家提供的帳號登入',
                       textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted)),
+                  if (pendingPunch != null) ...[
+                    const SizedBox(height: 12),
+                    Text('登入後會自動打卡；QR 碼 30 秒換一次，登入太久會標「待確認」，可回打卡機重掃',
+                        textAlign: TextAlign.center, style: TextStyle(color: AppColors.warn)),
+                  ],
                   const SizedBox(height: 32),
                   TextField(
                     controller: _email,
