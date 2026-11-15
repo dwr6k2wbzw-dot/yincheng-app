@@ -1,6 +1,7 @@
 // 程式審查 2026-11-15 第 4 項：薪資畫面切月時，舊月份的資料還在畫面上，但不能編輯、列印、發布（避免用新月份去存舊資料）。
 // 行銷審閱 2026-11-15 的 8 項畫面修改：不合法時數不試算、不計薪範圍、缺薪率提示、加班費比較、已手動調整、發布彙總、已發布唯讀；
 // 手機尺寸（360×780）跑過，版面溢出會讓測試失敗。
+// 程式審查 2026-11-15（05c90fd）：已發布的薪資單不能標草稿（走完整列印路徑）；數字欄位格式不對要停止試算、不能存。
 // 人名、金額都是示範資料（虛構）。
 // 畫面會載入網頁專用的程式（列印、載入速度），要用瀏覽器跑：
 //   flutter test --platform chrome test/payroll_screen_test.dart
@@ -18,6 +19,7 @@ import 'package:yincheng_ops/data/demo_repository.dart';
 import 'package:yincheng_ops/data/models.dart';
 import 'package:yincheng_ops/data/payroll.dart';
 import 'package:yincheng_ops/screens/payroll_screen.dart';
+import 'package:yincheng_ops/services/payslip_print.dart';
 import 'package:yincheng_ops/theme.dart';
 import 'package:yincheng_ops/widgets/format.dart';
 
@@ -187,6 +189,122 @@ void main() {
       await tester.pump();
       expect(find.text('實發金額：時數格式待修正，暫不計算'), findsNothing);
       expect(find.textContaining('實發金額 \$'), findsOneWidget);
+    });
+
+    testWidgets('數字欄位格式不對（1..5、空白分開）：停止試算、不能存；天數、加班、獎金、勞健保同一套', (tester) async {
+      await phone(tester);
+      final rows = await io(tester, () async {
+        await repo.signIn('owner@x', 'x');
+        await repo.preparePayroll('yc', month);
+        return repo.payrollMonth('yc', month);
+      });
+      FilledButton save() => tester.widget<FilledButton>(find.widgetWithText(FilledButton, '儲存'));
+      Future<void> type(String label, String text) async {
+        await tester.enterText(find.widgetWithText(TextField, label), text);
+        await tester.pump();
+      }
+
+      Future<void> blocked(String label, String text, String kind) async {
+        await type(label, text);
+        expect(find.text('實發金額：$kind格式待修正，暫不計算'), findsOneWidget, reason: '$label=$text');
+        expect(find.textContaining('實發金額 \$'), findsNothing, reason: '$label=$text');
+        expect(find.textContaining('格式不對：只能填 0 或正數'), findsOneWidget, reason: '$label=$text');
+        expect(save().onPressed, isNull, reason: '$label=$text');
+      }
+
+      Future<void> ok(String label, String text) async {
+        await type(label, text);
+        expect(find.textContaining('格式待修正'), findsNothing, reason: '$label=$text');
+        expect(find.textContaining('實發金額 \$'), findsOneWidget, reason: '$label=$text');
+        expect(save().onPressed, isNotNull, reason: '$label=$text');
+      }
+
+      // 時薪：時數、獎金、勞健保
+      final h = rows.firstWhere((r) => r.payType == 'hourly' && r.gross != null);
+      await pump(tester, PayrollEditScreen(membership: owner, month: month, row: h));
+      await blocked('上班時數', '1..5', '時數');
+      expect(find.text('實發金額 \$0'), findsNothing); // 以前會被當空白算成 $0
+      await blocked('上班時數', '.', '時數');
+      await ok('上班時數', '73.5');
+      await blocked('獎金', '1..5', '金額');
+      await ok('獎金', '');
+      await blocked('勞健保自付額', '..', '金額');
+      await ok('勞健保自付額', '300');
+      // 輸入框本來就只收數字和小數點：字母、負號打不進去
+      await type('獎金', 'abc');
+      expect(tester.widget<TextField>(find.widgetWithText(TextField, '獎金')).controller!.text, '');
+      await type('獎金', '-500');
+      expect(tester.widget<TextField>(find.widgetWithText(TextField, '獎金')).controller!.text, '500');
+
+      // 日薪：天數
+      final d = rows.firstWhere((r) => r.payType == 'daily' && r.gross != null);
+      await pump(tester, PayrollEditScreen(membership: owner, month: month, row: d));
+      await blocked('上班天數', '1..5', '天數');
+      await ok('上班天數', '12');
+
+      // 月薪：加班時數
+      final m = rows.firstWhere((r) => r.payType == 'monthly' && r.gross != null && r.otMode == 'fixed');
+      await pump(tester, PayrollEditScreen(membership: owner, month: month, row: m));
+      await blocked('加班時數', '1..5', '時數');
+      await ok('加班時數', '8.5');
+    });
+
+    testWidgets('列印完整路徑：管理頁草稿標草稿；發布後管理頁（全部、單張）和員工自己的都不標草稿', (tester) async {
+      await phone(tester);
+      final printed = <String>[];
+      final orig = printPayslipsImpl;
+      printPayslipsImpl = (slips) {
+        printed.add(payslipHtml(slips));
+        return true;
+      };
+      addTearDown(() => printPayslipsImpl = orig);
+      await io(tester, () async {
+        await repo.signIn('owner@x', 'x');
+        await repo.preparePayroll('yc', month);
+        await repo.setPayrollExempt('yc', 'demo-no-rate', true);
+      });
+
+      // 草稿：列印全部 → 每張都標草稿
+      await pump(tester, PayrollScreen(membership: owner, attendanceEnabled: true));
+      await scrollTo(tester, find.text('列印全部薪資單'));
+      await tester.tap(find.text('列印全部薪資單'));
+      await tester.pumpAndSettle();
+      expect(printed, hasLength(1));
+      expect(printed.last, contains('<title>【草稿】薪資單'));
+      final pages = '<section class="slip">'.allMatches(printed.last).length;
+      expect(pages, greaterThan(1));
+      expect('草稿／尚未發布</span>'.allMatches(printed.last).length, pages);
+
+      // 發布 → 重新進管理頁列印全部：沒有任何草稿標示
+      await io(tester, () => repo.publishPayroll('yc', month));
+      await pump(tester, const SizedBox());
+      await pump(tester, PayrollScreen(membership: owner, attendanceEnabled: true));
+      expect(find.text('已發布'), findsWidgets);
+      await scrollTo(tester, find.text('列印全部薪資單'));
+      await tester.tap(find.text('列印全部薪資單'));
+      await tester.pumpAndSettle();
+      expect(printed, hasLength(2));
+      expect(printed.last, isNot(contains('草稿')));
+      expect(printed.last, contains('<title>薪資單'));
+
+      // 已發布的單張（管理頁點進個人明細 → 列印）
+      final h = (await io(tester, () => repo.payrollMonth('yc', month))).firstWhere((r) => r.payType == 'hourly' && r.gross != null);
+      await pump(tester, PayrollEditScreen(membership: owner, month: month, row: h));
+      await tester.tap(find.text('列印／存成 PDF'));
+      await tester.pumpAndSettle();
+      expect(printed, hasLength(3));
+      expect(printed.last, isNot(contains('草稿')));
+      expect(printed.last, contains('<title>${h.name} '));
+
+      // 員工自己看的薪資單（已發布、有發布日期）
+      final staff = Membership(storeId: 'yc', storeName: '隱城', role: Role.staff, displayName: '示範');
+      await io(tester, () => repo.signIn('staff@x', 'x'));
+      await pump(tester, MyPayslipsScreen(membership: staff));
+      await tester.tap(find.text('列印／存成 PDF').first);
+      await tester.pumpAndSettle();
+      expect(printed, hasLength(4));
+      expect(printed.last, isNot(contains('草稿')));
+      expect(printed.last, contains('發布日期 '));
     });
 
     testWidgets('已發布的個人明細：唯讀文字、沒有輸入框、保留「已發布，無法編輯」', (tester) async {

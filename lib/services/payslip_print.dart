@@ -1,5 +1,7 @@
 import 'dart:js_interop';
 
+import 'package:flutter/foundation.dart';
+
 import '../data/payroll.dart';
 import 'payslip_html.dart';
 
@@ -10,4 +12,9 @@ external JSString _ycPrintHtml(JSString html);
 
 /// 薪資單列印／存成 PDF：另開一頁、自動跳出列印視窗（印表機選「儲存為 PDF」就是 PDF 檔）。
 /// 要在按鈕按下去的當下呼叫（不能先 await），不然瀏覽器會擋彈出視窗。回傳 false＝被擋了
-bool printPayslips(List<PayrollSlip> slips) => _ycPrintHtml(payslipHtml(slips).toJS).toDart == 'opened';
+bool printPayslips(List<PayrollSlip> slips) => printPayslipsImpl(slips);
+
+/// 測試換成假的，攔下實際要印的薪資單
+@visibleForTesting
+bool Function(List<PayrollSlip> slips) printPayslipsImpl =
+    (slips) => _ycPrintHtml(payslipHtml(slips).toJS).toDart == 'opened';

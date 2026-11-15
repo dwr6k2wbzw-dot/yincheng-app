@@ -58,6 +58,15 @@ void main() {
       expect(lsa.otBelowLaw, isFalse);
     });
 
+    test('數字欄位：格式不對（1..5、abc、負數）跟空白分開；0 和正數才算對', () {
+      for (final t in ['1..5', 'abc', '-3', '-0.5', '.', '..', '4.5.', '1,500', 'NaN', 'Infinity', '1e999']) {
+        expect(isBadPayrollNumber(t), isTrue, reason: t);
+      }
+      for (final t in ['', '  ', '0', '4', '4.5', '.5', '5.', '1500', ' 73.5 ']) {
+        expect(isBadPayrollNumber(t), isFalse, reason: t);
+      }
+    });
+
     test('時數只能 0.5 的倍數', () {
       for (final v in [0.0, 4.0, 4.5, 82.5, 160.0]) {
         expect(isHalfHour(v), isTrue, reason: '$v');
@@ -136,6 +145,24 @@ void main() {
       ]);
       expect(pub, isNot(contains('草稿')));
       expect(pub, contains('金額・新臺幣（元）'));
+    });
+
+    test('管理頁的清單轉成薪資單：照清單的發布狀態標草稿（清單沒有發布時間，頁尾只寫已發布）', () {
+      const row = PayrollRow(personId: 'p1', name: '阿明', payType: 'hourly', baseAmount: 200, hours: 10, gross: 2000);
+      const pubRow = PayrollRow(
+          personId: 'p1', name: '阿明', status: 'published', payType: 'hourly', baseAmount: 200, hours: 10, gross: 2000);
+      final m = DateTime(2026, 9, 1);
+      final draft = PayrollSlip.fromPayrollRow(row, m, '示範店'), pub = PayrollSlip.fromPayrollRow(pubRow, m, '示範店');
+      expect(draft.published, isFalse);
+      expect(pub.published, isTrue);
+      expect(payslipHtml([draft]), contains('草稿／尚未發布'));
+      expect(payslipHtml([draft]), contains('<title>【草稿】'));
+      final html = payslipHtml([pub]);
+      expect(html, isNot(contains('草稿')));
+      expect(html, contains('<p class="foot">已發布・'));
+      // 多人一起印：有一張草稿就整份標草稿；全部已發布就不標
+      expect(payslipHtml([pub, draft]), contains('<title>【草稿】薪資單'));
+      expect(payslipHtml([pub, pub]), contains('<title>薪資單'));
     });
 
     test('一次印多人：一人一頁', () {

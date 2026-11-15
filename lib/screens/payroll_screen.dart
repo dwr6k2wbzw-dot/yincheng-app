@@ -442,6 +442,26 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
 
   static String _fmt(double? v) => v == null || v == 0 ? '' : _n(v);
   static double? _parse(TextEditingController c) => c.text.trim().isEmpty ? null : double.tryParse(c.text.trim());
+
+  static bool _bad(TextEditingController c) => isBadPayrollNumber(c.text);
+
+  /// 這個人會用到的數字欄位（欄位、哪一類）
+  List<(TextEditingController, String)> get _fields => [
+        if (r.payType == 'daily') (_qty, '天數'),
+        if (r.payType == 'hourly') (_qty, '時數'),
+        if (r.payType == 'monthly') (_ot1, '時數'),
+        if (r.payType == 'monthly' && _lsa) (_ot2, '時數'),
+        (_bonus, '金額'),
+        if (r.payType != 'daily') (_ins, '金額'),
+      ];
+
+  /// 有欄位格式不對或時數不是 0.5 的倍數：停止試算、不能存。回傳要顯示的哪一類（時數／天數／金額）
+  String? get _blocked {
+    for (final (c, kind) in _fields) {
+      if (_bad(c)) return kind;
+    }
+    return _halfError != null ? '時數' : null;
+  }
   bool get _lsa => r.otMode == 'lsa';
   double? get _auto => r.payType == 'daily' ? r.autoDays : r.autoHours;
 
@@ -484,6 +504,7 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
       );
 
   Future<void> _save() async {
+    if (_blocked != null) return;
     setState(() => _saving = true);
     try {
       final o = _override;
@@ -511,7 +532,8 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
         inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
         onChanged: (_) => setState(() {}),
-        decoration: InputDecoration(labelText: label, helperText: helper),
+        decoration: InputDecoration(
+            labelText: label, helperText: helper, errorText: _bad(c) ? '格式不對：只能填 0 或正數（例如 4、4.5、1500）' : null),
       );
 
   Widget _ro(String label, String value) => Padding(
@@ -617,14 +639,14 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
         TextField(controller: _note, enabled: r.editable, maxLength: 200, decoration: const InputDecoration(labelText: '備註（薪資單上看得到）')),
         TextField(controller: _reason, enabled: r.editable, maxLength: 200, decoration: const InputDecoration(labelText: '修改原因（記在修改紀錄，可空白）')),
         const SizedBox(height: 12),
-        // 時數格式不對時不顯示新的試算（避免看起來像算好了）
-        _halfError != null
-            ? Text('實發金額：時數格式待修正，暫不計算',
+        // 數字格式不對時不顯示新的試算（避免看起來像算好了）
+        _blocked != null
+            ? Text('實發金額：$_blocked格式待修正，暫不計算',
                 style: TextStyle(fontSize: AppType.title, fontWeight: AppFont.heading, color: AppColors.bad))
             : Text('實發金額 ${g == null ? '—' : ntd(g)}',
                 style: const TextStyle(fontSize: AppType.heading, fontWeight: AppFont.heading)),
         const SizedBox(height: 16),
-        FilledButton(onPressed: _saving || _halfError != null ? null : _save, child: Text(_saving ? '儲存中…' : '儲存')),
+        FilledButton(onPressed: _saving || _blocked != null ? null : _save, child: Text(_saving ? '儲存中…' : '儲存')),
       ]),
     );
   }

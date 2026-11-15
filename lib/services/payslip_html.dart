@@ -13,7 +13,7 @@ String payslipHtml(List<PayrollSlip> slips) {
   final pages = StringBuffer();
   for (final s in slips) {
     final title = '${s.storeName} ${s.month.year} 年 ${s.month.month} 月薪資單';
-    final draft = s.publishedAt == null;
+    final draft = !s.published;
     final rows = StringBuffer();
     for (final l in s.lines()) {
       rows.write('<tr><td>${_esc(l.label)}</td><td class="d">${_esc(l.detail)}</td><td class="n">${_m(l.amount.round())}</td></tr>');
@@ -28,12 +28,12 @@ String payslipHtml(List<PayrollSlip> slips) {
     <tfoot><tr><td>實發金額</td><td></td><td class="n">${s.gross == null ? '—' : _m(s.gross!.round())}</td></tr></tfoot>
   </table>
   ${s.note == null || s.note!.isEmpty ? '' : '<p class="note">備註：${_esc(s.note!)}</p>'}
-  <p class="foot">${s.publishedAt == null ? '尚未發布（草稿）' : '發布日期 ${DateFormat('yyyy/M/d').format(s.publishedAt!)}'}・金額四捨五入到元</p>
+  <p class="foot">${draft ? '尚未發布（草稿）' : s.publishedAt == null ? '已發布' : '發布日期 ${DateFormat('yyyy/M/d').format(s.publishedAt!)}'}・金額四捨五入到元</p>
 </section>''');
   }
   final docTitle = slips.length == 1
-      ? '${slips.first.publishedAt == null ? '【草稿】' : ''}${slips.first.personName} ${slips.first.month.year}-${slips.first.month.month.toString().padLeft(2, '0')} 薪資單'
-      : slips.any((s) => s.publishedAt == null) ? '【草稿】薪資單' : '薪資單';
+      ? '${slips.first.published ? '' : '【草稿】'}${slips.first.personName} ${slips.first.month.year}-${slips.first.month.month.toString().padLeft(2, '0')} 薪資單'
+      : slips.any((s) => !s.published) ? '【草稿】薪資單' : '薪資單';
   return '''<!doctype html>
 <html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${_esc(docTitle)}</title>

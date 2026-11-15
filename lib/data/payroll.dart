@@ -52,6 +52,15 @@ double lsaOtRate2(double monthly) => monthly / 240 * 1.67;
 /// 時數只能是 0.5 小時的倍數（老闆 2026-11-15：打卡每段取整到半小時，手動輸入也一樣）
 bool isHalfHour(double v) => (v * 2 - (v * 2).roundToDouble()).abs() < 1e-9;
 
+/// 薪資數字欄位格式不對（例 1..5、abc、負數）：不是空白、卻讀不成 0 或正數。
+/// 空白＝沒填；格式不對不能當成空白（不然會被當 0 存進去）
+bool isBadPayrollNumber(String text) {
+  final t = text.trim();
+  if (t.isEmpty) return false;
+  final v = double.tryParse(t);
+  return v == null || !v.isFinite || v < 0;
+}
+
 /// 這個月薪資清單的一列（payroll_month）
 class PayrollRow {
   final String personId;
@@ -229,6 +238,8 @@ class PayrollSlip {
   final String? note;
   final double? gross;
   final DateTime? publishedAt;
+  /// 已發布（管理頁的清單只知道狀態、沒有發布時間，所以另外帶）
+  final bool published;
   const PayrollSlip({
     required this.month,
     required this.storeName,
@@ -246,7 +257,8 @@ class PayrollSlip {
     this.note,
     this.gross,
     this.publishedAt,
-  });
+    bool? published,
+  }) : published = published ?? publishedAt != null;
   factory PayrollSlip.fromRow(Map<String, dynamic> r) => PayrollSlip(
         month: _date(r['month']),
         storeName: r['store_name'] as String? ?? '',
@@ -283,6 +295,7 @@ class PayrollSlip {
         insurance: r.insurance,
         note: r.note,
         gross: r.gross,
+        published: r.published,
       );
 
   /// 加班費（月薪制）
