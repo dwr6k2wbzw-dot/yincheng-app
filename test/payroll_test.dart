@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yincheng_ops/data/demo_repository.dart';
 import 'package:yincheng_ops/data/payroll.dart';
+import 'package:yincheng_ops/data/repository.dart';
 import 'package:yincheng_ops/services/payslip_html.dart';
 
 void main() {
@@ -273,6 +274,16 @@ void main() {
       final pending = DemoRepository();
       await pending.signIn('unverified-staff@x', 'x');
       expect(await pending.myPayslips('yc'), isEmpty);
+    });
+  });
+
+  group('畫面上「薪率」改叫「薪資」（2026-11-15 老闆）', () {
+    test('資料庫守衛的訊息還寫「薪率」，顯示時換成「薪資」', () {
+      expect(friendlyError(Exception('message: 薪率只能往後加：生效日要晚於已有的生效日（已生效的不能改）, code: P0001')),
+          '薪資只能往後加：生效日要晚於已有的生效日（已生效的不能改）');
+      expect(friendlyError(Exception('message: 已生效的薪率不能刪除, code: P0001')), '已生效的薪資不能刪除');
+      expect(friendlyError(Exception('message: 還有人沒有薪率或還沒帶入，不能發布：示範甲, code: 22023')),
+          '還有人沒有薪資或還沒帶入，不能發布：示範甲');
     });
   });
 }

@@ -729,9 +729,9 @@ class _StaffTabState extends State<_StaffTab> {
           final owner = widget.membership.role == Role.owner;
           return ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [
             InfoLine(
-                text: owner ? '老闆看得到全部（含薪率、身分證、帳號）' : '身分證、帳號只顯示遮罩；薪率看得到、改得了別人的，自己的只能看',
+                text: owner ? '老闆看得到全部（含薪資、身分證、帳號）' : '身分證、帳號只顯示遮罩；薪資看得到、改得了別人的，自己的只能看',
                 icon: Icons.lock_outline,
-                detail: '員工本人只看得到自己的資料。薪率用生效日記歷史：調薪＝新增一筆較晚的生效日，已生效的不能改、不能刪。'),
+                detail: '員工本人只看得到自己的資料。薪資用生效日記歷史：調薪＝新增一筆較晚的生效日，已生效的不能改、不能刪。'),
             for (final s in snap.data!)
               ListTile(
                 contentPadding: EdgeInsets.zero,
@@ -817,7 +817,7 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
         context: context,
         builder: (d) => AlertDialog(
           title: const Text('確認帳號綁定'),
-          content: Text('確定「${e.userName ?? '這個帳號'}」就是 ${e.name} 本人？確認後這個帳號看得到 ${e.name} 的身分證、銀行帳號、薪率，也能用這個名字打卡。'),
+          content: Text('確定「${e.userName ?? '這個帳號'}」就是 ${e.name} 本人？確認後這個帳號看得到 ${e.name} 的身分證、銀行帳號、薪資，也能用這個名字打卡。'),
           actions: [
             TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('取消')),
             FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('是本人，確認')),
@@ -845,7 +845,7 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
       InfoLine(
           text: 'App 帳號 ${e.userName ?? '—'}・${_verified ? '已確認是本人' : '待老闆確認'}',
           icon: _verified ? Icons.verified_user_outlined : Icons.hourglass_empty,
-          detail: '確認前這個帳號不算本人：看不到這個人的個資和薪率，也不能用這個名字打卡。店長、員工自己選的綁定都要老闆確認。'),
+          detail: '確認前這個帳號不算本人：看不到這個人的個資和薪資，也不能用這個名字打卡。店長、員工自己選的綁定都要老闆確認。'),
       if (_owner)
         Align(
           alignment: Alignment.centerLeft,
@@ -890,7 +890,7 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
       context: context,
       builder: (d) => StatefulBuilder(
         builder: (d, set) => AlertDialog(
-          title: const Text('新增薪率'),
+          title: const Text('新增薪資'),
           content: SingleChildScrollView(
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               Row(children: [
@@ -1022,12 +1022,12 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
               const SizedBox(width: 8),
             ],
           ]),
-          if (!_canEditPay) Text('你自己的薪率只能看，要改請找老闆', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+          if (!_canEditPay) Text('你自己的薪資只能看，要改請找老闆', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
           FutureBuilder<List<PayRate>>(
             future: _rates,
             builder: (context, snap) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
-                Expanded(child: Text('薪率（生效日歷史）', style: TextStyle(color: AppColors.muted, fontSize: AppType.small))),
+                Expanded(child: Text('薪資（生效日歷史）', style: TextStyle(color: AppColors.muted, fontSize: AppType.small))),
                 if (_canEditPay) TextButton.icon(onPressed: _addRate, icon: const Icon(Icons.add, size: 18), label: const Text('新增')),
               ]),
               if (snap.hasError) Text(friendlyError(snap.error!), style: TextStyle(color: AppColors.bad)),

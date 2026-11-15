@@ -131,7 +131,7 @@ void main() {
       // 4. 缺薪率：總額寫「待補齊薪資資料」，另列人數與名字，可前往員工資料
       expect(find.text('待補齊薪資資料'), findsOneWidget);
       expect(find.text('算不出來'), findsNothing);
-      expect(find.text('1 人缺少薪率，還不能發布'), findsOneWidget);
+      expect(find.text('1 人缺少薪資，還不能發布'), findsOneWidget);
       await tester.tap(find.text('前往員工資料'));
       await tester.pumpAndSettle();
       expect(opened, 1);

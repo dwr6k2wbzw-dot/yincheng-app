@@ -355,5 +355,5 @@ String friendlyError(Object e) {
   if (msg.contains('Signups not allowed') || msg.contains('signups are disabled')) return '目前沒有開放建立帳號，請聯絡老闆。';
   if (msg.contains('Password should be')) return '密碼太短，請至少 8 個字。';
   if (msg.contains('change_requests_title_check')) return '第一行請寫個簡短的標題。';
-  return msg;
+  return msg.replaceAll('薪率', '薪資'); // 畫面上一律叫「薪資」（2026-11-15 老闆）；資料庫守衛的訊息還寫「薪率」（ops 0109、0110）
 }
