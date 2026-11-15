@@ -90,7 +90,7 @@ class _PayrollScreenState extends State<PayrollScreen> {
 
   Future<void> _prepare(DateTime month, bool again) async {
     if (again &&
-        !await _confirm('重新帶入', '重新帶入薪率、計薪方式${widget.attendanceEnabled ? '和打卡時數' : ''}。手動填的天數、時數、獎金、勞健保、加班時數都不會動。', '重新帶入')) {
+        !await _confirm('重新帶入', '重新帶入薪資、計薪方式${widget.attendanceEnabled ? '和打卡時數' : ''}。手動填的天數、時數、獎金、勞健保、加班時數都不會動。', '重新帶入')) {
       return;
     }
     await _run(() => _repo.preparePayroll(_store, month), again ? '已重新帶入' : '已建立 ${month.month} 月薪資');
@@ -118,9 +118,9 @@ class _PayrollScreenState extends State<PayrollScreen> {
         exempt
             ? '「不計薪」是這個員工的設定，不只這個月：之後每個還沒發布的月份都不會帶入他的薪資，也不算缺人。'
                 '已經帶入的薪資列不會刪除，已發布的月份不受影響。\n\n'
-                '要恢復：回到薪資清單點他的名字，按「取消不計薪」，有薪率後再按「重新帶入」。'
-                '要領薪的人請不要設，改到「員工資料」新增薪率。'
-            : '取消後這個人回到應計薪名單（之後每個還沒發布的月份都算），要有薪率、按「重新帶入」後才能發布。',
+                '要恢復：回到薪資清單點他的名字，按「取消不計薪」，有薪資後再按「重新帶入」。'
+                '要領薪的人請不要設，改到「員工資料」新增薪資。'
+            : '取消後這個人回到應計薪名單（之後每個還沒發布的月份都算），要有薪資、按「重新帶入」後才能發布。',
         exempt ? '設為不計薪' : '取消不計薪');
     if (!ok) return;
     await _run(() => _repo.setPayrollExempt(_store, r.personId, exempt), exempt ? '已設為不計薪' : '已取消不計薪');
@@ -232,12 +232,12 @@ class _PayrollScreenState extends State<PayrollScreen> {
           Padding(
             padding: const EdgeInsets.only(top: 6),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('$missingCount 人缺少薪率，還不能發布',
+              Text('$missingCount 人缺少薪資，還不能發布',
                   style: TextStyle(color: AppColors.bad, fontSize: AppType.small, fontWeight: AppFont.heading)),
               if (r.missingNames.isNotEmpty)
                 Text(r.missingNames.join('、'), style: TextStyle(color: AppColors.bad, fontSize: AppType.small)),
               Text(
-                  '沒有薪率的先到「員工資料」新增，薪率是之後才加的按「重新帶入」${_owner ? '；不領薪的人可以在下面點他設為不計薪' : '；不領薪的人請老闆設為不計薪'}',
+                  '沒有薪資的先到「員工資料」新增，薪資是之後才加的按「重新帶入」${_owner ? '；不領薪的人可以在下面點他設為不計薪' : '；不領薪的人請老闆設為不計薪'}',
                   style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
               if (widget.onOpenStaff != null)
                 TextButton.icon(
@@ -323,7 +323,7 @@ class _PayrollScreenState extends State<PayrollScreen> {
     final edited = (r.payType == 'daily' && r.daysEdited) || (r.payType == 'hourly' && r.hoursEdited);
     final auto = r.payType == 'daily' ? r.autoDays : r.autoHours, unit = r.payType == 'daily' ? '天' : '小時';
     final info = Text(r.missingRate
-          ? '應計薪但還沒帶入（沒有薪率，或薪率是之後才加的）${_owner && !published ? '・點這裡可設為不計薪' : ''}'
+          ? '應計薪但還沒帶入（沒有薪資，或薪資是之後才加的）${_owner && !published ? '・點這裡可設為不計薪' : ''}'
           : r.exempt
               ? '不計薪${_owner && !published ? '・點這裡取消' : ''}'
               : [
@@ -399,7 +399,7 @@ class _PayrollScreenState extends State<PayrollScreen> {
                     const SizedBox(height: 6),
                     Text(
                         widget.attendanceEnabled
-                            ? '建立時會帶入每個人的薪率，以及這個月「已確認」的打卡時數、天數（待確認的不算）。勞健保自付額預設帶上個月的。'
+                            ? '建立時會帶入每個人的薪資，以及這個月「已確認」的打卡時數、天數（待確認的不算）。勞健保自付額預設帶上個月的。'
                             : '這家店還沒開打卡：建立後時數、天數要手動填。勞健保自付額預設帶上個月的。',
                         style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
                     const SizedBox(height: 12),
@@ -581,7 +581,7 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
         ]),
       ),
       const SizedBox(height: 8),
-      _ro('計薪方式', '${payrollTypeLabel(r.payType)} ${r.baseAmount == null ? '（沒有薪率）' : ntd(r.baseAmount!)}'),
+      _ro('計薪方式', '${payrollTypeLabel(r.payType)} ${r.baseAmount == null ? '（沒有薪資）' : ntd(r.baseAmount!)}'),
       if (r.payType != 'monthly')
         _ro(r.payType == 'daily' ? '上班天數' : '上班時數',
             '${_n(q ?? 0)} $unit${_auto == null ? '' : (q == _auto ? '（打卡帶入）' : '（已手動調整，原始帶入 ${_n(_auto!)} $unit）')}'),
@@ -618,9 +618,9 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
       appBar: AppBar(title: Text('${r.name}・${widget.month.month} 月')),
       body: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [
         InfoLine(
-            text: '${payrollTypeLabel(r.payType)} ${r.baseAmount == null ? '（沒有薪率）' : ntd(r.baseAmount!)}',
+            text: '${payrollTypeLabel(r.payType)} ${r.baseAmount == null ? '（沒有薪資）' : ntd(r.baseAmount!)}',
             icon: Icons.payments_outlined,
-            detail: '薪率在「員工資料」改；改完回這裡按重新帶入。'),
+            detail: '薪資在「員工資料」改；改完回這裡按重新帶入。'),
         if (r.payType != 'monthly')
           _num(_qty, r.payType == 'daily' ? '上班天數' : '上班時數',
               helper: _auto == null

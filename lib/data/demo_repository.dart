@@ -1550,7 +1550,7 @@ class DemoRepository implements Repository {
   Future<void> addPayRate(String storeId, String personId, PayRate r) async {
     final list = _rates.putIfAbsent(personId, () => []);
     if (list.any((x) => !x.effectiveFrom.isBefore(r.effectiveFrom))) {
-      throw Exception('message: 薪率只能往後加：生效日要晚於已有的生效日（已生效的不能改）,');
+      throw Exception('message: 薪資只能往後加：生效日要晚於已有的生效日（已生效的不能改）,');
     }
     list.insert(0, PayRate(id: 'r${_seq++}', effectiveFrom: r.effectiveFrom, payType: r.payType, amount: r.amount,
         insuredSalary: r.insuredSalary, pensionSelfRate: r.pensionSelfRate, note: r.note));
@@ -1702,7 +1702,7 @@ class DemoRepository implements Repository {
     final k = _payKey(storeId, month), rows = _payRows[k];
     if (rows == null) throw Exception('message: 這個月還沒有薪資,');
     final names = (await payrollReport(storeId, month)).missingNames;
-    if (names.isNotEmpty) throw Exception('message: 還有人沒有薪率或還沒帶入，不能發布：${names.join('、')},');
+    if (names.isNotEmpty) throw Exception('message: 還有人沒有薪資或還沒帶入，不能發布：${names.join('、')},');
     _payStatus[k] = 'published';
     rows.updateAll((_, r) => _payCalc(r, status: 'published'));
   }

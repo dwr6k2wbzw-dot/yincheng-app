@@ -2047,7 +2047,7 @@ class SupabaseRepository implements Repository {
   @override
   Future<void> deletePayRate(String id) async {
     final rows = await _db.from('staff_pay_rates').delete().eq('id', id).select('id');
-    if (rows.isEmpty) throw Exception('message: 沒有權限刪除這筆薪率,');
+    if (rows.isEmpty) throw Exception('message: 沒有權限刪除這筆薪資,');
   }
 
   @override
