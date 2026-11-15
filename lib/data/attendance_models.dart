@@ -398,6 +398,9 @@ class StaffEntry {
     this.userVerified = false,
     this.userName,
   });
+
+  /// 員工資料頁的離職日：只在停用或已填離職日的人顯示（還在職的人要離職，先到班表把人停用）
+  bool get showsLeaveDate => !active || leaveDate != null;
   factory StaffEntry.fromRow(Map<String, dynamic> r) => StaffEntry(
         personId: r['person_id'] as String,
         name: r['name'] as String? ?? '',

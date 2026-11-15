@@ -773,6 +773,7 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
   late final _nid = TextEditingController(text: widget.entry.identityMasked ? '' : widget.entry.nationalId);
   late final _bank = TextEditingController(text: widget.entry.identityMasked ? '' : widget.entry.bankCode);
   late final _acct = TextEditingController(text: widget.entry.identityMasked ? '' : widget.entry.bankAccount);
+  late DateTime? _hire = widget.entry.hireDate;
   late DateTime? _leave = widget.entry.leaveDate;
   late String? _payType = widget.entry.payType;
   late bool _verified = widget.entry.userVerified;
@@ -780,6 +781,12 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
   bool _saving = false;
 
   bool get _owner => widget.membership.role == Role.owner;
+
+  /// 到職日：老闆、店長（班表人員資料的寫入權限，ops 0028）
+  bool get _canEditHire => _owner || widget.membership.role == Role.manager;
+
+  /// 離職日看開頁時的資料決定要不要顯示，編輯中清掉不會整行消失
+  bool get _showLeave => widget.entry.showsLeaveDate;
 
   /// 薪率、計薪方式：老闆全部；店長改別人的（ops 0110），自己的只能看（比照第一階段自審規則）
   bool get _canEditPay =>
@@ -861,6 +868,7 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
           emergencyPhone: _t(_ep),
           leaveDate: _leave,
           payType: _canEditPay ? _payType : null);
+      if (_canEditHire && _hire != widget.entry.hireDate) await _repo.saveHireDate(store, p, _hire);
       if (_owner) await _repo.saveStaffIdentity(store, p, nationalId: _t(_nid), bankCode: _t(_bank), bankAccount: _t(_acct));
       if (mounted) {
         showMessage(context, '已儲存');
@@ -963,14 +971,30 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
         TextField(controller: _ep, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: '緊急聯絡電話')),
         ListTile(
           contentPadding: EdgeInsets.zero,
-          title: Text(_leave == null ? '離職日：未離職' : '離職日：${DateFormat('yyyy/M/d').format(_leave!)}'),
-          trailing: _leave == null ? null : IconButton(tooltip: '清除', onPressed: () => setState(() => _leave = null), icon: const Icon(Icons.clear)),
-          onTap: () async {
-            final d = await showDatePicker(
-                context: context, initialDate: _leave ?? bizToday(), firstDate: DateTime(2020), lastDate: DateTime(bizToday().year + 1));
-            if (d != null) setState(() => _leave = d);
-          },
+          title: Text(_hire == null ? '到職日：未填' : '到職日：${DateFormat('yyyy/M/d').format(_hire!)}'),
+          subtitle: _hire == null && _canEditHire ? const Text('點這裡選日期；算薪的名單會用到') : null,
+          trailing: _hire == null || !_canEditHire
+              ? null
+              : IconButton(tooltip: '清除', onPressed: () => setState(() => _hire = null), icon: const Icon(Icons.clear)),
+          onTap: !_canEditHire
+              ? null
+              : () async {
+                  final d = await showDatePicker(
+                      context: context, initialDate: _hire ?? bizToday(), firstDate: DateTime(2010), lastDate: DateTime(bizToday().year + 1));
+                  if (d != null) setState(() => _hire = d);
+                },
         ),
+        if (_showLeave)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(_leave == null ? '離職日：未填' : '離職日：${DateFormat('yyyy/M/d').format(_leave!)}'),
+            trailing: _leave == null ? null : IconButton(tooltip: '清除', onPressed: () => setState(() => _leave = null), icon: const Icon(Icons.clear)),
+            onTap: () async {
+              final d = await showDatePicker(
+                  context: context, initialDate: _leave ?? bizToday(), firstDate: DateTime(2020), lastDate: DateTime(bizToday().year + 1));
+              if (d != null) setState(() => _leave = d);
+            },
+          ),
         const Divider(),
         Text('身分證、銀行帳號', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
         if (!_owner) ...[

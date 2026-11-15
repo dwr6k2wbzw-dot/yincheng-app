@@ -228,6 +228,46 @@ void main() {
     expect(b.status, 'pending');
     expect(b.flags, contains('duplicate'));
   });
+
+  group('到職日、離職日（員工資料頁，2026-11-15 老闆）', () {
+    test('離職日只在停用或已填離職日的人顯示', () {
+      StaffEntry s({bool active = true, DateTime? leave}) =>
+          StaffEntry(personId: 'p', name: '示範', kind: 'full', active: active, leaveDate: leave);
+      expect(s().showsLeaveDate, isFalse);
+      expect(s(active: false).showsLeaveDate, isTrue);
+      expect(s(leave: DateTime(2026, 10, 31)).showsLeaveDate, isTrue);
+      expect(s(active: false, leave: DateTime(2026, 10, 31)).showsLeaveDate, isTrue);
+    });
+
+    test('示範資料：老闆、店長存到職日後一覽讀得到，可清掉；不會動到離職日；員工不能改', () async {
+      SharedPreferences.setMockInitialValues({});
+      for (final email in ['owner@x', 'manager@x']) {
+        final repo = DemoRepository();
+        await repo.signIn(email, 'x');
+        Future<StaffEntry> f1() async => (await repo.staffDirectory('yc')).firstWhere((x) => x.personId == 'f1');
+        expect((await f1()).hireDate, isNull);
+        await repo.saveHireDate('yc', 'f1', DateTime(2025, 4, 1));
+        expect((await f1()).hireDate, DateTime(2025, 4, 1), reason: email);
+        expect((await f1()).leaveDate, isNull);
+        await repo.saveHireDate('yc', 'f1', null);
+        expect((await f1()).hireDate, isNull);
+      }
+      final staff = DemoRepository();
+      await staff.signIn('staff@x', 'x');
+      await expectLater(staff.saveHireDate('yc', 'f0', DateTime(2025, 1, 1)), throwsA(anything));
+    });
+
+    test('示範資料有一位已停用的人，帶離職日（老闆看得到、員工看不到）', () async {
+      SharedPreferences.setMockInitialValues({});
+      final owner = DemoRepository();
+      await owner.signIn('owner@x', 'x');
+      final left = (await owner.staffDirectory('yc')).firstWhere((x) => x.personId == 'x0');
+      expect((left.active, left.leaveDate, left.showsLeaveDate), (false, DateTime(2026, 10, 31), true));
+      final staff = DemoRepository();
+      await staff.signIn('staff@x', 'x');
+      expect((await staff.staffDirectory('yc')).map((x) => x.personId), ['f0']);
+    });
+  });
 }
 
 (int, int, int, int, int) toTaipeiParts(DateTime t) {
