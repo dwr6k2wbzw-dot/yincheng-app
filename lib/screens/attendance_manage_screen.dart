@@ -15,7 +15,7 @@ import 'attendance_screen.dart';
 import 'kiosk_screen.dart' show kioskIdPref, kioskSecretPref;
 
 /// 出勤管理（老闆、店長）：每天看異常清單、確認待確認的打卡、審補登、看出勤、匯出 CSV、設打卡機；
-/// 員工資料：老闆全部可改（含薪率、身分證、帳號）；店長看得到遮罩的身分證、帳號，看不到薪率。
+/// 員工資料：老闆全部可改（含薪率、身分證、帳號）；店長看得到遮罩的身分證、帳號，薪率看得到、可改別人的（ops 0110），自己的只能看。
 /// staffOnly：還沒開放打卡的店（小城外）只有員工資料，老闆照樣能確認帳號綁定，員工才能到隱城掃碼支援。
 class AttendanceManageScreen extends StatefulWidget {
   const AttendanceManageScreen(
@@ -729,7 +729,7 @@ class _StaffTabState extends State<_StaffTab> {
           final owner = widget.membership.role == Role.owner;
           return ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [
             InfoLine(
-                text: owner ? '老闆看得到全部（含薪率、身分證、帳號）' : '身分證、帳號只顯示遮罩；看不到薪率',
+                text: owner ? '老闆看得到全部（含薪率、身分證、帳號）' : '身分證、帳號只顯示遮罩；薪率看得到、改得了別人的，自己的只能看',
                 icon: Icons.lock_outline,
                 detail: '員工本人只看得到自己的資料。薪率用生效日記歷史：調薪＝新增一筆較晚的生效日，已生效的不能改、不能刪。'),
             for (final s in snap.data!)
@@ -780,13 +780,18 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
   bool _saving = false;
 
   bool get _owner => widget.membership.role == Role.owner;
+
+  /// 薪率、計薪方式：老闆全部；店長改別人的（ops 0110），自己的只能看（比照第一階段自審規則）
+  bool get _canEditPay =>
+      _owner ||
+      (widget.membership.role == Role.manager && widget.entry.canSeePay && widget.entry.userId != _repo.currentUserId);
   Repository get _repo => AppScope.of(context).repo;
   String? _t(TextEditingController c) => c.text.trim().isEmpty ? null : c.text.trim();
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_owner) _rates ??= _repo.payRates(widget.entry.personId);
+    if (_owner || widget.entry.canSeePay) _rates ??= _repo.payRates(widget.entry.personId);
   }
 
   @override
@@ -855,7 +860,7 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
           emergencyContact: _t(_ec),
           emergencyPhone: _t(_ep),
           leaveDate: _leave,
-          payType: _owner ? _payType : null);
+          payType: _canEditPay ? _payType : null);
       if (_owner) await _repo.saveStaffIdentity(store, p, nationalId: _t(_nid), bankCode: _t(_bank), bankAccount: _t(_acct));
       if (mounted) {
         showMessage(context, '已儲存');
@@ -884,6 +889,8 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
                 SelectChip(label: const Text('時薪'), selected: type == 'hourly', onSelected: (_) => set(() => type = 'hourly')),
                 const SizedBox(width: 8),
                 SelectChip(label: const Text('月薪'), selected: type == 'monthly', onSelected: (_) => set(() => type = 'monthly')),
+                const SizedBox(width: 8),
+                SelectChip(label: const Text('日薪'), selected: type == 'daily', onSelected: (_) => set(() => type = 'daily')),
               ]),
               ListTile(
                 contentPadding: EdgeInsets.zero,
@@ -977,20 +984,27 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9-]'))],
               decoration: const InputDecoration(labelText: '帳號')),
+        ],
+        if (_owner || e.canSeePay) ...[
           const Divider(),
           Row(children: [
             Text('計薪方式', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
             const SizedBox(width: 12),
-            SelectChip(label: const Text('時薪'), selected: _payType == 'hourly', onSelected: (_) => setState(() => _payType = 'hourly')),
-            const SizedBox(width: 8),
-            SelectChip(label: const Text('月薪'), selected: _payType == 'monthly', onSelected: (_) => setState(() => _payType = 'monthly')),
+            for (final t in const ['hourly', 'monthly', 'daily']) ...[
+              SelectChip(
+                  label: Text(payTypeLabel(t)),
+                  selected: _payType == t,
+                  onSelected: _canEditPay ? (_) => setState(() => _payType = t) : null),
+              const SizedBox(width: 8),
+            ],
           ]),
+          if (!_canEditPay) Text('你自己的薪率只能看，要改請找老闆', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
           FutureBuilder<List<PayRate>>(
             future: _rates,
             builder: (context, snap) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
                 Expanded(child: Text('薪率（生效日歷史）', style: TextStyle(color: AppColors.muted, fontSize: AppType.small))),
-                TextButton.icon(onPressed: _addRate, icon: const Icon(Icons.add, size: 18), label: const Text('新增')),
+                if (_canEditPay) TextButton.icon(onPressed: _addRate, icon: const Icon(Icons.add, size: 18), label: const Text('新增')),
               ]),
               if (snap.hasError) Text(friendlyError(snap.error!), style: TextStyle(color: AppColors.bad)),
               for (final r in snap.data ?? const <PayRate>[])
@@ -1002,7 +1016,7 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
                     if (r.insuredSalary != null) '投保 ${ntd(r.insuredSalary!)}',
                     '勞退自提 ${r.pensionSelfRate.toStringAsFixed(r.pensionSelfRate % 1 == 0 ? 0 : 1)}%',
                   ].join('・')),
-                  trailing: r.effectiveFrom.isAfter(bizToday())
+                  trailing: _canEditPay && r.effectiveFrom.isAfter(bizToday())
                       ? IconButton(tooltip: '刪除（還沒生效）', onPressed: () => _deleteRate(r), icon: const Icon(Icons.delete_outline))
                       : null,
                 ),

@@ -9,6 +9,7 @@ import '../services/clock.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'attendance_manage_screen.dart';
+import 'payroll_screen.dart';
 
 /// 班表第一階段：QR 打卡（ops 0109，老闆 2026-11-15；先在隱城試行）。
 /// 店內打卡機每 30 秒換一個 QR 碼，員工用自己的帳號掃；時間一律是伺服器時間。
@@ -120,8 +121,33 @@ class _AttendanceCardState extends State<AttendanceCard> {
 
   /// 還沒開放打卡的店：員工資料、確認本人跟打卡開關分開（程式審查 2026-11-15 第二輪）。
   /// 老闆、店長照樣進得了員工資料（老闆在這裡確認帳號綁定）；員工確認後才能到隱城掃碼支援。
+  /// 薪資（第二階段 ops 0110）：老闆、店長做薪資；綁定經老闆確認的員工看自己的薪資單
+  List<Widget> _payrollButtons(AttendanceMe me) => [
+        if (me.canManage)
+          OutlinedButton(
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => PayrollScreen(
+                    membership: widget.membership,
+                    attendanceEnabled: me.enabled,
+                    onOpenStaff: () => Navigator.of(context).push(MaterialPageRoute(
+                        builder: (_) => AttendanceManageScreen(
+                            membership: widget.membership,
+                            data: widget.data,
+                            codeTimes: widget.codeTimes,
+                            staffOnly: true)))))),
+            child: const Text('薪資'),
+          ),
+        if (me.personId != null && !me.bindingPending)
+          OutlinedButton(
+            onPressed: () => Navigator.of(context)
+                .push(MaterialPageRoute(builder: (_) => MyPayslipsScreen(membership: widget.membership))),
+            child: const Text('我的薪資單'),
+          ),
+      ];
+
   Widget _notEnabled(AttendanceMe me) {
-    if (!me.canManage && !me.bindingPending) return const SizedBox.shrink();
+    final verified = me.personId != null && !me.bindingPending;
+    if (!me.canManage && !me.bindingPending && !verified) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: SectionCard(
@@ -129,23 +155,32 @@ class _AttendanceCardState extends State<AttendanceCard> {
           Row(children: [
             Icon(Icons.badge_outlined, color: AppColors.primary),
             const SizedBox(width: 8),
-            const Expanded(child: Text('員工資料', style: TextStyle(fontSize: AppType.title, fontWeight: AppFont.heading))),
+            Expanded(
+                child: Text(me.canManage || me.bindingPending ? '員工資料' : '薪資單',
+                    style: const TextStyle(fontSize: AppType.title, fontWeight: AppFont.heading))),
           ]),
           const SizedBox(height: 6),
           if (me.canManage)
             Text('這家店還沒開放打卡；員工資料、確認帳號綁定照常可以用。員工的綁定經老闆確認後，才能到別家店掃碼支援',
                 style: TextStyle(color: AppColors.muted, fontSize: AppType.small))
-          else
+          else if (me.bindingPending)
             Text('你選的班表名字還在等老闆確認，確認後才能到別家店掃碼支援',
-                style: TextStyle(color: AppColors.warn, fontSize: AppType.small)),
-          if (me.canManage) ...[
+                style: TextStyle(color: AppColors.warn, fontSize: AppType.small))
+          else
+            Text('${me.personName ?? ''}・這家店還沒開放打卡，薪資單發布後在這裡看',
+                style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+          if (me.canManage || verified) ...[
             const SizedBox(height: 10),
-            OutlinedButton(
-              onPressed: () => Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => AttendanceManageScreen(
-                      membership: widget.membership, data: widget.data, codeTimes: widget.codeTimes, staffOnly: true))),
-              child: const Text('員工資料'),
-            ),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              if (me.canManage)
+                OutlinedButton(
+                  onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => AttendanceManageScreen(
+                          membership: widget.membership, data: widget.data, codeTimes: widget.codeTimes, staffOnly: true))),
+                  child: const Text('員工資料'),
+                ),
+              ..._payrollButtons(me),
+            ]),
           ],
         ]),
       ),
@@ -204,6 +239,7 @@ class _AttendanceCardState extends State<AttendanceCard> {
                               membership: widget.membership, data: widget.data, codeTimes: widget.codeTimes))),
                       child: const Text('出勤管理'),
                     ),
+                  ..._payrollButtons(me),
                 ]),
                 const SizedBox(height: 6),
                 Text('也可以直接用手機相機掃店裡打卡機上的 QR 碼', style: TextStyle(color: AppColors.muted, fontSize: AppType.caption)),

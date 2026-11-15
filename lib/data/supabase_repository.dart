@@ -2049,4 +2049,69 @@ class SupabaseRepository implements Repository {
       'bank_account': bankAccount,
     });
   }
+
+  // ---------------- 薪資（ops 0110） ----------------
+  String _month(DateTime m) => _day.format(DateTime(m.year, m.month, 1));
+
+  @override
+  Future<PayrollSettings> payrollSettings(String storeId) async {
+    final rows = _rpcRows(await _db.rpc('payroll_settings', params: {'p_store': storeId}));
+    return rows.isEmpty ? const PayrollSettings() : PayrollSettings.fromRow(rows.first);
+  }
+
+  @override
+  Future<void> setPayrollOvertime(String storeId, String mode, double rate) =>
+      _db.rpc('payroll_set_overtime', params: {'p_store': storeId, 'p_mode': mode, 'p_rate': rate});
+
+  @override
+  Future<int> preparePayroll(String storeId, DateTime month) async =>
+      ((await _db.rpc('payroll_prepare', params: {'p_store': storeId, 'p_month': _month(month)})) as num).toInt();
+
+  @override
+  Future<List<PayrollRow>> payrollMonth(String storeId, DateTime month) async =>
+      _rpcRows(await _db.rpc('payroll_month', params: {'p_store': storeId, 'p_month': _month(month)}))
+          .map(PayrollRow.fromRow)
+          .toList();
+
+  @override
+  Future<PayrollReport> payrollReport(String storeId, DateTime month) async {
+    final rows = _rpcRows(await _db.rpc('payroll_report', params: {'p_store': storeId, 'p_month': _month(month)}));
+    return rows.isEmpty ? const PayrollReport() : PayrollReport.fromRow(rows.first);
+  }
+
+  @override
+  Future<double?> savePayrollEntry(String storeId, String personId, DateTime month,
+      {double? days, double? hours, double otHours = 0, double otHours2 = 0, double bonus = 0, double insurance = 0,
+      String? note, String? reason}) async {
+    final v = await _db.rpc('payroll_save_entry', params: {
+      'p_store': storeId,
+      'p_person': personId,
+      'p_month': _month(month),
+      'p_days': days,
+      'p_hours': hours,
+      'p_ot_hours': otHours,
+      'p_ot_hours2': otHours2,
+      'p_bonus': bonus,
+      'p_insurance': insurance,
+      'p_note': note,
+      'p_reason': reason,
+    });
+    return v == null ? null : (v as num).toDouble();
+  }
+
+  @override
+  Future<void> publishPayroll(String storeId, DateTime month) =>
+      _db.rpc('payroll_publish', params: {'p_store': storeId, 'p_month': _month(month)});
+
+  @override
+  Future<void> reopenPayroll(String storeId, DateTime month, String reason) =>
+      _db.rpc('payroll_reopen', params: {'p_store': storeId, 'p_month': _month(month), 'p_reason': reason});
+
+  @override
+  Future<void> setPayrollExempt(String storeId, String personId, bool exempt) =>
+      _db.rpc('payroll_set_exempt', params: {'p_store': storeId, 'p_person': personId, 'p_exempt': exempt});
+
+  @override
+  Future<List<PayrollSlip>> myPayslips(String storeId) async =>
+      _rpcRows(await _db.rpc('payroll_my_slips', params: {'p_store': storeId})).map(PayrollSlip.fromRow).toList();
 }

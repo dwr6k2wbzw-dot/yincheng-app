@@ -3,11 +3,13 @@ import 'dart:typed_data';
 import 'attendance_models.dart';
 import 'change_request_models.dart';
 import 'models.dart';
+import 'payroll.dart';
 import 'purchase_items_math.dart';
 import 'reservation_models.dart';
 import 'shift_planner.dart';
 export 'attendance_models.dart';
 export 'change_request_models.dart';
+export 'payroll.dart';
 export 'reservation_models.dart';
 export 'shift_planner.dart';
 
@@ -298,20 +300,40 @@ abstract class Repository {
   Future<({String id, String secret})> registerKiosk(String storeId, String name);
   Future<void> disableKiosk(String kioskId);
   Future<KioskCode> kioskCode(String kioskId, String secret);
-  /// 員工資料一覽：老闆全部；店長身分證、帳號遮罩、沒有薪率；其他人只有自己
+  /// 員工資料一覽：老闆全部；店長身分證、帳號遮罩，看得到別人的薪率（ops 0110）、看不到可改自己的；其他人只有自己
   Future<List<StaffEntry>> staffDirectory(String storeId);
   /// 老闆確認（或取消確認）班表名字綁定的 App 帳號；userId＝畫面上看到的那個帳號，對不上就失敗
   Future<void> verifyBinding(String personId, String userId, {bool verify = true});
-  /// 聯絡資料（老闆、店長）；payType 只有老闆能改，店長傳 null＝不動
+  /// 聯絡資料（老闆、店長）；payType 老闆、店長（不是自己）能改，傳 null＝不動
   Future<void> saveStaffHr(String storeId, String personId,
       {String? phone, String? emergencyContact, String? emergencyPhone, DateTime? leaveDate, String? payType});
   Future<List<PayRate>> payRates(String personId);
-  /// 新增薪率（只有老闆；生效日要晚於既有的）
+  /// 新增薪率（老闆；店長只能替別人，ops 0110；生效日要晚於既有的）
   Future<void> addPayRate(String storeId, String personId, PayRate r);
   /// 只能刪還沒生效的
   Future<void> deletePayRate(String id);
   /// 身分證、匯款帳號（只有老闆）
   Future<void> saveStaffIdentity(String storeId, String personId, {String? nationalId, String? bankCode, String? bankAccount});
+
+  // ---------------- 薪資（ops 0110）：老闆、店長算；員工看自己已發布的薪資單 ----------------
+  Future<PayrollSettings> payrollSettings(String storeId);
+  /// 加班費算法（只有老闆）：fixed 固定時薪／lsa 依勞基法
+  Future<void> setPayrollOvertime(String storeId, String mode, double rate);
+  /// 建立或重新帶入這個月（薪率、打卡時數；不動手動填的）；回傳幾個人
+  Future<int> preparePayroll(String storeId, DateTime month);
+  Future<List<PayrollRow>> payrollMonth(String storeId, DateTime month);
+  Future<PayrollReport> payrollReport(String storeId, DateTime month);
+  /// 存一個人的薪資；days／hours 傳 null＝用打卡帶入的值。回傳實發金額
+  Future<double?> savePayrollEntry(String storeId, String personId, DateTime month,
+      {double? days, double? hours, double otHours = 0, double otHours2 = 0, double bonus = 0, double insurance = 0,
+      String? note, String? reason});
+  Future<void> publishPayroll(String storeId, DateTime month);
+  /// 重新開啟已發布的月份（只有老闆，要寫原因）
+  Future<void> reopenPayroll(String storeId, DateTime month, String reason);
+  /// 不計薪（只有老闆）：不領薪的人（例如老闆自己）從應計薪名單拿掉；有修改紀錄
+  Future<void> setPayrollExempt(String storeId, String personId, bool exempt);
+  /// 我的薪資單（已發布、綁定經老闆確認）
+  Future<List<PayrollSlip>> myPayslips(String storeId);
 }
 
 /// 把資料庫的錯誤訊息轉成店員看得懂的話（資料庫守衛的訊息本來就是中文）
@@ -321,6 +343,7 @@ String friendlyError(Object e) {
   final msg = m?.group(1) ?? s;
   if (msg.contains('duplicate key') && msg.contains('client_request')) return '這筆已經送出過了，不會重複新增。';
   if (msg.contains('row-level security')) return '沒有權限執行這個動作。';
+  if (msg.contains('function public.payroll_')) return '資料庫還沒更新到薪資版本，請等老闆核准上線。';
   if (msg.contains('daily_revenue_one_per_day')) return '這一天已經有營收紀錄了，請從列表點進去修改。';
   if (msg.contains('Invalid login credentials')) return '帳號或密碼錯誤。';
   if (msg.contains('vendor_slips_store_id_vendor_slip_no_key')) return '這個廠商已經有相同單號的單據了。';

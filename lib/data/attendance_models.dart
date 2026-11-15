@@ -425,7 +425,7 @@ class StaffEntry {
       );
 }
 
-String payTypeLabel(String? t) => switch (t) { 'monthly' => '月薪', 'hourly' => '時薪', _ => '未設定' };
+String payTypeLabel(String? t) => switch (t) { 'daily' => '日薪', 'monthly' => '月薪', 'hourly' => '時薪', _ => '未設定' };
 
 /// 薪率（生效日歷史；不能改，調薪＝新增一筆較晚的生效日）
 class PayRate {
