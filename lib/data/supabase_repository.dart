@@ -523,13 +523,20 @@ class SupabaseRepository implements Repository {
           .limit(1)
           .then((v) => v, onError: (_) => <Map<String, dynamic>>[]),
       // 班別／時段清單（0075）：讀不到就用 App 內建設定
+      // 0113 多 hidden；資料庫還沒更新時退回舊欄位
       _db
           .from('shift_mark_options')
-          .select('id, kind, mark, time_range, sort_order')
+          .select('id, kind, mark, time_range, sort_order, hidden')
           .eq('store_id', storeId)
           .order('sort_order')
           .order('mark')
-          .then<Object?>((v) => v, onError: (_) => null),
+          .then<Object?>((v) => v, onError: (_) => _db
+              .from('shift_mark_options')
+              .select('id, kind, mark, time_range, sort_order')
+              .eq('store_id', storeId)
+              .order('sort_order')
+              .order('mark')
+              .then<Object?>((v) => v, onError: (_) => null)),
     ]);
     final people = (r[0] as List).map((x) => ShiftPerson.fromRow(x as Map<String, dynamic>)).toList();
     final marks = <String, Map<int, String>>{};
@@ -1023,6 +1030,33 @@ class SupabaseRepository implements Repository {
   Future<void> deleteShiftMarkOption(String id) async {
     final rows = await _db.from('shift_mark_options').delete().eq('id', id).select('id');
     if (rows.isEmpty) throw Exception('message: 沒有權限刪除班別／時段,');
+  }
+
+  @override
+  Future<void> setShiftMarkOptionHidden(String id, bool hidden) async {
+    final rows = await _db.from('shift_mark_options').update({'hidden': hidden}).eq('id', id).select('id');
+    if (rows.isEmpty) throw Exception('message: 沒有權限修改班別／時段,');
+  }
+
+  @override
+  Future<List<ShiftChange>> shiftChangeHistory(String storeId, DateTime month) async {
+    final rows = await _db.rpc('shift_change_history',
+        params: {'p_store': storeId, 'p_month': _day.format(DateTime(month.year, month.month, 1))}) as List;
+    return [for (final r in rows) ShiftChange.fromRow(r as Map<String, dynamic>)];
+  }
+
+  @override
+  Future<int> undoShiftChange(String storeId, String changeId) async =>
+      ((await _db.rpc('shift_undo_change', params: {'p_store': storeId, 'p_change': changeId})) as num?)?.toInt() ?? 0;
+
+  @override
+  Future<void> assignShiftAccount(String personId, String? userId) =>
+      _db.rpc('shift_assign_account', params: {'p_person': personId, 'p_user': userId});
+
+  @override
+  Future<List<ShiftAccountCandidate>> shiftAccountCandidates(String storeId) async {
+    final rows = await _db.rpc('shift_account_candidates', params: {'p_store': storeId}) as List;
+    return [for (final r in rows) ShiftAccountCandidate.fromRow(r as Map<String, dynamic>)];
   }
 
   @override

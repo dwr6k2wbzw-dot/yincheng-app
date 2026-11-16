@@ -208,4 +208,39 @@ void main() {
           isEmpty);
     });
   });
+
+  group('draftConflicts（照片套用前，0113）', () {
+    test('指休那天、另一家店有班那天排上班會列出來；休、新人員不列', () {
+      final s = ShiftPlanSetup(requests: const {
+        'a': {3: 'off'}
+      }, otherStoreDays: const {
+        'c': {5}
+      });
+      final r = draftConflicts(
+        month: DateTime(2026, 12),
+        entries: const {
+          '甲': {3: 'V', 4: 'V'},
+          '丙': {5: '18:00-00:30', 6: 'V'},
+          '乙': {3: '休'},
+          '新人': {3: 'V'},
+        },
+        people: [ShiftPerson(id: 'a', name: '甲'), ShiftPerson(id: 'b', name: '乙'), ShiftPerson(id: 'c', name: '丙', kind: 'part')],
+        setup: s,
+      );
+      expect(r, ['丙 12/5 另一家店已經有班', '甲 12/3 填了指休']);
+    });
+  });
+
+  group('停用的班別（0113）', () {
+    test('選單不列，時數照算', () {
+      const o = ShiftOptions([
+        ShiftMarkOption(kind: 'code', mark: 'B', timeRange: '17:00-00:30'),
+        ShiftMarkOption(kind: 'code', mark: 'BX', timeRange: '18:00-00:30', hidden: true),
+        ShiftMarkOption(kind: 'range', mark: '19:00-00:30'),
+      ]);
+      expect(o.codes.map((c) => c.mark), ['B']);
+      expect(o.allCodes.map((c) => c.mark), ['B', 'BX']);
+      expect(o.ranges, ['19:00-00:30']);
+    });
+  });
 }

@@ -184,6 +184,36 @@ class DemoRepository implements Repository {
   @override
   Future<void> deleteShiftMarkOption(String id) async => _markOpts.removeWhere((x) => x.id == id);
   @override
+  Future<void> setShiftMarkOptionHidden(String id, bool hidden) async {
+    final i = _markOpts.indexWhere((x) => x.id == id);
+    if (i < 0) return;
+    final o = _markOpts[i];
+    _markOpts[i] =
+        ShiftMarkOption(id: o.id, kind: o.kind, mark: o.mark, timeRange: o.timeRange, sortOrder: o.sortOrder, hidden: hidden);
+  }
+
+  // 0113 示範：修改紀錄、還原、指定帳號
+  @override
+  Future<List<ShiftChange>> shiftChangeHistory(String storeId, DateTime month) async {
+    final at = DateTime(month.year, month.month, 1, 13, 12);
+    return [
+      ShiftChange(changeId: 'c2', at: at.add(const Duration(days: 6, hours: 3)), actorName: '示範店長', source: 'manual',
+          personId: 'f1', workDate: DateTime(month.year, month.month, 19), before: 'V', after: '休'),
+      for (var d = 1; d <= 3; d++)
+        ShiftChange(changeId: 'c1', at: at, actorName: '示範老闆', source: 'photo', personId: 'f0',
+            workDate: DateTime(month.year, month.month, d), before: null, after: 'V'),
+    ];
+  }
+  @override
+  Future<int> undoShiftChange(String storeId, String changeId) async => 1;
+  @override
+  Future<void> assignShiftAccount(String personId, String? userId) async {}
+  @override
+  Future<List<ShiftAccountCandidate>> shiftAccountCandidates(String storeId) async => const [
+        ShiftAccountCandidate(userId: 'u1', name: '示範店長', role: 'manager'),
+        ShiftAccountCandidate(userId: 'u2', name: '示範兼職', role: 'parttime', personId: 'p1', personName: '阿凱', verified: true),
+      ];
+  @override
   Future<void> setShift(String storeId, String personId, DateTime date, String? mark) async {}
   @override
   Future<void> setShiftNote(String storeId, DateTime date, String? note) async {}

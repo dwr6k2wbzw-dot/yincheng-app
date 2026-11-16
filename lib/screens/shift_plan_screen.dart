@@ -1579,6 +1579,33 @@ class _ShiftMarkOptionsScreenState extends State<ShiftMarkOptionsScreen> {
       await _repo.deleteShiftMarkOption(x.id);
       _load();
     } catch (e) {
+      if (!mounted) return;
+      // 排過的班別不能刪（0113：過去的時數會跟著變）→ 改成停用
+      if (x.isCode && '$e'.contains('SHIFT_CODE_USED')) {
+        final hide = await showDialog<bool>(
+          context: context,
+          builder: (c) => AlertDialog(
+            title: Text('「${x.mark}」已經排進班表'),
+            content: const Text('排過的班別不能刪，不然過去的時數會跟著變。\n\n改成「停用」：點格子時不會再出現，已經排好的格子跟時數照舊，之後也可以恢復。'),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
+              FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('停用')),
+            ],
+          ),
+        );
+        if (hide == true) await _setHidden(x, true);
+        return;
+      }
+      showMessage(context, friendlyError(e), error: true);
+    }
+  }
+
+  Future<void> _setHidden(ShiftMarkOption x, bool hidden) async {
+    try {
+      await _repo.setShiftMarkOptionHidden(x.id, hidden);
+      if (mounted) showMessage(context, hidden ? '「${x.mark}」停用了' : '「${x.mark}」恢復了');
+      _load();
+    } catch (e) {
       if (mounted) showMessage(context, friendlyError(e), error: true);
     }
   }
@@ -1610,17 +1637,23 @@ class _ShiftMarkOptionsScreenState extends State<ShiftMarkOptionsScreen> {
                     textAlign: TextAlign.center,
                     style: const TextStyle(fontWeight: FontWeight.w600)),
               ),
-              title: Text(code
-                  ? (x.timeRange ?? '').replaceFirst('-', '～')
-                  : x.mark.replaceFirst('-', '～')),
+              title: Text(
+                  code
+                      ? (x.timeRange ?? '').replaceFirst('-', '～')
+                      : x.mark.replaceFirst('-', '～'),
+                  style: TextStyle(color: x.hidden ? AppColors.muted : null)),
               subtitle: Text(
-                  '${_num(ShiftMonth.hoursOf(code ? x.timeRange : x.mark, const {}))} 小時',
+                  '${x.hidden ? '已停用・' : ''}${_num(ShiftMonth.hoursOf(code ? x.timeRange : x.mark, const {}))} 小時',
                   style: const TextStyle(fontSize: AppType.small)),
-              onTap: () => _edit(code: code, cur: x),
-              trailing: IconButton(
-                  tooltip: '刪除',
-                  icon: const Icon(Icons.delete_outline),
-                  onPressed: () => _delete(x)),
+              onTap: x.hidden ? null : () => _edit(code: code, cur: x),
+              trailing: x.hidden
+                  ? TextButton(
+                      onPressed: () => _setHidden(x, false),
+                      child: const Text('恢復'))
+                  : IconButton(
+                      tooltip: '刪除',
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: () => _delete(x)),
             ),
           TextButton.icon(
               onPressed: () => _edit(code: code),
@@ -1646,7 +1679,7 @@ class _ShiftMarkOptionsScreenState extends State<ShiftMarkOptionsScreen> {
                   : ListView(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
                       children: [
-                          Text('$_storeName 的清單，只影響這家店。點一項可以修改，刪掉不會改到已經排好的班。',
+                          Text('$_storeName 的清單，只影響這家店。點一項可以修改；已經排進班表的班別不能改時段、不能刪（過去的時數會跟著變），可以停用。',
                               style: TextStyle(
                                   color: AppColors.muted,
                                   fontSize: AppType.small)),
@@ -1654,7 +1687,7 @@ class _ShiftMarkOptionsScreenState extends State<ShiftMarkOptionsScreen> {
                           _section(
                               '班別',
                               '點格子排班時可以選的班別代碼（例 B＝17:00-00:30）${_storeName == '小城外' ? '；時數照時段算' : ''}',
-                              o.codes,
+                              o.allCodes,
                               code: true),
                           const SizedBox(height: 10),
                           _section(

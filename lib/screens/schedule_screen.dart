@@ -12,6 +12,7 @@ import '../services/slip_scan.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'attendance_screen.dart';
+import 'shift_history_screen.dart';
 import 'shift_plan_screen.dart';
 
 /// 班表（隱城、小城外）：一週一張表；最下面是每天人力。
@@ -446,7 +447,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   Future<void> _managePeople(ShiftMonth d) async {
-    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => _PeopleScreen(storeId: _store, people: d.people)));
+    await Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => _PeopleScreen(storeId: _store, people: d.people, isOwner: widget.membership.role == Role.owner)));
     _reload();
   }
 
@@ -513,7 +515,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
   Future<void> _openDraft(ShiftMonth d, ShiftDraft dr) async {
     final applied = await Navigator.of(context).push<bool>(MaterialPageRoute(
-        builder: (_) => _DraftScreen(month: _month, current: d, draft: dr, repo: _repo, markBg: _markBg)));
+        builder: (_) => _DraftScreen(storeId: _store, month: _month, current: d, draft: dr, repo: _repo, markBg: _markBg)));
     if (applied == true && mounted) showMessage(context, '已套用照片上的 ${_month.month} 月班表');
     _reload();
   }
@@ -612,6 +614,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               ]),
               _claimCard(d),
               _todayCard(d),
+              _myMonthCard(d),
               AttendanceCard(
                   key: ValueKey('attendance-$_claimSeq'), membership: widget.membership, data: d, codeTimes: _codeTimes),
               _draftCard(d),
@@ -694,6 +697,16 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                     icon: const Icon(Icons.schedule_outlined),
                     label: const Text('班別／時段'),
                   ),
+                  // 修改紀錄、整批還原（0113）
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final changed = await Navigator.of(context).push<bool>(MaterialPageRoute(
+                          builder: (_) => ShiftHistoryScreen(membership: widget.membership, month: _month, people: d.people)));
+                      if (changed == true) _reload();
+                    },
+                    icon: const Icon(Icons.history),
+                    label: const Text('修改紀錄'),
+                  ),
                   // 排班條件常駐（2026-11-16 健檢 A3：原本這個月排好後就進不去）
                   OutlinedButton.icon(
                     onPressed: () async {
@@ -754,6 +767,70 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         const SizedBox(width: 4),
         Text(label, style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
       ]);
+
+  /// 我的班（第二批：員工最想看的是自己的班）：已經對應班表名字的人，一個月一張小月曆
+  Widget _myMonthCard(ShiftMonth d) {
+    final me = _repo.currentUserId;
+    final p = me == null ? null : d.people.where((x) => x.active && x.userId == me).firstOrNull;
+    if (p == null) return const SizedBox.shrink();
+    final days = d.days;
+    final firstWd = DateTime(_month.year, _month.month, 1).weekday % 7; // 週日＝0
+    final today = bizToday();
+    final work = (d.marks[p.id] ?? const <int, String>{}).values.where(ShiftMonth.isOn).length;
+    final off = d.offDays(p.id);
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: SectionCard(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Text('我的 ${_month.month} 月班', style: const TextStyle(fontWeight: FontWeight.w700)),
+            const Spacer(),
+            Text('上班 $work 天${p.isFull ? '・休 $off 天' : ''}',
+                style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+          ]),
+          const SizedBox(height: 8),
+          Row(children: [
+            for (final w in ['日', '一', '二', '三', '四', '五', '六'])
+              Expanded(
+                  child: Text(w,
+                      textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted, fontSize: AppType.micro))),
+          ]),
+          const SizedBox(height: 4),
+          GridView.count(
+            crossAxisCount: 7,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            childAspectRatio: 1.25,
+            children: [
+              for (var i = 0; i < firstWd; i++) const SizedBox.shrink(),
+              for (var day = 1; day <= days; day++)
+                () {
+                  final m = d.mark(p.id, day);
+                  final isToday = today.year == _month.year && today.month == _month.month && today.day == day;
+                  return Container(
+                    margin: const EdgeInsets.all(1.5),
+                    decoration: BoxDecoration(
+                      color: _markBg(m),
+                      borderRadius: BorderRadius.circular(AppRadius.xs),
+                      border: isToday
+                          ? Border.all(color: AppColors.primary, width: 2)
+                          : (_markBg(m) == null ? Border.all(color: AppColors.cardHigh) : null),
+                    ),
+                    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      Text('$day', style: TextStyle(fontSize: AppType.micro, color: AppColors.muted)),
+                      Text(m == null ? '' : (ShiftMonth.isRange(m) ? m.split('-').first : m),
+                          maxLines: 1,
+                          overflow: TextOverflow.clip,
+                          style: const TextStyle(fontSize: AppType.small, fontWeight: FontWeight.w700, height: 1.1)),
+                    ]),
+                  );
+                }(),
+            ],
+          ),
+        ]),
+      ),
+    );
+  }
 
   Widget _todayCard(ShiftMonth d) {
     // 「今天」跟交接、提醒一樣以早上 6 點換日（凌晨還在營業時不會跳到隔天；2026-11-13）
@@ -1046,15 +1123,97 @@ String _num(double v) => v == v.roundToDouble() ? v.toInt().toString() : v.toStr
 
 /// 班表人員：新增、改名、正職／兼職、排序、隱藏
 class _PeopleScreen extends StatefulWidget {
-  const _PeopleScreen({required this.storeId, required this.people});
+  const _PeopleScreen({required this.storeId, required this.people, this.isOwner = false});
   final String storeId;
   final List<ShiftPerson> people;
+  final bool isOwner; // 老闆可以直接指定 App 帳號（0113）
   @override
   State<_PeopleScreen> createState() => _PeopleScreenState();
 }
 
 class _PeopleScreenState extends State<_PeopleScreen> {
   late List<ShiftPerson> _people = [...widget.people];
+  List<ShiftAccountCandidate> _accounts = const [];
+  bool _started = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_started) {
+      _started = true;
+      _loadAccounts();
+    }
+  }
+
+  Future<void> _loadAccounts() async {
+    if (!widget.isOwner) return;
+    try {
+      final a = await AppScope.of(context).repo.shiftAccountCandidates(widget.storeId);
+      if (mounted) setState(() => _accounts = a);
+    } catch (_) {
+      // 資料庫還沒更新：不顯示指定帳號
+    }
+  }
+
+  String? _accountName(ShiftPerson p) => p.userId == null
+      ? null
+      : (_accounts.where((a) => a.userId == p.userId).firstOrNull?.name ?? '已綁定的帳號');
+
+  Future<void> _reloadPeople() async {
+    final d = await AppScope.of(context).repo.shiftMonth(widget.storeId, DateTime.now());
+    if (mounted) setState(() => _people = d.people);
+    await _loadAccounts();
+  }
+
+  /// 老闆直接替這個人指定 App 帳號（＝確認，不用等員工自己選；0113）
+  Future<void> _assign(ShiftPerson p) async {
+    const none = '\u0000';
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.card,
+      builder: (c) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(c).size.height * 0.8),
+          child: ListView(shrinkWrap: true, padding: const EdgeInsets.all(16), children: [
+            Text('「${p.name}」是哪一個 App 帳號？', style: const TextStyle(fontSize: AppType.title, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 4),
+            Text('老闆指定的就算確認好了，那個人可以直接打卡、看自己的出勤和薪資單。',
+                style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+            const SizedBox(height: 8),
+            for (final a in _accounts)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                selected: a.userId == p.userId,
+                title: Text(a.name.isEmpty ? '（沒有名字）' : a.name),
+                subtitle: Text([
+                  roleLabel(roleFrom(a.role)),
+                  if (a.personName != null && a.personId != p.id) '目前是「${a.personName}」，改指定會解除那邊',
+                  if (a.personId == p.id) a.verified ? '目前就是這個帳號' : '目前就是這個帳號（還沒確認）',
+                ].join('・'), style: const TextStyle(fontSize: AppType.small)),
+                onTap: () => Navigator.pop(c, a.userId),
+              ),
+            if (p.userId != null)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.link_off),
+                title: const Text('不指定（解除）'),
+                onTap: () => Navigator.pop(c, none),
+              ),
+          ]),
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    try {
+      await AppScope.of(context).repo.assignShiftAccount(p.id, picked == none ? null : picked);
+      if (!mounted) return;
+      showMessage(context, picked == none ? '已解除「${p.name}」的帳號' : '已指定，「${p.name}」可以直接用了');
+      await _reloadPeople();
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+    }
+  }
 
   Future<void> _edit(ShiftPerson? p) async {
     final name = TextEditingController(text: p?.name ?? '');
@@ -1083,7 +1242,19 @@ class _PeopleScreenState extends State<_PeopleScreen> {
                 value: active,
                 onChanged: (v) => set(() => active = v),
               ),
-            if (p != null && p.userId != null)
+            if (p != null && widget.isOwner && _accounts.isNotEmpty)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  icon: const Icon(Icons.how_to_reg_outlined, size: 18),
+                  label: Text(p.userId == null ? '指定 App 帳號' : 'App 帳號：${_accountName(p)}（改指定）'),
+                  onPressed: () {
+                    Navigator.pop(c, false);
+                    _assign(p);
+                  },
+                ),
+              ),
+            if (p != null && p.userId != null && !(widget.isOwner && _accounts.isNotEmpty))
               Align(
                 alignment: Alignment.centerLeft,
                 child: TextButton.icon(
@@ -1148,7 +1319,7 @@ class _PeopleScreenState extends State<_PeopleScreen> {
             ),
           const SizedBox(height: 8),
           Text('人員不會被刪除（避免舊班表對不上）；不用了就關掉「顯示在班表」。'
-              '員工第一次填「指休」時會自己選班表上的名字，選錯了在這裡解除。',
+              '員工可以在班表頁最上面自己選名字（老闆確認後才算）${widget.isOwner ? '；老闆也可以點人名直接指定 App 帳號' : '，選錯了在這裡解除'}。',
               style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
         ]),
       );
@@ -1157,7 +1328,13 @@ class _PeopleScreenState extends State<_PeopleScreen> {
 /// 照片辨識草稿：整月預覽（跟目前班表不同的格子框起來）→ 套用或捨棄（0070）
 class _DraftScreen extends StatefulWidget {
   const _DraftScreen(
-      {required this.month, required this.current, required this.draft, required this.repo, required this.markBg});
+      {required this.storeId,
+      required this.month,
+      required this.current,
+      required this.draft,
+      required this.repo,
+      required this.markBg});
+  final String storeId;
   final DateTime month;
   final ShiftMonth current;
   final ShiftDraft draft;
@@ -1200,6 +1377,32 @@ class _DraftScreenState extends State<_DraftScreen> {
       ];
 
   Future<void> _apply() async {
+    // 資料庫會擋「指休那天排上班」「另一家店那天有班」，一格被擋整月都不會套用（0113）：先列出來
+    setState(() => _busy = true);
+    List<String>? conflicts;
+    try {
+      final setup = await widget.repo.shiftPlanSetup(widget.storeId, widget.month);
+      conflicts = draftConflicts(month: widget.month, entries: _d.entries, people: widget.current.people, setup: setup);
+    } catch (_) {
+      conflicts = null; // 讀不到就交給資料庫擋
+    }
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (conflicts != null && conflicts.isNotEmpty) {
+      await showDialog<void>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: Text('有 ${conflicts!.length} 格不能排上班'),
+          content: SingleChildScrollView(
+            child: Text('${conflicts.take(20).map((t) => '・$t').join('\n')}'
+                '${conflicts.length > 20 ? '\n…還有 ${conflicts.length - 20} 格' : ''}\n\n'
+                '照片上這幾天排了上班。請先到「填指休」把那天拿掉，或跟另一家店確認改班，再回來套用。'),
+          ),
+          actions: [FilledButton(onPressed: () => Navigator.pop(c), child: const Text('知道了'))],
+        ),
+      );
+      return;
+    }
     final hasData = widget.current.marks.values.any((m) => m.isNotEmpty);
     final ok = await showDialog<bool>(
       context: context,
