@@ -93,7 +93,8 @@ class _ShiftHistoryScreenState extends State<ShiftHistoryScreen> {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) Navigator.pop(context, _changed);
+        // 還原還在送的時候不能離開，不然班表頁不會重新整理（Codex P2）
+        if (!didPop && !_busy) Navigator.pop(context, _changed);
       },
       child: Scaffold(
         appBar: AppBar(title: Text('${widget.month.month} 月班表修改紀錄')),
