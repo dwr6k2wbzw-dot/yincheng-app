@@ -332,5 +332,49 @@ void main() {
       expect(find.byType(AlertDialog), findsNothing);
       await expectLater(repo.pinSet('f1', '7046'), throwsA(anything), reason: '員工不能設別人的');
     }, timeout: const Timeout(Duration(seconds: 90)));
+
+    // 程式審查 P2：手機 390×780、鍵盤占 300 時，對話框（含錯誤訊息）不能超出畫面，按鈕要按得到
+    testWidgets('手機鍵盤跳出來：設定密碼對話框可以捲動，不會超出畫面', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      tester.view.physicalSize = const Size(390, 780);
+      tester.view.devicePixelRatio = 1;
+      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+      addTearDown(tester.view.reset);
+      final repo = await _signedIn(tester, 'staff@x');
+      final m = Membership(storeId: 'yc', storeName: '隱城', role: Role.staff, displayName: '示範');
+      await tester.pumpWidget(_wrap(repo, Scaffold(body: SingleChildScrollView(
+          child: AttendanceCard(membership: m, data: _emptyMonth, codeTimes: const {})))));
+      await _settle(tester);
+      await tester.ensureVisible(find.text('打卡密碼'));
+      await tester.tap(find.text('打卡密碼'));
+      await _settle(tester);
+      expect(tester.takeException(), isNull, reason: '打開時不能超出畫面');
+      Future<void> enter(String pin, String again) async {
+        await tester.enterText(_dialog(find.byType(TextField)).at(0), pin);
+        await tester.enterText(_dialog(find.byType(TextField)).at(1), again);
+        await tester.ensureVisible(_dialog(find.widgetWithText(FilledButton, '儲存')));
+        await tester.pumpAndSettle();
+        await tester.tap(_dialog(find.widgetWithText(FilledButton, '儲存')));
+        await _settle(tester);
+      }
+      await enter('1593', '1539');
+      expect(find.text('兩次輸入的不一樣，請再輸入一次'), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: '出現錯誤訊息後也不能超出畫面');
+      await enter('1111', '1111');
+      expect(find.textContaining('太好猜'), findsOneWidget, reason: '最長的錯誤訊息');
+      expect(tester.takeException(), isNull);
+      // 隨機產生那個對話框也一樣
+      await tester.ensureVisible(_dialog(find.widgetWithText(OutlinedButton, '隨機產生')));
+      await tester.pumpAndSettle();
+      await tester.tap(_dialog(find.widgetWithText(OutlinedButton, '隨機產生')));
+      await _settle(tester);
+      expect(find.text('新的打卡密碼・阿明'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.ensureVisible(find.text('記下了'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('記下了'));
+      await _settle(tester);
+      expect(find.byType(AlertDialog), findsNothing);
+    }, timeout: const Timeout(Duration(seconds: 90)));
   });
 }

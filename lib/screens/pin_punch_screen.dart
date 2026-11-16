@@ -314,6 +314,7 @@ Future<bool> editPunchPin(BuildContext context,
 
       if (shown != null) {
         return AlertDialog(
+          scrollable: true,
           title: Text('新的打卡密碼・$name'),
           content: Column(mainAxisSize: MainAxisSize.min, children: [
             Text(shown!, style: const TextStyle(fontSize: AppType.hero, fontWeight: AppFont.heading, fontFeatures: tabular, letterSpacing: 8)),
@@ -324,7 +325,9 @@ Future<bool> editPunchPin(BuildContext context,
         );
       }
       void submit() => run(() => save(c.text.trim()));
+      // 手機鍵盤跳出來時空間不夠，整個對話框要能捲（程式審查 P2：390×780、鍵盤 300 會超出）
       return AlertDialog(
+        scrollable: true,
         title: Text('${hasPin ? '重設' : '設定'}打卡密碼・$name'),
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(
