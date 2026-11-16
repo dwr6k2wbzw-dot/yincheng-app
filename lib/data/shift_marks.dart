@@ -36,6 +36,10 @@ Map<String, double>? storeCodeHours(String store, ShiftOptions? o) {
   };
 }
 
+/// 停用的班別（0113）：已經排過的格子照舊顯示、照算時數，但新的排班不能再用
+Set<String> hiddenCodes(ShiftOptions? o) =>
+    {if (o != null && o.loaded) for (final c in o.allCodes) if (c.hidden) c.mark};
+
 /// 兼職時段選項
 List<String> storeRanges(String store, ShiftOptions? o) {
   if (o != null && o.loaded) return o.ranges;
