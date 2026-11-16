@@ -1572,6 +1572,8 @@ class DemoRepository implements Repository {
   @override
   Future<PinSetResult> pinSet(String personId, String? pin) async {
     if (_isManager && personId == 'f0') throw Exception('message: 店長的打卡密碼請老闆設定,');
+    // 員工改自己的只能隨機產生（ops 0112）
+    if (_isStaff && pin != null) throw Exception('message: 自己改打卡密碼只能按「隨機產生」,');
     if (pin != null && !RegExp(r'^[0-9]{4}$').hasMatch(pin)) throw Exception('message: 打卡密碼要是 4 位數字,');
     final taken = _pins.entries.any((e) => e.key != personId && e.value == pin);
     if (taken) return const PinSetResult(result: 'taken', message: '這組密碼不能用，請換一組');

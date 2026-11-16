@@ -25,14 +25,15 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> with SingleTickerProviderStateMixin {
-  int _tab = 0;
+  // 選到哪一頁記分頁名稱、不記位置：打卡頁（ops 0112）是背景讀到才插在最前面，原本選的頁不會跳成別頁
+  String? _tabLabel;
   // 切換分頁時整頁淡入（不重建頁面，各頁的捲動位置、輸入都保留）
   late final AnimationController _fade = AnimationController(vsync: this, duration: AppMotion.fast, value: 1);
   late final Animation<double> _fadeCurve = CurvedAnimation(parent: _fade, curve: AppMotion.curve);
 
-  void _go(int i) {
-    if (i == _tab) return;
-    setState(() => _tab = i);
+  void _go(String label) {
+    if (label == _tabLabel) return;
+    setState(() => _tabLabel = label);
     _fade.forward(from: 0);
   }
 
@@ -134,16 +135,16 @@ class _HomeShellState extends State<HomeShell> with SingleTickerProviderStateMix
       ),
       ],
     ];
-    int? scheduleTab;
-    if (AppConfig.scheduleStores.contains(m.storeName)) {
-      scheduleTab = tabs.length;
+    final hasSchedule = AppConfig.scheduleStores.contains(m.storeName);
+    if (hasSchedule) {
       tabs.add((
         ScheduleScreen(key: ValueKey('sc-${m.storeId}'), membership: m),
         const NavigationDestination(
             icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month_outlined), label: '班表'),
       ));
     }
-    final tab = _tab.clamp(0, tabs.length - 1);
+    final labels = [for (final t in tabs) t.$2.label];
+    final tab = labels.indexOf(_tabLabel ?? '').clamp(0, tabs.length - 1);
     return Scaffold(
       appBar: AppBar(
         title: _StoreSwitcher(state: state),
@@ -152,7 +153,7 @@ class _HomeShellState extends State<HomeShell> with SingleTickerProviderStateMix
           NotificationBell(
             key: ValueKey('bell-${m.storeId}'),
             membership: m,
-            onOpenSchedule: scheduleTab == null ? null : () => _go(scheduleTab!),
+            onOpenSchedule: hasSchedule ? () => _go('班表') : null,
           ),
           PopupMenuButton<String>(
             tooltip: '更多',
@@ -215,7 +216,7 @@ class _HomeShellState extends State<HomeShell> with SingleTickerProviderStateMix
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: tab,
-        onDestinationSelected: _go,
+        onDestinationSelected: (i) => _go(labels[i]),
         destinations: [for (final t in tabs) t.$2],
       ),
     );

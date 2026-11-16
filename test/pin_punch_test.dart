@@ -4,11 +4,14 @@
 @TestOn('browser')
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yincheng_ops/app_state.dart';
+import 'package:yincheng_ops/data/attendance_models.dart';
 import 'package:yincheng_ops/data/demo_repository.dart';
 import 'package:yincheng_ops/data/models.dart';
 import 'package:yincheng_ops/main.dart';
@@ -25,9 +28,9 @@ Future<DemoRepository> _signedIn(WidgetTester tester, String email) async {
 }
 
 /// 先開 App 再登入（跟真的登入一樣）：直接用已登入的狀態開 App，原本就會在 build 中讀店家清單而跳警告
-Future<DemoRepository> _loginApp(WidgetTester tester, String email) async {
+Future<DemoRepository> _loginApp(WidgetTester tester, String email, [DemoRepository? r]) async {
   SharedPreferences.setMockInitialValues({});
-  final repo = DemoRepository();
+  final repo = r ?? DemoRepository();
   await tester.pumpWidget(YinchengApp(state: AppState(repo)));
   await tester.pump();
   await tester.runAsync(() => repo.signIn(email, 'x'));
@@ -47,6 +50,24 @@ Future<void> _type(WidgetTester tester, String pin) async {
     await tester.pump();
   }
   await tester.pump(const Duration(milliseconds: 50));
+}
+
+/// 打卡頁晚一點才讀到（網路慢）
+class _SlowKioskRepo extends DemoRepository {
+  final gate = Completer<void>();
+  final done = Completer<void>();
+  @override
+  Future<KioskMine?> kioskMine() async {
+    await gate.future;
+    final k = await super.kioskMine();
+    if (!done.isCompleted) done.complete();
+    return k;
+  }
+}
+
+String _selectedTab(WidgetTester tester) {
+  final bar = tester.widget<NavigationBar>(find.byType(NavigationBar));
+  return (bar.destinations[bar.selectedIndex] as NavigationDestination).label;
 }
 
 Finder _dialog(Finder f) => find.descendant(of: find.byType(AlertDialog), matching: f);
@@ -82,6 +103,27 @@ void main() {
       await tester.tap(find.text('交接'));
       await _settle(tester);
       expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    }, timeout: const Timeout(Duration(seconds: 90)));
+
+    testWidgets('打卡頁晚讀到才插在最前面：已經選的分頁不會跳成別頁', (tester) async {
+      final repo = _SlowKioskRepo();
+      await _loginApp(tester, 'kiosk@x', repo);
+      expect(find.byType(PinPunchScreen, skipOffstage: false), findsNothing);
+      await tester.tap(find.text('庫存'));
+      await _settle(tester);
+      expect(_selectedTab(tester), '庫存');
+      // 登入是在真的非同步裡做的，讀打卡頁也在那邊：讓它真的跑完
+      await tester.runAsync(() async {
+        repo.gate.complete();
+        await repo.done.future;
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      });
+      await _settle(tester);
+      expect(find.byType(PinPunchScreen, skipOffstage: false), findsOneWidget, reason: '打卡分頁出現了（在後面，沒切過去）');
+      final labels = tester.widgetList<NavigationDestination>(find.byType(NavigationDestination)).map((d) => d.label).toList();
+      expect(labels.first, '打卡');
+      expect(_selectedTab(tester), '庫存', reason: '還是停在剛剛選的庫存，不會因為前面多一頁就跳到別頁');
       await tester.pumpWidget(const SizedBox());
     }, timeout: const Timeout(Duration(seconds: 90)));
 
@@ -215,7 +257,7 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     }, timeout: const Timeout(Duration(seconds: 90)));
 
-    testWidgets('員工：打卡卡片沒有掃碼打卡，有「打卡密碼」可以改自己的', (tester) async {
+    testWidgets('員工：打卡卡片沒有掃碼打卡，有「打卡密碼」可以改自己的（只能隨機產生）', (tester) async {
       SharedPreferences.setMockInitialValues({});
       final repo = await _signedIn(tester, 'staff@x');
       final m = Membership(storeId: 'yc', storeName: '隱城', role: Role.staff, displayName: '示範');
@@ -228,11 +270,18 @@ void main() {
       await _settle(tester);
       expect(find.text('重設打卡密碼・阿明'), findsOneWidget);
       expect(find.text('清除密碼'), findsNothing, reason: '員工只能改，不能清除');
-      await tester.enterText(_dialog(find.byType(TextField)), '2468');
-      await tester.tap(_dialog(find.widgetWithText(FilledButton, '儲存')));
+      expect(_dialog(find.byType(TextField)), findsNothing, reason: '自己改不能自己挑（不然試得出別人的密碼）');
+      expect(_dialog(find.text('儲存')), findsNothing);
+      await tester.tap(_dialog(find.widgetWithText(FilledButton, '隨機產生')));
       await _settle(tester);
-      expect(find.text('重設打卡密碼・阿明'), findsNothing);
-      await expectLater(repo.pinPunch('2468'), throwsA(anything), reason: '員工帳號不能用密碼打卡（只有打卡用帳號可以）');
+      expect(find.text('新的打卡密碼・阿明'), findsOneWidget);
+      final pin = tester.widgetList<Text>(_dialog(find.byType(Text))).map((t) => t.data ?? '').firstWhere((t) => RegExp(r'^[0-9]{4}$').hasMatch(t));
+      expect(find.textContaining('只顯示這一次'), findsOneWidget);
+      await tester.tap(find.text('記下了'));
+      await _settle(tester);
+      expect(find.byType(AlertDialog), findsNothing);
+      await expectLater(repo.pinSet('f0', '2468'), throwsA(anything), reason: '資料庫也擋員工自己挑');
+      await expectLater(repo.pinPunch(pin), throwsA(anything), reason: '員工帳號不能用密碼打卡（只有打卡用帳號可以）');
     }, timeout: const Timeout(Duration(seconds: 90)));
   });
 }

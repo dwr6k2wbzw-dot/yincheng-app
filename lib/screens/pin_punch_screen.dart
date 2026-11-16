@@ -315,6 +315,24 @@ Future<bool> editPunchPin(BuildContext context,
           actions: [FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('記下了'))],
         );
       }
+      // 自己改只能隨機產生（ops 0112）：自己挑的話，「這組不能用」等於知道那是別人的密碼
+      if (self) {
+        return AlertDialog(
+          title: Text('${hasPin ? '重設' : '設定'}打卡密碼・$name'),
+          content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('自己改只能隨機產生一組 4 位數，不會跟店裡別人一樣。產生後只顯示一次，忘了就再產生一組。',
+                style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+            if (err != null) ...[
+              const SizedBox(height: 8),
+              Text(err!, style: TextStyle(color: AppColors.bad)),
+            ],
+          ]),
+          actions: [
+            TextButton(onPressed: busy ? null : () => Navigator.pop(d, false), child: const Text('取消')),
+            FilledButton(onPressed: busy ? null : () => run(() => save(null)), child: const Text('隨機產生')),
+          ],
+        );
+      }
       return AlertDialog(
         title: Text('${hasPin ? '重設' : '設定'}打卡密碼・$name'),
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
