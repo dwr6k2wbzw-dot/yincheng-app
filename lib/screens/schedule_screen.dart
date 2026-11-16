@@ -576,11 +576,12 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             onDeleted: _canEdit ? () => _deletePhoto(ph, i + 1) : null,
             deleteButtonTooltipMessage: '刪掉這張',
           ),
+        // 跟照片同一種小標籤，高度一致（老闆 2026-11-17：下方按鈕大小不一）
         if (_canEdit && d.photos.length < 10)
-          OutlinedButton.icon(
-            onPressed: _uploadPhoto,
-            icon: const Icon(Icons.add_photo_alternate_outlined),
+          ActionChip(
+            avatar: const Icon(Icons.add_photo_alternate_outlined, size: 18),
             label: Text(d.photos.isEmpty ? '從相簿上傳班表照片' : '再加一張'),
+            onPressed: _uploadPhoto,
           ),
       ]),
     ]);
@@ -669,61 +670,84 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 _monthSummary(d, full),
               const SizedBox(height: 12),
               _photoRow(d),
-              if (_codeHours != null && d.people.any((p) => p.active)) ...[
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: OutlinedButton.icon(
-                    onPressed: () => _export(d),
-                    icon: const Icon(Icons.file_download_outlined),
-                    label: Text('匯出 ${_month.month} 月班表（Excel）'),
+              const SizedBox(height: 16),
+              // 下方按鈕排成同寬同高的格子（老闆 2026-11-17：原本大小不一、換行亂掉）：
+              // 先是四個班表設定，再來匯出、重新自動排（字比較長，各佔兩格）
+              _buttonGrid([
+                if (_canEdit) ...[
+                  (
+                    OutlinedButton.icon(
+                      style: _gridButtonStyle,
+                      onPressed: () => _managePeople(d),
+                      icon: const Icon(Icons.people_outline),
+                      label: const Text('班表人員'),
+                    ),
+                    false
                   ),
-                ),
-              ],
-              if (_canEdit) ...[
-                const SizedBox(height: 8),
-                Wrap(spacing: 8, runSpacing: 8, children: [
-                  OutlinedButton.icon(
-                    onPressed: () => _managePeople(d),
-                    icon: const Icon(Icons.people_outline),
-                    label: const Text('班表人員'),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: () async {
-                      await Navigator.of(context).push(MaterialPageRoute(
-                          builder: (_) => ShiftMarkOptionsScreen(membership: widget.membership, markBg: _markBg)));
-                      _reload();
-                    },
-                    icon: const Icon(Icons.schedule_outlined),
-                    label: const Text('班別／時段'),
-                  ),
-                  // 修改紀錄、整批還原（0113）
-                  OutlinedButton.icon(
-                    onPressed: () async {
-                      final changed = await Navigator.of(context).push<bool>(MaterialPageRoute(
-                          builder: (_) => ShiftHistoryScreen(membership: widget.membership, month: _month, people: d.people)));
-                      if (changed == true) _reload();
-                    },
-                    icon: const Icon(Icons.history),
-                    label: const Text('修改紀錄'),
+                  (
+                    OutlinedButton.icon(
+                      style: _gridButtonStyle,
+                      onPressed: () async {
+                        await Navigator.of(context).push(MaterialPageRoute(
+                            builder: (_) => ShiftMarkOptionsScreen(membership: widget.membership, markBg: _markBg)));
+                        _reload();
+                      },
+                      icon: const Icon(Icons.schedule_outlined),
+                      label: const Text('班別／時段'),
+                    ),
+                    false
                   ),
                   // 排班條件常駐（2026-11-16 健檢 A3：原本這個月排好後就進不去）
-                  OutlinedButton.icon(
-                    onPressed: () async {
-                      await Navigator.of(context).push(MaterialPageRoute(
-                          builder: (_) => ShiftRulesScreen(
-                              membership: widget.membership, month: _month, people: d.people, options: d.options)));
-                      _reload();
-                    },
-                    icon: const Icon(Icons.tune),
-                    label: const Text('排班條件'),
+                  (
+                    OutlinedButton.icon(
+                      style: _gridButtonStyle,
+                      onPressed: () async {
+                        await Navigator.of(context).push(MaterialPageRoute(
+                            builder: (_) => ShiftRulesScreen(
+                                membership: widget.membership, month: _month, people: d.people, options: d.options)));
+                        _reload();
+                      },
+                      icon: const Icon(Icons.tune),
+                      label: const Text('排班條件'),
+                    ),
+                    false
                   ),
-                ]),
+                  // 修改紀錄、整批還原（0113）
+                  (
+                    OutlinedButton.icon(
+                      style: _gridButtonStyle,
+                      onPressed: () async {
+                        final changed = await Navigator.of(context).push<bool>(MaterialPageRoute(
+                            builder: (_) => ShiftHistoryScreen(membership: widget.membership, month: _month, people: d.people)));
+                        if (changed == true) _reload();
+                      },
+                      icon: const Icon(Icons.history),
+                      label: const Text('修改紀錄'),
+                    ),
+                    false
+                  ),
+                ],
+                if (_codeHours != null && d.people.any((p) => p.active))
+                  (
+                    OutlinedButton.icon(
+                      style: _gridButtonStyle,
+                      onPressed: () => _export(d),
+                      icon: const Icon(Icons.file_download_outlined),
+                      label: Text('匯出 ${_month.month} 月班表（Excel）'),
+                    ),
+                    true
+                  ),
                 // 排好的月份也留一個不顯眼的「重新自動排」（老闆 2026-11-16 同意；會保留已經排好的格子）
-                if (isMonthScheduled(d, _setup) && !_month.isBefore(DateTime(DateTime.now().year, DateTime.now().month)))
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
+                if (_canEdit &&
+                    isMonthScheduled(d, _setup) &&
+                    !_month.isBefore(DateTime(DateTime.now().year, DateTime.now().month)))
+                  (
+                    // 跟其他格子同大小，但用灰字灰框，不比其他按鈕顯眼
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          foregroundColor: AppColors.muted,
+                          side: BorderSide(color: AppColors.line)),
                       onPressed: () async {
                         await Navigator.of(context).push(MaterialPageRoute(
                             builder: (_) =>
@@ -733,8 +757,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       icon: const Icon(Icons.auto_awesome_outlined, size: 18),
                       label: Text('重新自動排 ${_month.month} 月'),
                     ),
+                    true
                   ),
-              ],
+              ]),
               if (_canEdit)
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
@@ -751,6 +776,22 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           );
         },
       );
+
+  static final _gridButtonStyle = OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8));
+
+  /// 按鈕排成格子：手機 2 欄、寬一點 4 欄，每格同寬、高 48；(按鈕, true) 的佔兩格。沒有按鈕就不佔位置。
+  Widget _buttonGrid(List<(Widget, bool)> items) {
+    if (items.isEmpty) return const SizedBox.shrink();
+    return LayoutBuilder(builder: (context, box) {
+      const gap = 8.0;
+      final cols = box.maxWidth >= 520 ? 4 : 2;
+      // 取整數，四格加起來才不會因為小數點多出一點點而被擠到下一行
+      final cell = ((box.maxWidth - gap * (cols - 1)) / cols).floorToDouble();
+      return Wrap(spacing: gap, runSpacing: gap, children: [
+        for (final (button, wide) in items) SizedBox(width: wide ? cell * 2 + gap : cell, height: 48, child: button),
+      ]);
+    });
+  }
 
   Widget _legend(String m, Color? bg, String label) => Row(mainAxisSize: MainAxisSize.min, children: [
         Container(
