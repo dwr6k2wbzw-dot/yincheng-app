@@ -282,7 +282,16 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
     return f;
   }
 
-  List<PlanIssue> _precheck() => precheckPlan(
+  /// 排前檢查＋沒有可以排的班別（停用光了）也要先擋下來，不能硬排（Codex P2）
+  List<PlanIssue> _precheck() => [
+        for (final p in _planPeople())
+          if (p.marks.isEmpty)
+            PlanIssue('noMark', 0, '${p.name} 沒有可以排的班別（班別都停用了），請到「班別／時段」恢復或新增一個',
+                personId: p.id),
+        ..._precheckCore(),
+      ];
+
+  List<PlanIssue> _precheckCore() => precheckPlan(
         year: _m.year,
         month: _m.month,
         people: _planPeople(),

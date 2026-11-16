@@ -31,8 +31,14 @@ bool _planFull(ShiftPerson p, ShiftPlanSetup? s) =>
     p.isFull && !(s?.rules[p.id]?.planAsPart ?? false);
 
 /// 這家店沒設排班條件時，上班用的記號
+/// 班別清單讀得到、但班別（或時段）全部停用了 → 回空的，自動排班會先擋下來請店長處理，
+/// 不會偷偷排回已經停用的 B／BH（Codex P2）
 List<String> _defaultMarks(String storeName, bool full, ShiftOptions? o) {
   if (storeName != '小城外') return const ['V'];
+  if (o != null && o.loaded) {
+    if (full) return [for (final c in o.codes.take(2)) c.mark];
+    return o.ranges.isNotEmpty ? [o.ranges.first] : const [];
+  }
   if (full) {
     final codes = [
       for (final c in o?.codes ?? const <ShiftMarkOption>[]) c.mark
@@ -1176,6 +1182,10 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
   }
 }
 
+extension on String {
+  String ifEmpty(String other) => isEmpty ? other : this;
+}
+
 String _n(double v) =>
     v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
 
@@ -1359,7 +1369,7 @@ class _RuleEditorState extends State<_RuleEditor> {
             Text('上班排哪些班別／時段（照點的順序，第一個優先）',
                 style: const TextStyle(fontWeight: FontWeight.w600)),
             Text(
-                '沒選＝${_defaultMarks(widget.storeName, p.isFull && !_asPart, widget.options).join('、')}（有上個月的班就照上個月最常排的）',
+                '沒選＝${_defaultMarks(widget.storeName, p.isFull && !_asPart, widget.options).join('、').ifEmpty('（沒有可用的班別，請到「班別／時段」恢復或新增）')}（有上個月的班就照上個月最常排的）',
                 style:
                     TextStyle(color: AppColors.muted, fontSize: AppType.small)),
             const SizedBox(height: 6),
