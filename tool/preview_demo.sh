@@ -2,6 +2,7 @@
 # 本機示範預覽：一律用示範資料（DEMO=true）建置，不會連到正式的登入或資料庫。
 #   tool/preview_demo.sh [埠號，預設 8766]
 # 建好後開腳本最後印出的網址（/phone.html 是 390×780 手機框）；示範帳號：email 含 manager＝店長、含 staff＝員工，其他＝老闆。
+# 打卡用帳號（4 位數密碼打卡）：網址加 ?auto=1&as=kiosk（隱城）或 ?auto=1&as=kiosk-xc（小城外，打卡沒開）；示範密碼 2580＝阿哲、3691＝小魚。員工自己設密碼：?auto=1&as=staff → 班表（示範員工阿明還沒有密碼）。
 # 只給本機預覽用；正式部署（deploy.yml）自己建置，不經過這支腳本。
 set -euo pipefail
 cd "$(dirname "$0")/.."

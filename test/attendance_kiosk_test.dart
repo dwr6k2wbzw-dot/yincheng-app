@@ -62,8 +62,9 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     }, timeout: const Timeout(Duration(seconds: 90)));
 
-    testWidgets('老闆設定打卡機 → 登出、清掉頁面；按返回、離開都回不到後台', (tester) async {
-      SharedPreferences.setMockInitialValues({});
+    // 2026-11-16 起不能再新設 QR 打卡機（改密碼打卡）；已經設好的這台照樣打得開
+    testWidgets('老闆打開這台的打卡畫面 → 登出、清掉頁面；按返回、離開都回不到後台', (tester) async {
+      SharedPreferences.setMockInitialValues({kioskIdPref: _k, kioskSecretPref: 'demo-secret'});
       tester.view.physicalSize = const Size(1200, 2000);
       addTearDown(tester.view.reset);
       final repo = DemoRepository();
@@ -86,14 +87,15 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('打卡機'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('把這台設成打卡機'));
+      expect(find.text('把這台設成打卡機'), findsNothing);
+      await tester.tap(find.text('打開這台的打卡畫面'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('設定'));
+      await tester.tap(find.text('登出並打開'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       await tester.pump(const Duration(milliseconds: 300));
 
-      expect(repo.isSignedIn, isFalse, reason: '設定完要登出');
+      expect(repo.isSignedIn, isFalse, reason: '打開打卡畫面要登出');
       expect(find.byType(KioskScreen), findsOneWidget);
       expect(find.byType(HomeShell), findsNothing);
       expect(find.byType(AttendanceManageScreen), findsNothing);

@@ -1992,6 +1992,52 @@ class SupabaseRepository implements Repository {
       KioskCode.fromRow(_rpcOne(await _db.rpc('attendance_kiosk_code', params: {'p_kiosk': kioskId, 'p_secret': secret})));
 
   @override
+  Future<List<KioskAccountCandidate>> kioskAccountCandidates(String storeId) async =>
+      _rpcRows(await _db.rpc('attendance_kiosk_account_candidates', params: {'p_store': storeId}))
+          .map(KioskAccountCandidate.fromRow)
+          .toList();
+
+  @override
+  Future<void> setKioskAccount(String storeId, String userId) =>
+      _db.rpc('attendance_kiosk_account_set', params: {'p_store': storeId, 'p_user': userId});
+
+  /// 資料庫還沒套用 0112：當作沒有這個功能
+  static bool _missingFn(PostgrestException e) => e.code == 'PGRST202' || e.code == '42883';
+
+  @override
+  Future<KioskMine?> kioskMine() async {
+    final List<Map<String, dynamic>> rows;
+    try {
+      rows = _rpcRows(await _db.rpc('attendance_kiosk_mine'));
+    } on PostgrestException catch (e) {
+      if (_missingFn(e)) return null;
+      rethrow;
+    }
+    return rows.isEmpty ? null : KioskMine.fromRow(rows.first);
+  }
+
+  @override
+  Future<PinPunchResult> pinPunch(String pin) async =>
+      PinPunchResult.fromRow(_rpcOne(await _db.rpc('attendance_pin_punch', params: {'p_pin': pin})));
+
+  @override
+  Future<List<PinStatus>?> pinStatus(String storeId) async {
+    try {
+      return _rpcRows(await _db.rpc('attendance_pin_status', params: {'p_store': storeId})).map(PinStatus.fromRow).toList();
+    } on PostgrestException catch (e) {
+      if (_missingFn(e)) return null;
+      rethrow;
+    }
+  }
+
+  @override
+  Future<PinSetResult> pinSet(String personId, String? pin) async =>
+      PinSetResult.fromRow(_rpcOne(await _db.rpc('attendance_pin_set', params: {'p_person': personId, 'p_pin': pin})));
+
+  @override
+  Future<void> pinClear(String personId) => _db.rpc('attendance_pin_clear', params: {'p_person': personId});
+
+  @override
   Future<List<StaffEntry>> staffDirectory(String storeId) async =>
       _rpcRows(await _db.rpc('staff_directory', params: {'p_store': storeId})).map(StaffEntry.fromRow).toList();
 

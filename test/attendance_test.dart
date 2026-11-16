@@ -155,7 +155,7 @@ void main() {
     test('打卡歷程、補登人選的顯示文字', () {
       PunchHistoryEntry h(String a, [String? d]) => PunchHistoryEntry(at: DateTime.utc(2026), action: a, decision: d);
       expect([h('punch'), h('amendment_request'), h('amendment_approve'), h('review', 'confirmed'), h('review', 'rejected')].map((e) => e.label),
-          ['掃碼打卡', '申請補登', '核准補登', '確認', '不採用']);
+          ['打卡', '申請補登', '核准補登', '確認', '不採用']);
       expect(const AttendancePerson(personId: 'x', name: '阿傑', homeStoreName: '小城外', crossStore: true).label, '阿傑（小城外支援）');
       expect(const AttendancePerson(personId: 'y', name: '阿明').label, '阿明');
     });

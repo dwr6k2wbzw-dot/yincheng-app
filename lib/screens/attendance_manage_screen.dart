@@ -12,7 +12,8 @@ import '../services/pl_export.dart' deferred as pl;
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'attendance_screen.dart';
-import 'kiosk_screen.dart' show kioskIdPref, kioskSecretPref;
+import 'kiosk_screen.dart' show kioskIdPref;
+import 'pin_punch_screen.dart' show editPunchPin;
 
 /// 出勤管理（老闆、店長）：每天看異常清單、確認待確認的打卡、審補登、看出勤、匯出 CSV、設打卡機；
 /// 員工資料：老闆全部可改（含薪率、身分證、帳號）；店長看得到遮罩的身分證、帳號，薪率看得到、可改別人的（ops 0110），自己的只能看。
@@ -463,7 +464,7 @@ class _RawTabState extends State<_RawTab> with AutomaticKeepAliveClientMixin, _R
               for (final r in snap.data!.reversed)
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  leading: Icon(r.source == 'amendment' ? Icons.edit_calendar : Icons.qr_code_2,
+                  leading: Icon(r.source == 'amendment' ? Icons.edit_calendar : (r.source == 'pin' ? Icons.dialpad : Icons.qr_code_2),
                       color: r.awaitingReview ? AppColors.warn : (r.counted ? AppColors.good : AppColors.muted)),
                   title: Text('${r.personName}・${punchTypeLabel(r.punchType)} ${_mdHm(r.punchedAt)}'),
                   subtitle: Text([
@@ -592,41 +593,12 @@ class _KioskTabState extends State<_KioskTab> {
   String? _thisDevice;
 
   Repository get _repo => AppScope.of(context).repo;
+  bool get _owner => widget.membership.role == Role.owner;
 
   Future<List<KioskInfo>> _load() async {
     final prefs = await SharedPreferences.getInstance();
     _thisDevice = prefs.getString(kioskIdPref);
     return _repo.kiosks(widget.membership.storeId);
-  }
-
-  Future<void> _register() async {
-    final c = TextEditingController(text: '${widget.membership.storeName}吧台');
-    final name = await showDialog<String>(
-      context: context,
-      builder: (d) => AlertDialog(
-        title: const Text('把這台設成打卡機'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('這台裝置會一直顯示 QR 碼，不用登入。請在店裡固定的平板或手機上按這個。\n設定完這台會自動登出你的帳號，之後要回後台得重新登入。'),
-          TextField(controller: c, maxLength: 40, decoration: const InputDecoration(labelText: '名稱')),
-        ]),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(d), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(d, c.text.trim()), child: const Text('設定')),
-        ],
-      ),
-    );
-    c.dispose();
-    if (name == null || name.isEmpty || !mounted) return;
-    try {
-      final k = await _repo.registerKiosk(widget.membership.storeId, name);
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(kioskIdPref, k.id);
-      await prefs.setString(kioskSecretPref, k.secret);
-      if (!mounted) return;
-      await _openKiosk();
-    } catch (e) {
-      if (mounted) showMessage(context, friendlyError(e), error: true);
-    }
   }
 
   /// 換成打卡機畫面：先登出（打卡機畫面自己也會再登出一次），清掉整個頁面堆疊，按返回回不到後台
@@ -651,15 +623,63 @@ class _KioskTabState extends State<_KioskTab> {
     if (ok == true && mounted) await _openKiosk();
   }
 
+  /// 老闆：選一個店裡共用的帳號設成打卡用帳號（ops 0112）。權限照舊，登入後第一頁多一個密碼打卡
+  Future<void> _setAccount() async {
+    final List<KioskAccountCandidate> list;
+    try {
+      list = await _repo.kioskAccountCandidates(widget.membership.storeId);
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+      return;
+    }
+    if (!mounted) return;
+    final pick = await showDialog<KioskAccountCandidate>(
+      context: context,
+      builder: (d) => AlertDialog(
+        title: const Text('設定打卡用帳號'),
+        content: SizedBox(
+          width: 400,
+          child: ListView(shrinkWrap: true, children: [
+            const Text('選店裡共用的帳號。原本能用的功能都不變，登入後第一頁多一個「打卡」，員工輸入自己的 4 位數密碼打卡。這個帳號不能連到員工資料，也不能幫自己打卡。'),
+            const SizedBox(height: 8),
+            if (list.isEmpty) Text('這家店沒有可以選的帳號（老闆、店長不能設）', style: TextStyle(color: AppColors.muted)),
+            for (final c in list)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                enabled: c.blocked == null,
+                title: Text(c.displayName),
+                subtitle: Text(c.blocked ?? roleLabel(roleFrom(c.role))),
+                onTap: c.blocked == null ? () => Navigator.pop(d, c) : null,
+              ),
+          ]),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(d), child: const Text('取消'))],
+      ),
+    );
+    if (pick == null || !mounted) return;
+    try {
+      await _repo.setKioskAccount(widget.membership.storeId, pick.userId);
+      if (!mounted) return;
+      showMessage(context, '已把「${pick.displayName}」設成打卡用帳號');
+      setState(() {
+        _future = _load();
+      });
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+    }
+  }
+
   Future<void> _disable(KioskInfo k) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (d) => AlertDialog(
-        title: Text('停用「${k.name}」？'),
-        content: const Text('停用後這台的 QR 碼掃了會標「打卡機已停用」待確認。不能再開回來，要用就重新設定一台。'),
+        title: Text(k.isAccount ? '取消打卡用帳號「${k.accountName ?? k.name}」？' : '停用「${k.name}」？'),
+        content: Text(k.isAccount
+            ? '取消後這個帳號登入就沒有「打卡」頁，其他功能照舊。之前的打卡紀錄都保留。'
+            : '停用後這台的 QR 碼掃了會標「打卡機已停用」待確認。不能再開回來。'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('停用')),
+          FilledButton(onPressed: () => Navigator.pop(d, true), child: Text(k.isAccount ? '取消打卡用帳號' : '停用')),
         ],
       ),
     );
@@ -677,11 +697,14 @@ class _KioskTabState extends State<_KioskTab> {
         future: _future,
         builder: (context, snap) => ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [
           const InfoLine(
-              text: '店裡固定一台平板或手機當打卡機',
+              text: '店裡共用的帳號登入，第一頁就是密碼打卡',
               icon: Icons.info_outline,
-              detail: '打卡機每 30 秒換一個 QR 碼，碼由伺服器產生、伺服器驗證。員工掃了用自己的帳號打卡。不檢查 Wi-Fi、定位（瀏覽器讀不到 Wi-Fi 名稱，手機常用 4G），只記 IP 當參考。'),
+              detail: '員工在店裡的平板或手機輸入自己的 4 位數打卡密碼，時間一律是伺服器時間。連錯 5 次鎖 1 分鐘。'
+                  '打卡密碼在「員工資料」點人設定（老闆、店長；店長不能設自己的），員工也能在班表的打卡卡片自己設（輸入兩次確認，太好猜或跟別人重複的不能用）。'),
           Wrap(spacing: 8, runSpacing: 8, children: [
-            FilledButton.icon(onPressed: _register, icon: const Icon(Icons.add), label: const Text('把這台設成打卡機')),
+            if (_owner)
+              FilledButton.icon(
+                  onPressed: _setAccount, icon: const Icon(Icons.person_pin_outlined), label: const Text('設定打卡用帳號')),
             if (_thisDevice != null)
               OutlinedButton.icon(
                 onPressed: _confirmOpenKiosk,
@@ -695,12 +718,18 @@ class _KioskTabState extends State<_KioskTab> {
             for (final k in snap.data!)
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: Icon(Icons.tablet_mac, color: k.active ? AppColors.good : AppColors.muted),
-                title: Text('${k.name}${k.id == _thisDevice ? '（這台）' : ''}'),
+                leading: Icon(k.isAccount ? Icons.person_pin_outlined : Icons.tablet_mac,
+                    color: k.active ? AppColors.good : AppColors.muted),
+                title: Text(k.isAccount
+                    ? '打卡用帳號：${k.accountName ?? k.name}'
+                    : '${k.name}${k.id == _thisDevice ? '（這台）' : ''}'),
                 subtitle: Text(k.active
                     ? (k.lastSeenAt == null ? '還沒開過打卡畫面' : '最後連線 ${_mdHm(k.lastSeenAt!)}')
-                    : '已停用'),
-                trailing: k.active ? TextButton(onPressed: () => _disable(k), child: const Text('停用')) : null,
+                    : (k.isAccount ? '已取消' : '已停用')),
+                // 打卡用帳號只有老闆能取消（店長取消會被資料庫擋）
+                trailing: k.active && (!k.isAccount || _owner)
+                    ? TextButton(onPressed: () => _disable(k), child: Text(k.isAccount ? '取消' : '停用'))
+                    : null,
               ),
         ]),
       );
@@ -716,23 +745,32 @@ class _StaffTab extends StatefulWidget {
 }
 
 class _StaffTabState extends State<_StaffTab> {
-  late Future<List<StaffEntry>> _future = _load();
+  late Future<(List<StaffEntry>, Map<String, PinStatus>?)> _future = _load();
 
-  Future<List<StaffEntry>> _load() => AppScope.of(context).repo.staffDirectory(widget.membership.storeId);
+  /// 員工資料＋打卡密碼設了沒（ops 0112；資料庫還沒更新就不顯示密碼）
+  Future<(List<StaffEntry>, Map<String, PinStatus>?)> _load() async {
+    final repo = AppScope.of(context).repo, store = widget.membership.storeId;
+    final pins = repo.pinStatus(store).then<List<PinStatus>?>((v) => v, onError: (_) => null);
+    final list = await repo.staffDirectory(store);
+    final p = await pins;
+    return (list, p == null ? null : {for (final x in p) x.personId: x});
+  }
 
   @override
-  Widget build(BuildContext context) => FutureBuilder<List<StaffEntry>>(
+  Widget build(BuildContext context) => FutureBuilder<(List<StaffEntry>, Map<String, PinStatus>?)>(
         future: _future,
         builder: (context, snap) {
           if (snap.hasError) return ErrorView(message: friendlyError(snap.error!), onRetry: () => setState(() => _future = _load()));
           if (!snap.hasData) return const Center(child: CircularProgressIndicator());
           final owner = widget.membership.role == Role.owner;
+          final (staff, pins) = snap.data!;
           return ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [
             InfoLine(
                 text: owner ? '老闆看得到全部（含薪資、身分證、帳號）' : '身分證、帳號只顯示遮罩；薪資看得到、改得了別人的，自己的只能看',
                 icon: Icons.lock_outline,
-                detail: '員工本人只看得到自己的資料。薪資用生效日記歷史：調薪＝新增一筆較晚的生效日，已生效的不能改、不能刪。'),
-            for (final s in snap.data!)
+                detail: '員工本人只看得到自己的資料。薪資用生效日記歷史：調薪＝新增一筆較晚的生效日，已生效的不能改、不能刪。'
+                    '${pins == null ? '' : '點人可以設定打卡密碼（4 位數，同店不重複，不能太好猜；員工也能自己設；店長的由老闆設定）。'}'),
+            for (final s in staff)
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: Text('${s.name}${s.active ? '' : '（停用）'}${s.leaveDate != null ? '・已離職' : ''}'),
@@ -741,12 +779,18 @@ class _StaffTabState extends State<_StaffTab> {
                   if (s.phone != null) s.phone!,
                   if (s.canSeePay && s.rateAmount != null) '${payTypeLabel(s.ratePayType)} ${ntd(s.rateAmount!)}',
                   bindingLabel(s),
+                  if (pins?[s.personId] case final p?) p.hasPin ? '打卡密碼已設定' : '打卡密碼未設定',
                 ].join('・')),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () async {
                   await Navigator.of(context).push(MaterialPageRoute(
-                      builder: (_) => StaffEditScreen(membership: widget.membership, entry: s)));
-                  if (mounted) setState(() => _future = _load());
+                      builder: (_) => StaffEditScreen(membership: widget.membership, entry: s, pin: pins?[s.personId])));
+                  // 回來重新讀（打卡密碼設了沒也會變）；setState 不能回傳 Future
+                  if (mounted) {
+                    setState(() {
+                      _future = _load();
+                    });
+                  }
                 },
               ),
           ]);
@@ -759,9 +803,10 @@ String bindingLabel(StaffEntry s) => s.userId == null
     : '帳號 ${s.userName ?? '—'}（${s.userVerified ? '已確認' : '待老闆確認'}）';
 
 class StaffEditScreen extends StatefulWidget {
-  const StaffEditScreen({super.key, required this.membership, required this.entry});
+  const StaffEditScreen({super.key, required this.membership, required this.entry, this.pin});
   final Membership membership;
   final StaffEntry entry;
+  final PinStatus? pin; // 打卡密碼設了沒（ops 0112）；null＝資料庫還沒更新，不顯示
   @override
   State<StaffEditScreen> createState() => _StaffEditScreenState();
 }
@@ -777,6 +822,7 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
   late DateTime? _leave = widget.entry.leaveDate;
   late String? _payType = widget.entry.payType;
   late bool _verified = widget.entry.userVerified;
+  late bool? _hasPin = widget.pin?.hasPin;
   Future<List<PayRate>>? _rates;
   bool _saving = false;
 
@@ -856,6 +902,33 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
       else if (!_verified)
         Text('只有老闆能確認', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
     ]);
+  }
+
+  /// 打卡密碼：已設定／未設定（看不到密碼本身）；老闆、店長可設定、重設、清除，店長的由老闆設定
+  Widget _pinRow() {
+    final p = widget.pin!;
+    final canClear = p.canSet && (_owner || widget.membership.role == Role.manager);
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(Icons.dialpad, color: _hasPin! ? AppColors.good : AppColors.muted),
+      title: Text(_hasPin! ? '打卡密碼：已設定' : '打卡密碼：未設定'),
+      subtitle: Text(p.canSet
+          ? '4 位數字，同一家店不能重複；設好之後誰都看不到'
+          : (p.mine ? '店長的打卡密碼請老闆設定' : '只有老闆、店長能設定')),
+      trailing: !p.canSet
+          ? null
+          : OutlinedButton(
+              onPressed: () async {
+                final changed = await editPunchPin(context,
+                    personId: p.personId, name: widget.entry.name, hasPin: _hasPin!, canClear: canClear, self: p.mine);
+                if (!changed || !mounted) return;
+                // 重新讀一次設了沒（清除、設定都會改）
+                final fresh = (await _repo.pinStatus(widget.membership.storeId))?.where((x) => x.personId == p.personId).firstOrNull;
+                if (mounted && fresh != null) setState(() => _hasPin = fresh.hasPin);
+              },
+              child: Text(_hasPin! ? '重設' : '設定'),
+            ),
+    );
   }
 
   Future<void> _save() async {
@@ -965,6 +1038,7 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
       appBar: AppBar(title: Text(e.name)),
       body: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [
         _binding(),
+        if (widget.pin != null) _pinRow(),
         const Divider(),
         TextField(controller: _phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: '電話')),
         TextField(controller: _ec, decoration: const InputDecoration(labelText: '緊急聯絡人')),

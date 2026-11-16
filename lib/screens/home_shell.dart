@@ -12,6 +12,7 @@ import 'dashboard_screen.dart';
 import 'members_screen.dart';
 import 'handover_screen.dart';
 import 'notifications_screen.dart';
+import 'pin_punch_screen.dart';
 import 'purchases_screen.dart';
 import 'revenue_screen.dart';
 import 'stock_counts_screen.dart';
@@ -24,14 +25,15 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> with SingleTickerProviderStateMixin {
-  int _tab = 0;
+  // 選到哪一頁記分頁名稱、不記位置：打卡頁（ops 0112）是背景讀到才插在最前面，原本選的頁不會跳成別頁
+  String? _tabLabel;
   // 切換分頁時整頁淡入（不重建頁面，各頁的捲動位置、輸入都保留）
   late final AnimationController _fade = AnimationController(vsync: this, duration: AppMotion.fast, value: 1);
   late final Animation<double> _fadeCurve = CurvedAnimation(parent: _fade, curve: AppMotion.curve);
 
-  void _go(int i) {
-    if (i == _tab) return;
-    setState(() => _tab = i);
+  void _go(String label) {
+    if (label == _tabLabel) return;
+    setState(() => _tabLabel = label);
     _fade.forward(from: 0);
   }
 
@@ -90,7 +92,14 @@ class _HomeShellState extends State<HomeShell> with SingleTickerProviderStateMix
     }
     // 以店家 id 當 key：切換店家時各分頁重新載入
     // 營收分頁只給老闆／店長（資料庫也只允許這兩種角色讀寫營收）
+    // 打卡用帳號（ops 0112）：第一頁是密碼打卡，其他分頁照原本的權限
+    final kiosk = state.kiosk;
     final tabs = <(Widget, NavigationDestination)>[
+      if (kiosk != null && kiosk.storeId == m.storeId)
+        (
+          PinPunchScreen(key: ValueKey('pin-${m.storeId}'), kiosk: kiosk),
+          const NavigationDestination(icon: Icon(Icons.dialpad), selectedIcon: Icon(Icons.dialpad), label: '打卡'),
+        ),
       if (m.isPartTime) ...[
         (
           DashboardScreen(key: ValueKey('d-${m.storeId}'), membership: m),
@@ -126,16 +135,16 @@ class _HomeShellState extends State<HomeShell> with SingleTickerProviderStateMix
       ),
       ],
     ];
-    int? scheduleTab;
-    if (AppConfig.scheduleStores.contains(m.storeName)) {
-      scheduleTab = tabs.length;
+    final hasSchedule = AppConfig.scheduleStores.contains(m.storeName);
+    if (hasSchedule) {
       tabs.add((
         ScheduleScreen(key: ValueKey('sc-${m.storeId}'), membership: m),
         const NavigationDestination(
             icon: Icon(Icons.calendar_month_outlined), selectedIcon: Icon(Icons.calendar_month_outlined), label: '班表'),
       ));
     }
-    final tab = _tab.clamp(0, tabs.length - 1);
+    final labels = [for (final t in tabs) t.$2.label];
+    final tab = labels.indexOf(_tabLabel ?? '').clamp(0, tabs.length - 1);
     return Scaffold(
       appBar: AppBar(
         title: _StoreSwitcher(state: state),
@@ -144,7 +153,7 @@ class _HomeShellState extends State<HomeShell> with SingleTickerProviderStateMix
           NotificationBell(
             key: ValueKey('bell-${m.storeId}'),
             membership: m,
-            onOpenSchedule: scheduleTab == null ? null : () => _go(scheduleTab!),
+            onOpenSchedule: hasSchedule ? () => _go('班表') : null,
           ),
           PopupMenuButton<String>(
             tooltip: '更多',
@@ -207,7 +216,7 @@ class _HomeShellState extends State<HomeShell> with SingleTickerProviderStateMix
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: tab,
-        onDestinationSelected: _go,
+        onDestinationSelected: (i) => _go(labels[i]),
         destinations: [for (final t in tabs) t.$2],
       ),
     );

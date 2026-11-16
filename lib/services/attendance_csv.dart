@@ -32,7 +32,7 @@ String buildAttendanceCsv(List<AttendanceExportRow> rows) {
         punchTypeLabel(r.punchType),
         time.format(toTaipei(r.punchedAt)),
         r.storeName,
-        r.source == 'amendment' ? '補登' : 'QR',
+        switch (r.source) { 'amendment' => '補登', 'pin' => '密碼', _ => 'QR' },
         r.status == 'pending' ? '待確認' : '正常',
         r.flags.split(' ').where((f) => f.isNotEmpty).map(punchFlagLabel).join('、'),
         switch (r.review) { 'confirmed' => '已確認', 'rejected' => '不採用', _ => '' },
