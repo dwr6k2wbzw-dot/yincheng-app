@@ -21,7 +21,7 @@ List<String> storeMarks(String store, ShiftOptions? o) {
 Map<String, String> storeCodeTimes(String store, ShiftOptions? o) => {
       ...?AppConfig.shiftCodeTimes[store],
       if (o != null && o.loaded)
-        for (final c in o.codes) c.mark: c.timeRange ?? '',
+        for (final c in o.allCodes) c.mark: c.timeRange ?? '',
     };
 
 /// 以時數統計的店家（小城外）：班別 → 時數；隱城看天數 → null
@@ -31,10 +31,14 @@ Map<String, double>? storeCodeHours(String store, ShiftOptions? o) {
   return {
     ...cfg,
     if (o != null && o.loaded)
-      for (final c in o.codes)
+      for (final c in o.allCodes)
         if (c.timeRange != null) c.mark: ShiftMonth.hoursOf(c.timeRange, const {}),
   };
 }
+
+/// 停用的班別（0113）：已經排過的格子照舊顯示、照算時數，但新的排班不能再用
+Set<String> hiddenCodes(ShiftOptions? o) =>
+    {if (o != null && o.loaded) for (final c in o.allCodes) if (c.hidden) c.mark};
 
 /// 兼職時段選項
 List<String> storeRanges(String store, ShiftOptions? o) {

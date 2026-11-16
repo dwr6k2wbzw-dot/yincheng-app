@@ -809,7 +809,9 @@ class ShiftMarkOption {
   final String mark;
   final String? timeRange;
   final int sortOrder;
-  const ShiftMarkOption({this.id = '', required this.kind, required this.mark, this.timeRange, this.sortOrder = 0});
+  final bool hidden; // 0113：停用（排過的班別不能刪、不能改時段；選單不出現，舊格子時數照算）
+  const ShiftMarkOption(
+      {this.id = '', required this.kind, required this.mark, this.timeRange, this.sortOrder = 0, this.hidden = false});
   bool get isCode => kind == 'code';
   factory ShiftMarkOption.fromRow(Map<String, dynamic> r) => ShiftMarkOption(
         id: r['id'] as String,
@@ -817,6 +819,7 @@ class ShiftMarkOption {
         mark: r['mark'] as String,
         timeRange: r['time_range'] as String?,
         sortOrder: (r['sort_order'] as num?)?.toInt() ?? 0,
+        hidden: r['hidden'] == true,
       );
 }
 
@@ -824,8 +827,62 @@ class ShiftOptions {
   final bool loaded; // false＝讀不到（照 App 內建設定）
   final List<ShiftMarkOption> items;
   const ShiftOptions(this.items, {this.loaded = true});
-  List<ShiftMarkOption> get codes => items.where((x) => x.isCode).toList();
-  List<String> get ranges => [for (final x in items) if (!x.isCode) x.mark];
+  /// 選單用：停用的班別不列
+  List<ShiftMarkOption> get codes => items.where((x) => x.isCode && !x.hidden).toList();
+  /// 算時數、說明用：含停用的（舊格子時數照算）
+  List<ShiftMarkOption> get allCodes => items.where((x) => x.isCode).toList();
+  List<String> get ranges => [for (final x in items) if (!x.isCode && !x.hidden) x.mark];
+}
+
+/// 班表一格的修改紀錄（0113；只有老闆店長讀得到）
+class ShiftChange {
+  final String changeId; // 同一次修改（App 一次請求）
+  final DateTime at;
+  final String? actorName;
+  final String source; // manual／plan（自動排班公布）／photo（照片套用）／undo（還原）
+  final String personId;
+  final DateTime workDate;
+  final String? before;
+  final String? after;
+  const ShiftChange(
+      {required this.changeId,
+      required this.at,
+      this.actorName,
+      required this.source,
+      required this.personId,
+      required this.workDate,
+      this.before,
+      this.after});
+  factory ShiftChange.fromRow(Map<String, dynamic> r) => ShiftChange(
+        changeId: r['change_id'] as String,
+        at: DateTime.parse(r['at'] as String),
+        actorName: r['actor_name'] as String?,
+        source: r['source'] as String? ?? 'manual',
+        personId: r['person_id'] as String,
+        workDate: DateTime.parse(r['work_date'] as String),
+        before: r['before_mark'] as String?,
+        after: r['after_mark'] as String?,
+      );
+}
+
+/// 老闆替班表人員指定帳號時可以選的人（0113）
+class ShiftAccountCandidate {
+  final String userId;
+  final String name;
+  final String role;
+  final String? personId; // 目前綁在誰身上
+  final String? personName;
+  final bool verified;
+  const ShiftAccountCandidate(
+      {required this.userId, required this.name, required this.role, this.personId, this.personName, this.verified = false});
+  factory ShiftAccountCandidate.fromRow(Map<String, dynamic> r) => ShiftAccountCandidate(
+        userId: r['user_id'] as String,
+        name: (r['display_name'] as String?) ?? '',
+        role: r['role'] as String? ?? '',
+        personId: r['person_id'] as String?,
+        personName: r['person_name'] as String?,
+        verified: r['verified'] == true,
+      );
 }
 
 /// 每人每月手動填的數字

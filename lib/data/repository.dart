@@ -159,6 +159,14 @@ abstract class Repository {
   /// 班別／時段清單（0075）：id 空白＝新增
   Future<void> saveShiftMarkOption(String storeId, ShiftMarkOption o);
   Future<void> deleteShiftMarkOption(String id);
+  /// 0113：停用／恢復班別（排過的班別不能刪、不能改時段）
+  Future<void> setShiftMarkOptionHidden(String id, bool hidden);
+  /// 0113：這個月班表的修改紀錄（老闆店長）、整批還原一次修改
+  Future<List<ShiftChange>> shiftChangeHistory(String storeId, DateTime month);
+  Future<int> undoShiftChange(String storeId, String changeId);
+  /// 0113：老闆直接替班表人員指定 App 帳號（＝確認）；userId null＝解除
+  Future<void> assignShiftAccount(String personId, String? userId);
+  Future<List<ShiftAccountCandidate>> shiftAccountCandidates(String storeId);
 
   // 自動排班（0073）
   /// 這個月的排班設定：每日人力、特別日子、截止日、排班條件（員工只讀得到自己的）、大家填的想休／可上
@@ -356,7 +364,8 @@ abstract class Repository {
 String friendlyError(Object e) {
   final s = e.toString();
   final m = RegExp(r'message: ([^,]+)').firstMatch(s);
-  final msg = m?.group(1) ?? s;
+  // 0113：資料庫擋下來的訊息前面有代碼（給 App 判斷用），顯示時拿掉
+  final msg = (m?.group(1) ?? s).replaceFirst(RegExp(r'^(SHIFT_BLOCKED|SHIFT_CODE_USED|SHIFT_UNDO_CONFLICT)：'), '');
   if (msg.contains('duplicate key') && msg.contains('client_request')) return '這筆已經送出過了，不會重複新增。';
   if (msg.contains('row-level security')) return '沒有權限執行這個動作。';
   if (msg.contains('function public.payroll_')) return '資料庫還沒更新到薪資版本，請等老闆核准上線。';

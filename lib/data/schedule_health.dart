@@ -129,3 +129,27 @@ bool _hasMax(List<PlanPerson> people, ShiftMonth data,
       minFullByDay: const {},
       entries: entries,
     ).issues.any((i) => i.code == 'max' && i.personId == personId);
+
+/// 照片辨識草稿套用前：資料庫會擋的格子（那天填了指休、另一家店那天有班；0113）。
+/// 整月套用只要有一格被擋就整批不寫，所以先在 App 列出全部，讓店長知道要改哪裡。
+/// 照片上的新人員還沒有指休、也沒連到另一家店，不會被擋。
+List<String> draftConflicts({
+  required DateTime month,
+  required Map<String, Map<int, String>> entries, // 人名 → 日 → 記號
+  required List<ShiftPerson> people,
+  required ShiftPlanSetup setup,
+}) {
+  final out = <String>[];
+  final names = entries.keys.toList()..sort();
+  for (final name in names) {
+    final p = people.where((x) => x.name == name.trim()).firstOrNull;
+    if (p == null) continue;
+    final days = entries[name]!.keys.toList()..sort();
+    for (final d in days) {
+      if (!ShiftMonth.isOn(entries[name]![d])) continue;
+      if (setup.requests[p.id]?[d] == 'off') out.add('${p.name} ${month.month}/$d 填了指休');
+      if (setup.otherStoreDays[p.id]?.contains(d) ?? false) out.add('${p.name} ${month.month}/$d 另一家店已經有班');
+    }
+  }
+  return out;
+}

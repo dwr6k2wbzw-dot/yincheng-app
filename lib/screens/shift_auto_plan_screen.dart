@@ -179,12 +179,16 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
     setState(() => _offAsk = true);
   }
 
-  /// 上個月最常排的上班記號（沒設排班條件時用）
+  /// 停用的班別：新的排班不能再用（Codex P2）
+  Set<String> get _hidden => hiddenCodes(_cur?.options);
+
+  /// 上個月最常排的上班記號（沒設排班條件時用；停用的班別不算）
   List<String> _usualMarks(ShiftPerson p) {
     final c = <String, int>{};
+    final hidden = _hidden;
     for (final sm in [_prev, _cur]) {
       for (final m in (sm?.marks[p.id] ?? const <int, String>{}).values) {
-        if (_isWork(m)) c[m] = (c[m] ?? 0) + 1;
+        if (_isWork(m) && !hidden.contains(m)) c[m] = (c[m] ?? 0) + 1;
       }
     }
     final ms = c.keys.toList()..sort((a, b) => c[b]!.compareTo(c[a]!));
@@ -211,12 +215,15 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
 
   List<PlanPerson> _planPeople() {
     final s = _setup!;
+    final hidden = _hidden;
     return [
       for (final p in _people)
         () {
           final r = s.rules[p.id];
           final full = _planFull(p, s);
           final usual = _usualMarks(p);
+          // 排班條件裡選了已經停用的班別：自動排班不用它
+          final ruleMarks = [for (final m in r?.marks ?? const <String>[]) if (!hidden.contains(m)) m];
           return PlanPerson(
             id: p.id,
             name: p.name,
@@ -229,12 +236,15 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
             maxShifts: r?.maxShifts,
             maxConsecutive: r?.maxConsecutive ?? 6,
             noWeekdays: r?.noWeekdays ?? const {},
-            marks: (r?.marks.isNotEmpty ?? false)
-                ? r!.marks
+            marks: ruleMarks.isNotEmpty
+                ? ruleMarks
                 : (usual.isNotEmpty
                     ? usual
                     : _defaultMarks(_storeName, full, _cur!.options)),
-            weekdayMarks: r?.weekdayMarks ?? const {},
+            weekdayMarks: {
+              for (final e in (r?.weekdayMarks ?? const <int, String>{}).entries)
+                if (!hidden.contains(e.value)) e.key: e.value,
+            },
             preferRun: s.preferRun,
             prevRun: _tailRun(_prev, p.id),
             nextRun: _headRun(_next, p.id),
@@ -272,7 +282,16 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
     return f;
   }
 
-  List<PlanIssue> _precheck() => precheckPlan(
+  /// 排前檢查＋沒有可以排的班別（停用光了）也要先擋下來，不能硬排（Codex P2）
+  List<PlanIssue> _precheck() => [
+        for (final p in _planPeople())
+          if (p.marks.isEmpty)
+            PlanIssue('noMark', 0, '${p.name} 沒有可以排的班別（班別都停用了），請到「班別／時段」恢復或新增一個',
+                personId: p.id),
+        ..._precheckCore(),
+      ];
+
+  List<PlanIssue> _precheckCore() => precheckPlan(
         year: _m.year,
         month: _m.month,
         people: _planPeople(),
@@ -434,7 +453,7 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
                     ...storeRanges(_storeName, _cur!.options),
                     ..._usualMarks(p),
                     ...?_setup!.rules[p.id]?.weekdayMarks.values,
-                  })
+                  }.where((m) => m == cur || !_hidden.contains(m)))
                     SelectChip(
                       label: Text(m),
                       selected: m == cur,

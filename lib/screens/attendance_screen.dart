@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../app_state.dart';
 import '../data/models.dart';
@@ -90,6 +91,29 @@ class AttendanceCard extends StatefulWidget {
 class _AttendanceCardState extends State<AttendanceCard> {
   Future<AttendanceMe?>? _future;
   PinStatus? _myPin; // 自己的打卡密碼設了沒（看不到密碼本身）
+  // 班表頁第二批：打卡卡片預設收起來，班表往上移；按標題展開，記在這支手機（讀寫不到就照預設）
+  static const _openKey = 'attendance_card_open';
+  bool _open = false;
+
+  @override
+  void initState() {
+    super.initState();
+    () async {
+      try {
+        final v = (await SharedPreferences.getInstance()).getBool(_openKey) ?? false;
+        if (mounted && v != _open) setState(() => _open = v);
+      } catch (_) {}
+    }();
+  }
+
+  void _toggle() {
+    setState(() => _open = !_open);
+    () async {
+      try {
+        await (await SharedPreferences.getInstance()).setBool(_openKey, _open);
+      } catch (_) {}
+    }();
+  }
 
   @override
   void didChangeDependencies() {
@@ -215,14 +239,18 @@ class _AttendanceCardState extends State<AttendanceCard> {
             padding: const EdgeInsets.only(top: 8),
             child: SectionCard(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  Icon(Icons.dialpad, color: AppColors.primary),
-                  const SizedBox(width: 8),
-                  const Expanded(child: Text('打卡（試行）', style: TextStyle(fontSize: AppType.title, fontWeight: AppFont.heading))),
-                  if (me.personId != null)
-                    Text(me.onShift ? '上班中' : '未上班',
-                        style: TextStyle(color: me.onShift ? AppColors.good : AppColors.muted, fontSize: AppType.small)),
-                ]),
+                InkWell(
+                  onTap: _toggle,
+                  child: Row(children: [
+                    Icon(Icons.dialpad, color: AppColors.primary),
+                    const SizedBox(width: 8),
+                    const Expanded(child: Text('打卡（試行）', style: TextStyle(fontSize: AppType.title, fontWeight: AppFont.heading))),
+                    if (me.personId != null)
+                      Text(me.onShift ? '上班中' : '未上班',
+                          style: TextStyle(color: me.onShift ? AppColors.good : AppColors.muted, fontSize: AppType.small)),
+                    Icon(_open ? Icons.expand_less : Icons.expand_more, color: AppColors.muted),
+                  ]),
+                ),
                 const SizedBox(height: 6),
                 if (AppScope.of(context).kiosk?.storeId == widget.membership.storeId)
                   Text('這是店裡的打卡用帳號：打卡請用第一頁「打卡」，輸入自己的 4 位數密碼',
@@ -258,8 +286,9 @@ class _AttendanceCardState extends State<AttendanceCard> {
                     )
                   else
                     Text('你還沒有打卡密碼，請老闆設定', style: TextStyle(color: AppColors.warn, fontSize: AppType.small)),
-                const SizedBox(height: 10),
-                Wrap(spacing: 8, runSpacing: 8, children: [
+                if (_open) const SizedBox(height: 10),
+                if (_open)
+                  Wrap(spacing: 8, runSpacing: 8, children: [
                   if (me.personId != null && _myPin != null && _myPin!.canSet)
                     FilledButton.tonalIcon(
                         onPressed: () => _editPin(_myPin!), icon: const Icon(Icons.dialpad), label: const Text('打卡密碼')),
