@@ -35,21 +35,30 @@ void main() {
   final export = '匯出 $month 月班表（Excel）';
   final replan = '重新自動排 $month 月';
 
-  Future<void> pump(WidgetTester tester, Role role, double width) async {
+  Future<void> pump(WidgetTester tester, Role role, double width, {double textScale = 1}) async {
     SharedPreferences.setMockInitialValues({});
+    tester.platformDispatcher.textScaleFactorTestValue = textScale;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = Size(width, 4000); // 夠高，整頁一次排完
     addTearDown(tester.view.reset);
     final repo = _PhotoRepo();
     await tester.runAsync(() => repo.signIn('owner@x', 'x'));
     final m = Membership(storeId: 'xc', storeName: '小城外', role: role, displayName: '示範');
-    // 週格子的日期欄在測試字型下會高 1px（改版前就有，真的瀏覽器不會），不算這次的問題；其他錯誤照常讓測試失敗
+    // 改版前就有、不是這次改的地方（main 上同樣出現），不算這次的問題：
+    // 週格子的日期欄高度固定，測試字型下會高 1px、字放大時更多；字放大 2 倍時上方卡片裡有一列太寬。
+    // 其他錯誤（包括下方按鈕）照常讓測試失敗
     final orig = FlutterError.onError;
     FlutterError.onError = (d) {
       final where = d.informationCollector?.call().join('\n') ?? '';
-      if (d.exceptionAsString().contains('overflowed by 1.00 pixels on the bottom') &&
+      final msg = d.exceptionAsString();
+      if (msg.contains('A RenderFlex overflowed by') && msg.contains('pixels on the bottom') &&
           where.contains('Column ← Align ← Padding ← DecoratedBox') &&
           where.contains('GestureDetector ← Row')) {
+        return;
+      }
+      if (msg.contains('A RenderFlex overflowed by') && msg.contains('pixels on the right') &&
+          where.contains('Row ← Column ← Padding ← DecoratedBox ← ConstrainedBox ← Container ← SectionCard')) {
         return;
       }
       orig?.call(d);
@@ -94,6 +103,29 @@ void main() {
       final add = tester.getRect(find.widgetWithText(ActionChip, '再加一張'));
       expect(add.height, photo.height);
       expect(add.top, photo.top);
+    });
+  }
+
+  // 程式審查 2026-11-17：寬 552、字放大 1.3 倍時，原本固定高 48 會把換行的字切掉
+  for (final (width, scale) in [(552.0, 1.3), (640.0, 1.3), (390.0, 2.0)]) {
+    testWidgets('系統字放大 $scale 倍、寬 $width：字不會被切掉，同一列一樣大', (tester) async {
+      await pump(tester, Role.owner, width, textScale: scale);
+      final labels = [..._settings, export, replan];
+      for (final l in labels) {
+        final b = box(tester, l), t = tester.getRect(find.text(l));
+        expect(b.height, greaterThanOrEqualTo(48), reason: l);
+        expect(t.top >= b.top && t.bottom <= b.bottom && t.left >= b.left && t.right <= b.right, isTrue,
+            reason: '$l 的字 $t 超出按鈕 $b');
+      }
+      final s = [for (final l in _settings) box(tester, l)];
+      expect(s[1].top, s[0].top); // 字放大就 2 欄（每格比較寬）
+      expect(s[2].top, greaterThan(s[0].top));
+      for (final b in s) {
+        expect(b.width, s.first.width);
+      }
+      // 同一列一樣高（其中一個換行，整列一起變高）
+      expect(s[1].height, s[0].height);
+      expect(s[3].height, s[2].height);
     });
   }
 

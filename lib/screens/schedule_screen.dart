@@ -780,15 +780,42 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   static final _gridButtonStyle = OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8));
 
   /// 按鈕排成格子：手機 2 欄、寬一點 4 欄，每格同寬、高 48；(按鈕, true) 的佔兩格。沒有按鈕就不佔位置。
+  /// 系統字放大時：4 欄要更寬才用（不然字擠成兩行），字真的放不下時整列跟著變高，不會切掉字。
   Widget _buttonGrid(List<(Widget, bool)> items) {
     if (items.isEmpty) return const SizedBox.shrink();
     return LayoutBuilder(builder: (context, box) {
       const gap = 8.0;
-      final cols = box.maxWidth >= 520 ? 4 : 2;
+      final scale = MediaQuery.textScalerOf(context).scale(14) / 14;
+      final cols = box.maxWidth >= 520 * scale ? 4 : 2;
       // 取整數，四格加起來才不會因為小數點多出一點點而被擠到下一行
       final cell = ((box.maxWidth - gap * (cols - 1)) / cols).floorToDouble();
-      return Wrap(spacing: gap, runSpacing: gap, children: [
-        for (final (button, wide) in items) SizedBox(width: wide ? cell * 2 + gap : cell, height: 48, child: button),
+      // 一列一列排，同一列的按鈕一樣高（字放大換行時整列一起變高）
+      final rows = <List<(Widget, bool)>>[];
+      var used = cols;
+      for (final item in items) {
+        final span = item.$2 ? 2 : 1;
+        if (used + span > cols) {
+          rows.add([]);
+          used = 0;
+        }
+        rows.last.add(item);
+        used += span;
+      }
+      return Column(mainAxisSize: MainAxisSize.min, children: [
+        for (final (i, row) in rows.indexed)
+          Padding(
+            padding: EdgeInsets.only(top: i == 0 ? 0 : gap),
+            child: IntrinsicHeight(
+              child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                for (final (j, (button, wide)) in row.indexed) ...[
+                  if (j > 0) const SizedBox(width: gap),
+                  ConstrainedBox(
+                      constraints: BoxConstraints.tightFor(width: wide ? cell * 2 + gap : cell).copyWith(minHeight: 48),
+                      child: button),
+                ],
+              ]),
+            ),
+          ),
       ]);
     });
   }
