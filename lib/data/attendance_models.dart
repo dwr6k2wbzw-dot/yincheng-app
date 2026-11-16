@@ -288,7 +288,11 @@ class PinStatus {
       );
 }
 
-/// 設定打卡密碼的結果：ok（隨機產生時 pin 只在這次看得到）／taken（跟別人重複）／limited（重複太多次）
+/// 太好猜的打卡密碼：四個相同數字、連號（往上或往下）。跟資料庫 app.attendance_pin_weak 同一條規則（ops 0112）
+bool isWeakPunchPin(String pin) =>
+    pin.length == 4 && (pin == pin[0] * 4 || '0123456789'.contains(pin) || '9876543210'.contains(pin));
+
+/// 設定打卡密碼的結果：ok（隨機產生時 pin 只在這次看得到）／rejected（太好猜或跟別人重複，故意不分）／limited（重複太多次）
 class PinSetResult {
   final String result;
   final String? pin;

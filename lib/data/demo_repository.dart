@@ -1504,8 +1504,8 @@ class DemoRepository implements Repository {
         id: id, name: '示範公用帳號', active: true, createdAt: DateTime.now(), accountUserId: userId, accountName: '示範公用帳號'));
   }
 
-  // 示範打卡密碼（虛構）：阿明 1234、小魚 5678；正式資料庫只存雜湊
-  final _pins = <String, String>{'f0': '1234', 'p0': '5678'};
+  // 示範打卡密碼（虛構）：阿哲 2580、小魚 3691；阿明（示範員工自己）還沒設，班表頁會請他先設定。正式資料庫只存雜湊
+  final _pins = <String, String>{'f2': '2580', 'p0': '3691'};
   final _pinLast = <String, String>{}; // 每個人上一次打的是上班還是下班
   final _pinPunches = <AttendanceExportRow>[];
   int _pinFails = 0;
@@ -1538,7 +1538,7 @@ class DemoRepository implements Repository {
         return PinPunchResult(result: 'locked', lockedUntil: _pinLockedUntil, message: '密碼連錯 5 次，請 1 分鐘後再試');
       }
       return PinPunchResult(
-          result: 'wrong', remaining: 5 - _pinFails, message: '密碼不對，還可以試 ${5 - _pinFails} 次。還沒設定密碼的人，請找店長設定打卡密碼');
+          result: 'wrong', remaining: 5 - _pinFails, message: '密碼不對，還可以試 ${5 - _pinFails} 次。還沒有打卡密碼的人，請在自己的 App 班表頁設定');
     }
     _pinFails = 0;
     final name = (await shiftMonth('yc', now)).people.firstWhere((p) => p.id == who).name;
@@ -1572,13 +1572,15 @@ class DemoRepository implements Repository {
   @override
   Future<PinSetResult> pinSet(String personId, String? pin) async {
     if (_isManager && personId == 'f0') throw Exception('message: 店長的打卡密碼請老闆設定,');
-    // 員工改自己的只能隨機產生（ops 0112）
-    if (_isStaff && pin != null) throw Exception('message: 自己改打卡密碼只能按「隨機產生」,');
+    if (_isStaff && personId != 'f0') throw Exception('message: 沒有權限設定這個人的打卡密碼,');
     if (pin != null && !RegExp(r'^[0-9]{4}$').hasMatch(pin)) throw Exception('message: 打卡密碼要是 4 位數字,');
+    // 太好猜、跟別人重複都只說「不能用」（同 ops 0112）
     final taken = _pins.entries.any((e) => e.key != personId && e.value == pin);
-    if (taken) return const PinSetResult(result: 'taken', message: '這組密碼不能用，請換一組');
+    if (pin != null && (taken || isWeakPunchPin(pin))) {
+      return const PinSetResult(result: 'rejected', message: '這組密碼不能用，請換一組');
+    }
     var v = pin;
-    while (v == null || _pins.entries.any((e) => e.key != personId && e.value == v)) {
+    while (v == null || isWeakPunchPin(v) || _pins.entries.any((e) => e.key != personId && e.value == v)) {
       v = (1000 + DateTime.now().microsecond % 9000).toString();
     }
     _pins[personId] = v;

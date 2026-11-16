@@ -239,7 +239,25 @@ class _AttendanceCardState extends State<AttendanceCard> {
                           : '${me.personName ?? ''}・上次${punchTypeLabel(me.lastPunchType ?? 'in')} ${_taipeiMdHm(last)}',
                       style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
                 if (me.personId != null && _myPin != null && !_myPin!.hasPin)
-                  Text('你還沒有打卡密碼，請找店長設定打卡密碼', style: TextStyle(color: AppColors.warn, fontSize: AppType.small)),
+                  if (_myPin!.canSet)
+                    // 老闆 2026-11-16：員工自己設密碼。沒設的人一定要看到
+                    Container(
+                      margin: const EdgeInsets.only(top: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                          color: AppColors.warn.withValues(alpha: 0.12),
+                          border: Border.all(color: AppColors.warn),
+                          borderRadius: BorderRadius.circular(AppRadius.sm)),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text('請先設定打卡密碼',
+                            style: TextStyle(color: AppColors.warn, fontSize: AppType.title, fontWeight: AppFont.heading)),
+                        const SizedBox(height: 2),
+                        Text('按下面「打卡密碼」自己設 4 位數，之後在店裡的打卡平板輸入就能打卡',
+                            style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+                      ]),
+                    )
+                  else
+                    Text('你還沒有打卡密碼，請老闆設定', style: TextStyle(color: AppColors.warn, fontSize: AppType.small)),
                 const SizedBox(height: 10),
                 Wrap(spacing: 8, runSpacing: 8, children: [
                   if (me.personId != null && _myPin != null && _myPin!.canSet)

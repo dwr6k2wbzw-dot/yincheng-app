@@ -700,7 +700,7 @@ class _KioskTabState extends State<_KioskTab> {
               text: '店裡共用的帳號登入，第一頁就是密碼打卡',
               icon: Icons.info_outline,
               detail: '員工在店裡的平板或手機輸入自己的 4 位數打卡密碼，時間一律是伺服器時間。連錯 5 次鎖 1 分鐘。'
-                  '打卡密碼在「員工資料」點人設定（老闆、店長；店長不能設自己的），員工也能在班表的打卡卡片改自己的。'),
+                  '打卡密碼在「員工資料」點人設定（老闆、店長；店長不能設自己的），員工也能在班表的打卡卡片自己設（輸入兩次確認，太好猜或跟別人重複的不能用）。'),
           Wrap(spacing: 8, runSpacing: 8, children: [
             if (_owner)
               FilledButton.icon(
@@ -769,7 +769,7 @@ class _StaffTabState extends State<_StaffTab> {
                 text: owner ? '老闆看得到全部（含薪資、身分證、帳號）' : '身分證、帳號只顯示遮罩；薪資看得到、改得了別人的，自己的只能看',
                 icon: Icons.lock_outline,
                 detail: '員工本人只看得到自己的資料。薪資用生效日記歷史：調薪＝新增一筆較晚的生效日，已生效的不能改、不能刪。'
-                    '${pins == null ? '' : '點人可以設定打卡密碼（4 位數，同店不重複；店長的由老闆設定）。'}'),
+                    '${pins == null ? '' : '點人可以設定打卡密碼（4 位數，同店不重複，不能太好猜；員工也能自己設；店長的由老闆設定）。'}'),
             for (final s in staff)
               ListTile(
                 contentPadding: EdgeInsets.zero,

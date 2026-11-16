@@ -223,7 +223,7 @@ class _PinPunchScreenState extends State<PinPunchScreen> {
         ),
       ]),
       const SizedBox(height: 12),
-      Text('還沒有打卡密碼的人，請找店長設定', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+      Text('還沒有打卡密碼的人，請在自己的 App 班表頁設定', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
     ]);
   }
 }
@@ -258,12 +258,14 @@ class _Key extends StatelessWidget {
       );
 }
 
-/// 設定／重設打卡密碼（老闆、店長在員工資料；員工在班表的打卡卡片改自己的）。
+/// 設定／重設打卡密碼（老闆、店長在員工資料；員工在班表的打卡卡片設自己的）。
+/// 自己輸入要打兩次確認，也可以隨機產生。太好猜、跟別人重複都由資料庫擋（ops 0112），重複只說「不能用」。
 /// 密碼只存雜湊：設好之後誰都看不到；隨機產生的只在這次顯示。有改到回 true
 Future<bool> editPunchPin(BuildContext context,
     {required String personId, required String name, required bool hasPin, bool canClear = false, bool self = false}) async {
   final repo = AppScope.of(context).repo;
   final c = TextEditingController();
+  final c2 = TextEditingController();
   String? err, shown;
   var busy = false;
   final changed = await showDialog<bool>(
@@ -299,7 +301,11 @@ Future<bool> editPunchPin(BuildContext context,
       }
 
       Future<String?> save(String? pin) async {
-        if (pin != null && !RegExp(r'^[0-9]{4}$').hasMatch(pin)) return '打卡密碼要是 4 位數字';
+        if (pin != null) {
+          if (!RegExp(r'^[0-9]{4}$').hasMatch(pin)) return '打卡密碼要是 4 位數字';
+          if (pin != c2.text.trim()) return '兩次輸入的不一樣，請再輸入一次';
+          if (isWeakPunchPin(pin)) return '四個相同數字或連號（像 1111、1234、4321）太好猜，請換一組';
+        }
         final r = await repo.pinSet(personId, pin);
         if (!r.ok) return r.message;
         shown = r.pin; // 隨機產生的才有
@@ -317,28 +323,14 @@ Future<bool> editPunchPin(BuildContext context,
           actions: [FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('記下了'))],
         );
       }
-      // 自己改只能隨機產生（ops 0112）：自己挑的話，「這組不能用」等於知道那是別人的密碼
-      if (self) {
-        return AlertDialog(
-          title: Text('${hasPin ? '重設' : '設定'}打卡密碼・$name'),
-          content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('自己改只能隨機產生一組 4 位數，不會跟店裡別人一樣。產生後只顯示一次，忘了就再產生一組。',
-                style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
-            if (err != null) ...[
-              const SizedBox(height: 8),
-              Text(err!, style: TextStyle(color: AppColors.bad)),
-            ],
-          ]),
-          actions: [
-            TextButton(onPressed: busy ? null : () => Navigator.pop(d, false), child: const Text('取消')),
-            FilledButton(onPressed: busy ? null : () => run(() => save(null)), child: const Text('隨機產生')),
-          ],
-        );
-      }
+      void submit() => run(() => save(c.text.trim()));
       return AlertDialog(
         title: Text('${hasPin ? '重設' : '設定'}打卡密碼・$name'),
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('4 位數字，同一家店不能跟別人一樣。設好之後誰都看不到密碼，忘了就重設。',
+          Text(
+              self
+                  ? '自己設 4 位數，輸入兩次確認。不能用四個相同數字或連號，也不能跟店裡別人一樣。設好之後誰都看不到，忘了就再設一次；不想自己想可以按「隨機產生」。'
+                  : '4 位數字，輸入兩次確認。不能用四個相同數字或連號，同一家店不能跟別人一樣。設好之後誰都看不到密碼，忘了就重設。',
               style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
           TextField(
             controller: c,
@@ -347,8 +339,17 @@ Future<bool> editPunchPin(BuildContext context,
             keyboardType: TextInputType.number,
             maxLength: 4,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            decoration: InputDecoration(labelText: '新的打卡密碼', errorText: err, errorMaxLines: 3),
-            onSubmitted: busy ? null : (_) => run(() => save(c.text.trim())),
+            textInputAction: TextInputAction.next,
+            decoration: const InputDecoration(labelText: '新的打卡密碼'),
+          ),
+          TextField(
+            controller: c2,
+            obscureText: true,
+            keyboardType: TextInputType.number,
+            maxLength: 4,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            decoration: InputDecoration(labelText: '再輸入一次', errorText: err, errorMaxLines: 3),
+            onSubmitted: busy ? null : (_) => submit(),
           ),
         ]),
         actions: [
@@ -363,7 +364,7 @@ Future<bool> editPunchPin(BuildContext context,
                 child: const Text('清除密碼')),
           TextButton(onPressed: busy ? null : () => Navigator.pop(d, false), child: const Text('取消')),
           OutlinedButton(onPressed: busy ? null : () => run(() => save(null)), child: const Text('隨機產生')),
-          FilledButton(onPressed: busy ? null : () => run(() => save(c.text.trim())), child: const Text('儲存')),
+          FilledButton(onPressed: busy ? null : submit, child: const Text('儲存')),
         ],
       );
     }),

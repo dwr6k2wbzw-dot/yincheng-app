@@ -55,9 +55,18 @@ void main() {
     expect(empty.canSet, isFalse);
 
     expect(PinSetResult.fromRow({'result': 'ok', 'pin': '4821'}).pin, '4821');
-    final taken = PinSetResult.fromRow({'result': 'taken', 'message': '這組密碼不能用，請換一組'});
-    expect(taken.ok, isFalse);
-    expect(taken.pin, isNull);
+    final rejected = PinSetResult.fromRow({'result': 'rejected', 'message': '這組密碼不能用，請換一組'});
+    expect(rejected.ok, isFalse);
+    expect(rejected.pin, isNull);
+  });
+
+  test('太好猜的打卡密碼：四個相同數字、連號（往上、往下），跟資料庫同一條規則', () {
+    for (final p in ['0000', '1111', '9999', '0123', '1234', '6789', '9876', '4321', '3210']) {
+      expect(isWeakPunchPin(p), isTrue, reason: p);
+    }
+    for (final p in ['2580', '3691', '1593', '1235', '1122', '0987', '8901', '2468']) {
+      expect(isWeakPunchPin(p), isFalse, reason: p);
+    }
   });
 
   test('KioskInfo：有綁帳號＝打卡用帳號', () {
