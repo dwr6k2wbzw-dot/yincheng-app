@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../app_state.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
+import '../data/schedule_health.dart';
 import '../data/shift_marks.dart';
 import '../services/pl_export.dart' deferred as pl;
 import '../services/shift_export.dart' deferred as sx;
@@ -55,6 +56,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   int _week = 0; // 第幾週（0 起算，以週日為一週開始）
   late Future<ShiftMonth> _future;
   ShiftMonth? _data;
+  ShiftPlanSetup? _setup; // 每天要幾人、指休等（讀不到就是 null，不影響看班表）
+  int _claimSeq = 0; // 選了「我是誰」之後讓打卡卡片重新讀
   bool _started = false;
 
   bool get _canEdit => widget.membership.isManager;
@@ -84,8 +87,16 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   Future<ShiftMonth> _load() async {
     // 切月份時，上一個月份的資料比較晚回來也不能蓋掉現在看的月份（2026-11-13 健檢）
     final m = _month;
-    final d = await _repo.shiftMonth(_store, m);
-    if (m == _month) _data = d;
+    final r = await Future.wait<Object?>([
+      _repo.shiftMonth(_store, m),
+      // 排班設定只拿來判斷「排好了沒」和標出缺人的日子；讀不到不擋班表（2026-11-16 健檢）
+      _repo.shiftPlanSetup(_store, m).then<ShiftPlanSetup?>((v) => v, onError: (_) => null),
+    ]);
+    final d = r[0] as ShiftMonth;
+    if (m == _month) {
+      _data = d;
+      _setup = r[1] as ShiftPlanSetup?;
+    }
     return d;
   }
 
@@ -114,6 +125,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   void _shiftMonth(int n) {
     _month = DateTime(_month.year, _month.month + n);
     _data = null; // 新月份的資料回來以前先轉圈，不拿舊月份的資料配新月份的日期
+    _setup = null;
     _week = _weekOf(bizToday());
     _reload();
   }
@@ -171,6 +183,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     );
     if (picked == null || picked == current || (picked.isEmpty && current == null)) return;
     final mark = picked.isEmpty ? null : picked;
+    if (ShiftMonth.isOn(mark) && !await _checkEdit(p, day, mark!)) return;
     // 先改畫面，再存資料庫；失敗就重新載入
     setState(() {
       final m = _data!.marks.putIfAbsent(p.id, () => {});
@@ -186,6 +199,132 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       if (mounted) showMessage(context, friendlyError(e), error: true);
       _reload();
     }
+  }
+
+  /// 排上班前先檢查（2026-11-16 健檢 B1）：指休的日子、另一家店那天有班＝不能存；
+  /// 違反排班條件（固定不排的星期、連上太多、不能同一天…）＝提醒後還是可以存。
+  /// 每次都重新讀指休和另一家店的班，才不會用到舊的。
+  Future<bool> _checkEdit(ShiftPerson p, int day, String mark) async {
+    final m = _month;
+    ShiftPlanSetup? setup;
+    try {
+      setup = await _repo.shiftPlanSetup(_store, m);
+    } catch (_) {
+      setup = null;
+    }
+    if (!mounted || m != _month || _data == null) return false;
+    if (setup == null) {
+      return await _confirm('沒辦法檢查', '讀不到指休和另一家店的班（可能沒網路），這次沒辦法檢查。還是要存嗎？', '還是要存');
+    }
+    setState(() => _setup = setup);
+    final issues = editIssues(data: _data!, setup: setup, personId: p.id, day: day, mark: mark);
+    final hard = [for (final i in issues) if (i.level == 0) i.text];
+    if (hard.isNotEmpty) {
+      await showDialog<void>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: const Text('這格不能排上班'),
+          content: Text('${hard.map((t) => '・$t').join('\n')}\n\n'
+              '${issues.any((i) => i.code == 'off') ? '如果他那天真的可以來，請先到「填指休」把那天拿掉。' : '請先跟另一家店確認，把那邊的班改掉。'}'),
+          actions: [FilledButton(onPressed: () => Navigator.pop(c), child: const Text('知道了'))],
+        ),
+      );
+      return false;
+    }
+    final soft = [for (final i in issues) if (i.level == 1) i.text];
+    if (soft.isEmpty) return true;
+    return await _confirm('這樣排會違反排班條件', '${soft.map((t) => '・$t').join('\n')}\n\n確定要這樣排嗎？', '還是要排');
+  }
+
+  Future<bool> _confirm(String title, String body, String ok) async =>
+      await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: Text(title),
+          content: SingleChildScrollView(child: Text(body)),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
+            FilledButton(onPressed: () => Navigator.pop(c, true), child: Text(ok)),
+          ],
+        ),
+      ) ==
+      true;
+
+  /// 還沒對應班表名字的人：班表頁最上面常駐一行（2026-11-16 健檢 A1；原本只藏在「填指休」裡）
+  bool _needClaim(ShiftMonth d) {
+    final me = _repo.currentUserId;
+    if (me == null || !d.people.any((p) => p.active)) return false;
+    if (AppScope.of(context).kiosk?.storeId == _store) return false; // 店裡的打卡用帳號不能連到員工
+    return !d.people.any((p) => p.active && p.userId == me);
+  }
+
+  Future<void> _claim(ShiftMonth d) async {
+    final free = d.people.where((p) => p.active && p.userId == null).toList();
+    final picked = await showModalBottomSheet<ShiftPerson>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.card,
+      builder: (c) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(c).size.height * 0.8),
+          child: ListView(shrinkWrap: true, padding: const EdgeInsets.fromLTRB(16, 16, 16, 16), children: [
+            const Text('你是班表上的哪一位？', style: TextStyle(fontSize: AppType.title, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 4),
+            Text('選一次就好。老闆確認後，就能打卡、看自己的出勤和薪資單、自己填指休。',
+                style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+            const SizedBox(height: 12),
+            if (free.isEmpty)
+              Text('班表上的名字都有人選了，請找老闆或店長幫你加進班表人員。', style: TextStyle(color: AppColors.warn))
+            else
+              for (final p in free)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(p.name),
+                  subtitle: Text(p.isFull ? '正職' : '兼職'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.pop(c, p),
+                ),
+          ]),
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    final ok = await _confirm('你是「${picked.name}」？', '選了之後只能用這個名字。選錯了請找老闆或店長改。', '是我');
+    if (!ok || !mounted) return;
+    try {
+      await _repo.claimShiftPerson(picked.id);
+      if (!mounted) return;
+      showMessage(context, '已經選好「${picked.name}」，等老闆確認後就能打卡、看自己的出勤');
+      setState(() => _claimSeq++);
+      _reload();
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+    }
+  }
+
+  Widget _claimCard(ShiftMonth d) {
+    if (!_needClaim(d)) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: SectionCard(
+        child: InkWell(
+          onTap: () => _claim(d),
+          child: Row(children: [
+            Icon(Icons.person_search_outlined, color: AppColors.warn),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('你是班表上的哪一位？', style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.warn)),
+                const SizedBox(height: 2),
+                Text('點這裡選你的名字，老闆確認後就能打卡、看自己的出勤',
+                    style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+              ]),
+            ),
+            const Icon(Icons.chevron_right),
+          ]),
+        ),
+      ),
+    );
   }
 
   Future<String?> _askRange(BuildContext ctx, String? current) async {
@@ -250,6 +389,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     final s = TextEditingController(text: f(hoursMode ? st.compUnused : st.shouldOff));
     final u = TextEditingController(text: f(hoursMode ? st.specialTotal : st.prevUnused));
     DateTime? hire = p.hireDate;
+    String? errS, errU;
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => StatefulBuilder(
@@ -257,9 +397,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           title: Text('${p.name}・${_month.month} 月'),
           content: Column(mainAxisSize: MainAxisSize.min, children: [
             TextField(controller: s, keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: InputDecoration(labelText: hoursMode ? '未休／補休（天）' : '本月應休（天）')),
+                decoration: InputDecoration(labelText: hoursMode ? '未休／補休（天）' : '本月應休（天）', errorText: errS)),
             TextField(controller: u, keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: InputDecoration(labelText: hoursMode ? '累計特休（天）' : '原未休特休（天）')),
+                decoration: InputDecoration(labelText: hoursMode ? '累計特休（天）' : '原未休特休（天）', errorText: errU)),
             const SizedBox(height: 8),
             ListTile(
               contentPadding: EdgeInsets.zero,
@@ -274,14 +414,21 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           ]),
           actions: [
             TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
-            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('儲存')),
+            // 打錯的字不能當成空白存檔，會把原本的數字清掉（2026-11-16 健檢 C1）
+            FilledButton(
+                onPressed: () => set(() {
+                      errS = parseDayNumber(s.text).ok ? null : '請只填數字（例：8 或 8.5）';
+                      errU = parseDayNumber(u.text).ok ? null : '請只填數字（例：8 或 8.5）';
+                      if (errS == null && errU == null) Navigator.pop(c, true);
+                    }),
+                child: const Text('儲存')),
           ],
         ),
       ),
     );
     if (ok != true) return;
     try {
-      final a = double.tryParse(s.text), b = double.tryParse(u.text);
+      final a = parseDayNumber(s.text).value, b = parseDayNumber(u.text).value;
       await _repo.saveShiftStats(
           _store,
           p.id,
@@ -463,11 +610,19 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 ),
                 IconButton(tooltip: '下個月', onPressed: () => _shiftMonth(1), icon: const Icon(Icons.chevron_right)),
               ]),
+              _claimCard(d),
               _todayCard(d),
-              AttendanceCard(membership: widget.membership, data: d, codeTimes: _codeTimes),
+              AttendanceCard(
+                  key: ValueKey('attendance-$_claimSeq'), membership: widget.membership, data: d, codeTimes: _codeTimes),
               _draftCard(d),
               if (d.people.any((p) => p.active))
-                ShiftPlanCard(membership: widget.membership, data: d, viewMonth: _month, markBg: _markBg, onChanged: _reload),
+                ShiftPlanCard(
+                    membership: widget.membership,
+                    data: d,
+                    viewMonth: _month,
+                    scheduled: isMonthScheduled(d, _setup),
+                    markBg: _markBg,
+                    onChanged: _reload),
               const SizedBox(height: 8),
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
@@ -495,6 +650,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               Wrap(spacing: 12, runSpacing: 4, children: [
                 for (final m in _marks) _legend(m, _markBg(m), _markDesc(m)),
                 if (_ranges.isNotEmpty) _legend('時段', _markBg('18:00-00:30'), '兼職時段'),
+                if (_setup != null) _legend('人力', AppColors.bad.withValues(alpha: 0.25), '紅色＝比需要的人少'),
               ]),
               if (_codeHours != null)
                 Padding(
@@ -538,7 +694,33 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                     icon: const Icon(Icons.schedule_outlined),
                     label: const Text('班別／時段'),
                   ),
+                  // 排班條件常駐（2026-11-16 健檢 A3：原本這個月排好後就進不去）
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      await Navigator.of(context).push(MaterialPageRoute(
+                          builder: (_) => ShiftRulesScreen(
+                              membership: widget.membership, month: _month, people: d.people, options: d.options)));
+                      _reload();
+                    },
+                    icon: const Icon(Icons.tune),
+                    label: const Text('排班條件'),
+                  ),
                 ]),
+                // 排好的月份也留一個不顯眼的「重新自動排」（老闆 2026-11-16 同意；會保留已經排好的格子）
+                if (isMonthScheduled(d, _setup) && !_month.isBefore(DateTime(DateTime.now().year, DateTime.now().month)))
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () async {
+                        await Navigator.of(context).push(MaterialPageRoute(
+                            builder: (_) =>
+                                ShiftAutoPlanScreen(membership: widget.membership, month: _month, markBg: _markBg)));
+                        _reload();
+                      },
+                      icon: const Icon(Icons.auto_awesome_outlined, size: 18),
+                      label: Text('重新自動排 ${_month.month} 月'),
+                    ),
+                  ),
               ],
               if (_canEdit)
                 Padding(
@@ -600,6 +782,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   Widget _weekGrid(ShiftMonth d, (int, int) wk, List<ShiftPerson> full, List<ShiftPerson> part) {
+    final scheduled = isMonthScheduled(d, _setup);
     // 一週固定 7 欄（月初、月底不足的日子留空），寬度依螢幕平分
     final firstWd = DateTime(_month.year, _month.month, wk.$1).weekday % 7;
     final cols = List<int?>.generate(7, (i) {
@@ -729,10 +912,21 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           Row(children: [
             name('人力', bold: true, color: AppColors.primary),
             for (final day in cols)
-              cell(
-                Text(day == null ? '' : '${d.staffing(day)}',
-                    style: TextStyle(fontSize: AppType.small, fontWeight: FontWeight.w800, color: AppColors.primary)),
-              ),
+              () {
+                // 比需要的人少就標紅（2026-11-16 健檢 B2；讀不到排班設定就不標；還沒開始排的日子不標，整片紅只會干擾）
+                final short = day != null &&
+                    _setup != null &&
+                    (scheduled || d.people.any((p) => d.mark(p.id, day) != null)) &&
+                    d.staffing(day) < dayNeed(_month, day, _setup);
+                return cell(
+                  Text(day == null ? '' : '${d.staffing(day)}',
+                      style: TextStyle(
+                          fontSize: AppType.small,
+                          fontWeight: FontWeight.w800,
+                          color: short ? AppColors.bad : AppColors.primary)),
+                  bg: short ? AppColors.bad.withValues(alpha: 0.18) : null,
+                );
+              }(),
             sum(''),
           ]),
         ]),

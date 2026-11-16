@@ -571,7 +571,10 @@ class SupabaseRepository implements Repository {
   @override
   Future<void> setShift(String storeId, String personId, DateTime date, String? mark) async {
     if (mark == null) {
-      await _db.from('shift_entries').delete().eq('person_id', personId).eq('work_date', _day.format(date));
+      // 沒刪到（沒有權限、或已經被別人清掉）不能裝作成功（2026-11-16 健檢 B4）
+      final rows =
+          await _db.from('shift_entries').delete().eq('person_id', personId).eq('work_date', _day.format(date)).select('person_id');
+      if (rows.isEmpty) throw Exception('message: 這格沒有清掉（可能已經被別人改過），已重新載入,');
     } else {
       await _db.from('shift_entries').upsert(
           {'store_id': storeId, 'person_id': personId, 'work_date': _day.format(date), 'mark': mark},

@@ -231,7 +231,7 @@ class _AttendanceCardState extends State<AttendanceCard> {
                   Text('你選的班表名字還在等老闆確認，確認後才能打卡、看自己的出勤（老闆：出勤管理 → 員工資料）',
                       style: TextStyle(color: AppColors.warn, fontSize: AppType.small))
                 else if (me.personId == null)
-                  Text('先在下面「排班」卡片選你是班表上的誰，才能打卡', style: TextStyle(color: AppColors.warn, fontSize: AppType.small))
+                  Text('先在班表頁最上面選你是班表上的誰，老闆確認後才能打卡', style: TextStyle(color: AppColors.warn, fontSize: AppType.small))
                 else
                   Text(
                       last == null

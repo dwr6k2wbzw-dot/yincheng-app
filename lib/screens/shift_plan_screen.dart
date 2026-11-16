@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../app_state.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
+import '../data/schedule_health.dart';
 import '../data/shift_marks.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -51,11 +52,14 @@ class ShiftPlanCard extends StatelessWidget {
       required this.membership,
       required this.data,
       required this.viewMonth,
+      required this.scheduled,
       required this.markBg,
       required this.onChanged});
   final Membership membership;
   final ShiftMonth data; // 目前看的月份（用它的人員名單）
   final DateTime viewMonth;
+  /// 這個月排好了沒（班表頁用 isMonthScheduled 算：上班人次到當月需要的八成；2026-11-16 健檢）
+  final bool scheduled;
   final MarkBg markBg;
   final VoidCallback onChanged;
 
@@ -121,11 +125,11 @@ class ShiftPlanCard extends StatelessWidget {
     }
 
     // 跟著目前看的月份（老闆 2026-10-27）：
-    //   * 這個月已經排好班（有人有格子）→ 整張卡片不顯示，老闆店長也一樣（老闆 2026-11-13：排好了就不要再出現）
+    //   * 這個月已經排好班 → 整張卡片不顯示，老闆店長也一樣（老闆 2026-11-13：排好了就不要再出現）。
+    //     「排好了」＝上班人次到需要的八成（老闆 2026-11-16；原本「有任何一格」，先點一天特休卡片就不見）。
+    //     排好後：排班條件、重新自動排改放在班表頁下方的按鈕
     //   * 「填指休」只在下個月以後才有（員工只能填下個月以後）；「自動排班」不排已經過去的月份
     final thisMonth = DateTime(now.year, now.month);
-    final scheduled = data.people
-        .any((p) => p.active && (data.marks[p.id]?.isNotEmpty ?? false));
     final showRequest = !scheduled && !viewMonth.isBefore(next);
     final showAuto = manager && !scheduled && !viewMonth.isBefore(thisMonth);
     final tiles = <Widget>[
@@ -1247,12 +1251,24 @@ class _RuleEditorState extends State<_RuleEditor> {
   }
 
   Future<void> _save() async {
+    // 打錯的字不能當成「沒填」存檔（2026-11-16 健檢 C1）
+    final bad = [
+      if (widget.person.isFull && !_asPart && !parseDayNumber(_off.text).ok)
+        '每月休幾天',
+      if (!parseDayNumber(_min.text, integer: true).ok) '每月最少上幾天',
+      if (!parseDayNumber(_max.text, integer: true).ok) '每月最多上幾天',
+      if (!parseDayNumber(_consec.text, integer: true).ok) '最多連上幾天',
+    ];
+    if (bad.isNotEmpty) {
+      showMessage(context, '「${bad.join('、')}」請只填數字（整數）', error: true);
+      return;
+    }
     int? i(TextEditingController c) =>
-        c.text.trim().isEmpty ? null : int.tryParse(c.text.trim());
+        parseDayNumber(c.text, integer: true).value?.toInt();
     final r = ShiftRule(
       personId: widget.person.id,
-      monthOff: widget.person.isFull && _off.text.trim().isNotEmpty
-          ? double.tryParse(_off.text.trim())
+      monthOff: widget.person.isFull
+          ? parseDayNumber(_off.text).value
           : null,
       planAsPart: widget.person.isFull && _asPart,
       minShifts: i(_min),
