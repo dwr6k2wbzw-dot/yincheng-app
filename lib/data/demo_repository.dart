@@ -11,7 +11,8 @@ class DemoRepository implements Repository {
   final _auth = StreamController<bool>.broadcast();
   // 截圖檢查用（ui-shots.yml）：示範版網址加 ?auto=1 直接登入
   bool _signedIn = Uri.base.queryParameters.containsKey('auto');
-  String _email = '';
+  // 再加 &as=kiosk 直接以隱城的打卡用帳號登入（as=kiosk-xc：小城外，打卡還沒開）
+  String _email = Uri.base.queryParameters['as'] ?? '';
   int _seq = 0;
 
   final _categories = [
@@ -75,13 +76,15 @@ class DemoRepository implements Repository {
 
   bool get _isStaff => _email.contains('staff');
   bool get _isManager => !_isStaff && _email.contains('manager'); // 示範店長：看不到自己那列（薪資第一列假裝是他）
+  bool get _isKiosk => _email.contains('kiosk'); // 示範打卡用帳號（兼職權限）：帳號含 kiosk（含 xc＝小城外）
+  bool get _kioskXc => _isKiosk && _email.contains('xc');
 
   @override
   Stream<bool> get signedInChanges => _auth.stream;
   @override
   bool get isSignedIn => _signedIn;
   @override
-  String? get currentUserId => _signedIn ? 'demo-user' : null;
+  String? get currentUserId => _signedIn ? (_isKiosk ? 'demo-kiosk' : 'demo-user') : null;
   @override
   String? get currentUserEmail => _email;
 
@@ -435,7 +438,13 @@ class DemoRepository implements Repository {
   (double?,)? peekPettyCashBalance(String storeId) => null;
 
   @override
-  Future<List<Membership>> myMemberships() async => [
+  Future<List<Membership>> myMemberships() async => _isKiosk
+      ? [
+          _kioskXc
+              ? Membership(storeId: 'xc', storeName: '小城外', role: Role.parttime, displayName: '示範公用帳號')
+              : Membership(storeId: 'yc', storeName: '隱城', role: Role.parttime, displayName: '示範公用帳號'),
+        ]
+      : [
         Membership(
             storeId: 'yc',
             storeName: '隱城',
@@ -1453,6 +1462,7 @@ class DemoRepository implements Repository {
               review: _lastReview(r.id),
               counted: _lastReview(r.id) == 'confirmed' || (r.status == 'ok' && _lastReview(r.id) != 'rejected'),
               punchId: r.id),
+      ..._pinPunches,
     ];
   }
 
@@ -1469,7 +1479,114 @@ class DemoRepository implements Repository {
   @override
   Future<void> disableKiosk(String kioskId) async {
     final i = _kiosks.indexWhere((k) => k.id == kioskId);
-    if (i >= 0) _kiosks[i] = KioskInfo(id: kioskId, name: _kiosks[i].name, active: false, createdAt: _kiosks[i].createdAt);
+    final k = i < 0 ? null : _kiosks[i];
+    if (k != null) {
+      _kiosks[i] = KioskInfo(
+          id: kioskId, name: k.name, active: false, createdAt: k.createdAt, accountUserId: k.accountUserId, accountName: k.accountName);
+    }
+  }
+
+  @override
+  Future<List<KioskAccountCandidate>> kioskAccountCandidates(String storeId) async => [
+        KioskAccountCandidate(
+            userId: 'demo-kiosk',
+            displayName: '示範公用帳號',
+            role: 'parttime',
+            blocked: _kiosks.any((k) => k.active && k.accountUserId == 'demo-kiosk') ? '已經是打卡用帳號' : null),
+        const KioskAccountCandidate(userId: 'u3', displayName: '示範員工', role: 'staff', blocked: '已連到員工資料「示範員工」，要先解除'),
+      ];
+
+  @override
+  Future<void> setKioskAccount(String storeId, String userId) async {
+    if (_kiosks.any((k) => k.active && k.accountUserId == userId)) return;
+    final id = '00000000-0000-4000-8000-${(_seq++).toString().padLeft(12, '0')}';
+    _kiosks.add(KioskInfo(
+        id: id, name: '示範公用帳號', active: true, createdAt: DateTime.now(), accountUserId: userId, accountName: '示範公用帳號'));
+  }
+
+  // 示範打卡密碼（虛構）：阿明 1234、小魚 5678；正式資料庫只存雜湊
+  final _pins = <String, String>{'f0': '1234', 'p0': '5678'};
+  final _pinLast = <String, String>{}; // 每個人上一次打的是上班還是下班
+  final _pinPunches = <AttendanceExportRow>[];
+  int _pinFails = 0;
+  DateTime? _pinLockedUntil;
+
+  @override
+  Future<KioskMine?> kioskMine() async {
+    if (!_isKiosk) return null;
+    return _kioskXc
+        ? const KioskMine(kioskId: 'demo-kiosk-xc', storeId: 'xc', storeName: '小城外', kioskName: '示範公用帳號', error: '小城外打卡尚未開啟')
+        : const KioskMine(kioskId: 'demo-kiosk-yc', storeId: 'yc', storeName: '隱城', kioskName: '示範公用帳號');
+  }
+
+  @override
+  Future<PinPunchResult> pinPunch(String pin) async {
+    if (!_isKiosk) throw Exception('message: 只有店裡的打卡用帳號可以用密碼打卡,');
+    if (_kioskXc) throw Exception('message: 小城外打卡尚未開啟,');
+    final now = DateTime.now();
+    final lock = _pinLockedUntil;
+    if (lock != null && lock.isAfter(now)) {
+      return PinPunchResult(
+          result: 'locked', lockedUntil: lock, message: '密碼連錯 5 次，請 ${lock.difference(now).inSeconds + 1} 秒後再試');
+    }
+    final who = _pins.entries.where((e) => e.value == pin).firstOrNull?.key;
+    if (who == null) {
+      _pinFails++;
+      if (_pinFails >= 5) {
+        _pinFails = 0;
+        _pinLockedUntil = now.add(const Duration(minutes: 1));
+        return PinPunchResult(result: 'locked', lockedUntil: _pinLockedUntil, message: '密碼連錯 5 次，請 1 分鐘後再試');
+      }
+      return PinPunchResult(
+          result: 'wrong', remaining: 5 - _pinFails, message: '密碼不對，還可以試 ${5 - _pinFails} 次。還沒設定密碼的人，請找店長設定打卡密碼');
+    }
+    _pinFails = 0;
+    final name = (await shiftMonth('yc', now)).people.firstWhere((p) => p.id == who).name;
+    final type = _pinLast[who] == 'in' ? 'out' : 'in';
+    _pinLast[who] = type;
+    final biz = DateTime(now.year, now.month, now.day - (now.hour < 6 ? 1 : 0));
+    _pinPunches.add(AttendanceExportRow(
+        businessDate: biz, personName: name, punchType: type, punchedAt: now, storeName: '隱城',
+        source: 'pin', status: 'ok', flags: '', counted: true, punchId: 'pin${_seq++}'));
+    return PinPunchResult(result: 'ok', personName: name, punchType: type, punchedAt: now, status: 'ok', remaining: 5);
+  }
+
+  @override
+  Future<List<PinStatus>?> pinStatus(String storeId) async {
+    if (_isKiosk) return const [];
+    final m = await shiftMonth(storeId, DateTime.now());
+    return [
+      for (final p in m.people)
+        if (!_isStaff || p.id == 'f0')
+          PinStatus(
+              personId: p.id,
+              name: p.name,
+              active: p.active,
+              hasPin: _pins.containsKey(p.id),
+              // 示範：阿明（f0）是登入的這個人；店長不能設自己的
+              canSet: !(_isManager && p.id == 'f0'),
+              mine: p.id == 'f0'),
+    ];
+  }
+
+  @override
+  Future<PinSetResult> pinSet(String personId, String? pin) async {
+    if (_isManager && personId == 'f0') throw Exception('message: 店長的打卡密碼請老闆設定,');
+    if (pin != null && !RegExp(r'^[0-9]{4}$').hasMatch(pin)) throw Exception('message: 打卡密碼要是 4 位數字,');
+    final taken = _pins.entries.any((e) => e.key != personId && e.value == pin);
+    if (taken) return const PinSetResult(result: 'taken', message: '這組密碼不能用，請換一組');
+    var v = pin;
+    while (v == null || _pins.entries.any((e) => e.key != personId && e.value == v)) {
+      v = (1000 + DateTime.now().microsecond % 9000).toString();
+    }
+    _pins[personId] = v;
+    return PinSetResult(result: 'ok', pin: pin == null ? v : null);
+  }
+
+  @override
+  Future<void> pinClear(String personId) async {
+    if (_isStaff || (_isManager && personId == 'f0')) throw Exception('message: 沒有權限,');
+    _pins.remove(personId);
   }
 
   @override

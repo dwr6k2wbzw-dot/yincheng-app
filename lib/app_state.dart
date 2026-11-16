@@ -21,7 +21,27 @@ class AppState extends ChangeNotifier {
   static const pendingCodeKey = 'pending_invite_code';
   String? inviteResult; // 自動使用邀請碼的結果（顯示一次）
 
+  /// 打卡用帳號（ops 0112）：權限照兼職，這家店的第一頁多一個密碼打卡。null＝一般帳號
+  KioskMine? kiosk;
+  int _kioskSeq = 0;
+
+  /// 背景確認是不是打卡用帳號（不擋主畫面；登出、換人之後晚到的結果不套用）
+  Future<void> _loadKiosk() async {
+    final seq = ++_kioskSeq;
+    final uid = repo.currentUserId;
+    KioskMine? k;
+    try {
+      k = await repo.kioskMine();
+    } catch (_) {
+      return; // 連不上：維持原狀，主畫面照常
+    }
+    if (seq != _kioskSeq || uid == null || repo.currentUserId != uid) return;
+    kiosk = k;
+    notifyListeners();
+  }
+
   Future<void> loadMemberships() async {
+    _loadKiosk();
     // 先用手機裡存的上次店家清單直接進主畫面，背景再向資料庫確認（老闆 2026-10-16：打開太慢）
     final cached = repo.peekMemberships();
     if (cached != null && cached.isNotEmpty && memberships.isEmpty) {
@@ -104,6 +124,8 @@ class AppState extends ChangeNotifier {
   void clear() {
     memberships = [];
     current = null;
+    kiosk = null;
+    _kioskSeq++;
     notifyListeners();
   }
 }

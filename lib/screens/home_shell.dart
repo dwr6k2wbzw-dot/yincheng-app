@@ -12,6 +12,7 @@ import 'dashboard_screen.dart';
 import 'members_screen.dart';
 import 'handover_screen.dart';
 import 'notifications_screen.dart';
+import 'pin_punch_screen.dart';
 import 'purchases_screen.dart';
 import 'revenue_screen.dart';
 import 'stock_counts_screen.dart';
@@ -90,7 +91,14 @@ class _HomeShellState extends State<HomeShell> with SingleTickerProviderStateMix
     }
     // 以店家 id 當 key：切換店家時各分頁重新載入
     // 營收分頁只給老闆／店長（資料庫也只允許這兩種角色讀寫營收）
+    // 打卡用帳號（ops 0112）：第一頁是密碼打卡，其他分頁照原本的權限
+    final kiosk = state.kiosk;
     final tabs = <(Widget, NavigationDestination)>[
+      if (kiosk != null && kiosk.storeId == m.storeId)
+        (
+          PinPunchScreen(key: ValueKey('pin-${m.storeId}'), kiosk: kiosk),
+          const NavigationDestination(icon: Icon(Icons.dialpad), selectedIcon: Icon(Icons.dialpad), label: '打卡'),
+        ),
       if (m.isPartTime) ...[
         (
           DashboardScreen(key: ValueKey('d-${m.storeId}'), membership: m),

@@ -300,6 +300,20 @@ abstract class Repository {
   Future<({String id, String secret})> registerKiosk(String storeId, String name);
   Future<void> disableKiosk(String kioskId);
   Future<KioskCode> kioskCode(String kioskId, String secret);
+  /// 老闆：可以設成打卡用帳號的人（ops 0112）
+  Future<List<KioskAccountCandidate>> kioskAccountCandidates(String storeId);
+  /// 老闆：把這個帳號設成這家店的打卡用帳號（權限照舊，第一頁多一個密碼打卡）
+  Future<void> setKioskAccount(String storeId, String userId);
+  /// 登入的帳號是打卡用帳號就回它的店；不是（或資料庫還沒更新）回 null
+  Future<KioskMine?> kioskMine();
+  /// 打卡用帳號：用員工的 4 位數密碼打卡（時間是伺服器時間）
+  Future<PinPunchResult> pinPunch(String pin);
+  /// 打卡密碼有沒有設定（看不到密碼本身）；資料庫還沒更新回 null
+  Future<List<PinStatus>?> pinStatus(String storeId);
+  /// 設定／重設打卡密碼；pin 是 null＝隨機產生（只在回傳這次看得到）
+  Future<PinSetResult> pinSet(String personId, String? pin);
+  /// 老闆、店長：清除打卡密碼
+  Future<void> pinClear(String personId);
   /// 員工資料一覽：老闆全部；店長身分證、帳號遮罩，看得到別人的薪率（ops 0110）、看不到可改自己的；其他人只有自己
   Future<List<StaffEntry>> staffDirectory(String storeId);
   /// 老闆確認（或取消確認）班表名字綁定的 App 帳號；userId＝畫面上看到的那個帳號，對不上就失敗

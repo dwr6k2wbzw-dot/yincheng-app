@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../app_state.dart';
 import '../data/models.dart';
@@ -10,10 +9,11 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import 'attendance_manage_screen.dart';
 import 'payroll_screen.dart';
+import 'pin_punch_screen.dart' show editPunchPin;
 
-/// 班表第一階段：QR 打卡（ops 0109，老闆 2026-11-15；先在隱城試行）。
-/// 店內打卡機每 30 秒換一個 QR 碼，員工用自己的帳號掃；時間一律是伺服器時間。
-/// 掃碼有兩條路：手機內建相機直接掃（打開 App 網址 #/punch?…），或這裡的「掃碼打卡」。
+/// 班表第一階段：打卡（ops 0109，老闆 2026-11-15；先在隱城試行）；時間一律是伺服器時間。
+/// 2026-11-16 起改成在店裡的打卡用帳號輸入自己的 4 位數密碼（ops 0112），App 不再有掃碼打卡；
+/// 已經設好的 QR 打卡機用手機相機掃（#/punch?…）還是打得到。
 
 final _hm = DateFormat('HH:mm');
 final _mdHm = DateFormat('M/d HH:mm');
@@ -89,6 +89,7 @@ class AttendanceCard extends StatefulWidget {
 
 class _AttendanceCardState extends State<AttendanceCard> {
   Future<AttendanceMe?>? _future;
+  PinStatus? _myPin; // 自己的打卡密碼設了沒（看不到密碼本身）
 
   @override
   void didChangeDependencies() {
@@ -99,24 +100,39 @@ class _AttendanceCardState extends State<AttendanceCard> {
   @override
   void didUpdateWidget(AttendanceCard old) {
     super.didUpdateWidget(old);
-    if (old.membership.storeId != widget.membership.storeId) _future = _load();
+    if (old.membership.storeId != widget.membership.storeId) {
+      _myPin = null;
+      _future = _load();
+    }
   }
 
   Future<AttendanceMe?> _load() async {
+    final repo = AppScope.of(context).repo;
+    final store = widget.membership.storeId;
     try {
-      return await AppScope.of(context).repo.attendanceMe(widget.membership.storeId);
+      final me = await repo.attendanceMe(store);
+      if (me != null && me.enabled && me.personId != null && !me.bindingPending) _loadPin(repo, store);
+      return me;
     } catch (_) {
       return null; // 打卡讀不到不影響班表
     }
   }
 
-  void _reload() => setState(() => _future = _load());
+  Future<void> _loadPin(Repository repo, String store) async {
+    try {
+      final mine = (await repo.pinStatus(store))?.where((p) => p.mine).firstOrNull;
+      if (mounted && store == widget.membership.storeId) setState(() => _myPin = mine);
+    } catch (_) {}
+  }
 
-  Future<void> _scan() async {
-    final link = await Navigator.of(context).push<PunchLink>(MaterialPageRoute(builder: (_) => const PunchScanScreen()));
-    if (link == null || !mounted) return;
-    await punchAndShow(context, link);
-    _reload();
+  void _reload() => setState(() {
+        _future = _load();
+      });
+
+  /// 自己改打卡密碼（店長的請老闆設定）
+  Future<void> _editPin(PinStatus p) async {
+    final changed = await editPunchPin(context, personId: p.personId, name: p.name, hasPin: p.hasPin, self: true);
+    if (changed && mounted) _reload();
   }
 
   /// 還沒開放打卡的店：員工資料、確認本人跟打卡開關分開（程式審查 2026-11-15 第二輪）。
@@ -200,7 +216,7 @@ class _AttendanceCardState extends State<AttendanceCard> {
             child: SectionCard(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(children: [
-                  Icon(Icons.qr_code_2, color: AppColors.primary),
+                  Icon(Icons.dialpad, color: AppColors.primary),
                   const SizedBox(width: 8),
                   const Expanded(child: Text('打卡（試行）', style: TextStyle(fontSize: AppType.title, fontWeight: AppFont.heading))),
                   if (me.personId != null)
@@ -208,7 +224,10 @@ class _AttendanceCardState extends State<AttendanceCard> {
                         style: TextStyle(color: me.onShift ? AppColors.good : AppColors.muted, fontSize: AppType.small)),
                 ]),
                 const SizedBox(height: 6),
-                if (me.bindingPending)
+                if (AppScope.of(context).kiosk?.storeId == widget.membership.storeId)
+                  Text('這是店裡的打卡用帳號：打卡請用第一頁「打卡」，輸入自己的 4 位數密碼',
+                      style: TextStyle(color: AppColors.muted, fontSize: AppType.small))
+                else if (me.bindingPending)
                   Text('你選的班表名字還在等老闆確認，確認後才能打卡、看自己的出勤（老闆：出勤管理 → 員工資料）',
                       style: TextStyle(color: AppColors.warn, fontSize: AppType.small))
                 else if (me.personId == null)
@@ -219,10 +238,13 @@ class _AttendanceCardState extends State<AttendanceCard> {
                           ? '${me.personName ?? ''}・最近沒有打卡'
                           : '${me.personName ?? ''}・上次${punchTypeLabel(me.lastPunchType ?? 'in')} ${_taipeiMdHm(last)}',
                       style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+                if (me.personId != null && _myPin != null && !_myPin!.hasPin)
+                  Text('你還沒有打卡密碼，請找店長設定打卡密碼', style: TextStyle(color: AppColors.warn, fontSize: AppType.small)),
                 const SizedBox(height: 10),
                 Wrap(spacing: 8, runSpacing: 8, children: [
-                  if (me.personId != null)
-                    FilledButton.icon(onPressed: _scan, icon: const Icon(Icons.qr_code_scanner), label: const Text('掃碼打卡')),
+                  if (me.personId != null && _myPin != null && _myPin!.canSet)
+                    FilledButton.tonalIcon(
+                        onPressed: () => _editPin(_myPin!), icon: const Icon(Icons.dialpad), label: const Text('打卡密碼')),
                   if (me.personId != null)
                     OutlinedButton(
                       onPressed: () => Navigator.of(context)
@@ -241,72 +263,10 @@ class _AttendanceCardState extends State<AttendanceCard> {
                     ),
                   ..._payrollButtons(me),
                 ]),
-                const SizedBox(height: 6),
-                Text('也可以直接用手機相機掃店裡打卡機上的 QR 碼', style: TextStyle(color: AppColors.muted, fontSize: AppType.caption)),
               ]),
             ),
           );
         },
-      );
-}
-
-/// 掃碼畫面：認得打卡 QR 碼就回傳；其他 QR 碼提示不是打卡用的
-class PunchScanScreen extends StatefulWidget {
-  const PunchScanScreen({super.key});
-  @override
-  State<PunchScanScreen> createState() => _PunchScanScreenState();
-}
-
-class _PunchScanScreenState extends State<PunchScanScreen> {
-  final _controller = MobileScannerController(formats: const [BarcodeFormat.qrCode]);
-  bool _done = false;
-  String? _hint;
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _onDetect(BarcodeCapture c) {
-    if (_done) return;
-    for (final b in c.barcodes) {
-      final link = PunchLink.parse(b.rawValue ?? '');
-      if (link != null) {
-        _done = true;
-        Navigator.of(context).pop(link);
-        return;
-      }
-    }
-    if (_hint == null) setState(() => _hint = '這不是打卡用的 QR 碼，請掃店裡打卡機上的');
-  }
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('掃碼打卡')),
-        body: Column(children: [
-          Expanded(
-            child: MobileScanner(
-              controller: _controller,
-              onDetect: _onDetect,
-              errorBuilder: (context, error) => Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Text(
-                    error.errorCode == MobileScannerErrorCode.permissionDenied
-                        ? '沒有相機權限。請到瀏覽器設定允許這個網站使用相機，或改用手機內建相機直接掃 QR 碼。'
-                        : '相機打不開（${error.errorCode.name}）。可以改用手機內建相機直接掃 QR 碼。',
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(_hint ?? '對準打卡機上的 QR 碼', style: TextStyle(color: _hint == null ? AppColors.muted : AppColors.warn)),
-          ),
-        ]),
       );
 }
 

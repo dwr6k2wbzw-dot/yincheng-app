@@ -167,14 +167,136 @@ class KioskInfo {
   final bool active;
   final DateTime createdAt;
   final DateTime? lastSeenAt;
-  const KioskInfo({required this.id, required this.name, required this.active, required this.createdAt, this.lastSeenAt});
+  /// 打卡用帳號（ops 0112）：哪個帳號登入後第一頁是密碼打卡；null＝一般打卡機（裝置密鑰）
+  final String? accountUserId;
+  final String? accountName;
+  const KioskInfo(
+      {required this.id,
+      required this.name,
+      required this.active,
+      required this.createdAt,
+      this.lastSeenAt,
+      this.accountUserId,
+      this.accountName});
+  bool get isAccount => accountUserId != null;
   factory KioskInfo.fromRow(Map<String, dynamic> r) => KioskInfo(
         id: r['id'] as String,
         name: r['name'] as String? ?? '',
         active: r['active'] as bool? ?? false,
         createdAt: _ts(r['created_at']),
         lastSeenAt: _tsOrNull(r['last_seen_at']),
+        accountUserId: r['account_user_id'] as String?,
+        accountName: r['account_name'] as String?,
       );
+}
+
+/// 可以設成打卡用帳號的人（老闆設定時選）；blocked 不是 null＝不能選，內容是原因
+class KioskAccountCandidate {
+  final String userId;
+  final String displayName;
+  final String role;
+  final String? blocked;
+  const KioskAccountCandidate({required this.userId, required this.displayName, required this.role, this.blocked});
+  factory KioskAccountCandidate.fromRow(Map<String, dynamic> r) => KioskAccountCandidate(
+        userId: r['user_id'] as String,
+        displayName: r['display_name'] as String? ?? '',
+        role: r['role'] as String? ?? '',
+        blocked: r['blocked'] as String?,
+      );
+}
+
+/// 登入的帳號是打卡用帳號（ops 0112）：哪家店；error 不是 null＝現在不能打卡（打卡沒開、停權）
+class KioskMine {
+  final String kioskId;
+  final String storeId;
+  final String storeName;
+  final String kioskName;
+  final String? error;
+  const KioskMine({required this.kioskId, required this.storeId, required this.storeName, required this.kioskName, this.error});
+  factory KioskMine.fromRow(Map<String, dynamic> r) => KioskMine(
+        kioskId: r['kiosk_id'] as String,
+        storeId: r['store_id'] as String,
+        storeName: r['store_name'] as String? ?? '',
+        kioskName: r['kiosk_name'] as String? ?? '',
+        error: r['error'] as String?,
+      );
+}
+
+/// 密碼打卡的結果：ok／wrong（密碼不對）／locked（連錯 5 次，鎖 1 分鐘）
+class PinPunchResult {
+  final String result;
+  final String? personName;
+  final String? punchType;
+  final DateTime? punchedAt; // 伺服器時間
+  final String? status;
+  final List<String> flags;
+  final int remaining; // 還可以試幾次
+  final DateTime? lockedUntil;
+  final String message;
+  const PinPunchResult({
+    required this.result,
+    this.personName,
+    this.punchType,
+    this.punchedAt,
+    this.status,
+    this.flags = const [],
+    this.remaining = 0,
+    this.lockedUntil,
+    this.message = '',
+  });
+  bool get ok => result == 'ok';
+  bool get locked => result == 'locked';
+  bool get pending => status == 'pending';
+  factory PinPunchResult.fromRow(Map<String, dynamic> r) => PinPunchResult(
+        result: r['result'] as String,
+        personName: r['person_name'] as String?,
+        punchType: r['punch_type'] as String?,
+        punchedAt: _tsOrNull(r['punched_at']),
+        status: r['status'] as String?,
+        flags: [for (final f in (r['flags'] as List?) ?? const []) f as String],
+        remaining: (r['remaining'] as num?)?.toInt() ?? 0,
+        lockedUntil: _tsOrNull(r['locked_until']),
+        message: r['message'] as String? ?? '',
+      );
+}
+
+/// 打卡密碼設定狀態（看不到密碼本身）：老闆、店長看全部，其他人只有自己
+class PinStatus {
+  final String personId;
+  final String name;
+  final bool active;
+  final bool hasPin;
+  final DateTime? setAt;
+  final bool canSet; // 我能不能設定這個人的（店長不能設自己的）
+  final bool mine;
+  const PinStatus(
+      {required this.personId,
+      required this.name,
+      required this.active,
+      required this.hasPin,
+      this.setAt,
+      required this.canSet,
+      required this.mine});
+  factory PinStatus.fromRow(Map<String, dynamic> r) => PinStatus(
+        personId: r['person_id'] as String,
+        name: r['name'] as String? ?? '',
+        active: r['active'] as bool? ?? false,
+        hasPin: r['has_pin'] as bool? ?? false,
+        setAt: _tsOrNull(r['set_at']),
+        canSet: r['can_set'] as bool? ?? false,
+        mine: r['mine'] as bool? ?? false,
+      );
+}
+
+/// 設定打卡密碼的結果：ok（隨機產生時 pin 只在這次看得到）／taken（跟別人重複）／limited（重複太多次）
+class PinSetResult {
+  final String result;
+  final String? pin;
+  final String message;
+  const PinSetResult({required this.result, this.pin, this.message = ''});
+  bool get ok => result == 'ok';
+  factory PinSetResult.fromRow(Map<String, dynamic> r) =>
+      PinSetResult(result: r['result'] as String, pin: r['pin'] as String?, message: r['message'] as String? ?? '');
 }
 
 /// 一段出勤（上班配下一筆 14 小時內的下班）
@@ -491,7 +613,7 @@ class PunchHistoryEntry {
       );
 
   String get label => switch (action) {
-        'punch' => '掃碼打卡',
+        'punch' => '打卡',
         'amendment_punch' => '補登產生',
         'amendment_request' => '申請補登',
         'amendment_approve' => '核准補登',
