@@ -21,8 +21,8 @@ import 'package:yincheng_ops/screens/home_shell.dart';
 import 'package:yincheng_ops/screens/pin_punch_screen.dart';
 import 'package:yincheng_ops/theme.dart';
 
-Future<DemoRepository> _signedIn(WidgetTester tester, String email) async {
-  final repo = DemoRepository();
+Future<DemoRepository> _signedIn(WidgetTester tester, String email, [DemoRepository? r]) async {
+  final repo = r ?? DemoRepository();
   await tester.runAsync(() => repo.signIn(email, 'x'));
   return repo;
 }
@@ -63,6 +63,14 @@ class _SlowKioskRepo extends DemoRepository {
     if (!done.isCompleted) done.complete();
     return k;
   }
+}
+
+/// 一小時內錯太多次：伺服器鎖到整點（測畫面不會一分鐘就放開）
+class _HourLockRepo extends DemoRepository {
+  final until = DateTime.now().add(const Duration(minutes: 40));
+  @override
+  Future<PinPunchResult> pinPunch(String pin) async =>
+      PinPunchResult(result: 'locked', lockedUntil: until, message: '這台打錯太多次，暫停到 12:00；急著打卡請找店長補登');
 }
 
 String _selectedTab(WidgetTester tester) {
@@ -138,12 +146,12 @@ void main() {
   });
 
   group('密碼打卡鍵盤', () {
-    Future<DemoRepository> open(WidgetTester tester) async {
+    Future<DemoRepository> open(WidgetTester tester, [DemoRepository? r]) async {
       SharedPreferences.setMockInitialValues({});
       tester.view.physicalSize = const Size(800, 1400);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
-      final repo = await _signedIn(tester, 'kiosk@x');
+      final repo = await _signedIn(tester, 'kiosk@x', r);
       final kiosk = await repo.kioskMine();
       await tester.pumpWidget(_wrap(repo, Scaffold(body: PinPunchScreen(kiosk: kiosk!))));
       await tester.pump();
@@ -183,6 +191,18 @@ void main() {
       expect(one.onPressed, isNull, reason: '鎖住時鍵盤不能按');
       // 鎖住期間連對的密碼也打不了（資料庫一樣擋）
       expect((await repo.pinPunch('1234')).locked, isTrue);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('一小時內錯太多次：鎖超過 1 分鐘，顯示伺服器的「找店長補登」，1 分鐘後鍵盤還是鎖著', (tester) async {
+      await open(tester, _HourLockRepo());
+      await _type(tester, '0000');
+      expect(find.textContaining('急著打卡請找店長補登'), findsOneWidget);
+      expect(find.textContaining('秒後再試'), findsNothing, reason: '不是 1 分鐘的鎖，不能顯示秒數倒數');
+      await tester.pump(const Duration(seconds: 61));
+      final one = tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, '1'));
+      expect(one.onPressed, isNull, reason: '過 1 分鐘還在鎖：照伺服器的截止時間');
+      expect(find.textContaining('急著打卡請找店長補登'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
     });
 

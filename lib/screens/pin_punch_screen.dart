@@ -25,6 +25,7 @@ class _PinPunchScreenState extends State<PinPunchScreen> {
   PinPunchResult? _done; // 打卡成功：大字顯示，時間到回鍵盤
   String? _msg; // 密碼不對、連不上
   DateTime? _lockEnd; // 連錯 5 次：這台手機的時間，倒數用
+  bool _longLock = false; // 一小時內錯太多次：鎖到整點，顯示伺服器的「找店長補登」
   Timer? _back, _tick;
 
   @override
@@ -87,10 +88,11 @@ class _PinPunchScreenState extends State<PinPunchScreen> {
     }
   }
 
-  /// 鎖定倒數：伺服器說鎖到幾點，換成這台手機的倒數（手機時間不準也不會超過 1 分鐘）
+  /// 鎖定倒數：伺服器說鎖到幾點，換成這台手機的倒數（手機時間不準也不會超過 1 小時；提早解開的話伺服器照樣擋）
   void _startLock(DateTime? until) {
     var secs = until == null ? 60 : until.difference(DateTime.now()).inSeconds + 1;
-    secs = secs.clamp(1, 60);
+    secs = secs.clamp(1, 3600);
+    _longLock = secs > 60;
     _lockEnd = DateTime.now().add(Duration(seconds: secs));
     _tick?.cancel();
     _tick = Timer.periodic(const Duration(seconds: 1), (t) {
@@ -199,7 +201,7 @@ class _PinPunchScreenState extends State<PinPunchScreen> {
           child: _busy
               ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
               : Text(
-                  locked ? '密碼連錯 5 次，請 $left 秒後再試' : (_msg ?? ''),
+                  locked && !_longLock ? '密碼連錯 5 次，請 $left 秒後再試' : (_msg ?? ''),
                   textAlign: TextAlign.center,
                   style: TextStyle(color: AppColors.bad, fontSize: AppType.small),
                 ),
