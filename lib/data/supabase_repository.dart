@@ -141,11 +141,18 @@ class SupabaseRepository implements Repository {
   // ---------------- 店家 ----------------
   @override
   Future<List<Membership>> myMemberships() async {
-    final rows = await _db
+    // 0116：順便讀每家店的功能開關；資料庫還沒更新（讀不到 store_features）就照舊只讀店名
+    Future<List<Map<String, dynamic>>> load(String stores) => _db
         .from('store_members')
-        .select('store_id, role, display_name, stores(name)')
+        .select('store_id, role, display_name, $stores')
         .eq('user_id', currentUserId!)
         .eq('active', true);
+    List<Map<String, dynamic>> rows;
+    try {
+      rows = await load('stores(name, store_features(*))');
+    } on PostgrestException {
+      rows = await load('stores(name)');
+    }
     return _remember(_ck('members', []), rows, _parseMemberships);
   }
 

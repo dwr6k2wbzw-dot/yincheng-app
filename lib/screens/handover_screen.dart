@@ -1,11 +1,11 @@
 import 'dart:async';
+import '../data/store_features.dart';
 
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../app_state.dart';
-import '../config.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
 import '../services/slip_scan.dart';
@@ -108,7 +108,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
   String? get _me => _repo.currentUserId;
   // 提醒：任何成員都能新增；自己建的可以改、刪，老闆／店長可管理全部（0041）
   bool _canEditReminder(WorkReminder r) => _canManage || (_me != null && r.createdBy == _me);
-  bool get _hasSchedule => AppConfig.scheduleStores.contains(widget.membership.storeName);
+  bool get _hasSchedule => StoreFeatures.of(widget.membership.storeName).schedule;
 
   @override
   void initState() {

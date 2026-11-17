@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
+import '../data/store_features.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../app_state.dart';
-import '../config.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
 import '../theme.dart';
@@ -30,7 +30,7 @@ class _RevenueScreenState extends State<RevenueScreen> {
   bool get _canWrite => widget.membership.canSeeRevenue;
 
   /// 這店營收是否由 Dropbox 日報表同步（隱城、小城外都是）
-  bool get _excelSynced => AppConfig.excelSyncedStores.contains(widget.membership.storeName);
+  bool get _excelSynced => StoreFeatures.of(widget.membership.storeName).excelSynced;
 
   /// 能不能點開這一筆：老闆／店長／正職都能點開看；
   /// 能不能「改」由表單判斷（Excel 匯入的那筆正職只能看，見 RevenueFormScreen._readOnly）

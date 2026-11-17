@@ -14,17 +14,7 @@ class AppConfig {
   /// true：使用內建示範資料（不連線），方便先看畫面
   static const demo = bool.fromEnvironment('DEMO', defaultValue: false);
 
-  /// 營收以 Dropbox 日報表為準的店家：App 的營收分頁只能看，不能登記或修改（每小時自動同步）
-  static const excelSyncedStores = {'隱城', '小城外'};
-
-  /// 營收照 Excel 分「咖啡／調酒／拉麵／訂金」四項顯示的店家（調酒＝酒水＋餐食；客單＝調酒收入 ÷ 來客數，與小城外 Excel 相同）
-  static const multiLineStores = {'小城外'};
-
-  /// 以「廠商銷貨單」分頁取代「盤點」分頁的店家（資料來自 Dropbox 廠商進貨單資料夾）
-  static const vendorSlipStores = {'隱城', '小城外'};
-
-  /// 有「班表」分頁的店家
-  static const scheduleStores = {'隱城', '小城外'};
+  // 每家店的功能開關（班表分頁、以日報表為準、營收四項、銷貨單…）改放資料庫（0116），見 data/store_features.dart
 
   /// 班表可選的記號（依店家）
   static const shiftMarks = {

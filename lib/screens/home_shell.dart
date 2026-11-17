@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import '../data/store_features.dart';
 
 import '../app_state.dart';
 import '../services/load_timing.dart';
-import '../config.dart';
 import '../data/models.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -135,7 +135,7 @@ class _HomeShellState extends State<HomeShell> with SingleTickerProviderStateMix
       ),
       ],
     ];
-    final hasSchedule = AppConfig.scheduleStores.contains(m.storeName);
+    final hasSchedule = StoreFeatures.of(m.storeName).schedule;
     if (hasSchedule) {
       tabs.add((
         ScheduleScreen(key: ValueKey('sc-${m.storeId}'), membership: m),

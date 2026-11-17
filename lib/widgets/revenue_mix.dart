@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import '../data/store_features.dart';
 
-import '../config.dart';
 import '../theme.dart';
 import 'common.dart';
 import 'revenue_colors.dart';
@@ -16,7 +16,7 @@ class RevenuePart {
 }
 
 
-bool isMultiLineStore(String storeName) => AppConfig.multiLineStores.contains(storeName);
+bool isMultiLineStore(String storeName) => StoreFeatures.of(storeName).multiLineRevenue;
 
 /// 依店家決定營收要拆成哪幾項：
 ///   隱城：酒水／餐食（／專案）
