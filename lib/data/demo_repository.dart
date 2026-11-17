@@ -1770,14 +1770,13 @@ class DemoRepository implements Repository {
     final days = r.daysOverride ?? r.autoDays, hours = r.hoursOverride ?? r.autoHours;
     final g = payrollTotal(
         payType: r.payType, base: r.baseAmount, days: days, hours: hours, otHours: r.otHours, otHours2: r.otHours2,
-        otMode: r.otMode, otRate: r.otRate, bonus: r.bonus, insurance: r.insurance);
+        otMode: r.otMode, otRate: r.otRate, bonus: r.bonus, insurance: r.insurance, deduction: r.deduction);
     return PayrollRow(
         personId: r.personId, name: r.name, kind: r.kind, status: status ?? r.status, payType: r.payType,
         baseAmount: r.baseAmount, autoDays: r.autoDays, autoHours: r.autoHours, daysOverride: r.daysOverride,
         hoursOverride: r.hoursOverride, days: days, hours: hours, otHours: r.otHours, otHours2: r.otHours2,
-        otMode: r.otMode, otRate: r.otRate, bonus: r.bonus, insurance: r.insurance, note: r.note,
-        gross: g?.toDouble(), lsaRate: r.payType == 'monthly' && r.baseAmount != null ? lsaOtRate(r.baseAmount!) : null,
-        lsaRate2: r.payType == 'monthly' && r.baseAmount != null ? lsaOtRate2(r.baseAmount!) : null,
+        otMode: r.otMode, otRate: r.otRate, bonus: r.bonus, insurance: r.insurance, deduction: r.deduction, note: r.note,
+        gross: g?.toDouble(),
         editable: (status ?? r.status) == 'draft', missingRate: r.baseAmount == null, updatedAt: DateTime.now());
   }
 
@@ -1813,7 +1812,8 @@ class DemoRepository implements Repository {
           daysOverride: old?.daysOverride, hoursOverride: old?.hoursOverride,
           otHours: type == 'monthly' ? old?.otHours ?? 0 : 0, otHours2: type == 'monthly' ? old?.otHours2 ?? 0 : 0,
           otMode: _payOt.otMode, otRate: _payOt.otRate, bonus: old?.bonus ?? 0,
-          insurance: type == 'daily' ? 0 : old?.insurance ?? (type == 'monthly' ? 1200 : 300), note: old?.note), status: 'draft');
+          insurance: type == 'daily' ? 0 : old?.insurance ?? (type == 'monthly' ? 1200 : 300),
+          deduction: old?.deduction ?? 0, note: old?.note), status: 'draft');
     }
     _payStatus[k] = 'draft';
     return rows.length;
@@ -1859,7 +1859,7 @@ class DemoRepository implements Repository {
   @override
   Future<double?> savePayrollEntry(String storeId, String personId, DateTime month,
       {double? days, double? hours, double otHours = 0, double otHours2 = 0, double bonus = 0, double insurance = 0,
-      String? note, String? reason}) async {
+      double deduction = 0, String? note, String? reason}) async {
     _payNeedManager();
     final k = _payKey(storeId, month), r = _payRows[k]?[personId];
     if (r == null) throw Exception('message: 這個人這個月還沒有薪資，請先帶入,');
@@ -1873,7 +1873,8 @@ class DemoRepository implements Repository {
     final n = _payCalc(PayrollRow(
         personId: r.personId, name: r.name, kind: r.kind, status: r.status, payType: r.payType, baseAmount: r.baseAmount,
         autoDays: r.autoDays, autoHours: r.autoHours, daysOverride: days, hoursOverride: hours, otHours: otHours,
-        otHours2: otHours2, otMode: r.otMode, otRate: r.otRate, bonus: bonus, insurance: insurance, note: note));
+        otHours2: otHours2, otMode: r.otMode, otRate: r.otRate, bonus: bonus, insurance: insurance, deduction: deduction,
+        note: note));
     _payRows[k]![personId] = n;
     return n.gross;
   }

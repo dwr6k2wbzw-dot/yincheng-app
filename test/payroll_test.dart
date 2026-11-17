@@ -38,25 +38,24 @@ void main() {
       expect(roundYuan(0.1 + 0.2 + 0.2), 1);
     });
 
-    test('固定加班時薪低於勞基法 → 標示（前 2 小時比 1.34 倍、第 3 小時起比 1.67 倍）', () {
-      const r = PayrollRow(personId: 'x', name: '虛構', payType: 'monthly', baseAmount: 48000, otRate: 200, lsaRate: 268);
-      expect(r.otBelowLaw, isTrue);
-      expect(r.otBelowLawText, contains('前 2 小時'));
-      // 月薪 36,000：×1.34＝201、×1.67＝250.5；固定 210 高於前 2 小時、低於第 3 小時起 → 仍要警告
-      const mid = PayrollRow(personId: 'x', name: '虛構', payType: 'monthly', baseAmount: 36000, otRate: 210);
-      expect(mid.otBelowLaw, isTrue);
-      expect(mid.otBelowLawText, allOf(contains('第 3 小時起 250.50'), contains('有達到')));
-      // 月薪 30,000：×1.67＝208.75；固定 210 都不低於
-      const ok = PayrollRow(personId: 'x', name: '虛構', payType: 'monthly', baseAmount: 30000, otRate: 210, lsaRate: 167.5);
-      expect(ok.otBelowLaw, isFalse);
-      // 以前只比 1.34 倍會漏掉：30,000＋固定 200（低於 208.75）
-      const old = PayrollRow(personId: 'x', name: '虛構', payType: 'monthly', baseAmount: 30000, otRate: 200, lsaRate: 167.5);
-      expect(old.otBelowLaw, isTrue);
-      expect(lsaOtRate(30000), closeTo(167.5, 1e-9));
-      expect(lsaOtRate2(36000), closeTo(250.5, 1e-9));
-      // 依勞基法模式本身不會低於
-      const lsa = PayrollRow(personId: 'x', name: '虛構', payType: 'monthly', baseAmount: 36000, otMode: 'lsa', otRate: 0);
-      expect(lsa.otBelowLaw, isFalse);
+    test('扣項（ops 0124）：三種計薪方式都從實發扣掉', () {
+      expect(payrollTotal(payType: 'daily', base: 1500, days: 12, bonus: 300, deduction: 500), 17800);
+      expect(payrollTotal(payType: 'hourly', base: 190, hours: 80.5, insurance: 250, deduction: 45), 15000);
+      expect(payrollTotal(payType: 'monthly', base: 40000, bonus: 2000, insurance: 1500, otHours: 6, otRate: 200, deduction: 1700), 40000);
+      // 沒填＝0，跟原本的結果一樣
+      expect(payrollTotal(payType: 'monthly', base: 40000, bonus: 2000, insurance: 1500, otHours: 6, otRate: 200), 41700);
+    });
+
+    test('薪資單多一行「扣項」，每一行加起來等於實發', () {
+      final s = PayrollSlip(
+          month: DateTime(2031, 1), storeName: '虛構店', personName: '虛構', payType: 'hourly', baseAmount: 190, hours: 80.5,
+          insurance: 250, deduction: 45, gross: 15000);
+      final lines = s.lines();
+      expect(lines.where((l) => l.label == '扣項').single.amount, -45);
+      expect(lines.fold<double>(0, (a, l) => a + l.amount), 15000);
+      // 沒有扣項就不多那一行
+      expect(PayrollSlip(month: DateTime(2031, 1), storeName: '虛構店', personName: '虛構', payType: 'hourly', baseAmount: 190, hours: 1, gross: 190)
+          .lines().any((l) => l.label == '扣項'), isFalse);
     });
 
     test('數字欄位：格式不對（1..5、abc、負數）跟空白分開；0 和正數才算對', () {

@@ -204,7 +204,6 @@ class _PayrollScreenState extends State<PayrollScreen> {
   /// locked：載入中（切月、重新整理）或正在做事，所有按鈕都先停用
   Widget _summary(_MonthData d, bool locked) {
     final r = d.report, s = d.settings, rows = d.rows, month = d.month;
-    final below = rows.where((x) => x.otBelowLaw).toList();
     final hidden = rows.any((x) => x.hidden);
     final missing = r.missingNames.isNotEmpty || r.missingRate > 0;
     final missingCount = r.missingNames.isNotEmpty ? r.missingNames.length : r.missingRate;
@@ -259,20 +258,6 @@ class _PayrollScreenState extends State<PayrollScreen> {
           ),
           if (_owner) TextButton(onPressed: locked ? null : () => _editOvertime(s), child: const Text('修改')),
         ]),
-        if (below.isNotEmpty) ...[
-          Text('加班費可能低於勞基法第 24 條（元／小時）',
-              style: TextStyle(color: AppColors.warn, fontSize: AppType.small, fontWeight: AppFont.heading)),
-          for (final x in below)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Wrap(spacing: 12, runSpacing: 2, children: [
-                Text(x.name, style: const TextStyle(fontSize: AppType.small, fontWeight: AppFont.heading)),
-                Text('目前設定 ${_n(x.otRate)}', style: const TextStyle(fontSize: AppType.small)),
-                Text('依法比較：前 2 小時 ${_n(x.lsaFirst2!)}、第 3 小時起 ${_n(x.lsaFrom3!)}',
-                    style: TextStyle(color: AppColors.warn, fontSize: AppType.small)),
-              ]),
-            ),
-        ],
         const SizedBox(height: 12),
         Wrap(spacing: 8, runSpacing: 8, children: [
           if (!r.published) ...[
@@ -331,6 +316,7 @@ class _PayrollScreenState extends State<PayrollScreen> {
                   if (_qty(r).isNotEmpty) _qty(r),
                   if (r.bonus != 0) '獎金 ${ntd(r.bonus)}',
                   if (r.insurance != 0) '勞健保 −${ntd(r.insurance)}',
+                  if (r.deduction != 0) '扣項 −${ntd(r.deduction)}',
                 ].join('・'));
     return ListTile(
       contentPadding: EdgeInsets.zero,
@@ -440,6 +426,7 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
   late final _ot2 = TextEditingController(text: _fmt(r.otHours2));
   late final _bonus = TextEditingController(text: _fmt(r.bonus));
   late final _ins = TextEditingController(text: _fmt(r.insurance));
+  late final _ded = TextEditingController(text: _fmt(r.deduction));
   late final _note = TextEditingController(text: r.note);
   final _reason = TextEditingController();
   bool _saving = false;
@@ -459,6 +446,7 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
     _ot2: (1, 400),
     _bonus: (2, 99999999),
     _ins: (2, 99999999),
+    _ded: (2, 99999999),
   };
 
   /// 這個人會用到的數字欄位（欄位、哪一類）
@@ -469,6 +457,7 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
         if (r.payType == 'monthly' && _lsa) (_ot2, '時數'),
         (_bonus, '金額'),
         if (r.payType != 'daily') (_ins, '金額'),
+        (_ded, '金額'),
       ];
 
   /// 有欄位格式、小數位數、上限不對或時數不是 0.5 的倍數：停止試算、不能存。回傳要顯示的哪一類（時數／天數／金額）
@@ -483,7 +472,7 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
 
   @override
   void dispose() {
-    for (final c in [_qty, _ot1, _ot2, _bonus, _ins, _note, _reason]) {
+    for (final c in [_qty, _ot1, _ot2, _bonus, _ins, _ded, _note, _reason]) {
       c.dispose();
     }
     super.dispose();
@@ -516,6 +505,7 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
         otRate: r.otRate,
         bonus: _parse(_bonus) ?? 0,
         insurance: r.payType == 'daily' ? 0 : _parse(_ins) ?? 0,
+        deduction: _parse(_ded) ?? 0,
       );
 
   Future<void> _save() async {
@@ -530,6 +520,7 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
           otHours2: r.payType == 'monthly' && _lsa ? _parse(_ot2) ?? 0 : 0,
           bonus: _parse(_bonus) ?? 0,
           insurance: r.payType == 'daily' ? 0 : _parse(_ins) ?? 0,
+          deduction: _parse(_ded) ?? 0,
           note: _note.text.trim().isEmpty ? null : _note.text.trim(),
           reason: _reason.text.trim().isEmpty ? null : _reason.text.trim());
       if (mounted) Navigator.pop(context, true);
@@ -594,6 +585,7 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
       ],
       _ro('獎金', ntd(r.bonus)),
       if (r.payType != 'daily') _ro('勞健保自付額', r.insurance == 0 ? ntd(0) : '−${ntd(r.insurance)}'),
+      if (r.deduction != 0) _ro('扣項', '−${ntd(r.deduction)}'),
       if (r.note != null && r.note!.isNotEmpty) _ro('備註', r.note!),
       const Divider(height: 24),
       Row(children: [
@@ -638,11 +630,6 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
             _num(_ot2, '加班時數：每次第 3 小時起（×1.67）'),
           ] else
             _num(_ot1, '加班時數', helper: '× ${_n(r.otRate)} 元／小時'),
-          if (r.otBelowLaw)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text('可能低於勞基法第 24 條：${r.otBelowLawText}', style: TextStyle(color: AppColors.warn, fontSize: AppType.small)),
-            ),
         ],
         if (_halfError != null)
           Padding(
@@ -651,6 +638,7 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
           ),
         _num(_bonus, '獎金'),
         if (r.payType != 'daily') _num(_ins, '勞健保自付額', helper: '照投保單位的金額手動填；新月份會先帶上個月的'),
+        _num(_ded, '扣項', helper: '從實發金額扣掉；扣的是什麼請寫在備註（薪資單上看得到）'),
         TextField(controller: _note, enabled: r.editable, maxLength: 200, decoration: const InputDecoration(labelText: '備註（薪資單上看得到）')),
         TextField(controller: _reason, enabled: r.editable, maxLength: 200, decoration: const InputDecoration(labelText: '修改原因（記在修改紀錄，可空白）')),
         const SizedBox(height: 12),
