@@ -53,3 +53,40 @@ String attendanceCsvName(String store, DateTime from, DateTime to) {
   final f = DateFormat('yyyyMMdd');
   return '出勤_${store}_${f.format(from)}-${f.format(to)}.csv';
 }
+
+/// 打卡跟班表比對的異常報表（ops 0127）：一個人一天一列
+String buildScheduleCheckCsv(List<ScheduleCheckRow> rows) {
+  final day = DateFormat('yyyy-MM-dd'), hm = DateFormat('HH:mm');
+  String t(DateTime? v) => v == null ? '' : hm.format(toTaipei(v));
+  final out = StringBuffer()
+    ..write(['營業日', '姓名', '班表', '班的開始', '班的結束', '第一筆上班', '最後一筆下班', '異常', '核准加班（小時）', '加班待審', '有待確認的卡']
+        .map(csvCell)
+        .join(','))
+    ..write('\r\n');
+  for (final r in rows) {
+    out
+      ..write([
+        day.format(r.businessDate),
+        r.personName,
+        r.mark ?? '沒排班',
+        t(r.planStart),
+        t(r.planEnd),
+        t(r.firstIn),
+        t(r.lastOut),
+        r.issues.map(r.issueText).join('、'),
+        r.otApproved == null ? '' : hoursLabel(r.otApproved!),
+        r.otPending ? '是' : '',
+        r.punchPending ? '是' : '',
+      ].map(csvCell).join(','))
+      ..write('\r\n');
+  }
+  return out.toString();
+}
+
+Uint8List scheduleCheckCsvBytes(List<ScheduleCheckRow> rows) =>
+    Uint8List.fromList([0xEF, 0xBB, 0xBF, ...utf8.encode(buildScheduleCheckCsv(rows))]);
+
+String scheduleCheckCsvName(String store, DateTime from, DateTime to) {
+  final f = DateFormat('yyyyMMdd');
+  return '打卡比對_${store}_${f.format(from)}-${f.format(to)}.csv';
+}

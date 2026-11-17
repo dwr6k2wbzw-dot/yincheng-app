@@ -8,6 +8,7 @@ import '../data/repository.dart';
 import '../services/clock.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'attendance_check_screen.dart' show MyOvertimeSection;
 import 'attendance_manage_screen.dart';
 import 'payroll_screen.dart';
 import 'pin_punch_screen.dart' show editPunchPin;
@@ -377,6 +378,14 @@ class _MyAttendanceScreenState extends State<MyAttendanceScreen> {
             if (!snap.hasData) return const Center(child: CircularProgressIndicator());
             final rows = snap.data!;
             return ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 96), children: [
+              // ops 0127：加班要先申請；沒有事先申請的，事後申請寫原因
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: SectionCard(
+                  child: MyOvertimeSection(
+                      storeId: widget.membership.storeId, personId: widget.me.personId!, personName: widget.me.personName ?? ''),
+                ),
+              ),
               const InfoLine(
                   text: '最近 62 天・時間是伺服器時間（台北）',
                   icon: Icons.info_outline,

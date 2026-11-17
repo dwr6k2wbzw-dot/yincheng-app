@@ -572,6 +572,34 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
     return v == null || v == _auto ? null : v;
   }
 
+  /// 核准的加班（加班申請核准後自動帶入）；跟目前填的不一樣時可以一鍵改回
+  Widget _approvedOt(PayrollRow r) {
+    final a1 = r.autoOtHours ?? 0, a2 = r.autoOtHours2 ?? 0;
+    final same = _lsa ? (_parse(_ot1) ?? 0) == a1 && (_parse(_ot2) ?? 0) == a2 : (_parse(_ot1) ?? 0) == a1 + a2;
+    final text = a1 + a2 == 0
+        ? '這個月沒有核准的加班'
+        : _lsa
+            ? '核准的加班：前 2 小時 ${_n(a1)}、第 3 小時起 ${_n(a2)} 小時'
+            : '核准的加班 ${_n(a1 + a2)} 小時';
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(children: [
+        Icon(same ? Icons.check_circle_outline : Icons.edit_note, size: 18, color: same ? AppColors.good : AppColors.warn),
+        const SizedBox(width: 6),
+        Expanded(
+            child: Text(same ? '$text（自動帶入）' : '$text；目前填的不一樣，之後核准的不會自動帶入',
+                style: TextStyle(color: same ? AppColors.muted : AppColors.warn, fontSize: AppType.small))),
+        if (!same)
+          TextButton(
+              onPressed: () => setState(() {
+                    _ot1.text = _fmt(_lsa ? a1 : a1 + a2);
+                    _ot2.text = _fmt(_lsa ? a2 : 0);
+                  }),
+              child: const Text('改回核准的')),
+      ]),
+    );
+  }
+
   /// 時數、加班時數只能 0.5 的倍數（老闆 2026-11-15）
   String? get _halfError {
     final fields = [
@@ -785,6 +813,8 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
             _num(_ot2, '加班時數：每次第 3 小時起（×1.67）'),
           ] else
             _num(_ot1, '加班時數', helper: '× ${_n(r.otRate)} 元／小時'),
+          // ops 0127：核准的加班自動帶入；手動改過的不會被蓋掉，可以一鍵改回
+          if (r.autoOtHours != null) _approvedOt(r),
         ],
         if (_halfError != null)
           Padding(

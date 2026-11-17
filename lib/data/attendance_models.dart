@@ -654,3 +654,184 @@ class AttendancePerson {
       );
   String get label => crossStore ? '$name（${homeStoreName ?? '別家店'}支援）' : name;
 }
+
+// ---------------- 打卡跟班表比對、加班申請（ops 0127，老闆 2026-11-17 第 5、6 點） ----------------
+
+/// 比對班表的異常種類（attendance_schedule_check.issues）
+String scheduleIssueLabel(String k) => switch (k) {
+      'early_in' => '早到',
+      'late_in' => '遲到',
+      'early_out' => '早退',
+      'late_out' => '晚走',
+      'no_schedule' => '沒排班有打卡',
+      'no_punch' => '有排班沒打卡',
+      _ => k,
+    };
+
+/// 打卡跟班表比對的一列：一個人一天（只列有異常的）
+class ScheduleCheckRow {
+  final DateTime businessDate;
+  final String personId;
+  final String personName;
+  final String? mark; // 班表那格（V、B、18:00-00:30…；沒排班是 null）
+  final DateTime? planStart, planEnd; // 班的開始、結束（沒設時間是 null）
+  final DateTime? firstIn, lastOut; // 那天第一筆上班、最後一筆下班
+  final List<String> issues;
+  final int? earlyInMin, lateInMin, earlyOutMin, lateOutMin;
+  final bool punchPending; // 有打卡還在待確認
+  final double? otApproved; // 那天核准的加班時數
+  final bool otPending; // 那天有待審的加班申請
+  const ScheduleCheckRow({
+    required this.businessDate,
+    required this.personId,
+    required this.personName,
+    this.mark,
+    this.planStart,
+    this.planEnd,
+    this.firstIn,
+    this.lastOut,
+    this.issues = const [],
+    this.earlyInMin,
+    this.lateInMin,
+    this.earlyOutMin,
+    this.lateOutMin,
+    this.punchPending = false,
+    this.otApproved,
+    this.otPending = false,
+  });
+  factory ScheduleCheckRow.fromRow(Map<String, dynamic> r) => ScheduleCheckRow(
+        businessDate: _date(r['business_date']),
+        personId: r['person_id'] as String,
+        personName: labelOfPerson(r['person_id'], r['person_name'] as String? ?? ''),
+        mark: r['mark'] as String?,
+        planStart: _tsOrNull(r['plan_start']),
+        planEnd: _tsOrNull(r['plan_end']),
+        firstIn: _tsOrNull(r['first_in']),
+        lastOut: _tsOrNull(r['last_out']),
+        issues: _strs(r['issues']),
+        earlyInMin: (r['early_in_min'] as num?)?.toInt(),
+        lateInMin: (r['late_in_min'] as num?)?.toInt(),
+        earlyOutMin: (r['early_out_min'] as num?)?.toInt(),
+        lateOutMin: (r['late_out_min'] as num?)?.toInt(),
+        punchPending: r['punch_pending'] as bool? ?? false,
+        otApproved: _numOrNull(r['ot_approved']),
+        otPending: r['ot_pending'] as bool? ?? false,
+      );
+
+  int? minutesOf(String issue) => switch (issue) {
+        'early_in' => earlyInMin,
+        'late_in' => lateInMin,
+        'early_out' => earlyOutMin,
+        'late_out' => lateOutMin,
+        _ => null,
+      };
+
+  /// 「早到 40 分」「有排班沒打卡」
+  String issueText(String issue) {
+    final m = minutesOf(issue);
+    return m == null ? scheduleIssueLabel(issue) : '${scheduleIssueLabel(issue)} ${durationLabel(m)}';
+  }
+
+  /// 晚走但沒有核准、也沒有待審的加班
+  bool get lateWithoutOvertime => issues.contains('late_out') && (otApproved ?? 0) == 0 && !otPending;
+
+  /// 晚走幾分鐘換成加班時數的建議值（往下取到 0.5 小時，最少 0.5）
+  double get suggestedOvertimeHours {
+    final m = lateOutMin ?? 0;
+    final h = (m ~/ 30) / 2;
+    return h < 0.5 ? 0.5 : (h > 12 ? 12 : h);
+  }
+}
+
+/// 75 → 「1 小時 15 分」、40 → 「40 分」
+String durationLabel(int minutes) {
+  final h = minutes ~/ 60, m = minutes % 60;
+  if (h == 0) return '$m 分';
+  return m == 0 ? '$h 小時' : '$h 小時 $m 分';
+}
+
+/// 加班時數顯示：2.0 → 「2」、2.5 → 「2.5」
+String hoursLabel(double h) => h == h.roundToDouble() ? h.toInt().toString() : h.toString();
+
+/// 加班申請（attendance_overtime_list）
+class OvertimeRequest {
+  final String id;
+  final String personId;
+  final String personName;
+  final DateTime businessDate;
+  final double hours;
+  final String reason;
+  final bool afterTheFact; // 事後申請
+  final String status; // pending／approved／rejected／cancelled
+  final double? approvedHours;
+  final String? requestedByName;
+  final DateTime requestedAt;
+  final String? decidedByName;
+  final DateTime? decidedAt;
+  final String? decisionNote;
+  final bool mine; // 我送出的（可以撤回還沒審的）
+  final bool canDecide; // 我可以審（老闆；店長不能審自己的）
+  const OvertimeRequest({
+    required this.id,
+    required this.personId,
+    required this.personName,
+    required this.businessDate,
+    required this.hours,
+    required this.reason,
+    this.afterTheFact = false,
+    this.status = 'pending',
+    this.approvedHours,
+    this.requestedByName,
+    required this.requestedAt,
+    this.decidedByName,
+    this.decidedAt,
+    this.decisionNote,
+    this.mine = false,
+    this.canDecide = false,
+  });
+  factory OvertimeRequest.fromRow(Map<String, dynamic> r) => OvertimeRequest(
+        id: r['id'] as String,
+        personId: r['person_id'] as String,
+        personName: labelOfPerson(r['person_id'], r['person_name'] as String? ?? ''),
+        businessDate: _date(r['business_date']),
+        hours: (r['hours'] as num).toDouble(),
+        reason: r['reason'] as String? ?? '',
+        afterTheFact: r['after_the_fact'] as bool? ?? false,
+        status: r['status'] as String? ?? 'pending',
+        approvedHours: _numOrNull(r['approved_hours']),
+        requestedByName: r['requested_by_name'] as String?,
+        requestedAt: _ts(r['requested_at']),
+        decidedByName: r['decided_by_name'] as String?,
+        decidedAt: _tsOrNull(r['decided_at']),
+        decisionNote: r['decision_note'] as String?,
+        mine: r['mine'] as bool? ?? false,
+        canDecide: r['can_decide'] as bool? ?? false,
+      );
+
+  bool get pending => status == 'pending';
+  String get statusLabel => switch (status) {
+        'pending' => '待審',
+        'approved' => approvedHours != null && approvedHours != hours ? '已核准 ${hoursLabel(approvedHours!)} 小時' : '已核准',
+        'rejected' => '已退回',
+        'cancelled' => '已撤回',
+        _ => status,
+      };
+}
+
+/// 隱城 V、O 的時間（shift_mark_times；weekday 0＝平常，1＝週一…7＝週日另設）
+class ShiftMarkTime {
+  final String mark;
+  final int weekday;
+  final String timeRange;
+  const ShiftMarkTime({required this.mark, this.weekday = 0, required this.timeRange});
+  factory ShiftMarkTime.fromRow(Map<String, dynamic> r) =>
+      ShiftMarkTime(mark: r['mark'] as String, weekday: (r['weekday'] as num?)?.toInt() ?? 0, timeRange: r['time_range'] as String);
+}
+
+const weekdayLabels = ['平常', '週一', '週二', '週三', '週四', '週五', '週六', '週日'];
+
+/// 某一天 V／O 的時間：那個星期另設的優先，沒有就用平常的
+String? markTimeOn(List<ShiftMarkTime> times, String mark, DateTime day) =>
+    (times.where((t) => t.mark == mark && t.weekday == day.weekday).firstOrNull ??
+            times.where((t) => t.mark == mark && t.weekday == 0).firstOrNull)
+        ?.timeRange;
