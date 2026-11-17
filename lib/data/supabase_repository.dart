@@ -2012,6 +2012,55 @@ class SupabaseRepository implements Repository {
       _rpcRows(await _db.rpc('attendance_export', params: _range(storeId, from, to))).map(AttendanceExportRow.fromRow).toList();
 
   @override
+  Future<List<ScheduleCheckRow>> scheduleCheck(String storeId, DateTime from, DateTime to) async =>
+      _rpcRows(await _db.rpc('attendance_schedule_check', params: _range(storeId, from, to))).map(ScheduleCheckRow.fromRow).toList();
+
+  @override
+  Future<List<OvertimeRequest>> overtimeList(String storeId, DateTime from, DateTime to) async =>
+      _rpcRows(await _db.rpc('attendance_overtime_list', params: _range(storeId, from, to))).map(OvertimeRequest.fromRow).toList();
+
+  @override
+  Future<String> requestOvertime(String storeId, String personId, DateTime day, double hours, String reason) async =>
+      await _db.rpc('attendance_overtime_request', params: {
+        'p_store': storeId,
+        'p_person': personId,
+        'p_date': _day.format(day),
+        'p_hours': hours,
+        'p_reason': reason,
+      }) as String;
+
+  @override
+  Future<void> decideOvertime(String id, bool approve, {double? hours, String? note}) => _db.rpc('attendance_overtime_decide', params: {
+        'p_id': id,
+        'p_approve': approve,
+        if (hours != null) 'p_hours': hours,
+        if (note != null && note.isNotEmpty) 'p_note': note,
+      });
+
+  @override
+  Future<void> cancelOvertime(String id) => _db.rpc('attendance_overtime_cancel', params: {'p_id': id});
+
+  @override
+  Future<List<ShiftMarkTime>> shiftMarkTimes(String storeId) async {
+    try {
+      final rows = await _db.from('shift_mark_times').select('mark, weekday, time_range').eq('store_id', storeId);
+      return [for (final r in rows) ShiftMarkTime.fromRow(r)];
+    } on PostgrestException catch (e) {
+      if (e.code == '42P01' || e.code == 'PGRST205') return const []; // 資料庫還沒更新
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> saveShiftMarkTime(String storeId, ShiftMarkTime t) => _db
+      .from('shift_mark_times')
+      .upsert({'store_id': storeId, 'mark': t.mark, 'weekday': t.weekday, 'time_range': t.timeRange}, onConflict: 'store_id,mark,weekday');
+
+  @override
+  Future<void> deleteShiftMarkTime(String storeId, String mark, int weekday) =>
+      _db.from('shift_mark_times').delete().eq('store_id', storeId).eq('mark', mark).eq('weekday', weekday);
+
+  @override
   Future<List<KioskInfo>> kiosks(String storeId) async =>
       _rpcRows(await _db.rpc('attendance_kiosk_list', params: {'p_store': storeId})).map(KioskInfo.fromRow).toList();
 

@@ -11,6 +11,7 @@ import '../services/clock.dart';
 import '../services/pl_export.dart' deferred as pl;
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'attendance_check_screen.dart';
 import 'attendance_screen.dart';
 import 'kiosk_screen.dart' show kioskIdPref;
 import 'pin_punch_screen.dart' show editPunchPin;
@@ -47,14 +48,18 @@ class _AttendanceManageScreenState extends State<AttendanceManageScreen> {
       return Scaffold(appBar: AppBar(title: Text('員工資料・${m.storeName}')), body: _StaffTab(membership: m));
     }
     return DefaultTabController(
-      length: 5,
+      length: 7,
       child: Scaffold(
         appBar: AppBar(
           title: Text('出勤管理・${m.storeName}'),
-          bottom: const TabBar(isScrollable: true, tabAlignment: TabAlignment.start, tabs: [Tab(text: '異常'), Tab(text: '出勤'), Tab(text: '原始紀錄'), Tab(text: '打卡機'), Tab(text: '員工資料')]),
+          bottom: const TabBar(isScrollable: true, tabAlignment: TabAlignment.start, tabs: [
+            Tab(text: '異常'), Tab(text: '比對班表'), Tab(text: '加班'), Tab(text: '出勤'), Tab(text: '原始紀錄'), Tab(text: '打卡機'), Tab(text: '員工資料')
+          ]),
         ),
         body: TabBarView(children: [
           _AnomalyTab(membership: m, data: widget.data, codeTimes: widget.codeTimes, changed: _changed),
+          ScheduleCheckTab(membership: m, data: widget.data, codeTimes: widget.codeTimes, changed: _changed),
+          OvertimeTab(membership: m, changed: _changed),
           _SessionTab(membership: m, changed: _changed),
           _RawTab(membership: m, changed: _changed),
           _KioskTab(membership: m),

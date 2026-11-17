@@ -300,6 +300,19 @@ abstract class Repository {
   Future<List<AttendanceAnomaly>> attendanceAnomalies(String storeId, DateTime from, DateTime to);
   Future<List<AttendanceSession>> attendanceSessions(String storeId, DateTime from, DateTime to);
   Future<List<AttendanceExportRow>> attendanceExport(String storeId, DateTime from, DateTime to);
+  /// 打卡跟班表比對（ops 0127；老闆、店長）：早到、遲到、早退、晚走超過 30 分鐘、沒排班有打卡、有排班沒打卡
+  Future<List<ScheduleCheckRow>> scheduleCheck(String storeId, DateTime from, DateTime to);
+  /// 加班申請：老闆、店長看全店（待審的不管日期都列）；其他人只有自己的
+  Future<List<OvertimeRequest>> overtimeList(String storeId, DateTime from, DateTime to);
+  /// 申請加班（本人，或老闆、店長替店裡的人）；以營業日為單位、0.5 小時為一格、一定要寫原因
+  Future<String> requestOvertime(String storeId, String personId, DateTime day, double hours, String reason);
+  /// 核准（可以改時數）或退回（要寫原因）
+  Future<void> decideOvertime(String id, bool approve, {double? hours, String? note});
+  Future<void> cancelOvertime(String id);
+  /// 隱城 V、O 的時間（平常＋照星期另設）；資料庫還沒更新回空的
+  Future<List<ShiftMarkTime>> shiftMarkTimes(String storeId);
+  Future<void> saveShiftMarkTime(String storeId, ShiftMarkTime t);
+  Future<void> deleteShiftMarkTime(String storeId, String mark, int weekday);
   // 打卡機（老闆、店長設定；打卡機畫面本身不登入）
   Future<List<KioskInfo>> kiosks(String storeId);
   /// 回傳打卡機 id 與密鑰（密鑰只有這次拿得到，存在那台裝置上）

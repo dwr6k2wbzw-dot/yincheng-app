@@ -1510,6 +1510,141 @@ class DemoRepository implements Repository {
     ];
   }
 
+  // ---------- 打卡跟班表比對、加班申請（ops 0127） ----------
+  /// 示範：班的時間（隱城的 V 平常 18:00-00:30、週五六 19:00-01:30）
+  final _markTimes = <ShiftMarkTime>[
+    const ShiftMarkTime(mark: 'V', timeRange: '18:00-00:30'),
+    const ShiftMarkTime(mark: 'V', weekday: 5, timeRange: '19:00-01:30'),
+    const ShiftMarkTime(mark: 'V', weekday: 6, timeRange: '19:00-01:30'),
+  ];
+  late final List<OvertimeRequest> _ot = [
+    OvertimeRequest(id: 'ot1', personId: 'f1', personName: _dn('f1', '小安'), businessDate: _daysAgo(1), hours: 1.5,
+        reason: '客人留到快兩點，收店晚了', afterTheFact: true, requestedByName: '小安',
+        requestedAt: DateTime.now().subtract(const Duration(hours: 9))),
+    OvertimeRequest(id: 'ot2', personId: 'f0', personName: _dn('f0', '阿明'), businessDate: _daysAgo(3), hours: 2.5,
+        reason: '包場活動，事先排好', status: 'approved', approvedHours: 2.5, requestedByName: '示範',
+        requestedAt: DateTime.now().subtract(const Duration(days: 5)), decidedByName: '示範店長',
+        decidedAt: DateTime.now().subtract(const Duration(days: 4)), mine: true),
+    OvertimeRequest(id: 'ot3', personId: 'p0', personName: _dn('p0', '小魚'), businessDate: _daysAgo(6), hours: 1,
+        reason: '留下來盤點', afterTheFact: true, status: 'rejected', requestedByName: '小魚',
+        requestedAt: DateTime.now().subtract(const Duration(days: 6)), decidedByName: '示範店長',
+        decidedAt: DateTime.now().subtract(const Duration(days: 5)), decisionNote: '盤點排在上班時間內'),
+  ];
+
+  DateTime _at(DateTime day, String hm) {
+    final h = int.parse(hm.substring(0, 2)), m = int.parse(hm.substring(3));
+    return DateTime(day.year, day.month, day.day + (h < 6 ? 1 : 0), h, m);
+  }
+
+  @override
+  Future<List<ScheduleCheckRow>> scheduleCheck(String storeId, DateTime from, DateTime to) async {
+    if (_isStaff) throw Exception('message: 只有老闆或店長能看打卡比對,');
+    double? approved(String person, DateTime d) {
+      final v = _ot.where((o) => o.personId == person && o.businessDate == d && o.status == 'approved').fold<double>(0, (a, o) => a + (o.approvedHours ?? 0));
+      return v == 0 ? null : v;
+    }
+    bool pending(String person, DateTime d) => _ot.any((o) => o.personId == person && o.businessDate == d && o.pending);
+    ScheduleCheckRow row(String id, String nick, int ago, String? mark, String? plan, String? inHm, String? outHm, List<String> issues,
+        {int? ei, int? li, int? eo, int? lo}) {
+      final d = _daysAgo(ago);
+      final p = plan?.split('-');
+      return ScheduleCheckRow(
+          businessDate: d, personId: id, personName: _dn(id, nick), mark: mark,
+          planStart: p == null ? null : _at(d, p[0]), planEnd: p == null ? null : _at(d, p[1]),
+          firstIn: inHm == null ? null : _at(d, inHm), lastOut: outHm == null ? null : _at(d, outHm),
+          issues: issues, earlyInMin: ei, lateInMin: li, earlyOutMin: eo, lateOutMin: lo,
+          otApproved: approved(id, d), otPending: pending(id, d));
+    }
+    final vTime = markTimeOn(_markTimes, 'V', _daysAgo(1));
+    final rows = [
+      if (vTime != null) row('f1', '小安', 1, 'V', vTime, '18:02', '02:05', ['late_out'], lo: 95),
+      if (vTime != null) row('f0', '阿明', 3, 'V', markTimeOn(_markTimes, 'V', _daysAgo(3)), '17:55', '03:00', ['late_out'], lo: 150),
+      row('p0', '小魚', 2, '19:00-00:30', '19:00-00:30', '19:45', '00:30', ['late_in'], li: 45),
+      row('f2', '阿哲', 4, 'V', vTime == null ? null : markTimeOn(_markTimes, 'V', _daysAgo(4)), null, null, ['no_punch']),
+      row('p1', '阿凱', 5, '休', null, '18:30', '23:40', ['no_schedule']),
+      if (vTime != null) row('f1', '小安', 6, 'V', markTimeOn(_markTimes, 'V', _daysAgo(6)), '17:20', '23:55', ['early_in', 'early_out'], ei: 40, eo: 35),
+    ];
+    return [for (final r in rows) if (!r.businessDate.isBefore(from) && !r.businessDate.isAfter(to)) r];
+  }
+
+  @override
+  Future<List<OvertimeRequest>> overtimeList(String storeId, DateTime from, DateTime to) async => [
+        for (final o in _ot)
+          if (_isStaff ? o.personId == 'f0' : (o.pending || (!o.businessDate.isBefore(from) && !o.businessDate.isAfter(to))))
+            OvertimeRequest(
+                id: o.id, personId: o.personId, personName: o.personName, businessDate: o.businessDate, hours: o.hours, reason: o.reason,
+                afterTheFact: o.afterTheFact, status: o.status, approvedHours: o.approvedHours, requestedByName: o.requestedByName,
+                requestedAt: o.requestedAt, decidedByName: o.decidedByName, decidedAt: o.decidedAt, decisionNote: o.decisionNote,
+                mine: o.mine, canDecide: !_isStaff && o.pending && !(_isManager && o.mine)),
+      ];
+
+  void _otSet(String id, String status, {double? approved, String? note}) {
+    final i = _ot.indexWhere((o) => o.id == id);
+    if (i < 0) return;
+    final o = _ot[i];
+    if (!o.pending) throw Exception('message: 這筆加班申請已經處理過了,');
+    _ot[i] = OvertimeRequest(
+        id: o.id, personId: o.personId, personName: o.personName, businessDate: o.businessDate, hours: o.hours, reason: o.reason,
+        afterTheFact: o.afterTheFact, status: status, approvedHours: approved, requestedByName: o.requestedByName,
+        requestedAt: o.requestedAt, decidedByName: '示範', decidedAt: DateTime.now(), decisionNote: note, mine: o.mine);
+  }
+
+  @override
+  Future<String> requestOvertime(String storeId, String personId, DateTime day, double hours, String reason) async {
+    if (!isHalfHour(hours) || hours <= 0 || hours > 12) throw Exception('message: 加班時數以 0.5 小時為單位，一天最多 12 小時,');
+    if (reason.trim().length < 2) throw Exception('message: 請寫加班的原因,');
+    if (_ot.any((o) => o.personId == personId && o.businessDate == day && o.pending)) {
+      throw Exception('message: 這天已經有一筆待審核的加班申請,');
+    }
+    final id = 'ot${_seq++}';
+    final names = {for (final p in (await shiftMonth(storeId, day)).people) p.id: p.label};
+    _ot.add(OvertimeRequest(
+        id: id, personId: personId, personName: names[personId] ?? _dn('f0', '阿明'), businessDate: day, hours: hours,
+        reason: reason.trim(), afterTheFact: day.isBefore(_daysAgo(0)), requestedByName: '示範', requestedAt: DateTime.now(), mine: true));
+    return id;
+  }
+
+  @override
+  Future<void> decideOvertime(String id, bool approve, {double? hours, String? note}) async {
+    if (_isStaff) throw Exception('message: 只有老闆或店長能審核加班,');
+    final o = _ot.firstWhere((x) => x.id == id);
+    if (_isManager && o.mine) throw Exception('message: 自己的加班要請老闆或另一位店長核准,');
+    if (!approve && (note ?? '').trim().length < 2) throw Exception('message: 退回要寫原因,');
+    _otSet(id, approve ? 'approved' : 'rejected', approved: approve ? hours ?? o.hours : null, note: note);
+    // 核准當下就帶進那個月還沒發布的薪資（月薪制、手動改過的不蓋掉）
+    final month = DateTime(o.businessDate.year, o.businessDate.month);
+    final k = _payKey(_otStore, month), r = _payRows[k]?[o.personId];
+    if (approve && r != null && r.payType == 'monthly' && _payStatus[k] == 'draft') {
+      final a = _demoOt(o.personId, month);
+      _payRows[k]![o.personId] = _payCalc(PayrollRow(
+          personId: r.personId, name: r.name, slipName: r.slipName, kind: r.kind, status: r.status, payType: r.payType,
+          baseAmount: r.baseAmount, autoDays: r.autoDays, autoHours: r.autoHours, daysOverride: r.daysOverride,
+          hoursOverride: r.hoursOverride, otHours: r.otManual ? r.otHours : a.h1, otHours2: r.otManual ? r.otHours2 : a.h2,
+          otMode: r.otMode, otRate: r.otRate, bonus: r.bonus, insurance: r.insurance, deduction: r.deduction,
+          extras: r.extras, note: r.note, autoOtHours: a.h1, autoOtHours2: a.h2, otManual: r.otManual));
+    }
+  }
+
+  static const _otStore = 'yc'; // 示範：加班只在隱城
+
+  @override
+  Future<void> cancelOvertime(String id) async => _otSet(id, 'cancelled');
+
+  @override
+  Future<List<ShiftMarkTime>> shiftMarkTimes(String storeId) async => storeId == 'yc' ? List.of(_markTimes) : const [];
+
+  @override
+  Future<void> saveShiftMarkTime(String storeId, ShiftMarkTime t) async {
+    if (_isStaff) throw Exception('message: 只有老闆或店長能設班的時間,');
+    _markTimes
+      ..removeWhere((x) => x.mark == t.mark && x.weekday == t.weekday)
+      ..add(t);
+  }
+
+  @override
+  Future<void> deleteShiftMarkTime(String storeId, String mark, int weekday) async =>
+      _markTimes.removeWhere((x) => x.mark == mark && x.weekday == weekday);
+
   @override
   Future<List<AttendanceExportRow>> attendanceExport(String storeId, DateTime from, DateTime to) async {
     final d = _daysAgo(1);
@@ -1816,6 +1951,7 @@ class DemoRepository implements Repository {
         hoursOverride: r.hoursOverride, days: days, hours: hours, otHours: r.otHours, otHours2: r.otHours2,
         otMode: r.otMode, otRate: r.otRate, bonus: r.bonus, insurance: r.insurance, deduction: r.deduction,
         extras: r.extras, slipName: r.slipName, note: r.note,
+        autoOtHours: r.autoOtHours, autoOtHours2: r.autoOtHours2, otManual: r.otManual,
         gross: g?.toDouble(),
         editable: (status ?? r.status) == 'draft', missingRate: r.baseAmount == null, updatedAt: DateTime.now());
   }
@@ -1855,13 +1991,33 @@ class DemoRepository implements Repository {
           personId: p.id, name: p.label, slipName: p.shortLabel, kind: p.kind, payType: type, baseAmount: base, extras: ex,
           autoDays: auto && type == 'daily' ? 10 : null, autoHours: auto && type == 'hourly' ? 60.0 + i * 4.5 : null,
           daysOverride: old?.daysOverride, hoursOverride: old?.hoursOverride,
-          otHours: type == 'monthly' ? old?.otHours ?? 0 : 0, otHours2: type == 'monthly' ? old?.otHours2 ?? 0 : 0,
+          // 示範：月薪制帶入核准的加班（每天前 2 小時、第 3 小時起分開；手動改過的不蓋掉）
+          autoOtHours: auto && type == 'monthly' ? _demoOt(p.id, month).h1 : null,
+          autoOtHours2: auto && type == 'monthly' ? _demoOt(p.id, month).h2 : null,
+          otManual: old?.otManual ?? false,
+          otHours: type == 'monthly' ? (auto && !(old?.otManual ?? false) ? _demoOt(p.id, month).h1 : old?.otHours ?? 0) : 0,
+          otHours2: type == 'monthly' ? (auto && !(old?.otManual ?? false) ? _demoOt(p.id, month).h2 : old?.otHours2 ?? 0) : 0,
           otMode: _payOt.otMode, otRate: _payOt.otRate, bonus: old?.bonus ?? 0,
           insurance: type == 'daily' ? 0 : old?.insurance ?? 0,
           deduction: old?.deduction ?? 0, note: old?.note), status: 'draft');
     }
     _payStatus[k] = 'draft';
     return rows.length;
+  }
+
+  ({double h1, double h2}) _demoOt(String person, DateTime month) {
+    final byDay = <DateTime, double>{};
+    for (final o in _ot) {
+      if (o.personId == person && o.status == 'approved' && o.businessDate.year == month.year && o.businessDate.month == month.month) {
+        byDay[o.businessDate] = (byDay[o.businessDate] ?? 0) + (o.approvedHours ?? 0);
+      }
+    }
+    var h1 = 0.0, h2 = 0.0;
+    for (final h in byDay.values) {
+      h1 += h < 2 ? h : 2;
+      h2 += h > 2 ? h - 2 : 0;
+    }
+    return (h1: h1, h2: h2);
   }
 
   @override
@@ -1922,7 +2078,12 @@ class DemoRepository implements Repository {
         baseAmount: r.baseAmount,
         autoDays: r.autoDays, autoHours: r.autoHours, daysOverride: days, hoursOverride: hours, otHours: otHours,
         otHours2: otHours2, otMode: r.otMode, otRate: r.otRate, bonus: bonus, insurance: insurance, deduction: deduction,
-        extras: ex, note: note));
+        extras: ex, note: note, autoOtHours: r.autoOtHours, autoOtHours2: r.autoOtHours2,
+        otManual: r.autoOtHours == null
+            ? r.otManual
+            : r.otMode == 'lsa'
+                ? (otHours != r.autoOtHours || otHours2 != (r.autoOtHours2 ?? 0))
+                : otHours + otHours2 != r.autoOtHours! + (r.autoOtHours2 ?? 0)));
     if (ex.cashPaid > (n.gross ?? 0)) {
       throw Exception('message: 領現金額不能比實發金額多（實發 ${(n.gross ?? 0).round()} 元）,');
     }

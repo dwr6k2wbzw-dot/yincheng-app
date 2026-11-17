@@ -163,6 +163,10 @@ class PayrollRow {
   final bool missingRate; // 應計薪名單上、還沒有這個月薪資列（沒有薪率，或薪率是帶入之後才加的）
   final bool exempt; // 老闆標了不計薪（不在應計薪名單上）
   final DateTime? updatedAt;
+  /// 核准的加班帶入（ops 0127；月薪制、開了打卡的店）：null＝沒有帶入
+  final double? autoOtHours, autoOtHours2;
+  /// 店長手動改過加班時數（跟核准帶入的不一樣），之後不會被蓋掉
+  final bool otManual;
   const PayrollRow({
     required this.personId,
     required this.name,
@@ -192,6 +196,9 @@ class PayrollRow {
     this.missingRate = false,
     this.exempt = false,
     this.updatedAt,
+    this.autoOtHours,
+    this.autoOtHours2,
+    this.otManual = false,
   }) : slipName = slipName ?? name;
   factory PayrollRow.fromRow(Map<String, dynamic> r) => PayrollRow(
         personId: r['person_id'] as String,
@@ -222,6 +229,9 @@ class PayrollRow {
         missingRate: r['missing_rate'] as bool? ?? false,
         exempt: r['exempt'] as bool? ?? false,
         updatedAt: _tsOrNull(r['updated_at']),
+        autoOtHours: _numOrNull(r['auto_ot_hours']),
+        autoOtHours2: _numOrNull(r['auto_ot_hours2']),
+        otManual: r['ot_manual'] as bool? ?? false,
       );
 
   bool get published => status == 'published';
