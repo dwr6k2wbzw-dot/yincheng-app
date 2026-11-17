@@ -423,6 +423,18 @@ class DemoRepository implements Repository {
   final _demoInvites = <MemberInvite>[];
   @override
   Future<int> claimInvite(String code) async => -1;
+  // 示範自助註冊：帳號含 new＝還沒有任何店；建好之後這次登入就有一家店
+  bool get _isNew => _email.contains('new');
+  Membership? _newStore;
+  @override
+  Future<String> signupCreateStore(String storeName, String displayName) async {
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    if (const ['隱城', '小城外'].contains(storeName.trim())) {
+      throw Exception('message: SIGNUP_TAKEN：這個店名已經有人用了，請換一個（例如加上地區或分店名）');
+    }
+    _newStore = Membership(storeId: 'demo-new', storeName: storeName.trim(), role: Role.owner, displayName: displayName.trim());
+    return 'demo-new';
+  }
   @override
   Future<String> createInvite(List<String> storeIds, Role role, String name) async {
     _demoInvites.insert(0, MemberInvite(id: 'i${_demoInvites.length}', displayName: name, role: role,
@@ -446,6 +458,7 @@ class DemoRepository implements Repository {
   @override
   Future<void> signOut() async {
     _signedIn = false;
+    _newStore = null;
     _auth.add(false);
   }
 
@@ -468,7 +481,9 @@ class DemoRepository implements Repository {
   (double?,)? peekPettyCashBalance(String storeId) => null;
 
   @override
-  Future<List<Membership>> myMemberships() async => _isKiosk
+  Future<List<Membership>> myMemberships() async => _isNew
+      ? [if (_newStore != null) _newStore!]
+      : _isKiosk
       ? [
           _kioskXc
               ? Membership(storeId: 'xc', storeName: '小城外', role: Role.parttime, displayName: '示範公用帳號')

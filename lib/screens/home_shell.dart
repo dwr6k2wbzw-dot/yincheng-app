@@ -7,7 +7,9 @@ import '../data/models.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../data/repository.dart';
+import '../config.dart';
 import 'change_requests_screen.dart';
+import 'create_store_screen.dart';
 import 'dashboard_screen.dart';
 import 'members_screen.dart';
 import 'handover_screen.dart';
@@ -67,6 +69,10 @@ class _HomeShellState extends State<HomeShell> with SingleTickerProviderStateMix
       return Scaffold(body: ErrorView(message: state.error!, onRetry: state.loadMemberships));
     }
     final m = state.current;
+    if (m == null && AppConfig.selfSignup) {
+      // 公版：還沒有任何店 → 自己建一家（ops 0119）
+      return Scaffold(body: CreateStoreView(onEnterCode: () => enterInviteCode(context)));
+    }
     if (m == null) {
       return Scaffold(
         body: Center(

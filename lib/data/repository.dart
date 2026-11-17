@@ -43,6 +43,8 @@ abstract class Repository {
   // 成員管理（產生邀請碼、成員清單只有老闆；資料庫函式也會檢查）
   /// 用邀請碼加入店家。回傳加入的店家數；-1＝邀請碼無效、已用過或已過期
   Future<int> claimInvite(String code);
+  /// 自助註冊（ops 0119，只有公版環境開放）：建立「組織＋第一家店」，自己是老闆。回傳店的 id
+  Future<String> signupCreateStore(String storeName, String displayName);
   Future<String> createInvite(List<String> storeIds, Role role, String name);
   Future<List<MemberInfo>> storeMembers(String storeId);
   Future<List<MemberInvite>> openInvites(String storeId);
@@ -365,7 +367,7 @@ String friendlyError(Object e) {
   final s = e.toString();
   final m = RegExp(r'message: ([^,]+)').firstMatch(s);
   // 0113：資料庫擋下來的訊息前面有代碼（給 App 判斷用），顯示時拿掉
-  final msg = (m?.group(1) ?? s).replaceFirst(RegExp(r'^(SHIFT_BLOCKED|SHIFT_CODE_USED|SHIFT_UNDO_CONFLICT)：'), '');
+  final msg = (m?.group(1) ?? s).replaceFirst(RegExp(r'^(SHIFT_BLOCKED|SHIFT_CODE_USED|SHIFT_UNDO_CONFLICT|SIGNUP_[A-Z]+)：'), '');
   if (msg.contains('duplicate key') && msg.contains('client_request')) return '這筆已經送出過了，不會重複新增。';
   if (msg.contains('row-level security')) return '沒有權限執行這個動作。';
   if (msg.contains('function public.payroll_')) return '資料庫還沒更新到薪資版本，請等老闆核准上線。';

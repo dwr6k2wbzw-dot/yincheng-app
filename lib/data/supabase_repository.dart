@@ -107,6 +107,9 @@ class SupabaseRepository implements Repository {
   Future<int> claimInvite(String code) async =>
       (await _db.rpc('claim_invite', params: {'p_code': code}) as num).toInt();
   @override
+  Future<String> signupCreateStore(String storeName, String displayName) async =>
+      await _db.rpc('signup_create_store', params: {'p_store_name': storeName, 'p_display_name': displayName}) as String;
+  @override
   Future<String> createInvite(List<String> storeIds, Role role, String name) async =>
       await _db.rpc('create_invite', params: {'p_stores': storeIds, 'p_role': role.name, 'p_name': name}) as String;
   @override

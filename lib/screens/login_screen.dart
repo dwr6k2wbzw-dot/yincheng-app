@@ -21,6 +21,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _code = TextEditingController();
   bool _busy = false;
   bool _signUp = false; // true：第一次使用，建立帳號
+  bool _own = AppConfig.selfSignup; // 公版：自己開店（不用邀請碼）；false＝用邀請碼加入別人的店
 
   Future<void> _submitSignUp() async {
     final email = _email.text.trim();
@@ -37,23 +38,25 @@ class _LoginScreenState extends State<LoginScreen> {
       showMessage(context, '兩次輸入的密碼不一樣', error: true);
       return;
     }
-    if (code.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').length != 10) {
+    if (!_own && code.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').length != 10) {
       showMessage(context, '請輸入老闆給你的 10 碼邀請碼', error: true);
       return;
     }
     final repo = AppScope.of(context).repo;
     setState(() => _busy = true);
     try {
-      try {
-        (await SharedPreferences.getInstance()).setString(AppState.pendingCodeKey, code.toUpperCase());
-      } catch (_) {}
+      if (!_own) {
+        try {
+          (await SharedPreferences.getInstance()).setString(AppState.pendingCodeKey, code.toUpperCase());
+        } catch (_) {}
+      }
       final signedIn = await repo.signUp(email, _password.text);
       if (!signedIn && mounted) {
         await showDialog<void>(
           context: context,
           builder: (c) => AlertDialog(
             title: const Text('請到信箱確認'),
-            content: Text('確認信已寄到 $email。\n請點信裡的連結，再回到這裡用剛剛的 Email 和密碼登入，就會自動加入店家。'
+            content: Text('確認信已寄到 $email。\n請點信裡的連結，再回到這裡用剛剛的 Email 和密碼登入，${_own ? '就可以建立你的店。' : '就會自動加入店家。'}'
                 '${pendingPunch != null ? '\n\n注意：這次打卡沒有打到。登入後請回打卡機重新掃碼。' : ''}'),
             actions: [FilledButton(onPressed: () => Navigator.pop(c), child: const Text('知道了'))],
           ),
@@ -91,21 +94,31 @@ class _LoginScreenState extends State<LoginScreen> {
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 420),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  Row(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
-                    Image.asset('assets/logos/yincheng.png', height: 88, filterQuality: FilterQuality.medium),
-                    const SizedBox(width: 28),
-                    Image.asset('assets/logos/xcw.png', height: 72, filterQuality: FilterQuality.medium),
-                  ]),
-                  const SizedBox(height: 18),
-                  const Text('隱城 · 小城外', textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w600, letterSpacing: 4)),
+                  // 公版：產品名稱和標誌還沒決定，先放中性的圖示；隱城／小城外這一份照舊
+                  if (AppConfig.selfSignup) ...[
+                    Icon(Icons.storefront_outlined, color: AppColors.primary, size: 56),
+                    const SizedBox(height: 18),
+                    Text(_signUp ? '建立帳號' : '登入', textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w600)),
+                  ] else ...[
+                    Row(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
+                      Image.asset('assets/logos/yincheng.png', height: 88, filterQuality: FilterQuality.medium),
+                      const SizedBox(width: 28),
+                      Image.asset('assets/logos/xcw.png', height: 72, filterQuality: FilterQuality.medium),
+                    ]),
+                    const SizedBox(height: 18),
+                    const Text('隱城 · 小城外', textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: AppType.heading, fontWeight: FontWeight.w600, letterSpacing: 4)),
+                  ],
                   const SizedBox(height: 4),
                   Text(
-                      AppConfig.demo
+                      AppConfig.demo && !AppConfig.selfSignup // 公版的畫面預覽（示範＋自助註冊）顯示客人真的會看到的說明
                           ? '示範模式：任意帳密即可登入（帳號含 staff 以員工、含 manager 以店長身分登入）'
                           : _signUp
-                              ? '第一次使用：用你的 Email 建立帳號，並輸入老闆給你的邀請碼'
-                              : '以店家提供的帳號登入',
+                              ? (_own
+                                  ? '用你的 Email 建立帳號，下一步幫你的店取名字'
+                                  : '第一次使用：用你的 Email 建立帳號，並輸入老闆給你的邀請碼')
+                              : (AppConfig.selfSignup ? '用你的 Email 和密碼登入' : '以店家提供的帳號登入'),
                       textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted)),
                   if (pendingPunch != null) ...[
                     const SizedBox(height: 12),
@@ -113,6 +126,24 @@ class _LoginScreenState extends State<LoginScreen> {
                         textAlign: TextAlign.center, style: TextStyle(color: AppColors.warn)),
                   ],
                   const SizedBox(height: 32),
+                  if (_signUp && AppConfig.selfSignup) ...[
+                    SegmentedButton<bool>(
+                      segments: const [
+                        ButtonSegment(value: true, label: Text('我要開店'), icon: Icon(Icons.storefront_outlined)),
+                        ButtonSegment(value: false, label: Text('我有邀請碼'), icon: Icon(Icons.key_outlined)),
+                      ],
+                      selected: {_own},
+                      showSelectedIcon: false,
+                      // 沒選到的那一邊字放淡，選到的才是重點
+                      style: ButtonStyle(
+                        minimumSize: const WidgetStatePropertyAll(Size.fromHeight(48)),
+                        foregroundColor: WidgetStateProperty.resolveWith(
+                            (st) => st.contains(WidgetState.selected) ? AppColors.primary : AppColors.muted),
+                      ),
+                      onSelectionChanged: _busy ? null : (s) => setState(() => _own = s.first),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   TextField(
                     controller: _email,
                     keyboardType: TextInputType.emailAddress,
@@ -135,13 +166,15 @@ class _LoginScreenState extends State<LoginScreen> {
                       obscureText: true,
                       decoration: const InputDecoration(labelText: '再輸入一次密碼', prefixIcon: Icon(Icons.lock_outline)),
                     ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _code,
-                      textCapitalization: TextCapitalization.characters,
-                      decoration: const InputDecoration(
-                          labelText: '邀請碼', hintText: 'XXXXX-XXXXX', prefixIcon: Icon(Icons.key_outlined)),
-                    ),
+                    if (!_own) ...[
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _code,
+                        textCapitalization: TextCapitalization.characters,
+                        decoration: const InputDecoration(
+                            labelText: '邀請碼', hintText: 'XXXXX-XXXXX', prefixIcon: Icon(Icons.key_outlined)),
+                      ),
+                    ],
                   ],
                   const SizedBox(height: 24),
                   FilledButton(
@@ -149,13 +182,15 @@ class _LoginScreenState extends State<LoginScreen> {
                     style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
                     child: _busy
                         ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
-                        : Text(_signUp ? '建立帳號並加入' : '登入', style: const TextStyle(fontSize: AppType.title)),
+                        : Text(_signUp ? (_own ? '建立帳號' : '建立帳號並加入') : '登入', style: const TextStyle(fontSize: AppType.title)),
                   ),
-                  if (!AppConfig.demo) ...[
+                  if (!AppConfig.demo || AppConfig.selfSignup) ...[
                     const SizedBox(height: 12),
                     TextButton(
                       onPressed: _busy ? null : () => setState(() => _signUp = !_signUp),
-                      child: Text(_signUp ? '已經有帳號？回到登入' : '第一次使用？用邀請碼建立帳號'),
+                      child: Text(_signUp
+                          ? '已經有帳號？回到登入'
+                          : (AppConfig.selfSignup ? '第一次使用？建立帳號' : '第一次使用？用邀請碼建立帳號')),
                     ),
                   ],
                 ]),
