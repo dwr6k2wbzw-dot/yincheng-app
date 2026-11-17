@@ -529,7 +529,7 @@ class SupabaseRepository implements Repository {
           .order('created_at', ascending: false)
           .limit(1)
           .then((v) => v, onError: (_) => <Map<String, dynamic>>[]),
-      // 班別／時段清單（0075）：讀不到就用 App 內建設定
+      // 班別／時段清單（0075）：班別時數只看這份清單（App 不再內建），讀不到就整個報錯重試，不拿空的清單算時數
       // 0113 多 hidden；資料庫還沒更新時退回舊欄位
       _db
           .from('shift_mark_options')
@@ -542,8 +542,7 @@ class SupabaseRepository implements Repository {
               .select('id, kind, mark, time_range, sort_order')
               .eq('store_id', storeId)
               .order('sort_order')
-              .order('mark')
-              .then<Object?>((v) => v, onError: (_) => null)),
+              .order('mark')),
     ]);
     final people = (r[0] as List).map((x) => ShiftPerson.fromRow(x as Map<String, dynamic>)).toList();
     final marks = <String, Map<int, String>>{};
@@ -568,7 +567,7 @@ class SupabaseRepository implements Repository {
             f['uploaded_at'] == null ? null : DateTime.parse(f['uploaded_at'] as String).toLocal())
     ];
     final drafts = r[5] as List;
-    final opts = r[6] as List?;
+    final opts = r[6] as List;
     return ShiftMonth(
         from,
         people,
@@ -577,9 +576,7 @@ class SupabaseRepository implements Repository {
         stats,
         photos,
         drafts.isEmpty ? null : ShiftDraft.fromRow(drafts.first as Map<String, dynamic>),
-        opts == null
-            ? const ShiftOptions([], loaded: false)
-            : ShiftOptions([for (final x in opts) ShiftMarkOption.fromRow(x as Map<String, dynamic>)]));
+        ShiftOptions([for (final x in opts) ShiftMarkOption.fromRow(x as Map<String, dynamic>)]));
   }
 
   @override

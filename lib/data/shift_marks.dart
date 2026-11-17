@@ -1,37 +1,32 @@
-import '../config.dart';
 import 'store_features.dart';
 import 'models.dart';
 
-/// 班別／時段清單（0075，老闆 2026-10-28：兩家店都可以自己新增、刪除；隱城兼職也可排時段）
-/// 清單讀不到（例如舊資料庫）時，照 lib/config.dart 原本的設定。
+/// 班表可以用哪些記號、班別幾小時，全部看資料庫，不看店名：
+///   * 功能開關 shiftCodes（0116）：關＝用 V／O 記上班、看天數；開＝用班別代碼、看時數
+///   * 班別／時段清單 shift_mark_options（0075）：每家店自己的班別代碼＋時段、兼職時段
+/// 清單還沒讀到（[o] 是 null）時先不列班別，讀到就有。
+
+const _workMarks = ['V', 'O'];
+const _awayMarks = ['休', '指休', '特休'];
 
 /// 點格子時可選的記號：上班類（V、O、班別）在前，休假類在後
-List<String> storeMarks(String store, ShiftOptions? o) {
-  final cfg = AppConfig.shiftMarks[store] ?? const ['V', '休', '指休', 'O'];
-  if (o == null || !o.loaded) return cfg;
-  final legacyCodes = AppConfig.shiftCodeTimes[store]?.keys.toSet() ?? const <String>{};
-  final base = cfg.where((m) => !legacyCodes.contains(m)).toList();
-  return [
-    ...base.where((m) => !ShiftMonth.isAway(m)),
-    ...o.codes.map((c) => c.mark),
-    ...base.where(ShiftMonth.isAway),
-  ];
-}
+List<String> storeMarks(String store, ShiftOptions? o) => [
+      if (!StoreFeatures.of(store).shiftCodes) ..._workMarks,
+      if (o != null) ...o.codes.map((c) => c.mark),
+      ..._awayMarks,
+    ];
 
-/// 班別 → 時段（說明用；舊代碼也查得到）
+/// 班別 → 時段（說明用；停用的班別也查得到）
 Map<String, String> storeCodeTimes(String store, ShiftOptions? o) => {
-      ...?AppConfig.shiftCodeTimes[store],
-      if (o != null && o.loaded)
+      if (o != null)
         for (final c in o.allCodes) c.mark: c.timeRange ?? '',
     };
 
-/// 以時數統計的店家（開了 shiftCodes；目前是小城外）：班別 → 時數；看天數的店（隱城）→ null
-/// 要不要照時數統計看功能開關；`config.dart` 寫死的時數只當預設值（Codex P2）
+/// 以時數統計的店家（開了 shiftCodes）：班別 → 時數（照班別的時段算）；看天數的店 → null
 Map<String, double>? storeCodeHours(String store, ShiftOptions? o) {
   if (!StoreFeatures.of(store).shiftCodes) return null;
   return {
-    ...?AppConfig.shiftHours[store],
-    if (o != null && o.loaded)
+    if (o != null)
       for (final c in o.allCodes)
         if (c.timeRange != null) c.mark: ShiftMonth.hoursOf(c.timeRange, const {}),
   };
@@ -39,10 +34,7 @@ Map<String, double>? storeCodeHours(String store, ShiftOptions? o) {
 
 /// 停用的班別（0113）：已經排過的格子照舊顯示、照算時數，但新的排班不能再用
 Set<String> hiddenCodes(ShiftOptions? o) =>
-    {if (o != null && o.loaded) for (final c in o.allCodes) if (c.hidden) c.mark};
+    {if (o != null) for (final c in o.allCodes) if (c.hidden) c.mark};
 
 /// 兼職時段選項
-List<String> storeRanges(String store, ShiftOptions? o) {
-  if (o != null && o.loaded) return o.ranges;
-  return StoreFeatures.of(store).shiftCodes ? AppConfig.shiftQuickRanges : const [];
-}
+List<String> storeRanges(String store, ShiftOptions? o) => o != null ? o.ranges : const [];

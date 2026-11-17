@@ -2,7 +2,7 @@
 完整交接說明在私人 repo `dwr6k2wbzw-dot/yincheng-ops` 的 `CLAUDE.md`，接手前先讀那份。
 - 這個 repo 是公開的：**不可放真實營收或帳務資料**、不可放任何密鑰（publishable key 可以）。
 - push 到 main → `.github/workflows/deploy.yml` 建置並發佈到 https://dwr6k2wbzw-dot.github.io/yincheng-app/
-- 每家店的功能開關（班表分頁、以日報表為準、營收四項、銷貨單、班別代碼、logo）在資料庫 `store_features`（0116），App 用 `StoreFeatures.of(店名)` 讀（`lib/data/store_features.dart`）；**不要再用店名判斷功能**。班表記號與班別時數的預設值還在 `lib/config.dart`。
+- 每家店的功能開關（班表分頁、以日報表為準、營收四項、銷貨單、班別代碼、logo）在資料庫 `store_features`（0116），App 用 `StoreFeatures.of(店名)` 讀（`lib/data/store_features.dart`）；**不要再用店名判斷功能**。班表可用的記號、班別時數也只看資料庫（功能開關 `shiftCodes`＋`shift_mark_options`，見 `lib/data/shift_marks.dart`），App 不內建任何一家店的班別表。
 - App 內「功能許願」（2026-10-27）：`.github/workflows/claude-change.yml` 由 Supabase Edge Function 派工，Claude 依 `tool/change_request/prompt.md` 修改，結果放 `cr/<代號>` 分支＋PR＋預覽 `…/preview/<代號>/`；只有老闆在 App 按「上線」才合併。**不要直接在 GitHub 合併 cr/ 開頭的 PR。**
 
 ## UI UX Pro Max（只在本專案）

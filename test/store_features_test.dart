@@ -72,23 +72,51 @@ void main() {
     expect(storeLogo('隱城'), 'assets/logos/yincheng.png');
   });
 
-  test('照時數統計看功能開關，不看店名（Codex P2）', () {
-    // 沒有資料庫開關：小城外照時數、隱城和不認得的店照天數
-    expect(storeCodeHours('小城外', null)?['B'], 7.5);
-    expect(storeCodeHours('隱城', null), isNull);
-    expect(storeCodeHours('新客戶的店', null), isNull);
+  test('班表記號、班別時數只看功能開關和資料庫的班別清單，不看店名', () {
+    final xcOpts = ShiftOptions([
+      ShiftMarkOption.fromRow({'id': 'b', 'kind': 'code', 'mark': 'B', 'time_range': '17:00-00:30', 'sort_order': 10}),
+      ShiftMarkOption.fromRow({'id': 'bh', 'kind': 'code', 'mark': 'BH', 'time_range': '17:00-01:30', 'sort_order': 20}),
+      ShiftMarkOption.fromRow({'id': 'rbk', 'kind': 'code', 'mark': 'RBK', 'time_range': '16:00-23:00', 'sort_order': 30}),
+      ShiftMarkOption.fromRow(
+          {'id': 'old', 'kind': 'code', 'mark': 'BP', 'time_range': '19:00-00:30', 'sort_order': 40, 'hidden': true}),
+      ShiftMarkOption.fromRow({'id': 'r1', 'kind': 'range', 'mark': '18:00-00:30', 'sort_order': 10}),
+    ]);
+    final ycOpts = ShiftOptions([
+      ShiftMarkOption.fromRow({'id': 'r1', 'kind': 'range', 'mark': '18:00-00:30', 'sort_order': 10}),
+    ]);
 
-    // 新的店開了班別代碼：照時數，時數從這家店自己的班別時段算
+    // 小城外（班別代碼）：跟以前 App 內建的結果一樣
+    expect(storeMarks('小城外', xcOpts), ['B', 'BH', 'RBK', '休', '指休', '特休']);
+    expect(storeCodeHours('小城外', xcOpts), {'B': 7.5, 'BH': 8.5, 'RBK': 7.0, 'BP': 5.5});
+    expect(storeCodeTimes('小城外', xcOpts)['BH'], '17:00-01:30');
+    expect(storeRanges('小城外', xcOpts), ['18:00-00:30']);
+    expect(hiddenCodes(xcOpts), {'BP'});
+
+    // 隱城（V／O 記號、看天數）
+    expect(storeMarks('隱城', ycOpts), ['V', 'O', '休', '指休', '特休']);
+    expect(storeCodeHours('隱城', ycOpts), isNull);
+    expect(storeRanges('隱城', ycOpts), ['18:00-00:30']);
+
+    // 清單還沒讀到：不列班別、時數表是空的（不拿 App 內建的數字頂替）
+    expect(storeMarks('小城外', null), ['休', '指休', '特休']);
+    expect(storeCodeHours('小城外', null), isEmpty);
+    expect(storeRanges('小城外', null), isEmpty);
+    expect(storeMarks('隱城', null), ['V', 'O', '休', '指休', '特休']);
+
+    // 新的店：沒開班別代碼＝V／O；開了＝照它自己的班別清單
+    expect(storeMarks('新客戶的店', null), ['V', 'O', '休', '指休', '特休']);
+    expect(storeCodeHours('新客戶的店', null), isNull);
     Membership.fromRow(_member('新客戶的店', {'shift_codes': true}));
     final opts = ShiftOptions([
       ShiftMarkOption.fromRow({'id': 'o1', 'kind': 'code', 'mark': 'A', 'time_range': '10:00-18:00', 'sort_order': 1}),
     ]);
+    expect(storeMarks('新客戶的店', opts), ['A', '休', '指休', '特休']);
     expect(storeCodeHours('新客戶的店', opts), {'A': 8.0});
-    expect(storeCodeHours('新客戶的店', null), isEmpty);
 
-    // 資料庫把小城外的班別代碼關掉：改照天數
+    // 資料庫把小城外的班別代碼關掉：改用 V／O、照天數
     Membership.fromRow(_member('小城外', {'shift_codes': false}));
-    expect(storeCodeHours('小城外', null), isNull);
+    expect(storeCodeHours('小城外', xcOpts), isNull);
+    expect(storeMarks('小城外', xcOpts).take(2), ['V', 'O']);
   });
 
   test('不認得的 logo 代號不顯示 logo', () {
