@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../app_state.dart';
 import '../data/models.dart';
@@ -60,6 +61,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   ShiftPlanSetup? _setup; // 每天要幾人、指休等（讀不到就是 null，不影響看班表）
   int _claimSeq = 0; // 選了「我是誰」之後讓打卡卡片重新讀
   bool _started = false;
+  // 老闆不一定在這家店的班表上：可以把「你是班表上的哪一位？」收起來（記在這支手機、這家店；2026-11-17 老闆誤點選到別人）
+  bool _claimHidden = false;
+  bool get _isOwner => widget.membership.role == Role.owner;
+  String get _claimHiddenKey => 'claim_hidden_$_store';
 
   bool get _canEdit => widget.membership.isManager;
   Repository get _repo => AppScope.of(context).repo;
@@ -82,7 +87,23 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       _started = true;
       _week = _weekOf(bizToday());
       _future = _load();
+      if (_isOwner) _loadClaimHidden();
     }
+  }
+
+  Future<void> _loadClaimHidden() async {
+    try {
+      final v = (await SharedPreferences.getInstance()).getBool(_claimHiddenKey) ?? false;
+      if (mounted && v) setState(() => _claimHidden = true);
+    } catch (_) {}
+  }
+
+  Future<void> _hideClaim() async {
+    setState(() => _claimHidden = true);
+    try {
+      await (await SharedPreferences.getInstance()).setBool(_claimHiddenKey, true);
+    } catch (_) {}
+    if (mounted) showMessage(context, '已經收起來。之後要對應名字，到「班表人員」點人名指定帳號');
   }
 
   Future<ShiftMonth> _load() async {
@@ -304,26 +325,38 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   Widget _claimCard(ShiftMonth d) {
-    if (!_needClaim(d)) return const SizedBox.shrink();
+    if (!_needClaim(d) || (_isOwner && _claimHidden)) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: SectionCard(
-        child: InkWell(
-          onTap: () => _claim(d),
-          child: Row(children: [
-            Icon(Icons.person_search_outlined, color: AppColors.warn),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('你是班表上的哪一位？', style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.warn)),
-                const SizedBox(height: 2),
-                Text('點這裡選你的名字，老闆確認後就能打卡、看自己的出勤',
-                    style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
-              ]),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          InkWell(
+            onTap: () => _claim(d),
+            child: Row(children: [
+              Icon(Icons.person_search_outlined, color: AppColors.warn),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('你是班表上的哪一位？', style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.warn)),
+                  const SizedBox(height: 2),
+                  Text(_isOwner ? '有排班才需要選；選了馬上生效，選錯要到「班表人員」改' : '點這裡選你的名字，老闆確認後就能打卡、看自己的出勤',
+                      style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+                ]),
+              ),
+              const Icon(Icons.chevron_right),
+            ]),
+          ),
+          // 老闆不一定在這家店的班表上：可以收起來，不然每次都在最上面、容易誤點
+          if (_isOwner)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: _hideClaim,
+                style: TextButton.styleFrom(minimumSize: const Size(48, 48), foregroundColor: AppColors.muted),
+                child: const Text('我不在這家店的班表上，不用顯示'),
+              ),
             ),
-            const Icon(Icons.chevron_right),
-          ]),
-        ),
+        ]),
       ),
     );
   }
