@@ -1,4 +1,5 @@
 import '../services/clock.dart';
+import 'store_features.dart';
 import 'dart:typed_data';
 
 /// 資料模型（欄位名稱對應資料庫）
@@ -18,6 +19,14 @@ String roleLabel(Role r) => switch (r) {
       Role.parttime => '兼職',
     };
 
+/// 讀到成員資格時順便記下這家店的功能開關（0116；資料庫沒給就照以前寫死的）
+String _storeName(Map<String, dynamic> r) {
+  final store = r['stores'] as Map?;
+  final name = store?['name'] as String? ?? '';
+  StoreFeatures.remember(name, StoreFeatures.fromRow(store?['store_features']));
+  return name;
+}
+
 class Membership {
   final String storeId;
   final String storeName;
@@ -33,7 +42,7 @@ class Membership {
 
   factory Membership.fromRow(Map<String, dynamic> r) => Membership(
         storeId: r['store_id'] as String,
-        storeName: (r['stores'] as Map?)?['name'] as String? ?? '',
+        storeName: _storeName(r),
         role: roleFrom(r['role'] as String),
         displayName: r['display_name'] as String? ?? '',
       );

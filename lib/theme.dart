@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'data/store_features.dart';
 
 /// 每家店一套配色（老闆 2026-10-14 選定）：
 ///   小城外＝A「沉穩黑金」：黑底、金色重點
@@ -74,9 +75,10 @@ class StorePalette {
 enum DashboardStyle { gold, brand }
 
 /// 店家 logo（老闆 2026-10-14 提供，去背成透明 PNG）
-String? storeLogo(String? storeName) => switch (storeName) {
-      '隱城' => 'assets/logos/yincheng.png',
-      '小城外' => 'assets/logos/xcw.png',
+/// 哪家店用哪個 logo 由資料庫的功能開關決定（0116 store_features.logo）
+String? storeLogo(String? storeName) => switch (StoreFeatures.of(storeName).logo) {
+      'yincheng' => 'assets/logos/yincheng.png',
+      'xcw' => 'assets/logos/xcw.png',
       _ => null,
     };
 

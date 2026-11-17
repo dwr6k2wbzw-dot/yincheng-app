@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../data/store_features.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
@@ -57,7 +58,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
   }
 
   /// 進貨以 Dropbox 日報表為準的店：只能看，不能新增或核銷（核銷也以 Excel 的「核銷」欄為準）
-  bool get _synced => AppConfig.excelSyncedStores.contains(widget.membership.storeName);
+  bool get _synced => StoreFeatures.of(widget.membership.storeName).excelSynced;
 
   /// 顯示時合併的類別（0047）：例 咖啡吧-餐食、布布拉麵-餐食 → 餐食；只影響進貨頁分組，不改資料
   Map<String, String> _displayAs = {};
@@ -652,7 +653,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   List<Supplier> _sups = [];
   Map<String, String> _displayAs = {}; // 舊類別 → 合併後的類別（0048）
   String _paidBy = 'vendor';
-  // 依付款方式隱藏的類別（只隱城套用）
+  // 依付款方式隱藏的類別（只有開了 paidByCategories 的店套用；目前是隱城）
   /// 某類別在某付款方式下可自動帶入的預設廠商名稱（依合併後類別比對、排除該付款方式不適用的來源類別）
   List<String> _autoSuppliers(List<Supplier> sups, String category, String paidBy) => sups
       .where((s) => (_displayAs[s.defaultCategory] ?? s.defaultCategory) == category)
@@ -664,10 +665,10 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   /// 隱城依付款方式不提供的類別＋零用金不顯示提示的類別（Codex 審查）
   bool _sourceHidden(String? code, String paidBy) =>
       code != null &&
-      ((widget.membership.storeName == '隱城' && (_hiddenCatsByPaidBy[paidBy]?.contains(code) ?? false)) ||
+      ((StoreFeatures.of(widget.membership.storeName).paidByCategories && (_hiddenCatsByPaidBy[paidBy]?.contains(code) ?? false)) ||
           (paidBy == 'petty_cash' && AppConfig.pettyCashHintHidden.contains(code)));
 
-  Set<String> get _hiddenCats => widget.membership.storeName == '隱城'
+  Set<String> get _hiddenCats => StoreFeatures.of(widget.membership.storeName).paidByCategories
       ? (_hiddenCatsByPaidBy[_paidBy] ?? const <String>{})
       : const <String>{};
   bool _isReturn = false;
@@ -1094,7 +1095,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                   TextButton(onPressed: () => _readSlip(_photo!), child: const Text('再讀一次')),
               ]),
             ),
-          if (_photo != null && AppConfig.vendorSlipStores.contains(widget.membership.storeName) && !_isReturn)
+          if (_photo != null && StoreFeatures.of(widget.membership.storeName).vendorSlips && !_isReturn)
             Padding(
               padding: EdgeInsets.only(top: 6),
               child: Text('儲存後，照片會顯示在這筆進貨上，點縮圖可以看大圖。',
@@ -1210,7 +1211,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
           amount: isReturn ? -raw : raw,
           paidBy: _paidBy,
           clientRequestId: _requestId,
-          slipDraft: AppConfig.vendorSlipStores.contains(widget.membership.storeName),
+          slipDraft: StoreFeatures.of(widget.membership.storeName).vendorSlips,
           slipVendor: name.isEmpty ? null : name,
           noReceipt: _photo == null && _noReceipt,
         ),

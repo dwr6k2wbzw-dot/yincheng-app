@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../data/store_features.dart';
 import 'package:intl/intl.dart';
 
 import '../app_state.dart';
@@ -34,7 +35,7 @@ bool _planFull(ShiftPerson p, ShiftPlanSetup? s) =>
 /// 班別清單讀得到、但班別（或時段）全部停用了 → 回空的，自動排班會先擋下來請店長處理，
 /// 不會偷偷排回已經停用的 B／BH（Codex P2）
 List<String> _defaultMarks(String storeName, bool full, ShiftOptions? o) {
-  if (storeName != '小城外') return const ['V'];
+  if (!StoreFeatures.of(storeName).shiftCodes) return const ['V'];
   if (o != null && o.loaded) {
     if (full) return [for (final c in o.codes.take(2)) c.mark];
     return o.ranges.isNotEmpty ? [o.ranges.first] : const [];
@@ -1696,7 +1697,7 @@ class _ShiftMarkOptionsScreenState extends State<ShiftMarkOptionsScreen> {
                           const SizedBox(height: 10),
                           _section(
                               '班別',
-                              '點格子排班時可以選的班別代碼（例 B＝17:00-00:30）${_storeName == '小城外' ? '；時數照時段算' : ''}',
+                              '點格子排班時可以選的班別代碼（例 B＝17:00-00:30）${StoreFeatures.of(_storeName).shiftCodes ? '；時數照時段算' : ''}',
                               o.allCodes,
                               code: true),
                           const SizedBox(height: 10),

@@ -1,4 +1,5 @@
 import '../config.dart';
+import 'store_features.dart';
 import 'models.dart';
 
 /// 班別／時段清單（0075，老闆 2026-10-28：兩家店都可以自己新增、刪除；隱城兼職也可排時段）
@@ -43,5 +44,5 @@ Set<String> hiddenCodes(ShiftOptions? o) =>
 /// 兼職時段選項
 List<String> storeRanges(String store, ShiftOptions? o) {
   if (o != null && o.loaded) return o.ranges;
-  return store == '小城外' ? AppConfig.shiftQuickRanges : const [];
+  return StoreFeatures.of(store).shiftCodes ? AppConfig.shiftQuickRanges : const [];
 }
