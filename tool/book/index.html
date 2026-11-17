@@ -258,6 +258,11 @@
     if (!title || n.endsWith(title)) return n;
     return (n.replace(/\s*(先生|小姐)$/, '') + ' ' + title).slice(0, 40);
   };
+  // 防重複送出（ops 0121）：每一次送出帶一個隨機代號，內容沒改的重送帶同一個。
+  // 上一次其實訂成功、只是回應沒傳回來（斷線）→ 再按一次，伺服器認得是同一次，回同一筆，不會多訂。
+  let reqId = null, reqSig = null;
+  const newId = () => (crypto.randomUUID ? crypto.randomUUID()
+    : '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, (c) => (+c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (+c / 4)))).toString(16)));
   $('form').onsubmit = async (e) => {
     e.preventDefault();
     const err = $('err'); err.hidden = true;
@@ -266,11 +271,21 @@
     if (!title && !/(先生|小姐)$/.test($('name').value.trim())) { err.textContent = T('needTitle'); err.hidden = false; return; }
     $('submit').disabled = true; $('submit').textContent = T('sending');
     try {
-      const r = await YC.rpc('book_reservation', {
+      const args = {
         p_slug: slug, p_date: day, p_time: time, p_party: party,
         p_name: fullName(), p_phone: $('phone').value.trim() || null, p_email: $('email').value, p_note: $('note').value || null, p_lang: YCI.lang,
         ...(ref ? { p_ref: ref } : {}),
-      });
+      };
+      const sig = JSON.stringify(args);
+      if (sig !== reqSig) { reqSig = sig; reqId = newId(); }
+      let r;
+      try {
+        r = await YC.rpc('book_reservation', { ...args, p_request: reqId });
+      } catch (ex) {
+        // 資料庫還沒更新到認得代號的版本（PGRST202＝找不到這個參數的函式）：照原本的方式送
+        if (ex.code !== 'PGRST202') throw ex;
+        r = await YC.rpc('book_reservation', args);
+      }
       $('app').hidden = true;
       const done = $('done'); done.hidden = false;
       done.innerHTML = '<p class="big ok">' + T('booked') + '</p><p class="big">' + YC.esc(r.display_name) + '</p><p>' + YC.dateLabel(r.date) + ' ' + r.time + '　' + T('guests', r.party) + '<br>' + YC.esc(YCI.name(r.name)) + '</p><p class="hold">' + T('hold') + '</p><p class="note" id="mailNote">' + T('mailing') + '</p>' +

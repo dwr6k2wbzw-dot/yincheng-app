@@ -176,6 +176,7 @@
     [/不能更改/, { en: 'This reservation can no longer be changed.', ja: 'このご予約は変更できません。' }],
     [/更改次數太多/, { en: 'Too many change requests. Please call us.', ja: '変更の申請回数が上限に達しました。お電話ください。' }],
     [/人數請選|人數和目前一樣/, { en: 'Please choose a different number of guests (1–30).', ja: '別の人数（1〜30名）をお選びください。' }],
+    [/頁面的資料過期了|已經取消或處理過了/, { en: 'This page is out of date. Please refresh and book again.', ja: 'ページの情報が古くなっています。再読み込みして、もう一度ご予約ください。' }],
     [/連線失敗/, { en: D.en.netErr, ja: D.ja.netErr }],
   ];
   window.YCI = {
