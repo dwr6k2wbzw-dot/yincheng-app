@@ -36,7 +36,7 @@ void main() {
     test('建議的加班時數往下取到 0.5 小時，最少 0.5', () {
       expect(row.suggestedOvertimeHours, 1.0);
       expect(
-        const ScheduleCheckRow(
+         ScheduleCheckRow(
           businessDate: _d,
           personId: 'x',
           personName: 'x',
@@ -46,7 +46,7 @@ void main() {
         0.5,
       );
       expect(
-        const ScheduleCheckRow(
+         ScheduleCheckRow(
           businessDate: _d,
           personId: 'x',
           personName: 'x',
@@ -59,7 +59,7 @@ void main() {
 
     test('有核准或待審的加班就不算「沒申請」', () {
       expect(
-        const ScheduleCheckRow(
+         ScheduleCheckRow(
           businessDate: _d,
           personId: 'x',
           personName: 'x',
@@ -69,7 +69,7 @@ void main() {
         isFalse,
       );
       expect(
-        const ScheduleCheckRow(
+         ScheduleCheckRow(
           businessDate: _d,
           personId: 'x',
           personName: 'x',
@@ -81,7 +81,7 @@ void main() {
     });
 
     test('沒有分鐘數的異常只顯示名稱', () {
-      const r = ScheduleCheckRow(
+      final r = ScheduleCheckRow(
         businessDate: _d,
         personId: 'x',
         personName: 'x',
@@ -132,7 +132,7 @@ void main() {
 
   test('匯出報表：表頭、異常文字、核准加班', () {
     final csv = buildScheduleCheckCsv([
-      const ScheduleCheckRow(
+       ScheduleCheckRow(
         businessDate: _d,
         personId: 'x',
         personName: '小安',
@@ -170,11 +170,4 @@ void main() {
   });
 }
 
-const _d = _Date();
-
-/// const 用的固定日期
-class _Date implements DateTime {
-  const _Date();
-  @override
-  dynamic noSuchMethod(Invocation i) => DateTime(2026, 11, 14).noSuchMethod(i);
-}
+final _d = DateTime(2026, 11, 14);
