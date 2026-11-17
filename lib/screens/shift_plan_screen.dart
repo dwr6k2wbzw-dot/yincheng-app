@@ -36,18 +36,9 @@ bool _planFull(ShiftPerson p, ShiftPlanSetup? s) =>
 /// 不會偷偷排回已經停用的 B／BH（Codex P2）
 List<String> _defaultMarks(String storeName, bool full, ShiftOptions? o) {
   if (!StoreFeatures.of(storeName).shiftCodes) return const ['V'];
-  if (o != null && o.loaded) {
-    if (full) return [for (final c in o.codes.take(2)) c.mark];
-    return o.ranges.isNotEmpty ? [o.ranges.first] : const [];
-  }
-  if (full) {
-    final codes = [
-      for (final c in o?.codes ?? const <ShiftMarkOption>[]) c.mark
-    ];
-    return codes.isNotEmpty ? codes.take(2).toList() : const ['B', 'BH'];
-  }
-  final rs = storeRanges(storeName, o);
-  return rs.isNotEmpty ? [rs.first] : const ['18:00-00:30'];
+  if (o == null) return const [];
+  if (full) return [for (final c in o.codes.take(2)) c.mark];
+  return o.ranges.isNotEmpty ? [o.ranges.first] : const [];
 }
 
 // =====================================================================
@@ -1685,9 +1676,7 @@ class _ShiftMarkOptionsScreenState extends State<ShiftMarkOptionsScreen> {
           ? ErrorView(message: friendlyError(_error!), onRetry: _load)
           : o == null
               ? const Center(child: CircularProgressIndicator())
-              : !o.loaded
-                  ? ErrorView(message: '讀不到班別／時段清單，請稍後再試', onRetry: _load)
-                  : ListView(
+              : ListView(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
                       children: [
                           Text('$_storeName 的清單，只影響這家店。點一項可以修改；已經排進班表的班別不能改時段、不能刪（過去的時數會跟著變），可以停用。',

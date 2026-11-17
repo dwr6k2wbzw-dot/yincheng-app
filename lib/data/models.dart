@@ -833,9 +833,8 @@ class ShiftMarkOption {
 }
 
 class ShiftOptions {
-  final bool loaded; // false＝讀不到（照 App 內建設定）
   final List<ShiftMarkOption> items;
-  const ShiftOptions(this.items, {this.loaded = true});
+  const ShiftOptions(this.items);
   /// 選單用：停用的班別不列
   List<ShiftMarkOption> get codes => items.where((x) => x.isCode && !x.hidden).toList();
   /// 算時數、說明用：含停用的（舊格子時數照算）
