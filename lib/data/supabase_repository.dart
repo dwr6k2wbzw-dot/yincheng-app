@@ -2135,6 +2135,18 @@ class SupabaseRepository implements Repository {
   }
 
   @override
+  Future<void> updatePayRate(PayRate r) async {
+    final rows = await _db.from('staff_pay_rates').update({
+      'effective_from': _day.format(r.effectiveFrom),
+      'pay_type': r.payType,
+      'amount': r.amount,
+      'insured_salary': r.insuredSalary?.round(),
+      'pension_self_rate': r.pensionSelfRate,
+    }).eq('id', r.id).select('id');
+    if (rows.isEmpty) throw Exception('message: 沒有權限修改這筆薪資,');
+  }
+
+  @override
   Future<void> deletePayRate(String id) async {
     final rows = await _db.from('staff_pay_rates').delete().eq('id', id).select('id');
     if (rows.isEmpty) throw Exception('message: 沒有權限刪除這筆薪資,');

@@ -334,9 +334,11 @@ abstract class Repository {
   /// 到職日（班表人員 shift_people.hire_date；老闆、店長能改，ops 0028）；null＝清掉
   Future<void> saveHireDate(String storeId, String personId, DateTime? hireDate);
   Future<List<PayRate>> payRates(String personId);
-  /// 新增薪率（老闆；店長只能替別人，ops 0110；生效日要晚於既有的）
+  /// 新增薪率（老闆；店長只能替別人，ops 0110）。ops 0123 起生效日不用晚於既有的，同一個生效日只能一筆
   Future<void> addPayRate(String storeId, String personId, PayRate r);
-  /// 只能刪還沒生效的
+  /// 修改一筆薪率的生效日、計薪方式、金額、投保級距、勞退自提（ops 0123；用 r.id 認）
+  Future<void> updatePayRate(PayRate r);
+  /// 刪除一筆薪率（ops 0123 起已生效的也可以刪）
   Future<void> deletePayRate(String id);
   /// 身分證、匯款帳號（只有老闆）
   Future<void> saveStaffIdentity(String storeId, String personId, {String? nationalId, String? bankCode, String? bankAccount});
@@ -380,5 +382,6 @@ String friendlyError(Object e) {
   if (msg.contains('Signups not allowed') || msg.contains('signups are disabled')) return '目前沒有開放建立帳號，請聯絡老闆。';
   if (msg.contains('Password should be')) return '密碼太短，請至少 8 個字。';
   if (msg.contains('change_requests_title_check')) return '第一行請寫個簡短的標題。';
+  if (msg.contains('staff_pay_rates_person_id_effective_from_key')) return '這個生效日已經有一筆薪資了，請直接點那一筆修改。';
   return msg.replaceAll('薪率', '薪資'); // 畫面上一律叫「薪資」（2026-11-15 老闆）；資料庫守衛的訊息還寫「薪率」（ops 0109、0110）
 }
