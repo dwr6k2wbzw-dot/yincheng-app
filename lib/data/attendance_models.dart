@@ -556,7 +556,7 @@ class StaffEntry {
 
 String payTypeLabel(String? t) => switch (t) { 'daily' => '日薪', 'monthly' => '月薪', 'hourly' => '時薪', _ => '未設定' };
 
-/// 薪率（生效日歷史；不能改，調薪＝新增一筆較晚的生效日）
+/// 薪率（生效日歷史；ops 0123 起可以修改、刪除、補更早的生效日）
 class PayRate {
   final String id;
   final DateTime effectiveFrom;

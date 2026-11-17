@@ -955,15 +955,19 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
     }
   }
 
-  Future<void> _addRate() async {
-    final amount = TextEditingController(), insured = TextEditingController(), pension = TextEditingController(text: '0');
-    var type = _payType ?? 'hourly';
-    var from = bizToday();
+  /// 新增（old == null）或修改一筆薪資。ops 0123 起已經存在的也可以改、生效日可以往前填。
+  Future<void> _editRate([PayRate? old]) async {
+    String num0(double v) => v % 1 == 0 ? v.toStringAsFixed(0) : v.toString();
+    final amount = TextEditingController(text: old == null ? '' : num0(old.amount)),
+        insured = TextEditingController(text: old?.insuredSalary == null ? '' : num0(old!.insuredSalary!)),
+        pension = TextEditingController(text: old == null ? '0' : num0(old.pensionSelfRate));
+    var type = old?.payType ?? _payType ?? 'hourly';
+    var from = old?.effectiveFrom ?? bizToday();
     final r = await showDialog<PayRate>(
       context: context,
       builder: (d) => StatefulBuilder(
         builder: (d, set) => AlertDialog(
-          title: const Text('新增薪資'),
+          title: Text(old == null ? '新增薪資' : '修改薪資'),
           content: SingleChildScrollView(
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               Row(children: [
@@ -976,9 +980,11 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 title: Text('生效日 ${DateFormat('yyyy/M/d').format(from)}'),
+                subtitle: const Text('從這一天起照這個金額算；可以填過去的日期'),
+                trailing: const Icon(Icons.edit_calendar_outlined),
                 onTap: () async {
                   final x = await showDatePicker(
-                      context: d, initialDate: from, firstDate: DateTime(2020), lastDate: DateTime(from.year + 2));
+                      context: d, initialDate: from, firstDate: DateTime(2015), lastDate: DateTime(bizToday().year + 2));
                   if (x != null) set(() => from = x);
                 },
               ),
@@ -997,14 +1003,14 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
                 Navigator.pop(
                     d,
                     PayRate(
-                        id: '',
+                        id: old?.id ?? '',
                         effectiveFrom: from,
                         payType: type,
                         amount: a,
                         insuredSalary: double.tryParse(insured.text.trim()),
                         pensionSelfRate: pr));
               },
-              child: const Text('新增'),
+              child: Text(old == null ? '新增' : '儲存'),
             ),
           ],
         ),
@@ -1015,14 +1021,32 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
     }
     if (r == null || !mounted) return;
     try {
-      await _repo.addPayRate(widget.membership.storeId, widget.entry.personId, r);
-      if (mounted) setState(() => _rates = _repo.payRates(widget.entry.personId));
+      if (old == null) {
+        await _repo.addPayRate(widget.membership.storeId, widget.entry.personId, r);
+      } else {
+        await _repo.updatePayRate(r);
+      }
+      if (!mounted) return;
+      setState(() => _rates = _repo.payRates(widget.entry.personId));
+      showMessage(context, old == null ? '已新增' : '已修改。已經發布的薪資單不會跟著變');
     } catch (e) {
       if (mounted) showMessage(context, friendlyError(e), error: true);
     }
   }
 
   Future<void> _deleteRate(PayRate r) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (d) => AlertDialog(
+        title: const Text('刪除這筆薪資？'),
+        content: Text('${DateFormat('yyyy/M/d').format(r.effectiveFrom)} 起・${payTypeLabel(r.payType)} ${ntd(r.amount)}\n\n已經發布的薪資單不會跟著變。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('刪除')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
     try {
       await _repo.deletePayRate(r.id);
       if (mounted) setState(() => _rates = _repo.payRates(widget.entry.personId));
@@ -1102,8 +1126,10 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
             builder: (context, snap) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
                 Expanded(child: Text('薪資（生效日歷史）', style: TextStyle(color: AppColors.muted, fontSize: AppType.small))),
-                if (_canEditPay) TextButton.icon(onPressed: _addRate, icon: const Icon(Icons.add, size: 18), label: const Text('新增')),
+                if (_canEditPay) TextButton.icon(onPressed: () => _editRate(), icon: const Icon(Icons.add, size: 18), label: const Text('新增')),
               ]),
+              if (_canEditPay && (snap.data?.isNotEmpty ?? false))
+                Text('點一筆可以修改', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
               if (snap.hasError) Text(friendlyError(snap.error!), style: TextStyle(color: AppColors.bad)),
               for (final r in snap.data ?? const <PayRate>[])
                 ListTile(
@@ -1114,8 +1140,9 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
                     if (r.insuredSalary != null) '投保 ${ntd(r.insuredSalary!)}',
                     '勞退自提 ${r.pensionSelfRate.toStringAsFixed(r.pensionSelfRate % 1 == 0 ? 0 : 1)}%',
                   ].join('・')),
-                  trailing: _canEditPay && r.effectiveFrom.isAfter(bizToday())
-                      ? IconButton(tooltip: '刪除（還沒生效）', onPressed: () => _deleteRate(r), icon: const Icon(Icons.delete_outline))
+                  onTap: _canEditPay ? () => _editRate(r) : null,
+                  trailing: _canEditPay
+                      ? IconButton(tooltip: '刪除', onPressed: () => _deleteRate(r), icon: const Icon(Icons.delete_outline))
                       : null,
                 ),
             ]),

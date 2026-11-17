@@ -1715,11 +1715,27 @@ class DemoRepository implements Repository {
   @override
   Future<void> addPayRate(String storeId, String personId, PayRate r) async {
     final list = _rates.putIfAbsent(personId, () => []);
-    if (list.any((x) => !x.effectiveFrom.isBefore(r.effectiveFrom))) {
-      throw Exception('message: 薪資只能往後加：生效日要晚於已有的生效日（已生效的不能改）,');
+    if (list.any((x) => x.effectiveFrom == r.effectiveFrom)) {
+      throw Exception('message: duplicate key value violates unique constraint "staff_pay_rates_person_id_effective_from_key",');
     }
-    list.insert(0, PayRate(id: 'r${_seq++}', effectiveFrom: r.effectiveFrom, payType: r.payType, amount: r.amount,
+    list.add(PayRate(id: 'r${_seq++}', effectiveFrom: r.effectiveFrom, payType: r.payType, amount: r.amount,
         insuredSalary: r.insuredSalary, pensionSelfRate: r.pensionSelfRate, note: r.note));
+    list.sort((a, b) => b.effectiveFrom.compareTo(a.effectiveFrom));
+  }
+
+  @override
+  Future<void> updatePayRate(PayRate r) async {
+    for (final list in _rates.values) {
+      final i = list.indexWhere((x) => x.id == r.id);
+      if (i < 0) continue;
+      if (list.any((x) => x.id != r.id && x.effectiveFrom == r.effectiveFrom)) {
+        throw Exception('message: duplicate key value violates unique constraint "staff_pay_rates_person_id_effective_from_key",');
+      }
+      list[i] = r;
+      list.sort((a, b) => b.effectiveFrom.compareTo(a.effectiveFrom));
+      return;
+    }
+    throw Exception('message: 沒有權限修改這筆薪資,');
   }
 
   @override
