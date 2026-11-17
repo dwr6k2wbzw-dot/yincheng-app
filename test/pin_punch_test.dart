@@ -1,4 +1,5 @@
 // 2026-11-16 打卡用帳號＋4 位數密碼打卡（ops 0112）：公用帳號權限照舊，第一頁多一個密碼打卡。
+// 2026-11-17（ops 0125）：先點自己的名字、再輸入密碼；密碼不用跟別人不一樣；本人設過之後由店長重設。
 // AppState 會載入網頁專用的 load_timing（dart:js_interop），所以只能在瀏覽器跑：
 //   flutter test --platform chrome test/pin_punch_test.dart
 @TestOn('browser')
@@ -44,6 +45,14 @@ Future<void> _settle(WidgetTester tester) async {
   }
 }
 
+/// 打卡頁第一步：點自己的名字
+Future<void> _pick(WidgetTester tester, String name) async {
+  await tester.tap(find.text(name));
+  await tester.pump();
+}
+
+const _zhe = '張哲瑋（阿哲）', _yu = '余曉雯（小魚）', _ming = '林志明（阿明）'; // 示範資料：阿哲 2580、小魚 3691、阿明還沒設
+
 Future<void> _type(WidgetTester tester, String pin) async {
   for (final d in pin.split('')) {
     await tester.tap(find.widgetWithText(OutlinedButton, d));
@@ -69,7 +78,7 @@ class _SlowKioskRepo extends DemoRepository {
 class _HourLockRepo extends DemoRepository {
   final until = DateTime.now().add(const Duration(minutes: 40));
   @override
-  Future<PinPunchResult> pinPunch(String pin) async =>
+  Future<PinPunchResult> pinPunch(String personId, String pin) async =>
       PinPunchResult(result: 'locked', lockedUntil: until, message: '這台打錯太多次，暫停到 12:00；急著打卡請找店長補登');
 }
 
@@ -153,7 +162,7 @@ void main() {
     }, timeout: const Timeout(Duration(seconds: 90)));
   });
 
-  group('密碼打卡鍵盤', () {
+  group('密碼打卡：先點名字再輸入密碼', () {
     Future<DemoRepository> open(WidgetTester tester, [DemoRepository? r]) async {
       SharedPreferences.setMockInitialValues({});
       tester.view.physicalSize = const Size(800, 1400);
@@ -162,35 +171,58 @@ void main() {
       final repo = await _signedIn(tester, 'kiosk@x', r);
       final kiosk = await repo.kioskMine();
       await tester.pumpWidget(_wrap(repo, Scaffold(body: PinPunchScreen(kiosk: kiosk!))));
-      await tester.pump();
+      await _settle(tester);
       return repo;
     }
 
-    testWidgets('密碼對：大字顯示姓名、上班、時間，4 秒後回到鍵盤；再打一次是下班', (tester) async {
+    testWidgets('第一頁是名單（全名、暱稱在括號）；還沒設密碼的人標出來、點了只提示', (tester) async {
       await open(tester);
-      await _type(tester, '2580');
-      expect(find.text('阿哲'), findsOneWidget);
-      expect(find.text('上班'), findsOneWidget);
-      expect(find.textContaining(RegExp(r'^\d\d:\d\d$')), findsOneWidget);
-      expect(find.text('2580'), findsNothing, reason: '畫面上不顯示密碼');
-      await tester.pump(const Duration(seconds: 3));
-      expect(find.text('阿哲'), findsOneWidget, reason: '還沒到 4 秒');
-      await tester.pump(const Duration(milliseconds: 1100));
       expect(find.text('隱城・打卡'), findsOneWidget);
-      await _type(tester, '2580');
-      expect(find.text('下班'), findsOneWidget);
-      // 點一下馬上回鍵盤
-      await tester.tap(find.text('阿哲'));
+      expect(find.text(_zhe), findsOneWidget);
+      expect(find.text(_yu), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, '1'), findsNothing, reason: '還沒點名字，不顯示鍵盤');
+      expect(find.text('還沒設密碼'), findsWidgets);
+      await _pick(tester, _ming);
+      expect(find.textContaining('還沒有打卡密碼'), findsWidgets);
+      expect(find.widgetWithText(OutlinedButton, '1'), findsNothing, reason: '沒有密碼的人不進鍵盤');
+      // 點錯名字可以換人
+      await _pick(tester, _zhe);
+      expect(find.widgetWithText(OutlinedButton, '1'), findsOneWidget);
+      await tester.tap(find.text('不是我，換人'));
       await tester.pump();
       expect(find.text('隱城・打卡'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
     });
 
-    testWidgets('密碼不對：顯示剩幾次和「請在自己的 App 班表頁設定」，連錯 5 次鎖 1 分鐘、鍵盤不能按', (tester) async {
+    testWidgets('密碼對：大字顯示姓名、上班、時間，4 秒後回到名單；再打一次是下班', (tester) async {
+      await open(tester);
+      await _pick(tester, _zhe);
+      await _type(tester, '2580');
+      expect(find.text(_zhe), findsOneWidget);
+      expect(find.text('上班'), findsOneWidget);
+      expect(find.textContaining(RegExp(r'^\d\d:\d\d$')), findsOneWidget);
+      expect(find.text('2580'), findsNothing, reason: '畫面上不顯示密碼');
+      await tester.pump(const Duration(seconds: 3));
+      expect(find.text('上班'), findsOneWidget, reason: '還沒到 4 秒');
+      await tester.pump(const Duration(milliseconds: 1100));
+      await _settle(tester);
+      expect(find.text('隱城・打卡'), findsOneWidget);
+      await _pick(tester, _zhe);
+      await _type(tester, '2580');
+      expect(find.text('下班'), findsOneWidget);
+      // 點一下馬上回名單
+      await tester.tap(find.text('下班'));
+      await _settle(tester);
+      expect(find.text('隱城・打卡'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('點別人的名字、輸入自己的密碼：算打錯；連錯 5 次鎖 1 分鐘、鍵盤不能按', (tester) async {
       final repo = await open(tester);
-      await _type(tester, '0000');
+      await _pick(tester, _zhe);
+      await _type(tester, '3691'); // 小魚的密碼
       expect(find.textContaining('還可以試 4 次'), findsOneWidget);
-      expect(find.textContaining('次。還沒有打卡密碼的人，請在自己的 App 班表頁設定'), findsOneWidget);
+      expect(find.textContaining('忘記密碼請找店長重設'), findsWidgets);
       for (var i = 0; i < 4; i++) {
         await _type(tester, '0000');
       }
@@ -198,31 +230,45 @@ void main() {
       final one = tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, '1'));
       expect(one.onPressed, isNull, reason: '鎖住時鍵盤不能按');
       // 鎖住期間連對的密碼也打不了（資料庫一樣擋）
-      expect((await repo.pinPunch('2580')).locked, isTrue);
+      expect((await repo.pinPunch('f2', '2580')).locked, isTrue);
       await tester.pumpWidget(const SizedBox());
     });
 
     testWidgets('一小時內錯太多次：鎖超過 1 分鐘，顯示伺服器的「找店長補登」，1 分鐘後鍵盤還是鎖著', (tester) async {
       await open(tester, _HourLockRepo());
+      await _pick(tester, _zhe);
       await _type(tester, '0000');
       expect(find.textContaining('急著打卡請找店長補登'), findsOneWidget);
       expect(find.textContaining('秒後再試'), findsNothing, reason: '不是 1 分鐘的鎖，不能顯示秒數倒數');
       await tester.pump(const Duration(seconds: 61));
-      final one = tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, '1'));
-      expect(one.onPressed, isNull, reason: '過 1 分鐘還在鎖：照伺服器的截止時間');
+      // 30 秒沒動作會回到名單：名單上的名字也不能點
+      final name = tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, _zhe));
+      expect(name.onPressed, isNull, reason: '過 1 分鐘還在鎖：照伺服器的截止時間');
       expect(find.textContaining('急著打卡請找店長補登'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
     });
 
     testWidgets('刪除、清除：不到 4 位不送出', (tester) async {
       await open(tester);
+      await _pick(tester, _yu);
       await _type(tester, '12');
       await tester.tap(find.bySemanticsLabel('刪除一位'));
       await tester.pump();
       await tester.tap(find.text('清除'));
       await tester.pump();
       await _type(tester, '3691');
-      expect(find.text('小魚'), findsOneWidget, reason: '清掉之前按的，才打 3691');
+      expect(find.text('上班'), findsOneWidget, reason: '清掉之前按的，才打 3691');
+      expect(find.text(_yu), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('點了名字 30 秒沒動作：回到名單', (tester) async {
+      await open(tester);
+      await _pick(tester, _zhe);
+      await _type(tester, '25');
+      await tester.pump(const Duration(seconds: 31));
+      expect(find.text('隱城・打卡'), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, '1'), findsNothing);
       await tester.pumpWidget(const SizedBox());
     });
   });
@@ -240,26 +286,31 @@ void main() {
       return repo;
     }
 
-    testWidgets('老闆：員工資料看得到設了沒、看不到密碼；重複、太好猜的被擋，隨機產生只顯示一次', (tester) async {
+    testWidgets('老闆：員工資料看得到設了沒、看不到密碼；太好猜的被擋、可以跟別人同一組，隨機產生只顯示一次', (tester) async {
       final repo = await openStaff(tester, 'owner@x', Role.owner);
       expect(find.textContaining('打卡密碼已設定'), findsNWidgets(2)); // 阿哲、小魚
       expect(find.textContaining('打卡密碼未設定'), findsWidgets);
       expect(find.textContaining('2580'), findsNothing);
-      await tester.tap(find.text('小安'));
+      await tester.tap(find.text('陳怡安（小安）'));
       await _settle(tester);
       expect(find.text('打卡密碼：未設定'), findsOneWidget);
       await tester.tap(find.widgetWithText(OutlinedButton, '設定'));
       await _settle(tester);
-      await _enterPin(tester, '2580', '2580');
-      expect(find.text('這組密碼不能用，請換一組'), findsOneWidget, reason: '跟阿哲重複，只說不能用');
+      expect(find.textContaining('規則：4 位數字'), findsOneWidget, reason: '規則在輸入的地方就寫出來');
+      expect(find.textContaining('不能跟'), findsNothing, reason: '沒有「不能跟別人一樣」這條了');
       await _enterPin(tester, '0000', '0000');
       expect(find.textContaining('太好猜'), findsOneWidget, reason: '老闆設也一樣擋太好猜的');
-      await expectLater(repo.pinSet('f1', '0000'), completion(predicate<PinSetResult>((r) => r.result == 'rejected' && r.message == '這組密碼不能用，請換一組')),
-          reason: '資料庫擋太好猜的，跟重複回一模一樣');
+      await expectLater(repo.pinSet('f1', '0000'), completion(predicate<PinSetResult>((r) => r.result == 'rejected' && r.message.contains('太好猜'))),
+          reason: '資料庫也擋太好猜的，直接講原因');
       await tester.enterText(_dialog(find.byType(TextField)).first, '12');
       await tester.tap(_dialog(find.widgetWithText(FilledButton, '儲存')));
       await _settle(tester);
       expect(find.text('打卡密碼要是 4 位數字'), findsOneWidget);
+      await _enterPin(tester, '2580', '2580');
+      expect(find.byType(AlertDialog), findsNothing, reason: '跟阿哲同一組也可以（打卡先點名字）');
+      expect(find.text('打卡密碼：已設定'), findsOneWidget);
+      await tester.tap(find.widgetWithText(OutlinedButton, '重設'));
+      await _settle(tester);
       await tester.tap(find.widgetWithText(OutlinedButton, '隨機產生'));
       await _settle(tester);
       expect(find.textContaining('只顯示這一次'), findsOneWidget);
@@ -271,37 +322,37 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     }, timeout: const Timeout(Duration(seconds: 90)));
 
-    testWidgets('店長：可以設別人的，不能設自己的', (tester) async {
+    testWidgets('店長：可以設、重設、清除別人的，不能設自己的', (tester) async {
       await openStaff(tester, 'manager@x', Role.manager);
-      await tester.tap(find.text('阿明')); // 示範店長自己那列
+      await tester.tap(find.text(_ming)); // 示範店長自己那列
       await _settle(tester);
       expect(find.text('店長的打卡密碼請老闆設定'), findsOneWidget);
       expect(find.widgetWithText(OutlinedButton, '重設'), findsNothing);
       await tester.pageBack();
       await _settle(tester);
-      await tester.tap(find.text('小魚'));
+      await tester.tap(find.text(_yu));
       await _settle(tester);
       expect(find.widgetWithText(OutlinedButton, '重設'), findsOneWidget);
       await tester.tap(find.widgetWithText(OutlinedButton, '重設'));
       await _settle(tester);
-      expect(find.text('清除密碼'), findsOneWidget, reason: '店長可以清除別人的');
+      expect(find.text('清除密碼'), findsOneWidget, reason: '員工忘記密碼：店長重設或清除');
       await tester.pumpWidget(const SizedBox());
     }, timeout: const Timeout(Duration(seconds: 90)));
 
-    testWidgets('員工：沒有密碼會看到「請先設定打卡密碼」，可以自己輸入兩次設定；太好猜、重複、兩次不一樣都擋', (tester) async {
-      SharedPreferences.setMockInitialValues({});
+    testWidgets('員工：沒有密碼會看到「請先設定打卡密碼」，自己設一次；設好之後不能自己改，要找店長重設', (tester) async {
+      SharedPreferences.setMockInitialValues({'attendance_card_open': true});
       final repo = await _signedIn(tester, 'staff@x');
       final m = Membership(storeId: 'yc', storeName: '隱城', role: Role.staff, displayName: '示範');
       await tester.pumpWidget(_wrap(repo, Scaffold(body: SingleChildScrollView(
           child: AttendanceCard(membership: m, data: _emptyMonth, codeTimes: const {})))));
       await _settle(tester);
-      expect(find.text('掃碼打卡'), findsNothing);
-      expect(find.textContaining('手機相機掃'), findsNothing);
       expect(find.text('請先設定打卡密碼'), findsOneWidget, reason: '示範員工阿明還沒有密碼');
       await tester.tap(find.text('打卡密碼'));
       await _settle(tester);
-      expect(find.text('設定打卡密碼・阿明'), findsOneWidget);
+      expect(find.text('設定打卡密碼・$_ming'), findsOneWidget);
       expect(find.text('清除密碼'), findsNothing, reason: '員工只能設，不能清除');
+      expect(find.textContaining('規則：4 位數字'), findsOneWidget, reason: '規則在輸入的地方就寫出來');
+      expect(find.textContaining('請找店長重設'), findsOneWidget);
       expect(_dialog(find.byType(TextField)), findsNWidgets(2), reason: '自己輸入，打兩次確認');
       await _enterPin(tester, '1593', '1539');
       expect(find.text('兩次輸入的不一樣，請再輸入一次'), findsOneWidget);
@@ -310,26 +361,14 @@ void main() {
       await _enterPin(tester, '4321', '4321');
       expect(find.textContaining('太好猜'), findsOneWidget, reason: '往下的連號也算');
       await _enterPin(tester, '3691', '3691');
-      expect(find.text('這組密碼不能用，請換一組'), findsOneWidget, reason: '跟小魚重複：只說不能用，不說原因');
-      expect(find.textContaining('重複'), findsNothing);
-      await _enterPin(tester, '1593', '1593');
-      expect(find.byType(AlertDialog), findsNothing, reason: '設好了，對話框關掉、不顯示密碼');
+      expect(find.byType(AlertDialog), findsNothing, reason: '跟小魚同一組也可以；設好了，對話框關掉、不顯示密碼');
       expect(find.text('請先設定打卡密碼'), findsNothing);
-      expect(find.textContaining('1593'), findsNothing);
-      await expectLater(repo.pinPunch('1593'), throwsA(anything), reason: '員工帳號不能用密碼打卡（只有打卡用帳號可以）');
-      // 還是可以按「隨機產生」
-      await tester.tap(find.text('打卡密碼'));
-      await _settle(tester);
-      expect(find.text('重設打卡密碼・阿明'), findsOneWidget);
-      await tester.tap(_dialog(find.widgetWithText(OutlinedButton, '隨機產生')));
-      await _settle(tester);
-      expect(find.text('新的打卡密碼・阿明'), findsOneWidget);
-      final pin = tester.widgetList<Text>(_dialog(find.byType(Text))).map((t) => t.data ?? '').firstWhere((t) => RegExp(r'^[0-9]{4}$').hasMatch(t));
-      expect(isWeakPunchPin(pin), isFalse);
-      expect(find.textContaining('只顯示這一次'), findsOneWidget);
-      await tester.tap(find.text('記下了'));
-      await _settle(tester);
-      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.textContaining('3691'), findsNothing);
+      expect(find.text('打卡密碼'), findsNothing, reason: '設過之後沒有自己改的按鈕');
+      expect(find.textContaining('忘記或想換，請找店長重設'), findsOneWidget);
+      await expectLater(repo.pinSet('f0', '7046'), completion(predicate<PinSetResult>((r) => r.result == 'reset_needed')),
+          reason: '資料庫也擋：本人設過之後不能自己改');
+      await expectLater(repo.pinPunch('f0', '3691'), throwsA(anything), reason: '員工帳號不能用密碼打卡（只有打卡用帳號可以）');
       await expectLater(repo.pinSet('f1', '7046'), throwsA(anything), reason: '員工不能設別人的');
     }, timeout: const Timeout(Duration(seconds: 90)));
 
@@ -340,6 +379,7 @@ void main() {
       tester.view.devicePixelRatio = 1;
       tester.view.viewInsets = const FakeViewPadding(bottom: 300);
       addTearDown(tester.view.reset);
+      SharedPreferences.setMockInitialValues({'attendance_card_open': true});
       final repo = await _signedIn(tester, 'staff@x');
       final m = Membership(storeId: 'yc', storeName: '隱城', role: Role.staff, displayName: '示範');
       await tester.pumpWidget(_wrap(repo, Scaffold(body: SingleChildScrollView(
@@ -368,7 +408,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(_dialog(find.widgetWithText(OutlinedButton, '隨機產生')));
       await _settle(tester);
-      expect(find.text('新的打卡密碼・阿明'), findsOneWidget);
+      expect(find.text('新的打卡密碼・$_ming'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.ensureVisible(find.text('記下了'));
       await tester.pumpAndSettle();

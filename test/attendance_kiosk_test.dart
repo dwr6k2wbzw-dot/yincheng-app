@@ -212,7 +212,7 @@ final repo = DemoRepository();
 
       await tester.tap(find.text('原始紀錄'));
       await tester.pumpAndSettle();
-      await tester.tap(find.textContaining('小魚・上班'));
+      await tester.tap(find.textContaining('余曉雯（小魚）・上班'));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(FilledButton, '確認'));
       await tester.pumpAndSettle();

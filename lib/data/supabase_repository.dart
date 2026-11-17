@@ -611,6 +611,7 @@ class SupabaseRepository implements Repository {
   Future<void> saveShiftPerson(String storeId, ShiftPerson p, {bool isNew = false}) async {
     final v = {
       'name': p.name.trim(),
+      'full_name': (p.fullName?.trim().isEmpty ?? true) ? null : p.fullName!.trim(),
       'kind': p.kind,
       'sort_order': p.sortOrder,
       'hire_date': p.hireDate == null ? null : _day.format(p.hireDate!),
@@ -923,14 +924,6 @@ class SupabaseRepository implements Repository {
   @override
   Future<void> deleteShiftPairRule(String id) => _db.from('shift_pair_rules').delete().eq('id', id);
 
-  @override
-  Future<void> claimShiftPerson(String personId) => _db.rpc('shift_claim_person', params: {'p_person': personId});
-
-  @override
-  Future<void> clearShiftPersonUser(String personId) async {
-    final rows = await _db.from('shift_people').update({'user_id': null}).eq('id', personId).select('id');
-    if (rows.isEmpty) throw Exception('message: 沒有權限修改班表人員,');
-  }
 
   @override
   Future<void> setShiftRequest(String storeId, String personId, DateTime date, String? kind) async {
@@ -2061,8 +2054,12 @@ class SupabaseRepository implements Repository {
   }
 
   @override
-  Future<PinPunchResult> pinPunch(String pin) async =>
-      PinPunchResult.fromRow(_rpcOne(await _db.rpc('attendance_pin_punch', params: {'p_pin': pin})));
+  Future<List<KioskPerson>> kioskPeople() async =>
+      [for (final r in await _db.rpc('attendance_kiosk_people') as List) KioskPerson.fromRow(r as Map<String, dynamic>)];
+
+  @override
+  Future<PinPunchResult> pinPunch(String personId, String pin) async => PinPunchResult.fromRow(
+      _rpcOne(await _db.rpc('attendance_pin_punch', params: {'p_person': personId, 'p_pin': pin})));
 
   @override
   Future<List<PinStatus>?> pinStatus(String storeId) async {

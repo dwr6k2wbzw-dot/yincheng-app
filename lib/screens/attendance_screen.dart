@@ -153,7 +153,7 @@ class _AttendanceCardState extends State<AttendanceCard> {
         _future = _load();
       });
 
-  /// 自己改打卡密碼（店長的請老闆設定）
+  /// 自己設打卡密碼（只有還沒設的時候；店長的請老闆設定）
   Future<void> _editPin(PinStatus p) async {
     final changed = await editPunchPin(context, personId: p.personId, name: p.name, hasPin: p.hasPin, self: true);
     if (changed && mounted) _reload();
@@ -201,10 +201,10 @@ class _AttendanceCardState extends State<AttendanceCard> {
           ]),
           const SizedBox(height: 6),
           if (me.canManage)
-            Text('這家店還沒開放打卡；員工資料、確認帳號綁定照常可以用。員工的綁定經老闆確認後，才能到別家店掃碼支援',
+            Text('這家店還沒開放打卡；員工資料、薪資照常可以用',
                 style: TextStyle(color: AppColors.muted, fontSize: AppType.small))
           else if (me.bindingPending)
-            Text('你選的班表名字還在等老闆確認，確認後才能到別家店掃碼支援',
+            Text('你的帳號對應還沒生效，請店長或老闆在「班表人員」替你確認一次',
                 style: TextStyle(color: AppColors.warn, fontSize: AppType.small))
           else
             Text('${me.personName ?? ''}・這家店還沒開放打卡，薪資單發布後在這裡看',
@@ -253,13 +253,17 @@ class _AttendanceCardState extends State<AttendanceCard> {
                 ),
                 const SizedBox(height: 6),
                 if (AppScope.of(context).kiosk?.storeId == widget.membership.storeId)
-                  Text('這是店裡的打卡用帳號：打卡請用第一頁「打卡」，輸入自己的 4 位數密碼',
+                  Text('這是店裡的打卡用帳號：打卡請用第一頁「打卡」，先點自己的名字、再輸入 4 位數密碼',
                       style: TextStyle(color: AppColors.muted, fontSize: AppType.small))
                 else if (me.bindingPending)
-                  Text('你選的班表名字還在等老闆確認，確認後才能打卡、看自己的出勤（老闆：出勤管理 → 員工資料）',
+                  Text('你的帳號對應還沒生效，請店長或老闆在「班表人員」替你確認一次，之後才能打卡、看自己的出勤',
                       style: TextStyle(color: AppColors.warn, fontSize: AppType.small))
                 else if (me.personId == null)
-                  Text('先在班表頁最上面選你是班表上的誰，老闆確認後才能打卡', style: TextStyle(color: AppColors.warn, fontSize: AppType.small))
+                  Text(
+                      me.canManage
+                          ? '你的帳號沒有對應班表上的人（自己有排班、要打卡才需要；在「班表人員」對應）'
+                          : '你的帳號還沒對應到員工資料：請店長或老闆在「班表人員」替你對應一次，之後就能打卡、看自己的出勤',
+                      style: TextStyle(color: me.canManage ? AppColors.muted : AppColors.warn, fontSize: AppType.small))
                 else
                   Text(
                       last == null
@@ -280,12 +284,19 @@ class _AttendanceCardState extends State<AttendanceCard> {
                         Text('請先設定打卡密碼',
                             style: TextStyle(color: AppColors.warn, fontSize: AppType.title, fontWeight: AppFont.heading)),
                         const SizedBox(height: 2),
-                        Text('按下面「打卡密碼」自己設 4 位數，之後在店裡的打卡平板輸入就能打卡',
+                        Text('按下面「打卡密碼」自己設 4 位數；之後在店裡的打卡平板先點自己的名字、再輸入密碼',
                             style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
                       ]),
                     )
                   else
                     Text('你還沒有打卡密碼，請老闆設定', style: TextStyle(color: AppColors.warn, fontSize: AppType.small)),
+                // ops 0125：設過之後本人不能自己改，忘記或想換由店長重設
+                if (_open && me.personId != null && _myPin != null && _myPin!.hasPin && !_myPin!.canSet)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text('打卡密碼已經設好；忘記或想換，請找店長重設',
+                        style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+                  ),
                 if (_open) const SizedBox(height: 10),
                 if (_open)
                   Wrap(spacing: 8, runSpacing: 8, children: [

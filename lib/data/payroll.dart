@@ -2,6 +2,8 @@
 // 金額以資料庫算的為準（payroll_entries.gross）；這裡的 [payrollTotal] 和資料庫 app.payroll_total 同一套公式，
 // 只用在編輯畫面「按儲存前先試算」。
 
+import 'person_names.dart';
+
 double? _numOrNull(dynamic v) => v == null ? null : (v as num).toDouble();
 double _num(dynamic v) => v == null ? 0 : (v as num).toDouble();
 DateTime _date(dynamic v) => DateTime.parse(v as String);
@@ -123,7 +125,7 @@ class PayrollRow {
   });
   factory PayrollRow.fromRow(Map<String, dynamic> r) => PayrollRow(
         personId: r['person_id'] as String,
-        name: r['name'] as String? ?? '',
+        name: labelOfPerson(r['person_id'], r['name'] as String? ?? ''),
         kind: r['kind'] as String? ?? 'full',
         status: r['status'] as String? ?? 'draft',
         payType: r['pay_type'] as String? ?? 'hourly',
@@ -244,7 +246,7 @@ class PayrollSlip {
   factory PayrollSlip.fromRow(Map<String, dynamic> r) => PayrollSlip(
         month: _date(r['month']),
         storeName: r['store_name'] as String? ?? '',
-        personName: r['person_name'] as String? ?? '',
+        personName: labelOfPerson(r['person_id'], r['person_name'] as String? ?? ''),
         payType: r['pay_type'] as String? ?? 'hourly',
         baseAmount: _numOrNull(r['base_amount']),
         days: _numOrNull(r['days']),

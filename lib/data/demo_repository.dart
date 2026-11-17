@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'models.dart';
+import 'person_names.dart';
 import 'purchase_items_math.dart';
 import 'repository.dart';
 
@@ -154,8 +155,24 @@ class DemoRepository implements Repository {
     return ShiftMonth(
       m,
       [
-        for (final (i, n) in fulls.indexed) ShiftPerson(id: 'f$i', name: n, sortOrder: i),
-        for (final (i, n) in parts.keys.indexed) ShiftPerson(id: 'p$i', name: n, kind: 'part', sortOrder: 10 + i),
+        // 示範全名（虛構）；小白、阿樂故意沒填，示範「沒填全名」的樣子。阿明＝登入的示範帳號，阿凱已經對應好
+        for (final (i, n) in fulls.indexed)
+          ShiftPerson(
+              id: 'f$i',
+              name: n,
+              fullName: _demoFullNames[n],
+              sortOrder: i,
+              userId: i == 0 && !_isKiosk ? 'demo-user' : null,
+              userVerified: i == 0 && !_isKiosk),
+        for (final (i, n) in parts.keys.indexed)
+          ShiftPerson(
+              id: 'p$i',
+              name: n,
+              fullName: _demoFullNames[n],
+              kind: 'part',
+              sortOrder: 10 + i,
+              userId: i == 1 ? 'u2' : null,
+              userVerified: i == 1),
       ],
       marks,
       future ? const {} : const {3: '月會日'},
@@ -208,10 +225,22 @@ class DemoRepository implements Repository {
   Future<int> undoShiftChange(String storeId, String changeId) async => 1;
   @override
   Future<void> assignShiftAccount(String personId, String? userId) async {}
+  /// 示範資料裡寫死的暱稱 → 顯示用的名字（全名（暱稱）），跟正式版從資料庫讀回來後的換法一樣
+  String _dn(String id, String nick) => personLabel(nick, _demoFullNames[nick]);
+  static const _demoFullNames = {'阿明': '林志明', '小安': '陳怡安', '阿哲': '張哲瑋', '小魚': '余曉雯', '阿凱': '王凱文', '芳芳': '李芳芳'};
   @override
-  Future<List<ShiftAccountCandidate>> shiftAccountCandidates(String storeId) async => const [
-        ShiftAccountCandidate(userId: 'u1', name: '示範店長', role: 'manager'),
-        ShiftAccountCandidate(userId: 'u2', name: '示範兼職', role: 'parttime', personId: 'p1', personName: '阿凱', verified: true),
+  Future<List<ShiftAccountCandidate>> shiftAccountCandidates(String storeId) async => [
+        ShiftAccountCandidate(
+            userId: 'demo-user',
+            name: _isManager ? '示範店長' : '示範帳號',
+            role: _isManager ? 'manager' : 'owner',
+            personId: 'f0',
+            personName: '阿明',
+            verified: true),
+        const ShiftAccountCandidate(userId: 'u3', name: '小安的帳號', role: 'staff'),
+        const ShiftAccountCandidate(userId: 'u4', name: '阿哲的帳號', role: 'staff'),
+        const ShiftAccountCandidate(userId: 'u2', name: '阿凱的帳號', role: 'parttime', personId: 'p1', personName: '阿凱', verified: true),
+        const ShiftAccountCandidate(userId: 'u5', name: '小魚的帳號', role: 'parttime'),
       ];
   @override
   Future<void> setShift(String storeId, String personId, DateTime date, String? mark) async {}
@@ -250,10 +279,6 @@ class DemoRepository implements Repository {
       _pairRules.add(PairRule(id: '${DateTime.now().microsecondsSinceEpoch}', a: a, b: b, kind: kind));
   @override
   Future<void> deleteShiftPairRule(String id) async => _pairRules.removeWhere((r) => r.id == id);
-  @override
-  Future<void> claimShiftPerson(String personId) async {}
-  @override
-  Future<void> clearShiftPersonUser(String personId) async {}
   @override
   Future<void> setShiftRequest(String storeId, String personId, DateTime date, String? kind) async {
     final m = _shiftReq.putIfAbsent(personId, () => {});
@@ -1382,7 +1407,7 @@ class DemoRepository implements Repository {
       enabled: storeId == 'yc',
       canManage: !_isStaff, // 小城外沒開打卡，老闆照樣管員工資料
       personId: _bindingPending ? null : 'f0',
-      personName: _bindingPending ? null : '阿明',
+      personName: _bindingPending ? null : _dn('f0', '阿明'),
       lastPunchType: last?.punchType,
       lastPunchedAt: last?.at,
       onShift: last?.punchType == 'in',
@@ -1458,19 +1483,19 @@ class DemoRepository implements Repository {
     final m = await shiftMonth(storeId, DateTime.now());
     return [
       for (final p in m.people)
-        if (p.active) AttendancePerson(personId: p.id, name: p.name),
+        if (p.active) AttendancePerson(personId: p.id, name: p.label),
       const AttendancePerson(personId: 'xc-demo', name: '阿傑', homeStoreName: '小城外', crossStore: true),
     ];
   }
 
   @override
   Future<List<AttendanceAnomaly>> attendanceAnomalies(String storeId, DateTime from, DateTime to) async => [
-        AttendanceAnomaly(kind: 'missing_out', businessDate: _daysAgo(1), personId: 'f1', personName: '小安',
+        AttendanceAnomaly(kind: 'missing_out', businessDate: _daysAgo(1), personId: 'f1', personName: _dn('f1', '小安'),
             punchId: 'demo1', at: DateTime.now().subtract(const Duration(hours: 30)), punchType: 'in', detail: '上班後 14 小時內沒有下班'),
-        AttendanceAnomaly(kind: 'pending', businessDate: _daysAgo(0), personId: 'p0', personName: '小魚',
+        AttendanceAnomaly(kind: 'pending', businessDate: _daysAgo(0), personId: 'p0', personName: _dn('p0', '小魚'),
             punchId: 'demo2', at: DateTime.now().subtract(const Duration(hours: 3)), punchType: 'in', detail: 'QR 碼過期'),
         for (final a in _att.where((r) => r.kind == 'amendment' && r.status == 'pending'))
-          AttendanceAnomaly(kind: 'amendment', personId: 'f0', personName: '阿明', amendmentId: a.id, at: a.at, punchType: a.punchType, detail: a.note),
+          AttendanceAnomaly(kind: 'amendment', personId: 'f0', personName: _dn('f0', '阿明'), amendmentId: a.id, at: a.at, punchType: a.punchType, detail: a.note),
       ];
 
   @override
@@ -1479,9 +1504,9 @@ class DemoRepository implements Repository {
     DateTime at(int h, int m) => DateTime(d.year, d.month, d.day, h, m);
     final demo2 = _lastReview('demo2') == 'confirmed';
     return [
-      AttendanceSession(personId: 'f0', personName: '阿明', businessDate: d, inAt: at(18, 0), outAt: at(23, 30), minutes: 330),
+      AttendanceSession(personId: 'f0', personName: _dn('f0', '阿明'), businessDate: d, inAt: at(18, 0), outAt: at(23, 30), minutes: 330),
       AttendanceSession(
-          personId: 'p0', personName: '小魚', businessDate: d, inAt: at(19, 2), outAt: at(23, 0), minutes: 238, pending: !demo2),
+          personId: 'p0', personName: _dn('p0', '小魚'), businessDate: d, inAt: at(19, 2), outAt: at(23, 0), minutes: 238, pending: !demo2),
     ];
   }
 
@@ -1490,14 +1515,14 @@ class DemoRepository implements Repository {
     final d = _daysAgo(1);
     final demo2 = _lastReview('demo2');
     return [
-      AttendanceExportRow(businessDate: d, personName: '阿明', punchType: 'in', punchedAt: DateTime(d.year, d.month, d.day, 18), storeName: '隱城',
+      AttendanceExportRow(businessDate: d, personName: _dn('f0', '阿明'), punchType: 'in', punchedAt: DateTime(d.year, d.month, d.day, 18), storeName: '隱城',
           source: 'qr', status: 'ok', flags: '', review: _lastReview('demo0'), counted: _lastReview('demo0') != 'rejected', punchId: 'demo0'),
-      AttendanceExportRow(businessDate: d, personName: '小魚', punchType: 'in', punchedAt: DateTime(d.year, d.month, d.day, 19, 2), storeName: '隱城',
+      AttendanceExportRow(businessDate: d, personName: _dn('p0', '小魚'), punchType: 'in', punchedAt: DateTime(d.year, d.month, d.day, 19, 2), storeName: '隱城',
           source: 'qr', status: 'pending', flags: 'code_expired', review: demo2, counted: demo2 == 'confirmed', punchId: 'demo2'),
       for (final r in _att.where((r) => r.isPunch))
           AttendanceExportRow(
               businessDate: r.businessDate ?? r.at,
-              personName: '阿明',
+              personName: _dn('f0', '阿明'),
               punchType: r.punchType,
               punchedAt: r.at,
               storeName: '隱城',
@@ -1565,7 +1590,17 @@ class DemoRepository implements Repository {
   }
 
   @override
-  Future<PinPunchResult> pinPunch(String pin) async {
+  Future<List<KioskPerson>> kioskPeople() async {
+    if (!_isKiosk) throw Exception('message: 只有店裡的打卡用帳號可以看打卡名單,');
+    final m = await shiftMonth('yc', DateTime.now());
+    return [
+      for (final p in m.people)
+        if (p.active) KioskPerson(personId: p.id, name: p.label, hasPin: _pins.containsKey(p.id)),
+    ];
+  }
+
+  @override
+  Future<PinPunchResult> pinPunch(String personId, String pin) async {
     if (!_isKiosk) throw Exception('message: 只有店裡的打卡用帳號可以用密碼打卡,');
     if (_kioskXc) throw Exception('message: 小城外打卡尚未開啟,');
     final now = DateTime.now();
@@ -1574,21 +1609,22 @@ class DemoRepository implements Repository {
       return PinPunchResult(
           result: 'locked', lockedUntil: lock, message: '密碼連錯 5 次，請 ${lock.difference(now).inSeconds + 1} 秒後再試');
     }
-    final who = _pins.entries.where((e) => e.value == pin).firstOrNull?.key;
-    if (who == null) {
+    final name = (await shiftMonth('yc', now)).people.firstWhere((p) => p.id == personId).label;
+    if (!_pins.containsKey(personId)) {
+      return PinPunchResult(result: 'no_pin', personName: name, remaining: 5, message: '「$name」還沒有打卡密碼：請在自己的 App 班表頁設定，或找店長幫你設');
+    }
+    if (_pins[personId] != pin) {
       _pinFails++;
       if (_pinFails >= 5) {
         _pinFails = 0;
         _pinLockedUntil = now.add(const Duration(minutes: 1));
         return PinPunchResult(result: 'locked', lockedUntil: _pinLockedUntil, message: '密碼連錯 5 次，請 1 分鐘後再試');
       }
-      return PinPunchResult(
-          result: 'wrong', remaining: 5 - _pinFails, message: '密碼不對，還可以試 ${5 - _pinFails} 次。還沒有打卡密碼的人，請在自己的 App 班表頁設定');
+      return PinPunchResult(result: 'wrong', remaining: 5 - _pinFails, message: '密碼不對，還可以試 ${5 - _pinFails} 次。忘記密碼請找店長重設');
     }
     _pinFails = 0;
-    final name = (await shiftMonth('yc', now)).people.firstWhere((p) => p.id == who).name;
-    final type = _pinLast[who] == 'in' ? 'out' : 'in';
-    _pinLast[who] = type;
+    final type = _pinLast[personId] == 'in' ? 'out' : 'in';
+    _pinLast[personId] = type;
     final biz = DateTime(now.year, now.month, now.day - (now.hour < 6 ? 1 : 0));
     _pinPunches.add(AttendanceExportRow(
         businessDate: biz, personName: name, punchType: type, punchedAt: now, storeName: '隱城',
@@ -1605,11 +1641,11 @@ class DemoRepository implements Repository {
         if (!_isStaff || p.id == 'f0')
           PinStatus(
               personId: p.id,
-              name: p.name,
+              name: p.label,
               active: p.active,
               hasPin: _pins.containsKey(p.id),
-              // 示範：阿明（f0）是登入的這個人；店長不能設自己的
-              canSet: !(_isManager && p.id == 'f0'),
+              // 示範：阿明（f0）是登入的這個人；店長不能設自己的；員工本人只有還沒設的時候能自己設
+              canSet: _isStaff ? !_pins.containsKey(p.id) : !(_isManager && p.id == 'f0'),
               mine: p.id == 'f0'),
     ];
   }
@@ -1619,13 +1655,15 @@ class DemoRepository implements Repository {
     if (_isManager && personId == 'f0') throw Exception('message: 店長的打卡密碼請老闆設定,');
     if (_isStaff && personId != 'f0') throw Exception('message: 沒有權限設定這個人的打卡密碼,');
     if (pin != null && !RegExp(r'^[0-9]{4}$').hasMatch(pin)) throw Exception('message: 打卡密碼要是 4 位數字,');
-    // 太好猜、跟別人重複都只說「不能用」（同 ops 0112）
-    final taken = _pins.entries.any((e) => e.key != personId && e.value == pin);
-    if (pin != null && (taken || isWeakPunchPin(pin))) {
-      return const PinSetResult(result: 'rejected', message: '這組密碼不能用，請換一組');
+    // ops 0125：不用跟別人不一樣；本人設過之後要店長重設
+    if (_isStaff && _pins.containsKey(personId)) {
+      return const PinSetResult(result: 'reset_needed', message: '已經設過打卡密碼了。忘記或想換，請找店長重設');
+    }
+    if (pin != null && isWeakPunchPin(pin)) {
+      return const PinSetResult(result: 'rejected', message: '這組太好猜了，請換一組（不能四個數字都一樣，也不能是連號）');
     }
     var v = pin;
-    while (v == null || isWeakPunchPin(v) || _pins.entries.any((e) => e.key != personId && e.value == v)) {
+    while (v == null || isWeakPunchPin(v)) {
       v = (1000 + DateTime.now().microsecond % 9000).toString();
     }
     _pins[personId] = v;
@@ -1661,7 +1699,7 @@ class DemoRepository implements Repository {
         if (!_isStaff || p.id == 'f0')
           StaffEntry(
             personId: p.id,
-            name: p.name,
+            name: p.label,
             kind: p.kind,
             active: p.active,
             hireDate: _hire.containsKey(p.id) ? _hire[p.id] : p.hireDate,
@@ -1807,7 +1845,7 @@ class DemoRepository implements Repository {
       final base = switch (type) { 'daily' => 1800.0, 'monthly' => 36000.0 + i * 1000, _ => 200.0 };
       final auto = storeId == 'yc';
       rows[p.id] = _payCalc(PayrollRow(
-          personId: p.id, name: p.name, kind: p.kind, payType: type, baseAmount: base,
+          personId: p.id, name: p.label, kind: p.kind, payType: type, baseAmount: base,
           autoDays: auto && type == 'daily' ? 10 : null, autoHours: auto && type == 'hourly' ? 60.0 + i * 4.5 : null,
           daysOverride: old?.daysOverride, hoursOverride: old?.hoursOverride,
           otHours: type == 'monthly' ? old?.otHours ?? 0 : 0, otHours2: type == 'monthly' ? old?.otHours2 ?? 0 : 0,
@@ -1904,7 +1942,7 @@ class DemoRepository implements Repository {
     final m = DateTime(DateTime.now().year, DateTime.now().month - 1, 1);
     return [
       PayrollSlip(
-          month: m, storeName: storeId == 'yc' ? '隱城' : '小城外', personName: '阿明', payType: 'hourly', baseAmount: 200,
+          month: m, storeName: storeId == 'yc' ? '隱城' : '小城外', personName: _dn('f0', '阿明'), payType: 'hourly', baseAmount: 200,
           hours: 82.5, bonus: 500, insurance: 300, gross: 16700, publishedAt: DateTime(m.year, m.month + 1, 5)),
     ];
   }

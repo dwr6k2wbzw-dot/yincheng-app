@@ -630,12 +630,12 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
   String _assignee(WorkReminder r, HandoverBoard b) {
     if (r.assignOnShift) {
       if (!_hasSchedule) return '當天上班的人';
-      final on = b.people.where((p) => p.active && ShiftMonth.isOn(b.todayMarks[p.id])).map((p) => p.name).toList();
+      final on = b.people.where((p) => p.active && ShiftMonth.isOn(b.todayMarks[p.id])).map((p) => p.shortLabel).toList();
       return '當天上班的人${on.isEmpty ? '' : '（${on.join('、')}）'}';
     }
     if (r.assignPersonId != null) {
       for (final p in b.people) {
-        if (p.id == r.assignPersonId) return p.name;
+        if (p.id == r.assignPersonId) return p.label;
       }
       return '指定人員';
     }
@@ -848,7 +848,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
                 items: [
                   const DropdownMenuItem(value: '', child: Text('不指定（大家都看得到）')),
                   if (_hasSchedule) const DropdownMenuItem(value: 'shift', child: Text('當天上班的人')),
-                  for (final p in people) DropdownMenuItem(value: p.id, child: Text(p.name)),
+                  for (final p in people) DropdownMenuItem(value: p.id, child: Text(p.label)),
                 ],
                 onChanged: (v) => set(() => assign = v ?? ''),
               ),

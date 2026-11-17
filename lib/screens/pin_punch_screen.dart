@@ -9,36 +9,96 @@ import '../data/repository.dart';
 import '../services/clock.dart';
 import '../theme.dart';
 
-/// 打卡用帳號的第一頁（ops 0112，老闆 2026-11-16）：員工輸入自己的 4 位數密碼打卡。
-/// 時間一律是伺服器時間；打卡成功大字顯示姓名、上班／下班、時間，4 秒後回到鍵盤。
+/// 打卡用帳號的第一頁（ops 0112、0125）：先點自己的名字，再輸入自己的 4 位數密碼。
+/// 時間一律是伺服器時間；打卡成功大字顯示姓名、上班／下班、時間，4 秒後回到名單。
 class PinPunchScreen extends StatefulWidget {
   const PinPunchScreen({super.key, required this.kiosk});
   final KioskMine kiosk;
   static const backAfter = Duration(seconds: 4);
+
+  /// 點了名字之後多久沒動作就回到名單（免得下一個人在別人的名字下面輸入）
+  static const idleBack = Duration(seconds: 30);
   @override
   State<PinPunchScreen> createState() => _PinPunchScreenState();
 }
 
 class _PinPunchScreenState extends State<PinPunchScreen> {
+  List<KioskPerson>? _people;
+  String? _loadError;
+  KioskPerson? _who; // 點了誰的名字
   String _pin = '';
   bool _busy = false;
-  PinPunchResult? _done; // 打卡成功：大字顯示，時間到回鍵盤
+  PinPunchResult? _done; // 打卡成功：大字顯示，時間到回名單
   String? _msg; // 密碼不對、連不上
   DateTime? _lockEnd; // 連錯 5 次：這台手機的時間，倒數用
   bool _longLock = false; // 一小時內錯太多次：鎖到整點，顯示伺服器的「找店長補登」
-  Timer? _back, _tick;
+  Timer? _back, _tick, _idle;
+  bool _started = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_started) {
+      _started = true;
+      if (widget.kiosk.error == null) _loadPeople();
+    }
+  }
 
   @override
   void dispose() {
     _back?.cancel();
     _tick?.cancel();
+    _idle?.cancel();
     super.dispose();
+  }
+
+  Future<void> _loadPeople() async {
+    try {
+      final p = await AppScope.of(context).repo.kioskPeople();
+      if (mounted) {
+        setState(() {
+          _people = p;
+          _loadError = null;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _loadError = friendlyError(e));
+    }
   }
 
   bool get _locked => _lockEnd != null && DateTime.now().isBefore(_lockEnd!);
 
+  void _touch() {
+    _idle?.cancel();
+    if (_who != null) _idle = Timer(PinPunchScreen.idleBack, _toNames);
+  }
+
+  void _pick(KioskPerson p) {
+    if (!p.hasPin) {
+      setState(() => _msg = '「${p.name}」還沒有打卡密碼：請在自己的 App 班表頁設定，或找店長幫你設');
+      return;
+    }
+    setState(() {
+      _who = p;
+      _pin = '';
+      _msg = null;
+    });
+    _touch();
+  }
+
+  void _toNames() {
+    _idle?.cancel();
+    if (!mounted || _busy) return;
+    setState(() {
+      _who = null;
+      _pin = '';
+      if (!_locked) _msg = null;
+    });
+  }
+
   void _press(String d) {
     if (_busy || _locked || _pin.length >= 4) return;
+    _touch();
     setState(() {
       _pin += d;
       _msg = null;
@@ -48,19 +108,23 @@ class _PinPunchScreenState extends State<PinPunchScreen> {
 
   void _backspace() {
     if (_busy || _pin.isEmpty) return;
+    _touch();
     setState(() => _pin = _pin.substring(0, _pin.length - 1));
   }
 
   void _clear() {
     if (_busy) return;
+    _touch();
     setState(() => _pin = '');
   }
 
   Future<void> _submit() async {
+    final who = _who;
+    if (who == null) return;
     setState(() => _busy = true);
     PinPunchResult r;
     try {
-      r = await AppScope.of(context).repo.pinPunch(_pin);
+      r = await AppScope.of(context).repo.pinPunch(who.personId, _pin);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -76,15 +140,21 @@ class _PinPunchScreenState extends State<PinPunchScreen> {
       _pin = '';
       if (r.ok) {
         _done = r;
+        _who = null;
         _msg = null;
       } else {
         _msg = r.message;
         if (r.locked) _startLock(r.lockedUntil);
+        if (r.result == 'no_pin') _who = null; // 密碼剛被清掉：回名單
       }
     });
     if (r.ok) {
+      _idle?.cancel();
       _back?.cancel();
       _back = Timer(PinPunchScreen.backAfter, _reset);
+    } else {
+      _touch();
+      if (r.result == 'no_pin') _loadPeople();
     }
   }
 
@@ -112,6 +182,7 @@ class _PinPunchScreenState extends State<PinPunchScreen> {
   void _reset() {
     _back?.cancel();
     if (mounted) setState(() => _done = null);
+    _loadPeople(); // 名單可能變了（新的人、剛設好密碼）
   }
 
   @override
@@ -128,14 +199,15 @@ class _PinPunchScreenState extends State<PinPunchScreen> {
     }
     final done = _done;
     if (done != null) return _success(done);
-    return _keypad(k);
+    final who = _who;
+    return who == null ? _names(k) : _keypad(k, who);
   }
 
-  Widget _centered(List<Widget> children) => Center(
+  Widget _centered(List<Widget> children, {double maxWidth = 380}) => Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 380),
+            constraints: BoxConstraints(maxWidth: maxWidth),
             child: Column(mainAxisSize: MainAxisSize.min, children: children),
           ),
         ),
@@ -164,21 +236,78 @@ class _PinPunchScreenState extends State<PinPunchScreen> {
               textAlign: TextAlign.center, style: TextStyle(color: AppColors.warn)),
         ],
         const SizedBox(height: 24),
-        Text('${PinPunchScreen.backAfter.inSeconds} 秒後回到鍵盤，點一下馬上回去',
+        Text('${PinPunchScreen.backAfter.inSeconds} 秒後回到名單，點一下馬上回去',
             style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
       ]),
     );
   }
 
-  Widget _keypad(KioskMine k) {
+  /// 第一步：點自己的名字
+  Widget _names(KioskMine k) {
+    final people = _people;
+    return _centered(maxWidth: 560, [
+      Text('${k.storeName}・打卡', style: const TextStyle(fontSize: AppType.display, fontWeight: AppFont.heading)),
+      const SizedBox(height: 6),
+      Text('先點你的名字，再輸入 4 位數打卡密碼', style: TextStyle(color: AppColors.muted)),
+      SizedBox(
+        height: 48,
+        child: Center(
+          child: Text(
+              _locked && !_longLock ? '密碼連錯 5 次，請 ${_lockEnd!.difference(DateTime.now()).inSeconds + 1} 秒後再試' : (_msg ?? ''),
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.bad, fontSize: AppType.small)),
+        ),
+      ),
+      if (_loadError != null) ...[
+        Text(_loadError!, textAlign: TextAlign.center, style: TextStyle(color: AppColors.bad)),
+        const SizedBox(height: 8),
+        OutlinedButton(onPressed: _loadPeople, child: const Text('再試一次')),
+      ] else if (people == null)
+        const Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator())
+      else if (people.isEmpty)
+        Text('班表上還沒有人，請店長到「班表人員」新增', style: TextStyle(color: AppColors.muted))
+      else
+        Wrap(alignment: WrapAlignment.center, spacing: 10, runSpacing: 10, children: [
+          for (final p in people)
+            SizedBox(
+              width: 164,
+              height: 64,
+              child: OutlinedButton(
+                onPressed: _locked ? null : () => _pick(p),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  foregroundColor: p.hasPin ? null : AppColors.muted,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.lg)),
+                ),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Text(p.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: AppType.title, fontWeight: AppFont.heading)),
+                  if (!p.hasPin) Text('還沒設密碼', style: TextStyle(fontSize: AppType.caption, color: AppColors.muted)),
+                ]),
+              ),
+            ),
+        ]),
+      const SizedBox(height: 16),
+      Text('還沒有打卡密碼的人：在自己的 App 班表頁設定。忘記密碼請找店長重設',
+          textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+    ]);
+  }
+
+  /// 第二步：輸入密碼
+  Widget _keypad(KioskMine k, KioskPerson who) {
     final locked = _locked;
     final left = locked ? _lockEnd!.difference(DateTime.now()).inSeconds + 1 : 0;
     Widget key(String d) => _Key(onTap: locked || _busy ? null : () => _press(d), child: Text(d));
     return _centered([
-      Text('${k.storeName}・打卡', style: const TextStyle(fontSize: AppType.display, fontWeight: AppFont.heading)),
-      const SizedBox(height: 6),
+      Text(who.name,
+          textAlign: TextAlign.center, style: const TextStyle(fontSize: AppType.display, fontWeight: AppFont.heading)),
+      const SizedBox(height: 2),
+      TextButton.icon(
+          onPressed: _busy ? null : _toNames, icon: const Icon(Icons.arrow_back, size: 18), label: const Text('不是我，換人')),
       Text('輸入你的 4 位數打卡密碼', style: TextStyle(color: AppColors.muted)),
-      const SizedBox(height: 20),
+      const SizedBox(height: 16),
       Semantics(
         label: '已輸入 ${_pin.length} 位',
         child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -223,7 +352,7 @@ class _PinPunchScreenState extends State<PinPunchScreen> {
         ),
       ]),
       const SizedBox(height: 12),
-      Text('還沒有打卡密碼的人，請在自己的 App 班表頁設定', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+      Text('忘記密碼請找店長重設', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
     ]);
   }
 }
@@ -259,7 +388,8 @@ class _Key extends StatelessWidget {
 }
 
 /// 設定／重設打卡密碼（老闆、店長在員工資料；員工在班表的打卡卡片設自己的）。
-/// 自己輸入要打兩次確認，也可以隨機產生。太好猜、跟別人重複都由資料庫擋（ops 0112），重複只說「不能用」。
+/// 自己輸入要打兩次確認，也可以隨機產生。規則（4 位數、不能太好猜）在輸入的地方就寫出來；
+/// 不用跟別人不一樣（ops 0125：打卡先點名字再輸入密碼）。本人只能在還沒有密碼時自己設，之後由店長重設。
 /// 密碼只存雜湊：設好之後誰都看不到；隨機產生的只在這次顯示。有改到回 true
 Future<bool> editPunchPin(BuildContext context,
     {required String personId, required String name, required bool hasPin, bool canClear = false, bool self = false}) async {
@@ -332,8 +462,10 @@ Future<bool> editPunchPin(BuildContext context,
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(
               self
-                  ? '自己設 4 位數，輸入兩次確認。不能用四個相同數字或連號，也不能跟店裡別人一樣。設好之後誰都看不到，忘了就再設一次；不想自己想可以按「隨機產生」。'
-                  : '4 位數字，輸入兩次確認。不能用四個相同數字或連號，同一家店不能跟別人一樣。設好之後誰都看不到密碼，忘了就重設。',
+                  ? '規則：4 位數字；不能四個數字都一樣，也不能是連號（像 1111、1234、4321）。'
+                      '設好之後誰都看不到；之後忘記或想換，請找店長重設。不想自己想可以按「隨機產生」。'
+                  : '規則：4 位數字；不能四個數字都一樣，也不能是連號（像 1111、1234、4321）。'
+                      '設好之後誰都看不到密碼；員工忘記了，由店長在這裡重設。',
               style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
           TextField(
             controller: c,

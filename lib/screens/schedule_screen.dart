@@ -58,7 +58,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   late Future<ShiftMonth> _future;
   ShiftMonth? _data;
   ShiftPlanSetup? _setup; // 每天要幾人、指休等（讀不到就是 null，不影響看班表）
-  int _claimSeq = 0; // 選了「我是誰」之後讓打卡卡片重新讀
   bool _started = false;
 
   bool get _canEdit => widget.membership.isManager;
@@ -140,7 +139,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Text('${p.name}・${DateFormat('M/d（E）', 'zh_TW').format(DateTime(_month.year, _month.month, day))}',
+            Text('${p.label}・${DateFormat('M/d（E）', 'zh_TW').format(DateTime(_month.year, _month.month, day))}',
                 style: const TextStyle(fontSize: AppType.title, fontWeight: FontWeight.w700)),
             const SizedBox(height: 12),
             Wrap(spacing: 10, runSpacing: 10, children: [
@@ -252,84 +251,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       true;
 
   /// 還沒對應班表名字的人：班表頁最上面常駐一行（2026-11-16 健檢 A1；原本只藏在「填指休」裡）
-  bool _needClaim(ShiftMonth d) {
-    final me = _repo.currentUserId;
-    if (me == null || !d.people.any((p) => p.active)) return false;
-    // 老闆的帳號不問（老闆 2026-11-17：店裡的人也會用老闆帳號，兩次被選到別人）；老闆要對應名字到「班表人員」點人名指定帳號
-    if (widget.membership.role == Role.owner) return false;
-    if (AppScope.of(context).kiosk?.storeId == _store) return false; // 店裡的打卡用帳號不能連到員工
-    return !d.people.any((p) => p.active && p.userId == me);
-  }
-
-  Future<void> _claim(ShiftMonth d) async {
-    final free = d.people.where((p) => p.active && p.userId == null).toList();
-    final picked = await showModalBottomSheet<ShiftPerson>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.card,
-      builder: (c) => SafeArea(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: MediaQuery.of(c).size.height * 0.8),
-          child: ListView(shrinkWrap: true, padding: const EdgeInsets.fromLTRB(16, 16, 16, 16), children: [
-            const Text('你是班表上的哪一位？', style: TextStyle(fontSize: AppType.title, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 4),
-            Text('選一次就好。老闆確認後，就能打卡、看自己的出勤和薪資單、自己填指休。',
-                style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
-            const SizedBox(height: 12),
-            if (free.isEmpty)
-              Text('班表上的名字都有人選了，請找老闆或店長幫你加進班表人員。', style: TextStyle(color: AppColors.warn))
-            else
-              for (final p in free)
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(p.name),
-                  subtitle: Text(p.isFull ? '正職' : '兼職'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.pop(c, p),
-                ),
-          ]),
-        ),
-      ),
-    );
-    if (picked == null || !mounted) return;
-    final ok = await _confirm('你是「${picked.name}」？', '選了之後只能用這個名字。選錯了請找老闆或店長改。', '是我');
-    if (!ok || !mounted) return;
-    try {
-      await _repo.claimShiftPerson(picked.id);
-      if (!mounted) return;
-      showMessage(context, '已經選好「${picked.name}」，等老闆確認後就能打卡、看自己的出勤');
-      setState(() => _claimSeq++);
-      _reload();
-    } catch (e) {
-      if (mounted) showMessage(context, friendlyError(e), error: true);
-    }
-  }
-
-  Widget _claimCard(ShiftMonth d) {
-    if (!_needClaim(d)) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: SectionCard(
-        child: InkWell(
-          onTap: () => _claim(d),
-          child: Row(children: [
-            Icon(Icons.person_search_outlined, color: AppColors.warn),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('你是班表上的哪一位？', style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.warn)),
-                const SizedBox(height: 2),
-                Text('點這裡選你的名字，老闆確認後就能打卡、看自己的出勤',
-                    style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
-              ]),
-            ),
-            const Icon(Icons.chevron_right),
-          ]),
-        ),
-      ),
-    );
-  }
-
   Future<String?> _askRange(BuildContext ctx, String? current) async {
     final t = TextEditingController(text: ShiftMonth.isRange(current) ? current! : '');
     String? err;
@@ -397,7 +318,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       context: context,
       builder: (c) => StatefulBuilder(
         builder: (c, set) => AlertDialog(
-          title: Text('${p.name}・${_month.month} 月'),
+          title: Text('${p.label}・${_month.month} 月'),
           content: Column(mainAxisSize: MainAxisSize.min, children: [
             TextField(controller: s, keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 decoration: InputDecoration(labelText: hoursMode ? '未休／補休（天）' : '本月應休（天）', errorText: errS)),
@@ -440,7 +361,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               ? ShiftStats(shouldOff: st.shouldOff, prevUnused: st.prevUnused, compUnused: a, specialTotal: b)
               : ShiftStats(shouldOff: a, prevUnused: b, compUnused: st.compUnused, specialTotal: st.specialTotal));
       if (hire != p.hireDate) {
-        await _repo.saveShiftPerson(_store, ShiftPerson(id: p.id, name: p.name, kind: p.kind, sortOrder: p.sortOrder, hireDate: hire, active: p.active, roleCode: p.roleCode, userId: p.userId));
+        await _repo.saveShiftPerson(_store, ShiftPerson(id: p.id, name: p.name, fullName: p.fullName, kind: p.kind, sortOrder: p.sortOrder, hireDate: hire, active: p.active, roleCode: p.roleCode, userId: p.userId));
       }
       _reload();
     } catch (e) {
@@ -450,7 +371,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
   Future<void> _managePeople(ShiftMonth d) async {
     await Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => _PeopleScreen(storeId: _store, people: d.people, isOwner: widget.membership.role == Role.owner)));
+        builder: (_) => _PeopleScreen(storeId: _store, people: d.people, isOwner: widget.membership.role == Role.owner, myUserId: _repo.currentUserId)));
     _reload();
   }
 
@@ -615,11 +536,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 ),
                 IconButton(tooltip: '下個月', onPressed: () => _shiftMonth(1), icon: const Icon(Icons.chevron_right)),
               ]),
-              _claimCard(d),
               _todayCard(d),
               _myMonthCard(d),
               AttendanceCard(
-                  key: ValueKey('attendance-$_claimSeq'), membership: widget.membership, data: d, codeTimes: _codeTimes),
+                  membership: widget.membership, data: d, codeTimes: _codeTimes),
               _draftCard(d),
               if (d.people.any((p) => p.active))
                 ShiftPlanCard(
@@ -909,9 +829,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     // 有班別／時段的店，名字後面帶班別（V、O 不用寫）
     final on = d.people.where((p) => p.active && ShiftMonth.isOn(d.mark(p.id, now.day))).map((p) {
       final m = d.mark(p.id, now.day)!;
-      return (m == 'V' || m == 'O') ? p.name : '${p.name}（${_codeTimes[m] == null ? m : '$m ${_codeTimes[m]}'}）';
+      return (m == 'V' || m == 'O') ? p.shortLabel : '${p.shortLabel}（${_codeTimes[m] == null ? m : '$m ${_codeTimes[m]}'}）';
     }).toList();
-    final off = d.people.where((p) => p.active && p.isFull && ShiftMonth.isAway(d.mark(p.id, now.day))).map((p) => p.name).toList();
+    final off = d.people.where((p) => p.active && p.isFull && ShiftMonth.isAway(d.mark(p.id, now.day))).map((p) => p.shortLabel).toList();
     final note = d.notes[now.day];
     return SectionCard(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -980,7 +900,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           }).length}';
         }
         return Row(children: [
-          name(p.roleCode == null ? p.name : '${p.name}\n${p.roleCode}'),
+          name(p.roleCode == null ? p.shortLabel : '${p.shortLabel}\n${p.roleCode}'),
           for (final day in cols)
             if (day == null)
               cell(const SizedBox.shrink())
@@ -1115,7 +1035,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 final leave = d.leaveDays(p.id).toDouble();
                 final remain = (should != null && prev != null) ? prev - (taken - should) - leave : null;
                 return row([
-                  p.name,
+                  p.shortLabel,
                   n(should),
                   n(taken),
                   n(prev),
@@ -1167,7 +1087,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               () {
                 final st = d.stats[p.id] ?? const ShiftStats();
                 return row([
-                  p.isFull ? p.name : '${p.name}（兼）',
+                  p.isFull ? p.shortLabel : '${p.shortLabel}（兼）',
                   _num(d.hours(p.id, ch)),
                   '${d.workDays(p.id)}',
                   p.isFull ? '${d.offDays(p.id)}' : '—',
@@ -1191,12 +1111,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
 String _num(double v) => v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
 
-/// 班表人員：新增、改名、正職／兼職、排序、隱藏
+/// 班表人員：新增、全名／暱稱、正職／兼職、排序、隱藏、對應 App 帳號
 class _PeopleScreen extends StatefulWidget {
-  const _PeopleScreen({required this.storeId, required this.people, this.isOwner = false});
+  const _PeopleScreen({required this.storeId, required this.people, this.isOwner = false, this.myUserId});
   final String storeId;
   final List<ShiftPerson> people;
-  final bool isOwner; // 老闆可以直接指定 App 帳號（0113）
+  final bool isOwner; // 老闆：什麼都能改。店長：只能替別人對應還沒對應好的（0125）
+  final String? myUserId;
   @override
   State<_PeopleScreen> createState() => _PeopleScreenState();
 }
@@ -1216,18 +1137,23 @@ class _PeopleScreenState extends State<_PeopleScreen> {
   }
 
   Future<void> _loadAccounts() async {
-    if (!widget.isOwner) return;
     try {
       final a = await AppScope.of(context).repo.shiftAccountCandidates(widget.storeId);
       if (mounted) setState(() => _accounts = a);
     } catch (_) {
-      // 資料庫還沒更新：不顯示指定帳號
+      // 讀不到（資料庫還沒更新）：不顯示指定帳號
     }
   }
 
   String? _accountName(ShiftPerson p) => p.userId == null
       ? null
-      : (_accounts.where((a) => a.userId == p.userId).firstOrNull?.name ?? '已綁定的帳號');
+      : (_accounts.where((a) => a.userId == p.userId).firstOrNull?.name ?? '已對應的帳號');
+
+  String _personLabelOf(String? id, String? fallback) =>
+      _people.where((x) => x.id == id).firstOrNull?.label ?? fallback ?? '';
+
+  /// 店長不能動的：自己的帳號、自己對應的那個人
+  bool _mine(ShiftPerson p) => !widget.isOwner && p.userId != null && p.userId == widget.myUserId;
 
   Future<void> _reloadPeople() async {
     final d = await AppScope.of(context).repo.shiftMonth(widget.storeId, DateTime.now());
@@ -1235,7 +1161,7 @@ class _PeopleScreenState extends State<_PeopleScreen> {
     await _loadAccounts();
   }
 
-  /// 老闆直接替這個人指定 App 帳號（＝確認，不用等員工自己選；0113）
+  /// 替這個人指定 App 帳號。老闆指定、店長替別人指定都直接生效；已經對應好的要改只有老闆（0125）
   Future<void> _assign(ShiftPerson p) async {
     const none = '\u0000';
     final picked = await showModalBottomSheet<String>(
@@ -1246,24 +1172,39 @@ class _PeopleScreenState extends State<_PeopleScreen> {
         child: ConstrainedBox(
           constraints: BoxConstraints(maxHeight: MediaQuery.of(c).size.height * 0.8),
           child: ListView(shrinkWrap: true, padding: const EdgeInsets.all(16), children: [
-            Text('「${p.name}」是哪一個 App 帳號？', style: const TextStyle(fontSize: AppType.title, fontWeight: FontWeight.w700)),
+            Text('「${p.label}」是哪一個 App 帳號？', style: const TextStyle(fontSize: AppType.title, fontWeight: FontWeight.w700)),
             const SizedBox(height: 4),
-            Text('老闆指定的就算確認好了，那個人可以直接打卡、看自己的出勤和薪資單。',
+            Text(
+                widget.isOwner
+                    ? '指定好就生效：那個人登入後直接是自己，可以打卡、看自己的出勤和薪資單。'
+                    : '指定好就生效：那個人登入後直接是自己。對應好之後要改，請找老闆。',
                 style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
             const SizedBox(height: 8),
             for (final a in _accounts)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                selected: a.userId == p.userId,
-                title: Text(a.name.isEmpty ? '（沒有名字）' : a.name),
-                subtitle: Text([
-                  roleLabel(roleFrom(a.role)),
-                  if (a.personName != null && a.personId != p.id) '目前是「${a.personName}」，改指定會解除那邊',
-                  if (a.personId == p.id) a.verified ? '目前就是這個帳號' : '目前就是這個帳號（還沒確認）',
-                ].join('・'), style: const TextStyle(fontSize: AppType.small)),
-                onTap: () => Navigator.pop(c, a.userId),
-              ),
-            if (p.userId != null)
+              Builder(builder: (_) {
+                final elsewhere = a.personId != null && a.personId != p.id;
+                final block = widget.isOwner
+                    ? null
+                    : a.userId == widget.myUserId
+                        ? '自己的帳號要請老闆對應'
+                        : elsewhere && a.verified
+                            ? '已經對應到「${_personLabelOf(a.personId, a.personName)}」，要改請找老闆'
+                            : null;
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  enabled: block == null,
+                  selected: a.userId == p.userId,
+                  title: Text(a.name.isEmpty ? '（沒有名字）' : a.name),
+                  subtitle: Text([
+                    roleLabel(roleFrom(a.role)),
+                    if (block != null) block,
+                    if (block == null && elsewhere) '目前是「${_personLabelOf(a.personId, a.personName)}」，改指定會解除那邊',
+                    if (a.personId == p.id) a.verified ? '目前就是這個帳號' : '目前就是這個帳號（還沒生效，點一下確認）',
+                  ].join('・'), style: const TextStyle(fontSize: AppType.small)),
+                  onTap: () => Navigator.pop(c, a.userId),
+                );
+              }),
+            if (p.userId != null && (widget.isOwner || !p.userVerified))
               ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: const Icon(Icons.link_off),
@@ -1275,10 +1216,25 @@ class _PeopleScreenState extends State<_PeopleScreen> {
       ),
     );
     if (picked == null || !mounted) return;
+    if (!widget.isOwner && picked != none) {
+      final acc = _accounts.where((a) => a.userId == picked).firstOrNull?.name ?? '';
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: Text('「${p.label}」就是帳號「$acc」？'),
+          content: const Text('確定後馬上生效：這個帳號看得到這個人的出勤、薪資單和個人資料。對應好之後只有老闆能改。'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
+            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('確定')),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
+    }
     try {
       await AppScope.of(context).repo.assignShiftAccount(p.id, picked == none ? null : picked);
       if (!mounted) return;
-      showMessage(context, picked == none ? '已解除「${p.name}」的帳號' : '已指定，「${p.name}」可以直接用了');
+      showMessage(context, picked == none ? '已解除「${p.label}」的帳號' : '對應好了，「${p.label}」登入後就是自己');
       await _reloadPeople();
     } catch (e) {
       if (mounted) showMessage(context, friendlyError(e), error: true);
@@ -1287,62 +1243,68 @@ class _PeopleScreenState extends State<_PeopleScreen> {
 
   Future<void> _edit(ShiftPerson? p) async {
     final name = TextEditingController(text: p?.name ?? '');
+    final full = TextEditingController(text: p?.fullName ?? '');
     final order = TextEditingController(text: '${p?.sortOrder ?? (_people.length + 1) * 10}');
     var kind = p?.kind ?? 'full';
     final role = TextEditingController(text: p?.roleCode ?? '');
     var active = p?.active ?? true;
+    // 已經對應好的：店長不能改；店長自己那一列也不能動
+    final locked = p != null && !widget.isOwner && (p.userVerified || _mine(p));
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => StatefulBuilder(
         builder: (c, set) => AlertDialog(
-          title: Text(p == null ? '新增人員' : '修改 ${p.name}'),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(controller: name, maxLength: 20, decoration: const InputDecoration(labelText: '名字')),
-            SegmentedButton<String>(
-              segments: const [ButtonSegment(value: 'full', label: Text('正職')), ButtonSegment(value: 'part', label: Text('兼職'))],
-              selected: {kind},
-              onSelectionChanged: (v) => set(() => kind = v.first),
-            ),
-            TextField(controller: role, maxLength: 10, decoration: const InputDecoration(labelText: '職務／班別（選填，例 B/R）')),
-            TextField(controller: order, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '排序（數字小的在上面）')),
-            if (p != null)
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('顯示在班表'),
-                value: active,
-                onChanged: (v) => set(() => active = v),
+          title: Text(p == null ? '新增人員' : '修改 ${p.label}'),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(
+                  controller: full,
+                  maxLength: 40,
+                  decoration: const InputDecoration(labelText: '全名', hintText: '例：王小明', helperText: '班表、薪資單都用全名')),
+              TextField(
+                  controller: name,
+                  maxLength: 20,
+                  decoration: const InputDecoration(labelText: '暱稱', helperText: '顯示成「全名（暱稱）」')),
+              SegmentedButton<String>(
+                segments: const [ButtonSegment(value: 'full', label: Text('正職')), ButtonSegment(value: 'part', label: Text('兼職'))],
+                selected: {kind},
+                onSelectionChanged: (v) => set(() => kind = v.first),
               ),
-            if (p != null && widget.isOwner && _accounts.isNotEmpty)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  icon: const Icon(Icons.how_to_reg_outlined, size: 18),
-                  label: Text(p.userId == null ? '指定 App 帳號' : 'App 帳號：${_accountName(p)}（改指定）'),
-                  onPressed: () {
-                    Navigator.pop(c, false);
-                    _assign(p);
-                  },
+              TextField(controller: role, maxLength: 10, decoration: const InputDecoration(labelText: '職務／班別（選填，例 B/R）')),
+              TextField(controller: order, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '排序（數字小的在上面）')),
+              if (p != null)
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('顯示在班表'),
+                  value: active,
+                  onChanged: (v) => set(() => active = v),
                 ),
-              ),
-            if (p != null && p.userId != null && !(widget.isOwner && _accounts.isNotEmpty))
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  icon: const Icon(Icons.link_off, size: 18),
-                  label: const Text('解除對應的 App 帳號（選錯人時用）'),
-                  onPressed: () async {
-                    try {
-                      await AppScope.of(context).repo.clearShiftPersonUser(p.id);
-                      if (c.mounted) Navigator.pop(c, false);
-                      final d = await AppScope.of(context).repo.shiftMonth(widget.storeId, DateTime.now());
-                      if (mounted) setState(() => _people = d.people);
-                    } catch (e) {
-                      if (mounted) showMessage(context, friendlyError(e), error: true);
-                    }
-                  },
+              if (p != null && _accounts.isNotEmpty && !locked)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    icon: const Icon(Icons.how_to_reg_outlined, size: 18),
+                    label: Text(p.userId == null
+                        ? '對應 App 帳號'
+                        : 'App 帳號：${_accountName(p)}${p.userVerified ? '（改指定）' : '（還沒生效，點這裡確認）'}'),
+                    onPressed: () {
+                      Navigator.pop(c, false);
+                      _assign(p);
+                    },
+                  ),
                 ),
-              ),
-          ]),
+              if (locked)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                        _mine(p) ? '這是你自己：你的 App 帳號由老闆對應' : 'App 帳號：${_accountName(p)}（要改請找老闆）',
+                        style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+                  ),
+                ),
+            ]),
+          ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
             FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('儲存')),
@@ -1350,11 +1312,15 @@ class _PeopleScreenState extends State<_PeopleScreen> {
         ),
       ),
     );
-    if (ok != true || name.text.trim().isEmpty || !mounted) return;
+    if (ok != true || !mounted) return;
+    // 只填全名的：暱稱先用全名（暱稱一定要有，班表照片辨識、排班靠它）
+    final nick = name.text.trim().isEmpty ? full.text.trim() : name.text.trim();
+    if (nick.isEmpty) return;
     final repo = AppScope.of(context).repo;
     final np = ShiftPerson(
         id: p?.id ?? '',
-        name: name.text.trim(),
+        name: nick.length > 20 ? nick.substring(0, 20) : nick,
+        fullName: full.text.trim().isEmpty ? null : full.text.trim(),
         kind: kind,
         sortOrder: int.tryParse(order.text) ?? 0,
         hireDate: p?.hireDate,
@@ -1371,28 +1337,67 @@ class _PeopleScreenState extends State<_PeopleScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('班表人員')),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: () => _edit(null),
-          icon: const Icon(Icons.person_add_alt_1),
-          label: const Text('新增人員'),
-        ),
-        body: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 96), children: [
-          for (final p in _people)
-            ListTile(
-              title: Text(p.name, style: TextStyle(color: p.active ? null : AppColors.muted)),
-              subtitle: Text('${p.isFull ? '正職' : '兼職'}${p.roleCode == null ? '' : '・${p.roleCode}'}・排序 ${p.sortOrder}${p.active ? '' : '・已隱藏'}${p.userId == null ? '・還沒對應 App 帳號' : '・已對應 App 帳號'}',
-                  style: const TextStyle(fontSize: AppType.small)),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => _edit(p),
+  Widget build(BuildContext context) {
+    final active = _people.where((p) => p.active).toList();
+    final noAccount = active.where((p) => p.userId == null || !p.userVerified).length;
+    final noFull = active.where((p) => p.fullName == null).length;
+    return Scaffold(
+      appBar: AppBar(title: const Text('班表人員')),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _edit(null),
+        icon: const Icon(Icons.person_add_alt_1),
+        label: const Text('新增人員'),
+      ),
+      body: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 96), children: [
+        if (noAccount > 0 || noFull > 0)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: SectionCard(
+              child: Row(children: [
+                Icon(Icons.info_outline, color: AppColors.warn),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                      [
+                        if (noAccount > 0) '$noAccount 位還沒對應 App 帳號（登入後 App 不知道他是誰，不能打卡、看不到自己的薪資單）',
+                        if (noFull > 0) '$noFull 位還沒填全名',
+                      ].join('\n'),
+                      style: const TextStyle(fontSize: AppType.small)),
+                ),
+              ]),
             ),
-          const SizedBox(height: 8),
-          Text('人員不會被刪除（避免舊班表對不上）；不用了就關掉「顯示在班表」。'
-              '員工可以在班表頁最上面自己選名字（老闆確認後才算）${widget.isOwner ? '；老闆也可以點人名直接指定 App 帳號' : '，選錯了在這裡解除'}。',
-              style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
-        ]),
-      );
+          ),
+        for (final p in _people)
+          ListTile(
+            title: Text(p.label, style: TextStyle(color: p.active ? null : AppColors.muted)),
+            subtitle: Text(
+                [
+                  p.isFull ? '正職' : '兼職',
+                  if (p.roleCode != null) p.roleCode!,
+                  '排序 ${p.sortOrder}',
+                  if (!p.active) '已隱藏',
+                  if (p.fullName == null) '沒填全名',
+                  p.userId == null
+                      ? '還沒對應 App 帳號'
+                      : p.userVerified
+                          ? 'App 帳號：${_accountName(p)}'
+                          : 'App 帳號：${_accountName(p)}（還沒生效）',
+                ].join('・'),
+                style: TextStyle(
+                    fontSize: AppType.small,
+                    color: p.active && (p.userId == null || !p.userVerified) ? AppColors.warn : null)),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _edit(p),
+          ),
+        const SizedBox(height: 8),
+        Text(
+            '人員不會被刪除（避免舊班表對不上）；不用了就關掉「顯示在班表」。\n'
+            '每個人的 App 帳號在這裡對應一次（點人名），員工登入後就不用再自己選名字。'
+            '${widget.isOwner ? '' : '店長可以替別人對應；自己的、已經對應好要改的，請找老闆。'}',
+            style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+      ]),
+    );
+  }
 }
 
 /// 照片辨識草稿：整月預覽（跟目前班表不同的格子框起來）→ 套用或捨棄（0070）
