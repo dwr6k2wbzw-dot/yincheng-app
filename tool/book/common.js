@@ -3,13 +3,23 @@ window.YC = {
   url: 'https://yfulcyeoqavqarpfnznw.supabase.co',
   key: 'sb_publishable_qRkNUf71em4UTxNaUuJ4DA_iu_KyN6Y', // 公開金鑰（publishable），本來就放在網頁裡
   async rpc(fn, args) {
-    const r = await fetch(this.url + '/rest/v1/rpc/' + fn, {
-      method: 'POST',
-      headers: { apikey: this.key, 'Content-Type': 'application/json' },
-      body: JSON.stringify(args),
-    });
+    let r;
+    try {
+      r = await fetch(this.url + '/rest/v1/rpc/' + fn, {
+        method: 'POST',
+        headers: { apikey: this.key, 'Content-Type': 'application/json' },
+        body: JSON.stringify(args),
+      });
+    } catch (_) {
+      // 手機斷線、訊號不好：瀏覽器丟的是英文訊息，換成看得懂的
+      throw new Error('連線失敗，請稍後再試');
+    }
     const body = await r.json().catch(() => null);
-    if (!r.ok) throw new Error((body && body.message) || '連線失敗，請稍後再試');
+    if (!r.ok) {
+      const e = new Error((body && body.message) || '連線失敗，請稍後再試');
+      e.code = body && body.code;
+      throw e;
+    }
     return body;
   },
   // 寄確認信／取消信（失敗不影響訂位本身）
