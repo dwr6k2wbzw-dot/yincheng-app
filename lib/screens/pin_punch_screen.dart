@@ -73,10 +73,17 @@ class _PinPunchScreenState extends State<PinPunchScreen> {
     if (_who != null) _idle = Timer(PinPunchScreen.idleBack, _toNames);
   }
 
-  void _pick(KioskPerson p) {
+  Future<void> _pick(KioskPerson p) async {
     if (!p.hasPin) {
-      setState(() => _msg = '「${p.name}」還沒有打卡密碼：請在自己的 App 班表頁設定，或找店長幫你設');
-      return;
+      // 名單是剛打開時讀的：他可能剛剛才在自己的 App 設好密碼（Codex P2），先重新讀一次再決定
+      await _loadPeople();
+      if (!mounted) return;
+      final now = _people?.where((x) => x.personId == p.personId).firstOrNull;
+      if (now == null || !now.hasPin) {
+        setState(() => _msg = '「${p.name}」還沒有打卡密碼：請在自己的 App 班表頁設定，或找店長幫你設');
+        return;
+      }
+      p = now;
     }
     setState(() {
       _who = p;
