@@ -25,12 +25,12 @@ Map<String, String> storeCodeTimes(String store, ShiftOptions? o) => {
         for (final c in o.allCodes) c.mark: c.timeRange ?? '',
     };
 
-/// 以時數統計的店家（小城外）：班別 → 時數；隱城看天數 → null
+/// 以時數統計的店家（開了 shiftCodes；目前是小城外）：班別 → 時數；看天數的店（隱城）→ null
+/// 要不要照時數統計看功能開關；`config.dart` 寫死的時數只當預設值（Codex P2）
 Map<String, double>? storeCodeHours(String store, ShiftOptions? o) {
-  final cfg = AppConfig.shiftHours[store];
-  if (cfg == null) return null;
+  if (!StoreFeatures.of(store).shiftCodes) return null;
   return {
-    ...cfg,
+    ...?AppConfig.shiftHours[store],
     if (o != null && o.loaded)
       for (final c in o.allCodes)
         if (c.timeRange != null) c.mark: ShiftMonth.hoursOf(c.timeRange, const {}),

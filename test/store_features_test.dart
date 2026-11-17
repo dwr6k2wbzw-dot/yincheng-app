@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yincheng_ops/data/models.dart';
+import 'package:yincheng_ops/data/shift_marks.dart';
 import 'package:yincheng_ops/data/store_features.dart';
 import 'package:yincheng_ops/theme.dart';
 
@@ -69,6 +70,25 @@ void main() {
     expect(m.storeName, '隱城');
     expect(StoreFeatures.of('隱城').schedule, isTrue);
     expect(storeLogo('隱城'), 'assets/logos/yincheng.png');
+  });
+
+  test('照時數統計看功能開關，不看店名（Codex P2）', () {
+    // 沒有資料庫開關：小城外照時數、隱城和不認得的店照天數
+    expect(storeCodeHours('小城外', null)?['B'], 7.5);
+    expect(storeCodeHours('隱城', null), isNull);
+    expect(storeCodeHours('新客戶的店', null), isNull);
+
+    // 新的店開了班別代碼：照時數，時數從這家店自己的班別時段算
+    Membership.fromRow(_member('新客戶的店', {'shift_codes': true}));
+    final opts = ShiftOptions([
+      ShiftMarkOption.fromRow({'id': 'o1', 'kind': 'code', 'mark': 'A', 'time_range': '10:00-18:00', 'sort_order': 1}),
+    ]);
+    expect(storeCodeHours('新客戶的店', opts), {'A': 8.0});
+    expect(storeCodeHours('新客戶的店', null), isEmpty);
+
+    // 資料庫把小城外的班別代碼關掉：改照天數
+    Membership.fromRow(_member('小城外', {'shift_codes': false}));
+    expect(storeCodeHours('小城外', null), isNull);
   });
 
   test('不認得的 logo 代號不顯示 logo', () {
