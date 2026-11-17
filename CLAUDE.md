@@ -3,6 +3,7 @@
 - 這個 repo 是公開的：**不可放真實營收或帳務資料**、不可放任何密鑰（publishable key 可以）。
 - push 到 main → `.github/workflows/deploy.yml` 建置並發佈到 https://dwr6k2wbzw-dot.github.io/yincheng-app/
 - 每家店的功能開關（班表分頁、以日報表為準、營收四項、銷貨單、班別代碼、logo）在資料庫 `store_features`（0116），App 用 `StoreFeatures.of(店名)` 讀（`lib/data/store_features.dart`）；**不要再用店名判斷功能**。班表可用的記號、班別時數也只看資料庫（功能開關 `shiftCodes`＋`shift_mark_options`，見 `lib/data/shift_marks.dart`），App 不內建任何一家店的班別表。
+- 自助註冊（ops 0119，2026-11-17）：只有公版那一份 App 才有，建置時加 `--dart-define=SELF_SIGNUP=true`（`AppConfig.selfSignup`）。登入頁可以不用邀請碼建立帳號（「我要開店／我有邀請碼」），登入後沒有任何店 → `lib/screens/create_store_screen.dart` 幫店取名字 → `signup_create_store`。**隱城／小城外這一份不加這個參數**（資料庫的開關也是關的）。公版的產品名稱、標誌還沒決定，登入頁先放中性的圖示。畫面預覽：`--dart-define=DEMO=true --dart-define=SELF_SIGNUP=true`，網址 `?auto=1&as=new@demo`（示範帳號含 new＝還沒有任何店）。
 - App 內「功能許願」（2026-10-27）：`.github/workflows/claude-change.yml` 由 Supabase Edge Function 派工，Claude 依 `tool/change_request/prompt.md` 修改，結果放 `cr/<代號>` 分支＋PR＋預覽 `…/preview/<代號>/`；只有老闆在 App 按「上線」才合併。**不要直接在 GitHub 合併 cr/ 開頭的 PR。**
 
 ## UI UX Pro Max（只在本專案）

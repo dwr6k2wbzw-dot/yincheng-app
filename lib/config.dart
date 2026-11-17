@@ -14,6 +14,10 @@ class AppConfig {
   /// true：使用內建示範資料（不連線），方便先看畫面
   static const demo = bool.fromEnvironment('DEMO', defaultValue: false);
 
+  /// true：公版那一份 App——登入頁可以不用邀請碼註冊，沒有任何店的帳號可以自己建立一家店（ops 0119）。
+  /// 隱城／小城外這一份不開（資料庫那邊的開關也是關的，開了這個參數也建不了）。
+  static const selfSignup = bool.fromEnvironment('SELF_SIGNUP', defaultValue: false);
+
   // 每家店的功能開關（班表分頁、以日報表為準、營收四項、銷貨單…）改放資料庫（0116），見 data/store_features.dart
 
   // 班表的記號、班別時段與時數不寫在這裡：記號看功能開關 shiftCodes，班別／時段在資料庫 shift_mark_options（見 data/shift_marks.dart）
