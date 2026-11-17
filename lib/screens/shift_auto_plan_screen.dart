@@ -226,7 +226,7 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
           final ruleMarks = [for (final m in r?.marks ?? const <String>[]) if (!hidden.contains(m)) m];
           return PlanPerson(
             id: p.id,
-            name: p.name,
+            name: p.label,
             full: full,
             offTarget: _cur!.stats[p.id]?.shouldOff ??
                 _off[p.id] ??
@@ -411,7 +411,7 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                '${p.name}・${DateFormat('M/d（E）', 'zh_TW').format(DateTime(_m.year, _m.month, d))}',
+                '${p.label}・${DateFormat('M/d（E）', 'zh_TW').format(DateTime(_m.year, _m.month, d))}',
                 style: const TextStyle(
                   fontSize: AppType.title,
                   fontWeight: FontWeight.w700,
@@ -925,7 +925,7 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              p.name,
+                              p.shortLabel,
                               style: const TextStyle(
                                 fontWeight: FontWeight.w600,
                               ),
@@ -1071,14 +1071,14 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
                 _setup!.rules[p.id]?.maxShifts == null &&
                 (_setup!.rules[p.id]?.noWeekdays.isEmpty ?? true)) &&
             !(req[p.id]?.values.any((v) => v == 'on') ?? false))
-          p.name,
+          p.shortLabel,
     ];
     double gapOf(int d) => (d > 1 && _wd(d) == 1) ? 5 : 0; // 週一前面留一點空，一週一週看得出來
 
     Widget nameCell(ShiftPerson p) => _cell(
           _planFull(p, _setup)
-              ? p.name
-              : '${p.name}\n${p.isFull ? '當兼職' : '兼職'}',
+              ? p.shortLabel
+              : '${p.shortLabel}\n${p.isFull ? '當兼職' : '兼職'}',
           w: _nameW,
         );
     Widget dayRow(ShiftPerson p) {

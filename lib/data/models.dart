@@ -1,4 +1,5 @@
 import '../services/clock.dart';
+import 'person_names.dart';
 import 'store_features.dart';
 import 'dart:typed_data';
 
@@ -782,32 +783,46 @@ typedef VendorHints = ({Map<String, List<String>> vendor, Map<String, List<Strin
 /// 班表上的人（正職 full／兼職 part）
 class ShiftPerson {
   final String id;
-  final String name;
+  final String name; // 班表上的稱呼（暱稱）；照片辨識、排班都靠它
+  final String? fullName; // 全名（0125，老闆、店長填）
   final String kind; // full / part
   final int sortOrder;
   final DateTime? hireDate;
   final bool active;
   final String? roleCode; // 班別（例 B／R）
-  final String? userId; // 對應的 App 帳號（0073：成員自己選「我是誰」）
+  final String? userId; // 對應的 App 帳號（0125：由老闆、店長指定）
+  final bool userVerified; // 對應已經生效（老闆指定、店長替別人指定）；0125 之前自己選的要重新指定一次才算
   ShiftPerson(
       {required this.id,
       required this.name,
+      this.fullName,
       this.kind = 'full',
       this.sortOrder = 0,
       this.hireDate,
       this.active = true,
       this.roleCode,
-      this.userId});
+      this.userId,
+      this.userVerified = false}) {
+    if (id.isNotEmpty) rememberPersonLabel(id, label);
+  }
   bool get isFull => kind == 'full';
+
+  /// 全名（暱稱）
+  String get label => personLabel(name, fullName);
+
+  /// 窄的地方（班表格子的名字欄）只放全名
+  String get shortLabel => (fullName == null || fullName!.isEmpty) ? name : fullName!;
   factory ShiftPerson.fromRow(Map<String, dynamic> r) => ShiftPerson(
         id: r['id'] as String,
         name: r['name'] as String,
+        fullName: r['full_name'] as String?,
         kind: r['kind'] as String? ?? 'full',
         sortOrder: (r['sort_order'] as num?)?.toInt() ?? 0,
         hireDate: _date(r['hire_date']),
         active: r['active'] as bool? ?? true,
         roleCode: r['role_code'] as String?,
         userId: r['user_id'] as String?,
+        userVerified: r['user_verified_at'] != null,
       );
 }
 

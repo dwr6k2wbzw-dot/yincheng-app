@@ -259,31 +259,6 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
             .isBefore(DateTime(today.year, today.month + 1));
   }
 
-  Future<void> _claim(ShiftPerson p) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: Text('你是「${p.name}」？'),
-        content: const Text('選了之後只能填這個人的日子。選錯了請找老闆或店長改。'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(c, false),
-              child: const Text('取消')),
-          FilledButton(
-              onPressed: () => Navigator.pop(c, true), child: const Text('是我')),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    try {
-      await _repo.claimShiftPerson(p.id);
-      _personId = p.id;
-      await _load();
-    } catch (e) {
-      if (mounted) showMessage(context, friendlyError(e), error: true);
-    }
-  }
-
   Future<void> _tap(int day) async {
     final p = _person;
     if (p == null) return;
@@ -329,29 +304,14 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
     final sm = _sm!;
     final active = sm.people.where((p) => p.active).toList();
     if (!_manager && _me == null) {
-      final free = active.where((p) => p.userId == null).toList();
+      // 0125：不用自己選名字了，帳號由老闆或店長對應
       return ListView(padding: const EdgeInsets.all(16), children: [
-        const Text('你是班表上的哪一位？',
+        const Text('你的帳號還沒對應到員工資料',
             style: TextStyle(
                 fontSize: AppType.title, fontWeight: FontWeight.w700)),
         const SizedBox(height: 4),
-        Text('第一次使用要先選一次，之後就不用再選。',
+        Text('請店長或老闆在「班表人員」替你對應一次，之後登入就能直接填想休、可以上班的日子。',
             style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
-        const SizedBox(height: 12),
-        if (free.isEmpty)
-          Text('班表上的名字都有人選了，請找老闆或店長幫你加進班表人員。',
-              style: TextStyle(color: AppColors.warn))
-        else
-          for (final p in free)
-            Card(
-              color: AppColors.card,
-              child: ListTile(
-                title: Text(p.name),
-                subtitle: Text(p.isFull ? '正職' : '兼職'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => _claim(p),
-              ),
-            ),
       ]);
     }
     final p = _person;
@@ -400,7 +360,7 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
                     DropdownMenuItem(
                         value: x.id,
                         child: Text(
-                            '${x.name}（${x.isFull ? '正職' : '兼職'}）${x.id == _me?.id ? '・我' : ''}')),
+                            '${x.label}（${x.isFull ? '正職' : '兼職'}）${x.id == _me?.id ? '・我' : ''}')),
                 ],
                 onChanged: (v) => setState(() => _personId = v),
               ),
@@ -408,7 +368,7 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
           SectionCard(
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(p == null ? '' : '${p.name}・${p.isFull ? '正職' : '兼職'}',
+              Text(p == null ? '' : '${p.label}・${p.isFull ? '正職' : '兼職'}',
                   style: const TextStyle(fontWeight: FontWeight.w700)),
               const SizedBox(height: 4),
               Text(
@@ -749,7 +709,7 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
                       labelText: kind == 'apart' ? '這個人' : '這個人上班的日子'),
                   items: [
                     for (final p in ps)
-                      DropdownMenuItem(value: p.id, child: Text(p.name))
+                      DropdownMenuItem(value: p.id, child: Text(p.label))
                   ],
                   onChanged: (v) => set(() {
                     a = v;
@@ -763,7 +723,7 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
                   items: [
                     for (final p in ps)
                       if (p.id != a)
-                        DropdownMenuItem(value: p.id, child: Text(p.name))
+                        DropdownMenuItem(value: p.id, child: Text(p.label))
                   ],
                   onChanged: (v) => set(() => b = v),
                 ),
@@ -923,7 +883,7 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
                               ? picked.add(p.id)
                               : picked.remove(p.id)),
                           title: Text(
-                              '${p.name}（${p.isFull ? '正職' : '兼職'}・過去兩個月上 ${s.worked} 天）'),
+                              '${p.label}（${p.isFull ? '正職' : '兼職'}・過去兩個月上 ${s.worked} 天）'),
                           subtitle: Text(desc(p, s),
                               style: const TextStyle(fontSize: AppType.small)),
                         ),
@@ -1160,7 +1120,7 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
                                 ListTile(
                                   contentPadding: EdgeInsets.zero,
                                   title: Text(
-                                      '${p.name}（${p.isFull ? '正職' : '兼職'}）'),
+                                      '${p.label}（${p.isFull ? '正職' : '兼職'}）'),
                                   subtitle: Text(_ruleSummary(p),
                                       style: const TextStyle(
                                           fontSize: AppType.small)),
@@ -1307,7 +1267,7 @@ class _RuleEditorState extends State<_RuleEditor> {
     final p = widget.person;
     const numKb = TextInputType.numberWithOptions(decimal: true);
     return Scaffold(
-      appBar: AppBar(title: Text('${p.name} 的排班條件')),
+      appBar: AppBar(title: Text('${p.label} 的排班條件')),
       body: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
           children: [

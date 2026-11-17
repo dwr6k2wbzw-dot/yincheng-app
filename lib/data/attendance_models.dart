@@ -2,6 +2,7 @@
 // 打卡時間一律是伺服器時間；營業日切點 06:00（台北），由資料庫算好帶回來（business_date）。
 
 import '../services/clock.dart';
+import 'person_names.dart';
 
 DateTime _ts(dynamic v) => DateTime.parse(v as String).toLocal();
 DateTime? _tsOrNull(dynamic v) => v == null ? null : _ts(v);
@@ -37,7 +38,7 @@ String anomalyKindLabel(String k) => switch (k) {
 class AttendanceMe {
   final bool enabled; // 這家店有沒有開放打卡（目前只有隱城）
   final bool canManage; // 老闆、店長
-  final String? personId; // 我在班表上是誰；null＝還沒在排班選「我是誰」
+  final String? personId; // 我在班表上是誰；null＝帳號還沒對應到員工資料（老闆、店長在班表人員對應）
   final String? personName;
   final String? lastPunchType;
   final DateTime? lastPunchedAt;
@@ -59,7 +60,7 @@ class AttendanceMe {
         enabled: r['enabled'] as bool? ?? false,
         canManage: r['can_manage'] as bool? ?? false,
         personId: r['person_id'] as String?,
-        personName: r['person_name'] as String?,
+        personName: r['person_name'] == null ? null : labelOfPerson(r['person_id'], r['person_name'] as String),
         lastPunchType: r['last_punch_type'] as String?,
         lastPunchedAt: _tsOrNull(r['last_punched_at']),
         onShift: r['on_shift'] as bool? ?? false,
@@ -222,7 +223,7 @@ class KioskMine {
       );
 }
 
-/// 密碼打卡的結果：ok／wrong（密碼不對）／locked（連錯 5 次，鎖 1 分鐘）
+/// 密碼打卡的結果：ok／wrong（密碼不對）／locked（連錯 5 次，鎖 1 分鐘）／no_pin（這個人還沒設密碼）
 class PinPunchResult {
   final String result;
   final String? personName;
@@ -260,6 +261,16 @@ class PinPunchResult {
       );
 }
 
+/// 打卡用帳號看的打卡名單（ops 0125）：先點名字再輸入密碼
+class KioskPerson {
+  final String personId;
+  final String name; // 顯示用：全名（暱稱）
+  final bool hasPin;
+  const KioskPerson({required this.personId, required this.name, required this.hasPin});
+  factory KioskPerson.fromRow(Map<String, dynamic> r) => KioskPerson(
+      personId: r['person_id'] as String, name: r['name'] as String? ?? '', hasPin: r['has_pin'] as bool? ?? false);
+}
+
 /// 打卡密碼設定狀態（看不到密碼本身）：老闆、店長看全部，其他人只有自己
 class PinStatus {
   final String personId;
@@ -267,7 +278,7 @@ class PinStatus {
   final bool active;
   final bool hasPin;
   final DateTime? setAt;
-  final bool canSet; // 我能不能設定這個人的（店長不能設自己的）
+  final bool canSet; // 我能不能設定這個人的（店長不能設自己的；本人只有還沒設的時候）
   final bool mine;
   const PinStatus(
       {required this.personId,
@@ -279,7 +290,7 @@ class PinStatus {
       required this.mine});
   factory PinStatus.fromRow(Map<String, dynamic> r) => PinStatus(
         personId: r['person_id'] as String,
-        name: r['name'] as String? ?? '',
+        name: labelOfPerson(r['person_id'], r['name'] as String? ?? ''),
         active: r['active'] as bool? ?? false,
         hasPin: r['has_pin'] as bool? ?? false,
         setAt: _tsOrNull(r['set_at']),
@@ -292,7 +303,7 @@ class PinStatus {
 bool isWeakPunchPin(String pin) =>
     pin.length == 4 && (pin == pin[0] * 4 || '0123456789'.contains(pin) || '9876543210'.contains(pin));
 
-/// 設定打卡密碼的結果：ok（隨機產生時 pin 只在這次看得到）／rejected（太好猜或跟別人重複，故意不分）／limited（重複太多次）
+/// 設定打卡密碼的結果：ok（隨機產生時 pin 只在這次看得到）／rejected（太好猜）／reset_needed（本人已經設過，要店長重設）
 class PinSetResult {
   final String result;
   final String? pin;
@@ -325,7 +336,7 @@ class AttendanceSession {
   }) : countedMinutes = countedMinutes ?? (pending ? 0 : minutes ?? 0);
   factory AttendanceSession.fromRow(Map<String, dynamic> r) => AttendanceSession(
         personId: r['person_id'] as String,
-        personName: r['person_name'] as String? ?? '',
+        personName: labelOfPerson(r['person_id'], r['person_name'] as String? ?? ''),
         businessDate: _date(r['business_date']),
         inAt: _tsOrNull(r['in_at']),
         outAt: _tsOrNull(r['out_at']),
@@ -361,7 +372,7 @@ class AttendanceAnomaly {
         kind: r['kind'] as String,
         businessDate: _dateOrNull(r['business_date']),
         personId: r['person_id'] as String?,
-        personName: r['person_name'] as String? ?? '',
+        personName: labelOfPerson(r['person_id'], r['person_name'] as String? ?? ''),
         punchId: r['punch_id'] as String?,
         amendmentId: r['amendment_id'] as String?,
         at: _tsOrNull(r['at']),
@@ -459,7 +470,7 @@ class AttendanceExportRow {
   String get countedLabel => counted ? '算' : awaitingReview ? '待確認（不算）' : '不算';
   factory AttendanceExportRow.fromRow(Map<String, dynamic> r) => AttendanceExportRow(
         businessDate: _date(r['business_date']),
-        personName: r['person_name'] as String? ?? '',
+        personName: labelOfPerson(r['person_id'], r['person_name'] as String? ?? ''),
         punchType: r['punch_type'] as String,
         punchedAt: _ts(r['punched_at']),
         storeName: r['store_name'] as String? ?? '',
@@ -497,7 +508,7 @@ class StaffEntry {
   final double? insuredSalary;
   final double? pensionSelfRate;
   final bool canSeePay;
-  final bool userVerified; // 帳號綁定老闆確認過了沒（沒確認＝不算本人）
+  final bool userVerified; // 帳號對應生效了沒（0125 之前員工自己選的要確認一次；沒生效＝不算本人）
   final String? userName; // 綁定的 App 帳號名稱
   const StaffEntry({
     required this.personId,
@@ -529,7 +540,7 @@ class StaffEntry {
   bool get showsLeaveDate => !active || leaveDate != null;
   factory StaffEntry.fromRow(Map<String, dynamic> r) => StaffEntry(
         personId: r['person_id'] as String,
-        name: r['name'] as String? ?? '',
+        name: labelOfPerson(r['person_id'], r['name'] as String? ?? ''),
         kind: r['kind'] as String? ?? 'full',
         active: r['active'] as bool? ?? true,
         hireDate: _dateOrNull(r['hire_date']),
@@ -637,7 +648,7 @@ class AttendancePerson {
   const AttendancePerson({required this.personId, required this.name, this.homeStoreName, this.crossStore = false});
   factory AttendancePerson.fromRow(Map<String, dynamic> r) => AttendancePerson(
         personId: r['person_id'] as String,
-        name: r['name'] as String? ?? '',
+        name: labelOfPerson(r['person_id'], r['name'] as String? ?? ''),
         homeStoreName: r['home_store_name'] as String?,
         crossStore: r['cross_store'] as bool? ?? false,
       );

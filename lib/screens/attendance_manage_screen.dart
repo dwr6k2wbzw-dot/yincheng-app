@@ -699,8 +699,8 @@ class _KioskTabState extends State<_KioskTab> {
           const InfoLine(
               text: '店裡共用的帳號登入，第一頁就是密碼打卡',
               icon: Icons.info_outline,
-              detail: '員工在店裡的平板或手機輸入自己的 4 位數打卡密碼，時間一律是伺服器時間。連錯 5 次鎖 1 分鐘。'
-                  '打卡密碼在「員工資料」點人設定（老闆、店長；店長不能設自己的），員工也能在班表的打卡卡片自己設（輸入兩次確認，太好猜或跟別人重複的不能用）。'),
+              detail: '員工在店裡的平板或手機先點自己的名字、再輸入自己的 4 位數打卡密碼，時間一律是伺服器時間。連錯 5 次鎖 1 分鐘。'
+                  '打卡密碼：員工第一次在班表的打卡卡片自己設（4 位數、不能太好猜）；忘記或想換，由店長在「員工資料」點人重設（店長的由老闆設）。'),
           Wrap(spacing: 8, runSpacing: 8, children: [
             if (_owner)
               FilledButton.icon(
@@ -768,8 +768,8 @@ class _StaffTabState extends State<_StaffTab> {
             InfoLine(
                 text: owner ? '老闆看得到全部（含薪資、身分證、帳號）' : '身分證、帳號只顯示遮罩；薪資看得到、改得了別人的，自己的只能看',
                 icon: Icons.lock_outline,
-                detail: '員工本人只看得到自己的資料。薪資用生效日記歷史：調薪＝新增一筆較晚的生效日，已生效的不能改、不能刪。'
-                    '${pins == null ? '' : '點人可以設定打卡密碼（4 位數，同店不重複，不能太好猜；員工也能自己設；店長的由老闆設定）。'}'),
+                detail: '員工本人只看得到自己的資料。薪資用生效日記歷史：調薪＝新增一筆生效日，打錯了點那一筆可以改。'
+                    '${pins == null ? '' : '點人可以設定、重設打卡密碼（4 位數，不能太好猜；員工第一次可以自己設，忘記了由店長在這裡重設；店長的由老闆設定）。'}'),
             for (final s in staff)
               ListTile(
                 contentPadding: EdgeInsets.zero,
@@ -799,8 +799,8 @@ class _StaffTabState extends State<_StaffTab> {
 }
 
 String bindingLabel(StaffEntry s) => s.userId == null
-    ? '沒綁 App 帳號'
-    : '帳號 ${s.userName ?? '—'}（${s.userVerified ? '已確認' : '待老闆確認'}）';
+    ? '還沒對應 App 帳號'
+    : '帳號 ${s.userName ?? '—'}${s.userVerified ? '' : '（還沒生效）'}';
 
 class StaffEditScreen extends StatefulWidget {
   const StaffEditScreen({super.key, required this.membership, required this.entry, this.pin});
@@ -855,7 +855,7 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
     super.dispose();
   }
 
-  /// 帳號綁定：只有老闆能確認（確認後那個帳號才算「本人」，看得到自己的個資、出勤、能打卡）
+  /// 帳號對應：平常在「班表人員」指定就生效（ops 0125）。這裡留給老闆確認／取消以前員工自己選的
   Future<void> _verify(bool verify) async {
     final e = widget.entry;
     if (verify) {
@@ -885,13 +885,18 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
   Widget _binding() {
     final e = widget.entry;
     if (e.userId == null) {
-      return const InfoLine(text: '沒綁 App 帳號', icon: Icons.link_off, detail: '員工登入後在班表選自己的名字，老闆確認後才算綁定完成。');
+      return const InfoLine(
+          text: '還沒對應 App 帳號',
+          icon: Icons.link_off,
+          detail: '到「班表 → 班表人員」點這個人，替他對應 App 帳號，對應好就生效（老闆、店長都可以；店長自己的由老闆對應）。'
+              '沒對應的人登入後 App 不知道他是誰：不能打卡、看不到自己的出勤和薪資單。');
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       InfoLine(
-          text: 'App 帳號 ${e.userName ?? '—'}・${_verified ? '已確認是本人' : '待老闆確認'}',
+          text: 'App 帳號 ${e.userName ?? '—'}・${_verified ? '已對應' : '還沒生效'}',
           icon: _verified ? Icons.verified_user_outlined : Icons.hourglass_empty,
-          detail: '確認前這個帳號不算本人：看不到這個人的個資和薪資，也不能用這個名字打卡。店長、員工自己選的綁定都要老闆確認。'),
+          detail: '還沒生效的是以前員工自己選的：這個帳號還看不到這個人的個資和薪資，也不能打卡。'
+              '老闆在這裡確認，或店長到「班表人員」重新指定一次同一個帳號，就生效。已經對應好的要改，請找老闆。'),
       if (_owner)
         Align(
           alignment: Alignment.centerLeft,
@@ -900,7 +905,7 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
               : FilledButton.tonal(onPressed: () => _verify(true), child: const Text('確認是本人')),
         )
       else if (!_verified)
-        Text('只有老闆能確認', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+        Text('到「班表 → 班表人員」點這個人，重新指定一次同一個帳號就生效', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
     ]);
   }
 
@@ -913,7 +918,7 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
       leading: Icon(Icons.dialpad, color: _hasPin! ? AppColors.good : AppColors.muted),
       title: Text(_hasPin! ? '打卡密碼：已設定' : '打卡密碼：未設定'),
       subtitle: Text(p.canSet
-          ? '4 位數字，同一家店不能重複；設好之後誰都看不到'
+          ? '4 位數字、不能太好猜；設好之後誰都看不到。員工忘記了在這裡重設'
           : (p.mine ? '店長的打卡密碼請老闆設定' : '只有老闆、店長能設定')),
       trailing: !p.canSet
           ? null
