@@ -354,7 +354,7 @@ abstract class Repository {
   /// 存一個人的薪資；days／hours 傳 null＝用打卡帶入的值。回傳實發金額
   Future<double?> savePayrollEntry(String storeId, String personId, DateTime month,
       {double? days, double? hours, double otHours = 0, double otHours2 = 0, double bonus = 0, double insurance = 0,
-      String? note, String? reason});
+      double deduction = 0, String? note, String? reason});
   Future<void> publishPayroll(String storeId, DateTime month);
   /// 重新開啟已發布的月份（只有老闆，要寫原因）
   Future<void> reopenPayroll(String storeId, DateTime month, String reason);
