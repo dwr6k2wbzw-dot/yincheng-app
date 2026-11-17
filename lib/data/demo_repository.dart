@@ -1596,7 +1596,7 @@ class DemoRepository implements Repository {
     if (_ot.any((o) => o.personId == personId && o.businessDate == day && o.pending)) {
       throw Exception('message: 這天已經有一筆待審核的加班申請,');
     }
-    final id = 'ot${_seq++}';
+    final id = 'otn${_seq++}'; // 跟示範資料的 ot1～ot3 分開（Codex P2）
     final names = {for (final p in (await shiftMonth(storeId, day)).people) p.id: p.label};
     _ot.add(OvertimeRequest(
         id: id, personId: personId, personName: names[personId] ?? _dn('f0', '阿明'), businessDate: day, hours: hours,

@@ -575,7 +575,7 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
   /// 核准的加班（加班申請核准後自動帶入）；跟目前填的不一樣時可以一鍵改回
   Widget _approvedOt(PayrollRow r) {
     final a1 = r.autoOtHours ?? 0, a2 = r.autoOtHours2 ?? 0;
-    final same = _lsa ? _parse(_ot1) == a1 && (_parse(_ot2) ?? 0) == a2 : (_parse(_ot1) ?? 0) == a1 + a2;
+    final same = _lsa ? (_parse(_ot1) ?? 0) == a1 && (_parse(_ot2) ?? 0) == a2 : (_parse(_ot1) ?? 0) == a1 + a2;
     final text = a1 + a2 == 0
         ? '這個月沒有核准的加班'
         : _lsa
