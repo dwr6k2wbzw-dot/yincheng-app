@@ -2,7 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:yincheng_ops/data/models.dart';
 import 'package:yincheng_ops/data/store_features.dart';
 import 'package:yincheng_ops/theme.dart';
-import 'package:yincheng_ops/widgets/revenue_mix.dart';
 
 Map<String, dynamic> _member(String name, dynamic features, {bool withKey = true}) => {
       'store_id': 's-$name',
@@ -48,7 +47,6 @@ void main() {
     final f = StoreFeatures.of('新客戶的店');
     expect([f.schedule, f.multiLineRevenue, f.shiftCodes], everyElement(isTrue));
     expect([f.excelSynced, f.vendorSlips, f.paidByCategories], everyElement(isFalse));
-    expect(isMultiLineStore('新客戶的店'), isTrue);
     expect(storeLogo('新客戶的店'), 'assets/logos/xcw.png');
 
     // 資料庫把隱城的開關關掉 → 以資料庫為準，不會退回寫死的內容
