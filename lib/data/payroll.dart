@@ -23,6 +23,7 @@ int roundYuan(double v) => v >= 0 ? (v + 0.5 + 1e-9).floor() : -((-v) + 0.5 + 1e
 /// - 月薪：底薪＋獎金−勞健保自付−扣項＋加班費（固定：時數×加班時薪；勞基法：月薪÷240×(1.34×前 2 小時＋1.67×之後)）
 /// - 時薪：時薪 × 時數＋獎金−勞健保自付−扣項
 /// 扣項（ops 0124）：三種計薪方式都從實發扣掉，扣的是什麼寫在備註
+/// 其他薪資項目（ops 0126，[PayExtras]）：收入的加進獎金那一格、支出的加進扣項那一格再算；領現不影響實發
 int? payrollTotal({
   required String payType,
   required double? base,
@@ -35,8 +36,11 @@ int? payrollTotal({
   double bonus = 0,
   double insurance = 0,
   double deduction = 0,
+  PayExtras extras = const PayExtras(),
 }) {
   if (base == null) return null;
+  bonus += extras.income;
+  deduction += extras.deduction;
   return switch (payType) {
     'daily' => roundYuan(base * (days ?? 0) + bonus - deduction),
     'hourly' => roundYuan(base * (hours ?? 0) + bonus - insurance - deduction),
@@ -67,6 +71,68 @@ String? payrollNumberError(String text, {required int decimals, int? max}) {
   return null;
 }
 
+/// 自訂的薪資項目（ops 0126）：收入或支出、名稱、金額
+class PayItem {
+  final bool income; // true＝收入，false＝支出
+  final String label;
+  final double amount;
+  const PayItem({required this.income, required this.label, required this.amount});
+  factory PayItem.fromJson(Map<String, dynamic> j) =>
+      PayItem(income: j['side'] == 'income', label: j['label'] as String? ?? '', amount: _num(j['amount']));
+  Map<String, dynamic> toJson() => {'side': income ? 'income' : 'deduction', 'label': label, 'amount': amount};
+}
+
+/// 自訂項目最多幾項、名稱最多幾個字（跟資料庫 app.payroll_items_ok 一樣）
+const payItemsMax = 12, payItemLabelMax = 20;
+
+/// 薪資單上內建的其他項目＋自訂項目（ops 0126，老闆 2026-11-17：薪資單分收入／支出、有金額才列）。
+/// 收入：全勤獎金；支出：勞保、健保、眷屬健保、所得稅；領現＝實發裡發現金的那一部分（不影響實發）。
+class PayExtras {
+  final double attendanceBonus;
+  final double laborIns;
+  final double healthIns;
+  final double dependentsIns;
+  final double incomeTax;
+  final double cashPaid;
+  final List<PayItem> items;
+  const PayExtras({
+    this.attendanceBonus = 0,
+    this.laborIns = 0,
+    this.healthIns = 0,
+    this.dependentsIns = 0,
+    this.incomeTax = 0,
+    this.cashPaid = 0,
+    this.items = const [],
+  });
+  factory PayExtras.fromRow(Map<String, dynamic> r) => PayExtras(
+        attendanceBonus: _num(r['attendance_bonus']),
+        laborIns: _num(r['labor_ins']),
+        healthIns: _num(r['health_ins']),
+        dependentsIns: _num(r['dependents_ins']),
+        incomeTax: _num(r['income_tax']),
+        cashPaid: _num(r['cash_paid']),
+        items: [for (final j in (r['extra_items'] as List? ?? const [])) PayItem.fromJson(Map<String, dynamic>.from(j as Map))],
+      );
+
+  /// 加進收入的合計（全勤獎金＋自訂收入）
+  double get income => attendanceBonus + items.where((i) => i.income).fold(0.0, (a, i) => a + i.amount);
+
+  /// 加進支出的合計（勞保＋健保＋眷屬健保＋所得稅＋自訂支出）
+  double get deduction =>
+      laborIns + healthIns + dependentsIns + incomeTax + items.where((i) => !i.income).fold(0.0, (a, i) => a + i.amount);
+
+  /// 存檔時送給資料庫的 p_more
+  Map<String, dynamic> toJson() => {
+        'attendance_bonus': attendanceBonus,
+        'labor_ins': laborIns,
+        'health_ins': healthIns,
+        'dependents_ins': dependentsIns,
+        'income_tax': incomeTax,
+        'cash_paid': cashPaid,
+        'extra_items': [for (final i in items) i.toJson()],
+      };
+}
+
 /// 這個月薪資清單的一列（payroll_month）
 class PayrollRow {
   final String personId;
@@ -88,6 +154,8 @@ class PayrollRow {
   final double bonus;
   final double insurance;
   final double deduction; // 扣項（ops 0124）
+  final PayExtras extras; // 全勤、勞保、健保、眷屬健保、所得稅、領現、自訂項目（ops 0126）
+  final String slipName; // 薪資單上的姓名：全名（沒填全名才是班表上的名字）
   final String? note;
   final double? gross;
   final bool editable;
@@ -115,6 +183,8 @@ class PayrollRow {
     this.bonus = 0,
     this.insurance = 0,
     this.deduction = 0,
+    this.extras = const PayExtras(),
+    String? slipName,
     this.note,
     this.gross,
     this.editable = false,
@@ -122,7 +192,7 @@ class PayrollRow {
     this.missingRate = false,
     this.exempt = false,
     this.updatedAt,
-  });
+  }) : slipName = slipName ?? name;
   factory PayrollRow.fromRow(Map<String, dynamic> r) => PayrollRow(
         personId: r['person_id'] as String,
         name: labelOfPerson(r['person_id'], r['name'] as String? ?? ''),
@@ -143,6 +213,8 @@ class PayrollRow {
         bonus: _num(r['bonus']),
         insurance: _num(r['insurance']),
         deduction: _num(r['deduction']),
+        extras: PayExtras.fromRow(r),
+        slipName: fullNameOfPerson(r['person_id'], r['name'] as String? ?? ''),
         note: r['note'] as String?,
         gross: _numOrNull(r['gross']),
         editable: r['editable'] as bool? ?? false,
@@ -197,10 +269,17 @@ class PayrollReport {
 class PayrollSettings {
   final String otMode;
   final double otRate;
-  const PayrollSettings({this.otMode = 'fixed', this.otRate = 200});
-  factory PayrollSettings.fromRow(Map<String, dynamic> r) =>
-      PayrollSettings(otMode: r['ot_mode'] as String? ?? 'fixed', otRate: _numOrNull(r['ot_rate']) ?? 200);
+  /// 公司登記全名（薪資單抬頭，ops 0126；只有老闆能設）。沒設＝null，薪資單抬頭照舊用店名
+  final String? companyName;
+  const PayrollSettings({this.otMode = 'fixed', this.otRate = 200, this.companyName});
+  factory PayrollSettings.fromRow(Map<String, dynamic> r) => PayrollSettings(
+      otMode: r['ot_mode'] as String? ?? 'fixed',
+      otRate: _numOrNull(r['ot_rate']) ?? 200,
+      companyName: r['company_name'] as String?);
 }
+
+/// 薪資單上的一行：項目、說明、金額
+typedef SlipLine = ({String label, String detail, double amount});
 
 /// 我的薪資單（payroll_my_slips：已發布、綁定經老闆確認的本人）
 class PayrollSlip {
@@ -218,6 +297,9 @@ class PayrollSlip {
   final double bonus;
   final double insurance;
   final double deduction;
+  final PayExtras extras;
+  /// 公司登記全名（薪資單抬頭）；沒設就用店名
+  final String? companyName;
   final String? note;
   final double? gross;
   final DateTime? publishedAt;
@@ -238,6 +320,8 @@ class PayrollSlip {
     this.bonus = 0,
     this.insurance = 0,
     this.deduction = 0,
+    this.extras = const PayExtras(),
+    this.companyName,
     this.note,
     this.gross,
     this.publishedAt,
@@ -246,7 +330,7 @@ class PayrollSlip {
   factory PayrollSlip.fromRow(Map<String, dynamic> r) => PayrollSlip(
         month: _date(r['month']),
         storeName: r['store_name'] as String? ?? '',
-        personName: labelOfPerson(r['person_id'], r['person_name'] as String? ?? ''),
+        personName: r['person_name'] as String? ?? '', // 資料庫給的就是全名（沒填全名才是班表上的名字）
         payType: r['pay_type'] as String? ?? 'hourly',
         baseAmount: _numOrNull(r['base_amount']),
         days: _numOrNull(r['days']),
@@ -258,16 +342,18 @@ class PayrollSlip {
         bonus: _num(r['bonus']),
         insurance: _num(r['insurance']),
         deduction: _num(r['deduction']),
+        extras: PayExtras.fromRow(r),
+        companyName: r['company_name'] as String?,
         note: r['note'] as String?,
         gross: _numOrNull(r['gross']),
         publishedAt: _tsOrNull(r['published_at']),
       );
 
   /// 老闆、店長在薪資清單上看的那一列，轉成同樣格式的薪資單（列印用）
-  factory PayrollSlip.fromPayrollRow(PayrollRow r, DateTime month, String storeName) => PayrollSlip(
+  factory PayrollSlip.fromPayrollRow(PayrollRow r, DateTime month, String storeName, {String? companyName}) => PayrollSlip(
         month: month,
         storeName: storeName,
-        personName: r.name,
+        personName: r.slipName,
         payType: r.payType,
         baseAmount: r.baseAmount,
         days: r.days,
@@ -279,44 +365,85 @@ class PayrollSlip {
         bonus: r.bonus,
         insurance: r.insurance,
         deduction: r.deduction,
+        extras: r.extras,
+        companyName: companyName,
         note: r.note,
         gross: r.gross,
         published: r.published,
       );
+
+  /// 薪資單抬頭：公司登記全名；還沒設就用店名
+  String get title => (companyName == null || companyName!.trim().isEmpty) ? storeName : companyName!.trim();
 
   /// 加班費（月薪制）
   int otPay() => payType != 'monthly' || baseAmount == null
       ? 0
       : roundYuan(otMode == 'lsa' ? baseAmount! / 240 * (1.34 * otHours + 1.67 * otHours2) : (otHours + otHours2) * otRate);
 
-  /// 薪資單上的每一行：項目、說明、金額（正＝加、負＝扣）。
-  /// 每一行都先四捨五入到元；實發是整筆算完才四捨五入（和資料庫一樣），
-  /// 兩邊差幾塊錢時多一行「進位調整」，讓每一行加起來一定等於實發。
-  List<({String label, String detail, double amount})> lines() {
+  static String _n(double v) => v % 1 == 0 ? v.toStringAsFixed(0) : v.toString();
+  static double _r(double v) => roundYuan(v).toDouble();
+
+  /// 收入那一欄（不含進位調整）：本薪、加班費、全勤獎金、獎金、自訂收入。有金額才列；金額都是正的、四捨五入到元
+  List<SlipLine> _incomeItems() {
     final b = baseAmount ?? 0;
-    String n(double v) => v % 1 == 0 ? v.toStringAsFixed(0) : v.toString();
-    double r(double v) => roundYuan(v).toDouble();
-    final items = [
+    return [
       switch (payType) {
-        'daily' => (label: '日薪', detail: '${n(b)} × ${n(days ?? 0)} 天', amount: r(b * (days ?? 0))),
-        'hourly' => (label: '時薪', detail: '${n(b)} × ${n(hours ?? 0)} 小時', amount: r(b * (hours ?? 0))),
-        _ => (label: '底薪', detail: '月薪', amount: r(b)),
+        'daily' => (label: '日薪', detail: '${_n(b)} × ${_n(days ?? 0)} 天', amount: _r(b * (days ?? 0))),
+        'hourly' => (label: '時薪', detail: '${_n(b)} × ${_n(hours ?? 0)} 小時', amount: _r(b * (hours ?? 0))),
+        _ => (label: '底薪', detail: '月薪', amount: _r(b)),
       },
       if (payType == 'monthly' && otHours + otHours2 > 0)
         (
           label: '加班費',
           detail: otMode == 'lsa'
-              ? '依勞基法：${n(b)}÷240 ×（1.34×${n(otHours)}${otHours2 > 0 ? '＋1.67×${n(otHours2)}' : ''} 小時）'
-              : '${n(otHours + otHours2)} 小時 × ${n(otRate)}',
+              ? '依勞基法：${_n(b)}÷240 ×（1.34×${_n(otHours)}${otHours2 > 0 ? '＋1.67×${_n(otHours2)}' : ''} 小時）'
+              : '${_n(otHours + otHours2)} 小時 × ${_n(otRate)}',
           amount: otPay().toDouble()
         ),
-      if (bonus != 0) (label: '獎金', detail: '', amount: r(bonus)),
-      if (insurance != 0) (label: '勞健保自付額', detail: '', amount: -r(insurance)),
-      if (deduction != 0) (label: '扣項', detail: '', amount: -r(deduction)),
+      if (extras.attendanceBonus != 0) (label: '全勤獎金', detail: '', amount: _r(extras.attendanceBonus)),
+      if (bonus != 0) (label: '獎金', detail: '', amount: _r(bonus)),
+      for (final i in extras.items)
+        if (i.income) (label: i.label, detail: '', amount: _r(i.amount)),
     ];
-    final diff = gross == null ? 0.0 : gross!.roundToDouble() - items.fold<double>(0, (a, l) => a + l.amount);
+  }
+
+  /// 支出那一欄：勞保、健保、眷屬健保、所得稅、（舊的）勞健保自付額、扣項、自訂支出。有金額才列；金額都是正的
+  List<SlipLine> deductionLines() => [
+        if (extras.laborIns != 0) (label: '勞保費', detail: '', amount: _r(extras.laborIns)),
+        if (extras.healthIns != 0) (label: '健保費', detail: '', amount: _r(extras.healthIns)),
+        if (extras.dependentsIns != 0) (label: '眷屬健保費', detail: '', amount: _r(extras.dependentsIns)),
+        if (extras.incomeTax != 0) (label: '所得稅', detail: '', amount: _r(extras.incomeTax)),
+        if (insurance != 0) (label: '勞健保自付額', detail: '', amount: _r(insurance)),
+        if (deduction != 0) (label: '扣項', detail: '', amount: _r(deduction)),
+        for (final i in extras.items)
+          if (!i.income) (label: i.label, detail: '', amount: _r(i.amount)),
+      ];
+
+  /// 每一項都先四捨五入到元；實發是整筆算完才四捨五入（和資料庫一樣），差的幾塊錢
+  double get _roundingDiff => gross == null
+      ? 0.0
+      : gross!.roundToDouble() -
+          (_incomeItems().fold<double>(0, (a, l) => a + l.amount) - deductionLines().fold<double>(0, (a, l) => a + l.amount));
+
+  /// 收入那一欄；各項進位後跟實發對不上時多一行「進位調整」，讓 收入合計 − 支出合計 一定等於實發
+  List<SlipLine> incomeLines() {
+    final diff = _roundingDiff;
+    return [..._incomeItems(), if (diff != 0) (label: '進位調整', detail: '各項四捨五入到元後與實發的差額', amount: diff)];
+  }
+
+  double get incomeTotal => incomeLines().fold<double>(0, (a, l) => a + l.amount);
+  double get deductionTotal => deductionLines().fold<double>(0, (a, l) => a + l.amount);
+
+  /// 領現金額（實發裡發現金的那一部分）；實際入帳＝實發−領現
+  double get cashPaid => _r(extras.cashPaid);
+  double? get transfer => gross == null ? null : gross!.roundToDouble() - cashPaid;
+
+  /// 全部排成一欄：收入（正）、支出（負）、進位調整。每一行加起來一定等於實發。
+  List<SlipLine> lines() {
+    final diff = _roundingDiff;
     return [
-      ...items,
+      ..._incomeItems(),
+      for (final l in deductionLines()) (label: l.label, detail: l.detail, amount: -l.amount),
       if (diff != 0) (label: '進位調整', detail: '各項四捨五入到元後與實發的差額', amount: diff),
     ];
   }

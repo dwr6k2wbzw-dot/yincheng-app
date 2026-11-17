@@ -12,3 +12,8 @@ String personLabel(String name, String? fullName) {
 final Map<String, String> _labels = {};
 void rememberPersonLabel(String personId, String label) => _labels[personId] = label;
 String labelOfPerson(Object? personId, String fallback) => _labels[personId] ?? fallback;
+
+/// 只要全名（薪資單上的姓名，ops 0126）：id → 全名；沒填全名的是班表上的名字
+final Map<String, String> _fullNames = {};
+void rememberPersonFullName(String personId, String fullName) => _fullNames[personId] = fullName;
+String fullNameOfPerson(Object? personId, String fallback) => _fullNames[personId] ?? fallback;

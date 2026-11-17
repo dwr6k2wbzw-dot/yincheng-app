@@ -1808,12 +1808,14 @@ class DemoRepository implements Repository {
     final days = r.daysOverride ?? r.autoDays, hours = r.hoursOverride ?? r.autoHours;
     final g = payrollTotal(
         payType: r.payType, base: r.baseAmount, days: days, hours: hours, otHours: r.otHours, otHours2: r.otHours2,
-        otMode: r.otMode, otRate: r.otRate, bonus: r.bonus, insurance: r.insurance, deduction: r.deduction);
+        otMode: r.otMode, otRate: r.otRate, bonus: r.bonus, insurance: r.insurance, deduction: r.deduction,
+        extras: r.extras);
     return PayrollRow(
         personId: r.personId, name: r.name, kind: r.kind, status: status ?? r.status, payType: r.payType,
         baseAmount: r.baseAmount, autoDays: r.autoDays, autoHours: r.autoHours, daysOverride: r.daysOverride,
         hoursOverride: r.hoursOverride, days: days, hours: hours, otHours: r.otHours, otHours2: r.otHours2,
-        otMode: r.otMode, otRate: r.otRate, bonus: r.bonus, insurance: r.insurance, deduction: r.deduction, note: r.note,
+        otMode: r.otMode, otRate: r.otRate, bonus: r.bonus, insurance: r.insurance, deduction: r.deduction,
+        extras: r.extras, slipName: r.slipName, note: r.note,
         gross: g?.toDouble(),
         editable: (status ?? r.status) == 'draft', missingRate: r.baseAmount == null, updatedAt: DateTime.now());
   }
@@ -1827,7 +1829,7 @@ class DemoRepository implements Repository {
   @override
   Future<void> setPayrollOvertime(String storeId, String mode, double rate) async {
     _payNeedManager();
-    _payOt = PayrollSettings(otMode: mode, otRate: rate);
+    _payOt = PayrollSettings(otMode: mode, otRate: rate, companyName: _payOt.companyName);
   }
 
   @override
@@ -1844,13 +1846,18 @@ class DemoRepository implements Repository {
       final type = i == 0 ? 'daily' : (p.kind == 'part' ? 'hourly' : 'monthly');
       final base = switch (type) { 'daily' => 1800.0, 'monthly' => 36000.0 + i * 1000, _ => 200.0 };
       final auto = storeId == 'yc';
+      // 示範：勞保、健保、眷屬健保跟正式的一樣先帶上個月的（這裡第一次帶入就給一組數字，畫面才看得到新格式）
+      final ex = old?.extras ??
+          (type == 'monthly'
+              ? PayExtras(attendanceBonus: 1000, laborIns: 916, healthIns: 568, dependentsIns: i == 1 ? 568 : 0)
+              : type == 'hourly' ? const PayExtras(laborIns: 277, healthIns: 172) : const PayExtras());
       rows[p.id] = _payCalc(PayrollRow(
-          personId: p.id, name: p.label, kind: p.kind, payType: type, baseAmount: base,
+          personId: p.id, name: p.label, slipName: p.shortLabel, kind: p.kind, payType: type, baseAmount: base, extras: ex,
           autoDays: auto && type == 'daily' ? 10 : null, autoHours: auto && type == 'hourly' ? 60.0 + i * 4.5 : null,
           daysOverride: old?.daysOverride, hoursOverride: old?.hoursOverride,
           otHours: type == 'monthly' ? old?.otHours ?? 0 : 0, otHours2: type == 'monthly' ? old?.otHours2 ?? 0 : 0,
           otMode: _payOt.otMode, otRate: _payOt.otRate, bonus: old?.bonus ?? 0,
-          insurance: type == 'daily' ? 0 : old?.insurance ?? (type == 'monthly' ? 1200 : 300),
+          insurance: type == 'daily' ? 0 : old?.insurance ?? 0,
           deduction: old?.deduction ?? 0, note: old?.note), status: 'draft');
     }
     _payStatus[k] = 'draft';
@@ -1897,7 +1904,7 @@ class DemoRepository implements Repository {
   @override
   Future<double?> savePayrollEntry(String storeId, String personId, DateTime month,
       {double? days, double? hours, double otHours = 0, double otHours2 = 0, double bonus = 0, double insurance = 0,
-      double deduction = 0, String? note, String? reason}) async {
+      double deduction = 0, PayExtras? extras, String? note, String? reason}) async {
     _payNeedManager();
     final k = _payKey(storeId, month), r = _payRows[k]?[personId];
     if (r == null) throw Exception('message: 這個人這個月還沒有薪資，請先帶入,');
@@ -1908,13 +1915,25 @@ class DemoRepository implements Repository {
     if ([hours, otHours, otHours2].any((v) => v != null && !isHalfHour(v))) {
       throw Exception('message: 時數只能填 0.5 小時的倍數,');
     }
+    final ex = extras ?? r.extras;
+    if (r.payType == 'daily' && ex.laborIns + ex.healthIns + ex.dependentsIns != 0) throw Exception('message: 日薪制不扣勞健保,');
     final n = _payCalc(PayrollRow(
-        personId: r.personId, name: r.name, kind: r.kind, status: r.status, payType: r.payType, baseAmount: r.baseAmount,
+        personId: r.personId, name: r.name, slipName: r.slipName, kind: r.kind, status: r.status, payType: r.payType,
+        baseAmount: r.baseAmount,
         autoDays: r.autoDays, autoHours: r.autoHours, daysOverride: days, hoursOverride: hours, otHours: otHours,
         otHours2: otHours2, otMode: r.otMode, otRate: r.otRate, bonus: bonus, insurance: insurance, deduction: deduction,
-        note: note));
+        extras: ex, note: note));
+    if (ex.cashPaid > (n.gross ?? 0)) {
+      throw Exception('message: 領現金額不能比實發金額多（實發 ${(n.gross ?? 0).round()} 元）,');
+    }
     _payRows[k]![personId] = n;
     return n.gross;
+  }
+
+  @override
+  Future<void> setPayrollCompany(String storeId, String name) async {
+    if (_isStaff || _isManager) throw Exception('message: 公司名稱只有老闆能改,');
+    _payOt = PayrollSettings(otMode: _payOt.otMode, otRate: _payOt.otRate, companyName: name.trim().isEmpty ? null : name.trim());
   }
 
   @override
@@ -1942,8 +1961,12 @@ class DemoRepository implements Repository {
     final m = DateTime(DateTime.now().year, DateTime.now().month - 1, 1);
     return [
       PayrollSlip(
-          month: m, storeName: storeId == 'yc' ? '隱城' : '小城外', personName: _dn('f0', '阿明'), payType: 'hourly', baseAmount: 200,
-          hours: 82.5, bonus: 500, insurance: 300, gross: 16700, publishedAt: DateTime(m.year, m.month + 1, 5)),
+          month: m, storeName: storeId == 'yc' ? '隱城' : '小城外', companyName: _payOt.companyName ?? '示範餐飲股份有限公司',
+          personName: _demoFullNames['阿明'] ?? '阿明', payType: 'hourly', baseAmount: 200, hours: 82.5, bonus: 500,
+          extras: const PayExtras(
+              attendanceBonus: 1000, laborIns: 277, healthIns: 172, dependentsIns: 172, incomeTax: 0, cashPaid: 5000,
+              items: [PayItem(income: true, label: '交通津貼', amount: 600), PayItem(income: false, label: '制服', amount: 300)]),
+          note: '11/3 支援小城外一天', gross: 17679, publishedAt: DateTime(m.year, m.month + 1, 5)),
     ];
   }
 }

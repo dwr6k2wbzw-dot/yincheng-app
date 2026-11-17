@@ -349,10 +349,13 @@ abstract class Repository {
   Future<int> preparePayroll(String storeId, DateTime month);
   Future<List<PayrollRow>> payrollMonth(String storeId, DateTime month);
   Future<PayrollReport> payrollReport(String storeId, DateTime month);
-  /// 存一個人的薪資；days／hours 傳 null＝用打卡帶入的值。回傳實發金額
+  /// 存一個人的薪資；days／hours 傳 null＝用打卡帶入的值。回傳實發金額。
+  /// extras（ops 0126）：全勤、勞保、健保、眷屬健保、所得稅、領現、自訂項目；傳 null＝不動
   Future<double?> savePayrollEntry(String storeId, String personId, DateTime month,
       {double? days, double? hours, double otHours = 0, double otHours2 = 0, double bonus = 0, double insurance = 0,
-      double deduction = 0, String? note, String? reason});
+      double deduction = 0, PayExtras? extras, String? note, String? reason});
+  /// 設公司登記全名（薪資單抬頭，ops 0126；只有老闆）。空白＝清掉，抬頭回到店名
+  Future<void> setPayrollCompany(String storeId, String name);
   Future<void> publishPayroll(String storeId, DateTime month);
   /// 重新開啟已發布的月份（只有老闆，要寫原因）
   Future<void> reopenPayroll(String storeId, DateTime month, String reason);

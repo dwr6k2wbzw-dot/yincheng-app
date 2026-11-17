@@ -2192,7 +2192,7 @@ class SupabaseRepository implements Repository {
   @override
   Future<double?> savePayrollEntry(String storeId, String personId, DateTime month,
       {double? days, double? hours, double otHours = 0, double otHours2 = 0, double bonus = 0, double insurance = 0,
-      double deduction = 0, String? note, String? reason}) async {
+      double deduction = 0, PayExtras? extras, String? note, String? reason}) async {
     final v = await _db.rpc('payroll_save_entry', params: {
       'p_store': storeId,
       'p_person': personId,
@@ -2206,9 +2206,14 @@ class SupabaseRepository implements Repository {
       'p_note': note,
       'p_reason': reason,
       'p_deduction': deduction,
+      if (extras != null) 'p_more': extras.toJson(),
     });
     return v == null ? null : (v as num).toDouble();
   }
+
+  @override
+  Future<void> setPayrollCompany(String storeId, String name) =>
+      _db.rpc('payroll_set_company', params: {'p_store': storeId, 'p_name': name});
 
   @override
   Future<void> publishPayroll(String storeId, DateTime month) =>
