@@ -229,8 +229,8 @@ void main() {
       await ok('上班時數', '73.5');
       await blocked('獎金', '1..5', '金額');
       await ok('獎金', '');
-      await blocked('勞健保自付額', '..', '金額');
-      await ok('勞健保自付額', '300');
+      await blocked('勞保費（自付）', '..', '金額');
+      await ok('勞保費（自付）', '300');
       // 輸入框本來就只收數字和小數點：字母、負號打不進去
       await type('獎金', 'abc');
       expect(tester.widget<TextField>(find.widgetWithText(TextField, '獎金')).controller!.text, '');
@@ -292,8 +292,8 @@ void main() {
       await pump(tester, PayrollEditScreen(membership: owner, month: month, row: h));
       await blocked('獎金', '100.555', '金額', '最多 2 位小數（例如 1500.25）');
       await type('獎金', '');
-      await blocked('勞健保自付額', '300.125', '金額', '最多 2 位小數（例如 1500.25）');
-      await type('勞健保自付額', '300');
+      await blocked('勞保費（自付）', '300.125', '金額', '最多 2 位小數（例如 1500.25）');
+      await type('勞保費（自付）', '300');
       await blocked('上班時數', '73.25', '時數', '最多 1 位小數（例如 1.5）');
       await type('上班時數', '73.5');
       await type('獎金', '100.55');
@@ -343,7 +343,7 @@ void main() {
 
       // 時薪：先手動改成 80，再留空 → 回到打卡帶入值
       final h = rows.firstWhere((r) => r.payType == 'hourly' && r.autoHours != null);
-      await edit(h, {'上班時數': '80', '獎金': '500', '勞健保自付額': '300'});
+      await edit(h, {'上班時數': '80', '獎金': '500', '勞保費（自付）': '300'});
       var saved = await row(h.personId);
       expect(saved.hoursOverride, 80);
       expect(saved.bonus, 500);
@@ -353,15 +353,18 @@ void main() {
       await tester.pump();
       expect(find.text('留空會使用打卡帶入的 ${n(h.autoHours!)} 小時（只算已確認的，每段四捨五入到半小時）；改了會保留原始值和修改紀錄'),
           findsOneWidget);
-      expect(find.text('實發金額 ${ntd(payrollTotal(payType: 'hourly', base: h.baseAmount, hours: h.autoHours, bonus: 500, insurance: 300)!)}'),
+      // ops 0126：勞健保拆成勞保、健保（示範資料的健保照帶入值）
+      expect(
+          find.text(
+              '實發金額 ${ntd(payrollTotal(payType: 'hourly', base: h.baseAmount, hours: h.autoHours, bonus: 500, extras: PayExtras(laborIns: 300, healthIns: h.extras.healthIns))!)}'),
           findsOneWidget); // 試算用帶入值，不是 0
 
-      await edit(saved, {'上班時數': '', '獎金': '', '勞健保自付額': ''});
+      await edit(saved, {'上班時數': '', '獎金': '', '勞保費（自付）': ''});
       saved = await row(h.personId);
       expect(saved.hoursOverride, isNull); // 不是存 0 蓋掉
       expect(saved.hours, h.autoHours);
       expect(saved.bonus, 0);
-      expect(saved.insurance, 0);
+      expect(saved.extras.laborIns, 0);
 
       // 日薪：天數留空同樣回到帶入值
       final d = rows.firstWhere((r) => r.payType == 'daily' && r.autoDays != null);
@@ -425,13 +428,13 @@ void main() {
       await tester.pumpAndSettle();
       expect(printed, hasLength(3));
       expect(printed.last, isNot(contains('草稿')));
-      expect(printed.last, contains('<title>${h.name} '));
+      expect(printed.last, contains('<title>${h.slipName} ')); // 薪資單上的姓名是全名
 
       // 員工自己看的薪資單（已發布、有發布日期）
       final staff = Membership(storeId: 'yc', storeName: '隱城', role: Role.staff, displayName: '示範');
       await io(tester, () => repo.signIn('staff@x', 'x'));
       await pump(tester, MyPayslipsScreen(membership: staff));
-      await tester.tap(find.text('列印／存成 PDF').first);
+      await tester.tap(find.text('存成 PDF（要留存才需要）').first);
       await tester.pumpAndSettle();
       expect(printed, hasLength(4));
       expect(printed.last, isNot(contains('草稿')));

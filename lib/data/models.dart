@@ -803,7 +803,10 @@ class ShiftPerson {
       this.roleCode,
       this.userId,
       this.userVerified = false}) {
-    if (id.isNotEmpty) rememberPersonLabel(id, label);
+    if (id.isNotEmpty) {
+      rememberPersonLabel(id, label);
+      rememberPersonFullName(id, shortLabel);
+    }
   }
   bool get isFull => kind == 'full';
 

@@ -192,10 +192,39 @@ class _PayrollScreenState extends State<PayrollScreen> {
     await _run(() => _repo.setPayrollOvertime(_store, mode, mode == 'fixed' ? r! : s.otRate), '已儲存加班費算法');
   }
 
-  void _print(DateTime month, List<PayrollRow> rows) {
+  /// 薪資單抬頭用的公司登記全名（只有老闆能改；空白＝用店名）
+  Future<void> _editCompany(PayrollSettings s) async {
+    final c = TextEditingController(text: s.companyName ?? '');
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (d) => AlertDialog(
+        title: const Text('薪資單抬頭'),
+        content: TextField(
+          controller: c,
+          autofocus: true,
+          maxLength: 60,
+          decoration: const InputDecoration(
+              labelText: '公司登記全名',
+              hintText: '例如：○○股份有限公司',
+              helperText: '請填跟扣繳憑單上一樣的公司全名。留空白＝薪資單抬頭用店名。',
+              helperMaxLines: 3),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(d, true), child: const Text('儲存')),
+        ],
+      ),
+    );
+    final name = c.text.trim();
+    if (ok != true) return;
+    await _run(() => _repo.setPayrollCompany(_store, name), name.isEmpty ? '已清掉，薪資單抬頭改回店名' : '已儲存薪資單抬頭');
+  }
+
+  void _print(DateTime month, List<PayrollRow> rows, PayrollSettings s) {
     final slips = [
       for (final r in rows)
-        if (!r.hidden && r.gross != null) PayrollSlip.fromPayrollRow(r, month, widget.membership.storeName),
+        if (!r.hidden && r.gross != null)
+          PayrollSlip.fromPayrollRow(r, month, widget.membership.storeName, companyName: s.companyName),
     ];
     if (slips.isEmpty) return;
     if (!printPayslips(slips)) showMessage(context, '瀏覽器擋住了新視窗，請允許這個網站開啟彈出視窗', error: true);
@@ -258,6 +287,22 @@ class _PayrollScreenState extends State<PayrollScreen> {
           ),
           if (_owner) TextButton(onPressed: locked ? null : () => _editOvertime(s), child: const Text('修改')),
         ]),
+        Row(children: [
+          Expanded(
+            child: Text.rich(
+              TextSpan(children: [
+                const TextSpan(text: '薪資單抬頭：'),
+                TextSpan(text: s.companyName ?? widget.membership.storeName),
+                if (s.companyName == null)
+                  TextSpan(
+                      text: _owner ? '（還沒填公司登記全名）' : '（公司登記全名請老闆填）',
+                      style: TextStyle(color: AppColors.warn)),
+              ]),
+              style: const TextStyle(fontSize: AppType.small),
+            ),
+          ),
+          if (_owner) TextButton(onPressed: locked ? null : () => _editCompany(s), child: Text(s.companyName == null ? '填寫' : '修改')),
+        ]),
         const SizedBox(height: 12),
         Wrap(spacing: 8, runSpacing: 8, children: [
           if (!r.published) ...[
@@ -266,7 +311,7 @@ class _PayrollScreenState extends State<PayrollScreen> {
           ],
           if (r.published && _owner) OutlinedButton(onPressed: locked ? null : () => _reopen(month), child: const Text('重新開啟')),
           OutlinedButton.icon(
-              onPressed: locked ? null : () => _print(month, rows),
+              onPressed: locked ? null : () => _print(month, rows, s),
               icon: const Icon(Icons.print_outlined, size: 18),
               label: const Text('列印全部薪資單')),
         ]),
@@ -296,7 +341,7 @@ class _PayrollScreenState extends State<PayrollScreen> {
       );
 
   /// 已發布的月份不在這裡改應計薪名單（要改先重新開啟）
-  Widget _row(DateTime month, PayrollRow r, bool locked, bool published) {
+  Widget _row(DateTime month, PayrollRow r, bool locked, bool published, String? companyName) {
     if (r.hidden) {
       return ListTile(
         contentPadding: EdgeInsets.zero,
@@ -314,9 +359,10 @@ class _PayrollScreenState extends State<PayrollScreen> {
               : [
                   payrollTypeLabel(r.payType) + (r.baseAmount != null ? ' ${ntd(r.baseAmount!)}' : ''),
                   if (_qty(r).isNotEmpty) _qty(r),
-                  if (r.bonus != 0) '獎金 ${ntd(r.bonus)}',
-                  if (r.insurance != 0) '勞健保 −${ntd(r.insurance)}',
-                  if (r.deduction != 0) '扣項 −${ntd(r.deduction)}',
+                  if (r.bonus + r.extras.income != 0) '獎金等 ＋${ntd(r.bonus + r.extras.income)}',
+                  if (r.insurance + r.deduction + r.extras.deduction != 0)
+                    '支出 −${ntd(r.insurance + r.deduction + r.extras.deduction)}',
+                  if (r.extras.cashPaid != 0) '領現 ${ntd(r.extras.cashPaid)}',
                 ].join('・'));
     return ListTile(
       contentPadding: EdgeInsets.zero,
@@ -338,7 +384,8 @@ class _PayrollScreenState extends State<PayrollScreen> {
               ? (_owner && !published ? () => _setExempt(r, !r.exempt) : null)
               : () async {
                   final changed = await Navigator.of(context).push<bool>(MaterialPageRoute(
-                      builder: (_) => PayrollEditScreen(membership: widget.membership, month: month, row: r)));
+                      builder: (_) => PayrollEditScreen(
+                          membership: widget.membership, month: month, row: r, companyName: companyName)));
                   if (changed == true && mounted) _reload();
                 },
     );
@@ -385,8 +432,8 @@ class _PayrollScreenState extends State<PayrollScreen> {
                     const SizedBox(height: 6),
                     Text(
                         widget.attendanceEnabled
-                            ? '建立時會帶入每個人的薪資，以及這個月「已確認」的打卡時數、天數（待確認的不算）。勞健保自付額預設帶上個月的。'
-                            : '這家店還沒開打卡：建立後時數、天數要手動填。勞健保自付額預設帶上個月的。',
+                            ? '建立時會帶入每個人的薪資，以及這個月「已確認」的打卡時數、天數（待確認的不算）。勞保、健保預設帶上個月的。'
+                            : '這家店還沒開打卡：建立後時數、天數要手動填。勞保、健保預設帶上個月的。',
                         style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
                     const SizedBox(height: 12),
                     FilledButton(
@@ -396,7 +443,7 @@ class _PayrollScreenState extends State<PayrollScreen> {
               else ...[
                 _summary(d, locked),
                 const SizedBox(height: 8),
-                for (final r in d.rows) _row(d.month, r, locked, d.report.published),
+                for (final r in d.rows) _row(d.month, r, locked, d.report.published, d.settings.companyName),
               ],
             ]);
           },
@@ -406,10 +453,11 @@ class _PayrollScreenState extends State<PayrollScreen> {
 
 /// 編輯一個人這個月的薪資；儲存前先試算（和資料庫同一套公式）
 class PayrollEditScreen extends StatefulWidget {
-  const PayrollEditScreen({super.key, required this.membership, required this.month, required this.row});
+  const PayrollEditScreen({super.key, required this.membership, required this.month, required this.row, this.companyName});
   final Membership membership;
   final DateTime month;
   final PayrollRow row;
+  final String? companyName; // 薪資單抬頭（列印用）
   @override
   State<PayrollEditScreen> createState() => _PayrollEditScreenState();
 }
@@ -427,6 +475,14 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
   late final _bonus = TextEditingController(text: _fmt(r.bonus));
   late final _ins = TextEditingController(text: _fmt(r.insurance));
   late final _ded = TextEditingController(text: _fmt(r.deduction));
+  // ops 0126：全勤獎金、勞保、健保、眷屬健保、所得稅、領現、自訂項目
+  late final _att = TextEditingController(text: _fmt(r.extras.attendanceBonus));
+  late final _lab = TextEditingController(text: _fmt(r.extras.laborIns));
+  late final _hea = TextEditingController(text: _fmt(r.extras.healthIns));
+  late final _dep = TextEditingController(text: _fmt(r.extras.dependentsIns));
+  late final _tax = TextEditingController(text: _fmt(r.extras.incomeTax));
+  late final _cash = TextEditingController(text: _fmt(r.extras.cashPaid));
+  late final List<PayItem> _items = [...r.extras.items];
   late final _note = TextEditingController(text: r.note);
   final _reason = TextEditingController();
   bool _saving = false;
@@ -447,7 +503,16 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
     _bonus: (2, 99999999),
     _ins: (2, 99999999),
     _ded: (2, 99999999),
+    _att: (2, 99999999),
+    _lab: (2, 99999999),
+    _hea: (2, 99999999),
+    _dep: (2, 99999999),
+    _tax: (2, 99999999),
+    _cash: (2, 99999999),
   };
+
+  /// 舊的「勞健保自付額」（合計）：只有已經填過的才顯示，之後分開填勞保、健保
+  bool get _legacyIns => r.payType != 'daily' && r.insurance != 0;
 
   /// 這個人會用到的數字欄位（欄位、哪一類）
   List<(TextEditingController, String)> get _fields => [
@@ -456,8 +521,12 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
         if (r.payType == 'monthly') (_ot1, '時數'),
         if (r.payType == 'monthly' && _lsa) (_ot2, '時數'),
         (_bonus, '金額'),
-        if (r.payType != 'daily') (_ins, '金額'),
+        (_att, '金額'),
+        if (r.payType != 'daily') ...[(_lab, '金額'), (_hea, '金額'), (_dep, '金額')],
+        (_tax, '金額'),
+        if (_legacyIns) (_ins, '金額'),
         (_ded, '金額'),
+        (_cash, '金額'),
       ];
 
   /// 有欄位格式、小數位數、上限不對或時數不是 0.5 的倍數：停止試算、不能存。回傳要顯示的哪一類（時數／天數／金額）
@@ -467,12 +536,31 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
     }
     return _halfError != null ? '時數' : null;
   }
+
+  /// 畫面上現在填的其他項目（日薪制不扣勞健保）
+  PayExtras get _extras {
+    final ins = r.payType != 'daily';
+    return PayExtras(
+        attendanceBonus: _parse(_att) ?? 0,
+        laborIns: ins ? _parse(_lab) ?? 0 : 0,
+        healthIns: ins ? _parse(_hea) ?? 0 : 0,
+        dependentsIns: ins ? _parse(_dep) ?? 0 : 0,
+        incomeTax: _parse(_tax) ?? 0,
+        cashPaid: _parse(_cash) ?? 0,
+        items: _items);
+  }
+
+  /// 領現是實發裡發現金的那一部分，不能比實發多
+  String? get _cashError {
+    final g = _preview, c = _parse(_cash) ?? 0;
+    return g != null && c > g ? '領現金額不能比實發金額多（實發 ${ntd(g)}）' : null;
+  }
   bool get _lsa => r.otMode == 'lsa';
   double? get _auto => r.payType == 'daily' ? r.autoDays : r.autoHours;
 
   @override
   void dispose() {
-    for (final c in [_qty, _ot1, _ot2, _bonus, _ins, _ded, _note, _reason]) {
+    for (final c in [_qty, _ot1, _ot2, _bonus, _ins, _ded, _att, _lab, _hea, _dep, _tax, _cash, _note, _reason]) {
       c.dispose();
     }
     super.dispose();
@@ -504,12 +592,13 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
         otMode: r.otMode,
         otRate: r.otRate,
         bonus: _parse(_bonus) ?? 0,
-        insurance: r.payType == 'daily' ? 0 : _parse(_ins) ?? 0,
+        insurance: _legacyIns ? _parse(_ins) ?? 0 : 0,
         deduction: _parse(_ded) ?? 0,
+        extras: _extras,
       );
 
   Future<void> _save() async {
-    if (_blocked != null) return;
+    if (_blocked != null || _cashError != null) return;
     setState(() => _saving = true);
     try {
       final o = _override;
@@ -519,8 +608,9 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
           otHours: r.payType == 'monthly' ? _parse(_ot1) ?? 0 : 0,
           otHours2: r.payType == 'monthly' && _lsa ? _parse(_ot2) ?? 0 : 0,
           bonus: _parse(_bonus) ?? 0,
-          insurance: r.payType == 'daily' ? 0 : _parse(_ins) ?? 0,
+          insurance: _legacyIns ? _parse(_ins) ?? 0 : 0,
           deduction: _parse(_ded) ?? 0,
+          extras: _extras,
           note: _note.text.trim().isEmpty ? null : _note.text.trim(),
           reason: _reason.text.trim().isEmpty ? null : _reason.text.trim());
       if (mounted) Navigator.pop(context, true);
@@ -551,8 +641,78 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
         ]),
       );
 
+  Widget _head(String text) => Padding(
+        padding: const EdgeInsets.only(top: 20, bottom: 2),
+        child: Text(text, style: TextStyle(color: AppColors.primary, fontSize: AppType.small, fontWeight: AppFont.heading)),
+      );
+
+  /// 自訂項目：新增一項（收入或支出、名稱、金額）
+  Future<void> _addItem(bool income) async {
+    final name = TextEditingController(), amount = TextEditingController();
+    String? err;
+    final item = await showDialog<PayItem>(
+      context: context,
+      builder: (d) => StatefulBuilder(
+        builder: (d, set) => AlertDialog(
+          title: Text(income ? '新增收入項目' : '新增支出項目'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(
+                controller: name,
+                autofocus: true,
+                maxLength: payItemLabelMax,
+                decoration: InputDecoration(labelText: '項目名稱', hintText: income ? '例如：交通津貼' : '例如：制服費')),
+            TextField(
+                controller: amount,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+                decoration: InputDecoration(labelText: '金額', errorText: err, errorMaxLines: 2)),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(d), child: const Text('取消')),
+            FilledButton(
+                onPressed: () {
+                  final e = name.text.trim().isEmpty
+                      ? '請填項目名稱'
+                      : payrollNumberError(amount.text, decimals: 2, max: 9999999) ??
+                          ((double.tryParse(amount.text.trim()) ?? 0) <= 0 ? '金額要大於 0' : null);
+                  if (e != null) return set(() => err = e);
+                  Navigator.pop(d, PayItem(income: income, label: name.text.trim(), amount: double.parse(amount.text.trim())));
+                },
+                child: const Text('新增')),
+          ],
+        ),
+      ),
+    );
+    name.dispose();
+    amount.dispose();
+    if (item != null && mounted) setState(() => _items.add(item));
+  }
+
+  /// 自訂項目（收入或支出那一邊）：每一項可以拿掉；最多 [payItemsMax] 項
+  List<Widget> _itemRows(bool income) => [
+        for (final i in _items)
+          if (i.income == income)
+            Row(children: [
+              Expanded(child: Text(i.label)),
+              Text('${income ? '' : '−'}${ntd(i.amount)}'),
+              IconButton(
+                  tooltip: '拿掉「${i.label}」',
+                  onPressed: () => setState(() => _items.remove(i)),
+                  icon: const Icon(Icons.close, size: 20)),
+            ]),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+              onPressed: _items.length >= payItemsMax ? null : () => _addItem(income),
+              icon: const Icon(Icons.add, size: 18),
+              label: Text(income ? '自己加一個收入項目' : '自己加一個支出項目')),
+        ),
+      ];
+
   void _printOne() {
-    if (!printPayslips([PayrollSlip.fromPayrollRow(r, widget.month, widget.membership.storeName)])) {
+    if (!printPayslips([
+      PayrollSlip.fromPayrollRow(r, widget.month, widget.membership.storeName, companyName: widget.companyName)
+    ])) {
       showMessage(context, '瀏覽器擋住了新視窗，請允許這個網站開啟彈出視窗', error: true);
     }
   }
@@ -583,15 +743,10 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
         ] else
           _ro('加班時數', '${_n(r.otHours + r.otHours2)} 小時 × ${_n(r.otRate)} 元'),
       ],
-      _ro('獎金', ntd(r.bonus)),
-      if (r.payType != 'daily') _ro('勞健保自付額', r.insurance == 0 ? ntd(0) : '−${ntd(r.insurance)}'),
-      if (r.deduction != 0) _ro('扣項', '−${ntd(r.deduction)}'),
       if (r.note != null && r.note!.isNotEmpty) _ro('備註', r.note!),
       const Divider(height: 24),
-      Row(children: [
-        const Expanded(child: Text('實發金額', style: TextStyle(fontWeight: AppFont.heading))),
-        Text(r.gross == null ? '—' : ntd(r.gross!), style: const TextStyle(fontSize: AppType.heading, fontWeight: AppFont.heading)),
-      ]),
+      PayslipTable(
+          slip: PayrollSlip.fromPayrollRow(r, widget.month, widget.membership.storeName, companyName: widget.companyName)),
       const SizedBox(height: 16),
       if (r.gross != null)
         OutlinedButton.icon(
@@ -636,9 +791,35 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
             padding: const EdgeInsets.only(top: 6),
             child: Text(_halfError!, style: TextStyle(color: AppColors.bad, fontSize: AppType.small)),
           ),
+        _head('收入（有填金額的才會出現在薪資單上）'),
+        _num(_att, '全勤獎金'),
         _num(_bonus, '獎金'),
-        if (r.payType != 'daily') _num(_ins, '勞健保自付額', helper: '照投保單位的金額手動填；新月份會先帶上個月的'),
-        _num(_ded, '扣項', helper: '從實發金額扣掉；扣的是什麼請寫在備註（薪資單上看得到）'),
+        ..._itemRows(true),
+        _head('支出'),
+        if (r.payType != 'daily') ...[
+          _num(_lab, '勞保費（自付）', helper: '照投保單位的金額手動填；勞保、健保、眷屬健保新月份會先帶上個月的'),
+          _num(_hea, '健保費（自付）'),
+          _num(_dep, '眷屬健保費'),
+        ],
+        _num(_tax, '所得稅（代扣）'),
+        if (_legacyIns) _num(_ins, '勞健保自付額（舊的合計欄位）', helper: '之後請分開填勞保、健保；這一格改成空白就不會再出現'),
+        _num(_ded, '其他扣項'),
+        ..._itemRows(false),
+        _head('發薪方式'),
+        TextField(
+          controller: _cash,
+          enabled: r.editable,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+          onChanged: (_) => setState(() {}),
+          decoration: InputDecoration(
+              labelText: '領現金額',
+              helperText: '實發金額裡發現金的部分（沒有就留空）；實際入帳＝實發−領現',
+              helperMaxLines: 3,
+              errorText: _error(_cash) ?? (_blocked == null ? _cashError : null),
+              errorMaxLines: 2),
+        ),
+        const SizedBox(height: 8),
         TextField(controller: _note, enabled: r.editable, maxLength: 200, decoration: const InputDecoration(labelText: '備註（薪資單上看得到）')),
         TextField(controller: _reason, enabled: r.editable, maxLength: 200, decoration: const InputDecoration(labelText: '修改原因（記在修改紀錄，可空白）')),
         const SizedBox(height: 12),
@@ -646,10 +827,16 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
         _blocked != null
             ? Text('實發金額：$_blocked格式待修正，暫不計算',
                 style: TextStyle(fontSize: AppType.title, fontWeight: AppFont.heading, color: AppColors.bad))
-            : Text('實發金額 ${g == null ? '—' : ntd(g)}',
-                style: const TextStyle(fontSize: AppType.heading, fontWeight: AppFont.heading)),
+            : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('實發金額 ${g == null ? '—' : ntd(g)}',
+                    style: const TextStyle(fontSize: AppType.heading, fontWeight: AppFont.heading)),
+                if (g != null && (_parse(_cash) ?? 0) > 0 && _cashError == null)
+                  Text('領現 ${ntd(_parse(_cash)!)}・實際入帳 ${ntd(g - roundYuan(_parse(_cash)!))}',
+                      style: TextStyle(color: AppColors.muted)),
+              ]),
         const SizedBox(height: 16),
-        FilledButton(onPressed: _saving || _blocked != null ? null : _save, child: Text(_saving ? '儲存中…' : '儲存')),
+        FilledButton(
+            onPressed: _saving || _blocked != null || _cashError != null ? null : _save, child: Text(_saving ? '儲存中…' : '儲存')),
       ]),
     );
   }
@@ -692,7 +879,75 @@ class _MyPayslipsScreenState extends State<MyPayslipsScreen> {
       );
 }
 
-/// 一張薪資單（每一項、實發金額、列印）
+/// 薪資單的表格（老闆 2026-11-17 指定的格式）：分「收入／支出」兩欄、有金額才列；
+/// 下面收入合計／支出合計、實發金額；有領現才多「領現金額」「實際入帳金額」。
+class PayslipTable extends StatelessWidget {
+  const PayslipTable({super.key, required this.slip});
+  final PayrollSlip slip;
+
+  static String _m(double v) => v < 0 ? '−${ntd(-v.round())}' : ntd(v.round());
+
+  Widget _column(String head, List<SlipLine> lines, String totalLabel, double total) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(head, style: TextStyle(color: AppColors.primary, fontSize: AppType.small, fontWeight: AppFont.heading)),
+          const SizedBox(height: 4),
+          for (final l in lines)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(l.label),
+                    if (l.detail.isNotEmpty) Text(l.detail, style: TextStyle(color: AppColors.muted, fontSize: AppType.caption)),
+                  ]),
+                ),
+                const SizedBox(width: 6),
+                Text(_m(l.amount)),
+              ]),
+            ),
+          if (lines.isEmpty) Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Text('—', style: TextStyle(color: AppColors.muted))),
+          const Spacer(),
+          const Divider(height: 16),
+          Row(children: [
+            Expanded(child: Text(totalLabel, style: TextStyle(color: AppColors.muted, fontSize: AppType.small))),
+            Text(_m(total), style: const TextStyle(fontWeight: AppFont.heading)),
+          ]),
+        ],
+      );
+
+  Widget _total(String label, String value, {bool big = false}) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(children: [
+          Expanded(child: Text(label, style: TextStyle(fontWeight: big ? AppFont.heading : null))),
+          Text(value, style: big ? const TextStyle(fontSize: AppType.heading, fontWeight: AppFont.heading) : null),
+        ]),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final cash = slip.cashPaid;
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      IntrinsicHeight(
+        child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Expanded(child: _column('收入', slip.incomeLines(), '收入合計', slip.incomeTotal)),
+          const VerticalDivider(width: 24),
+          Expanded(child: _column('支出', slip.deductionLines(), '支出合計', slip.deductionTotal)),
+        ]),
+      ),
+      const Divider(height: 20),
+      if (cash == 0)
+        _total('實發金額', slip.gross == null ? '—' : ntd(slip.gross!.round()), big: true)
+      else ...[
+        _total('實發金額', slip.gross == null ? '—' : ntd(slip.gross!.round())),
+        _total('領現金額', ntd(cash.round())),
+        _total('實際入帳金額', slip.transfer == null ? '—' : ntd(slip.transfer!.round()), big: true),
+      ],
+    ]);
+  }
+}
+
+/// 一張薪資單：抬頭（公司登記全名）、年月、姓名（全名）、收入／支出、備註。員工直接在 App 看；要留存可以存成 PDF
 class PayslipCard extends StatelessWidget {
   const PayslipCard({super.key, required this.slip});
   final PayrollSlip slip;
@@ -701,41 +956,31 @@ class PayslipCard extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
         padding: const EdgeInsets.only(bottom: 12),
         child: SectionCard(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('${slip.storeName} ${slip.month.year} 年 ${slip.month.month} 月',
-                style: const TextStyle(fontSize: AppType.title, fontWeight: AppFont.heading)),
-            const SizedBox(height: 8),
-            for (final l in slip.lines())
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Expanded(
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(l.label),
-                      if (l.detail.isNotEmpty) Text(l.detail, style: TextStyle(color: AppColors.muted, fontSize: AppType.caption)),
-                    ]),
-                  ),
-                  Text(l.amount < 0 ? '−${ntd(-l.amount.round())}' : ntd(l.amount.round())),
-                ]),
-              ),
-            const Divider(),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Text(slip.title, textAlign: TextAlign.center, style: const TextStyle(fontSize: AppType.title, fontWeight: AppFont.heading)),
+            Text('${slip.month.year} 年 ${slip.month.month} 月薪資單', textAlign: TextAlign.center),
+            const SizedBox(height: 6),
             Row(children: [
-              const Expanded(child: Text('實發金額', style: TextStyle(fontWeight: AppFont.heading))),
-              Text(slip.gross == null ? '—' : ntd(slip.gross!.round()),
-                  style: const TextStyle(fontSize: AppType.heading, fontWeight: AppFont.heading)),
+              Expanded(child: Text('姓名：${slip.personName}')),
+              Text(payrollTypeLabel(slip.payType), style: TextStyle(color: AppColors.muted)),
             ]),
-            if (slip.note != null && slip.note!.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Text('備註：${slip.note}', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
-              ),
+            const Divider(height: 20),
+            PayslipTable(slip: slip),
+            if (slip.note != null && slip.note!.isNotEmpty) ...[
+              const Divider(height: 20),
+              Text('備註', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+              Text(slip.note!),
+            ],
             const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: () {
-                if (!printPayslips([slip])) showMessage(context, '瀏覽器擋住了新視窗，請允許這個網站開啟彈出視窗', error: true);
-              },
-              icon: const Icon(Icons.print_outlined, size: 18),
-              label: const Text('列印／存成 PDF'),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () {
+                  if (!printPayslips([slip])) showMessage(context, '瀏覽器擋住了新視窗，請允許這個網站開啟彈出視窗', error: true);
+                },
+                icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                label: const Text('存成 PDF（要留存才需要）'),
+              ),
             ),
           ]),
         ),
