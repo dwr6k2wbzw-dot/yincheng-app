@@ -33,6 +33,19 @@ class _DashboardData {
   List<DailyRevenue> days = const []; // 本月與上個月每日營收（趨勢線、較上月同期）
   /// 前 3 個月的月彙總（[0]＝上個月；上個月／近 3 個月平均的來客與客單，老闆 2026-10-29）；讀不到的月份＝null
   List<MonthlySummary?> prev = const [];
+  /// 薪資預估（ops 0129）：人事基底沒手動填時自動用（發布了＝實際應發）；讀不到＝null
+  PayrollEstimate? payrollEst;
+  /// 人事基底：手動填的優先，沒填就用薪資預估（老闆 2026-11-18）
+  double? get payrollBase => fixed.payroll ?? payrollEst?.autoBase;
+  /// 人事基底是自動帶入的（沒手動填）
+  bool get payrollAuto => fixed.payroll == null && payrollEst != null;
+  /// 人事基底是自動帶入、但預估不完整時的提醒（Codex P2：缺薪資資料的人不能悄悄算 0）
+  String? get payrollAutoNote => payrollAuto && !payrollEst!.published ? payrollEst!.incompleteNote : null;
+  String get payrollBaseLabel => !payrollAuto
+      ? '人事（基底）'
+      : payrollEst!.published
+          ? '人事（基底・已發布薪資）'
+          : '人事（基底・薪資預估）';
 
   /// 本月累計 vs 上月累計；較上月同期＝本月 1～N 日 ÷ 上月 1～N 日（N＝本月最後有資料的那天）
   _Trend trend() {
@@ -116,6 +129,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       d.items = items;
       d.recurring = recurring;
       d.cardFeeRate = rate;
+      d.payrollEst = repo.peekPayrollEstimate(id, _month);
     }
     return d;
   }
@@ -146,6 +160,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           repo.expenseItems(id, _month),
           repo.recurringExpenseItems(id),
           repo.cardFeeRate(id),
+          // 薪資預估：讀不到（例如資料庫還沒更新）就當沒有，人事基底照舊
+          repo.payrollEstimate(id, _month).then<PayrollEstimate?>((v) => v, onError: (_) => null),
         ],
       ]);
       d.summary = r[0] as MonthlySummary;
@@ -156,6 +172,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         d.items = r[4] as List<ExpenseItem>;
         d.recurring = r[5] as List<RecurringExpenseItem>;
         d.cardFeeRate = r[6] as double;
+        d.payrollEst = r[7] as PayrollEstimate?;
       }
     }
     markLoad('總覽資料');
@@ -669,7 +686,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// 本月損益（與 _profitCard 同一算法）
   double _profitOf(_DashboardData d, MonthlySummary s) {
     final rent = (d.fixed.rent ?? 0) + d.itemsOf('rent') + d.recurringOf('rent');
-    final payroll = (d.fixed.payroll ?? 0) + d.itemsOf('payroll') + d.recurringOf('payroll');
+    final payroll = (d.payrollBase ?? 0) + d.itemsOf('payroll') + d.recurringOf('payroll');
     final misc = s.miscCost + d.itemsOf('misc') + d.recurringOf('misc') + d.cardFee(s);
     return s.revenue - s.purchaseCost - misc - rent - payroll;
   }
@@ -682,10 +699,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final payrollItems = d.itemsOf('payroll') + d.recurringOf('payroll');
     final miscItems = d.itemsOf('misc') + d.recurringOf('misc') + d.cardFee(s);
     final rent = (d.fixed.rent ?? 0) + rentItems;
-    final payroll = (d.fixed.payroll ?? 0) + payrollItems;
+    final payroll = (d.payrollBase ?? 0) + payrollItems;
     final misc = s.miscCost + miscItems;
     final profit = s.revenue - s.purchaseCost - misc - rent - payroll;
-    final missing = [if (d.fixed.rent == null) '租金', if (d.fixed.payroll == null) '人事'];
+    final missing = [if (d.fixed.rent == null) '租金', if (d.payrollBase == null) '人事'];
     // 百分比＝占當月營業收入（老闆 2026-10-12）；營收 0 時顯示 —
     String ofRevenue(double v) => pct(s.revenue > 0 ? v / s.revenue : null);
     Widget line(String k, double v, {bool minus = true}) => Padding(
@@ -724,23 +741,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Text('尚未輸入${missing.join('、')}，損益還不完整',
                 style: TextStyle(color: AppColors.warn, fontSize: AppType.small)),
           ),
+        if (d.payrollAutoNote != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text('人事預估不完整：${d.payrollAutoNote}',
+                style: TextStyle(color: AppColors.warn, fontSize: AppType.small)),
+          ),
         const SizedBox(height: 10),
         // 排序：租金、人事、進貨、雜項（老闆 2026-10-29）
         line('營業收入', s.revenue, minus: false),
         line('租金${rentItems != 0 ? '（含明細 ${ntd(rentItems)}）' : ''}', rent),
-        line('人事${payrollItems != 0 ? '（含明細 ${ntd(payrollItems)}）' : ''}', payroll),
+        line('人事${d.payrollAuto && !d.payrollEst!.published ? '（預估）' : ''}${payrollItems != 0 ? '（含明細 ${ntd(payrollItems)}）' : ''}', payroll),
         line('進貨（不含雜項類）', s.purchaseCost),
         line('雜項${miscItems != 0 ? '（含明細 ${ntd(miscItems)}）' : ''}', misc),
         const SizedBox(height: 2),
         Text('百分比＝占本月營業收入', style: TextStyle(color: AppColors.muted, fontSize: AppType.caption)),
         const Divider(height: 20),
-        Row(children: [
-          _fixedItem(d, 'rent', '租金（基底）', d.fixed.rent, s.revenue),
-          const SizedBox(width: 12),
-          _fixedItem(d, 'payroll', '人事（基底）', d.fixed.payroll, s.revenue),
-        ]),
+        IntrinsicHeight(
+          child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            _fixedItem(d, 'rent', '租金（基底）', d.fixed.rent, s.revenue),
+            const SizedBox(width: 12),
+            _payrollBaseItem(d, s.revenue),
+          ]),
+        ),
         const SizedBox(height: 4),
-        Text('租金、人事的單一金額當基底；下面的支出明細會另外加上去。', style: TextStyle(color: AppColors.muted, fontSize: AppType.caption)),
+        Text('租金、人事的單一金額當基底；下面的支出明細會另外加上去。人事沒填的月份，自動用薪資預估（照薪資和班表算的應發）。',
+            style: TextStyle(color: AppColors.muted, fontSize: AppType.caption)),
         const SizedBox(height: 12),
         _expenseItemsSection(d, s),
       ]),
@@ -762,7 +788,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ];
     final cardFee = d.cardFee(s);
     final rent = (d.fixed.rent ?? 0) + d.itemsOf('rent') + d.recurringOf('rent');
-    final payroll = (d.fixed.payroll ?? 0) + d.itemsOf('payroll') + d.recurringOf('payroll');
+    final payroll = (d.payrollBase ?? 0) + d.itemsOf('payroll') + d.recurringOf('payroll');
     final misc = s.miscCost + d.itemsOf('misc') + d.recurringOf('misc') + cardFee;
     final parts = revenueParts(widget.membership.storeName,
         drinks: s.drinksRevenue, food: s.foodRevenue, project: s.projectAmount,
@@ -787,10 +813,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ...detail('misc', null, ''),
       ],
       rentDetail: detail('rent', d.fixed.rent, '租金（基底）'),
-      payrollDetail: detail('payroll', d.fixed.payroll, '人事（基底）'),
+      payrollDetail: detail('payroll', d.payrollBase, d.payrollBaseLabel),
       warnings: [
         if (d.fixed.rent == null) '尚未輸入租金',
-        if (d.fixed.payroll == null) '尚未輸入人事',
+        if (d.payrollBase == null) '尚未輸入人事',
+        if (d.payrollAutoNote != null) '人事預估不完整：${d.payrollAutoNote}',
       ],
     );
     try {
@@ -1107,6 +1134,93 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ),
       );
+
+  /// 人事（基底）：手動填的優先；沒填自動用薪資預估（發布了用實際應發）。點了可以手動填、或改回自動（老闆 2026-11-18）
+  Widget _payrollBaseItem(_DashboardData d, double revenue) {
+    final v = d.payrollBase, est = d.payrollEst;
+    final sub = v == null
+        ? ''
+        : d.payrollAuto
+            ? (est!.published ? '自動・已發布薪資' : '自動・薪資預估')
+            : est == null
+                ? '手動輸入'
+                : '預估 ${ntd(est.autoBase)}';
+    return Expanded(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        onTap: () => _editPayrollBase(d),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(color: AppColors.cardHigh, borderRadius: BorderRadius.circular(AppRadius.md)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Text('人事（基底）', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+              const Spacer(),
+              Icon(d.payrollAuto ? Icons.auto_awesome_outlined : Icons.edit_outlined, size: 14, color: AppColors.muted),
+            ]),
+            const SizedBox(height: 4),
+            Text(v == null ? '尚未輸入' : ntd(v),
+                style: TextStyle(fontSize: v == null ? 14 : 18, fontWeight: FontWeight.w700, color: v == null ? AppColors.warn : null)),
+            const SizedBox(height: 2),
+            Text(v == null ? '' : '占營收 ${revenue > 0 ? pct(v / revenue) : '—'}',
+                style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+            if (sub.isNotEmpty)
+              Text(sub, style: TextStyle(color: d.payrollAuto ? AppColors.primary : AppColors.muted, fontSize: AppType.caption)),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _editPayrollBase(_DashboardData d) async {
+    final est = d.payrollEst, manual = d.fixed.payroll;
+    final ctrl = TextEditingController(text: manual == null ? '' : manual.round().toString());
+    // 回傳：數字＝手動填；-1＝改用自動；null＝取消
+    final v = await showDialog<double>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text('${DateFormat('M 月', 'zh_TW').format(d.month)}人事（基底）'),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (est != null) ...[
+            Text(est.published ? '已發布薪資（實際應發）' : '薪資預估（照薪資和班表）',
+                style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+            Text(ntd(est.autoBase), style: const TextStyle(fontSize: AppType.heading, fontWeight: AppFont.figure, fontFeatures: tabular)),
+            const SizedBox(height: 4),
+            Text(manual == null ? '目前自動用這個數字。要用別的金額，在下面手動填。' : '目前用你手動填的金額；按「改用自動」就會換成上面的數字。',
+                style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+            const SizedBox(height: 12),
+          ],
+          TextField(
+            controller: ctrl,
+            autofocus: est == null,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9]'))],
+            decoration: const InputDecoration(prefixText: '\$ ', labelText: '手動填金額（元）'),
+          ),
+        ]),
+        actions: [
+          if (manual != null && est != null)
+            TextButton(onPressed: () => Navigator.pop(c, -1.0), child: const Text('改用自動')),
+          TextButton(onPressed: () => Navigator.pop(c), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(c, double.tryParse(ctrl.text)), child: const Text('儲存')),
+        ],
+      ),
+    );
+    if (v == null || !mounted) return;
+    final repo = AppScope.of(context).repo;
+    try {
+      if (v < 0) {
+        await repo.clearFixedCost(widget.membership.storeId, d.month, 'payroll');
+        if (mounted) showMessage(context, '已改用自動（薪資預估）');
+      } else {
+        await repo.saveFixedCost(widget.membership.storeId, d.month, 'payroll', v);
+        if (mounted) showMessage(context, '已儲存人事（基底）');
+      }
+      _reload();
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+    }
+  }
 
   Widget _amount(String label, double v, Color dot, {String? sub}) => Expanded(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

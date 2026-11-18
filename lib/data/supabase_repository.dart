@@ -367,6 +367,16 @@ class SupabaseRepository implements Repository {
     }
   }
   @override
+  Future<void> clearFixedCost(String storeId, DateTime month, String category) async {
+    await _db
+        .from('expenses')
+        .delete()
+        .eq('store_id', storeId)
+        .eq('period_month', _day.format(DateTime(month.year, month.month, 1)))
+        .eq('category', category);
+  }
+
+  @override
   Future<List<ExpenseItem>> expenseItems(String storeId, DateTime month) async {
     final rows = await _db
         .from('expense_items')
@@ -2231,6 +2241,16 @@ class SupabaseRepository implements Repository {
       _rpcRows(await _db.rpc('payroll_month', params: {'p_store': storeId, 'p_month': _month(month)}))
           .map(PayrollRow.fromRow)
           .toList();
+
+  @override
+  Future<PayrollEstimate> payrollEstimate(String storeId, DateTime month) async => _remember(
+      _ck('payest', [storeId, _mk(month)]),
+      (await _db.rpc('payroll_estimate', params: {'p_store': storeId, 'p_month': _month(month)})) ?? const [],
+      _parseEstimate);
+  static PayrollEstimate _parseEstimate(dynamic raw) => PayrollEstimate(_rows(raw).map(PayrollEstimateRow.fromRow).toList());
+  @override
+  PayrollEstimate? peekPayrollEstimate(String storeId, DateTime month) =>
+      _peek(_ck('payest', [storeId, _mk(month)]), _parseEstimate);
 
   @override
   Future<PayrollReport> payrollReport(String storeId, DateTime month) async {

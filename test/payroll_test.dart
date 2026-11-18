@@ -338,4 +338,74 @@ void main() {
           '還有人沒有薪資或還沒帶入，不能發布：示範甲');
     });
   });
+
+  group('薪資預估（ops 0129）', () {
+    Map<String, dynamic> row(String id, String type, double est, {double? actual, bool pub = false, bool hidden = false, int untimed = 0}) => {
+          'person_id': id, 'name': '示範$id', 'pay_type': type, 'rate': hidden ? null : 200, 'basis': type == 'monthly' ? 'monthly' : 'schedule',
+          'days': type == 'daily' ? 3 : null, 'hours': type == 'hourly' ? 29.5 : null, 'sched_days': 3, 'sched_hours': 29.5,
+          'untimed': untimed, 'extra': 0, 'estimate': hidden ? null : est, 'actual': actual, 'published': pub, 'hidden': hidden,
+        };
+    test('合計、分類、沒時間的班', () {
+      final e = PayrollEstimate([
+        PayrollEstimateRow.fromRow(row('a', 'monthly', 40000)),
+        PayrollEstimateRow.fromRow(row('b', 'daily', 6000)),
+        PayrollEstimateRow.fromRow(row('c', 'hourly', 5900, untimed: 1)),
+      ]);
+      expect(e.total, 51900);
+      expect(e.autoBase, 51900);
+      expect(e.totalOf('hourly'), 5900);
+      expect(e.countOf('daily'), 1);
+      expect(e.untimed, 1);
+      expect(e.actualTotal, isNull);
+      expect(e.hasHidden, isFalse);
+    });
+    test('發布了：總覽用實際應發', () {
+      final e = PayrollEstimate([
+        PayrollEstimateRow.fromRow(row('a', 'monthly', 40000, actual: 41000, pub: true)),
+        PayrollEstimateRow.fromRow(row('b', 'hourly', 5000, actual: 4800, pub: true)),
+      ]);
+      expect(e.actualTotal, 45800);
+      expect(e.autoBase, 45800);
+    });
+    test('店長自己那列：沒有金額、標出來', () {
+      final e = PayrollEstimate([
+        PayrollEstimateRow.fromRow(row('a', 'monthly', 40000)),
+        PayrollEstimateRow.fromRow(row('me', 'monthly', 0, hidden: true)),
+      ]);
+      expect(e.total, 40000);
+      expect(e.hasHidden, isTrue);
+      expect(e.countOf('monthly'), 1);
+    });
+    test('沒有薪資資料的人：列出名字、提醒預估不完整（Codex P2）', () {
+      final none = {...row('n', 'hourly', 0), 'rate': null, 'basis': 'none', 'estimate': null};
+      final e = PayrollEstimate([
+        PayrollEstimateRow.fromRow(row('a', 'monthly', 40000)),
+        PayrollEstimateRow.fromRow(none),
+        PayrollEstimateRow.fromRow(row('me', 'monthly', 0, hidden: true)),
+      ]);
+      expect(e.missingNames, ['示範n']);
+      expect(e.incompleteNote, contains('示範n 沒有薪資資料'));
+      expect(PayrollEstimate([PayrollEstimateRow.fromRow(row('a', 'monthly', 40000))]).incompleteNote, isNull);
+      expect(PayrollEstimate([PayrollEstimateRow.fromRow(row('c', 'hourly', 100, untimed: 2))]).incompleteNote, '2 班沒設時間，沒算進時數');
+    });
+    test('怎麼算的說明', () {
+      expect(PayrollEstimateRow.fromRow(row('c', 'hourly', 5900)).howLabel, '時薪 200 × 29.5 小時（班表）');
+      expect(PayrollEstimateRow.fromRow(row('b', 'daily', 600)).howLabel, '日薪 200 × 3 天（班表）');
+      expect(PayrollEstimateRow.fromRow(row('a', 'monthly', 200)).howLabel, '月薪 200');
+    });
+    test('示範資料：店長看不到自己那列', () async {
+      SharedPreferences.setMockInitialValues({});
+      final owner = DemoRepository();
+      await owner.signIn('owner@x', 'x');
+      final all = await owner.payrollEstimate('yc', DateTime(2026, 11));
+      expect(all.rows, isNotEmpty);
+      expect(all.hasHidden, isFalse);
+      expect(all.total, greaterThan(0));
+      final mgr = DemoRepository();
+      await mgr.signIn('manager@x', 'x');
+      final mine = await mgr.payrollEstimate('yc', DateTime(2026, 11));
+      expect(mine.hasHidden, isTrue);
+      expect(mine.total, lessThan(all.total));
+    });
+  });
 }
