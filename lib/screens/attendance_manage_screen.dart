@@ -772,7 +772,7 @@ class _KioskTabState extends State<_KioskTab> {
           const InfoLine(
               text: '店裡共用的帳號登入，第一頁就是密碼打卡',
               icon: Icons.info_outline,
-              detail: '員工在店裡的平板或手機先點自己的名字、再輸入自己的 4 位數打卡密碼，時間一律是伺服器時間。連錯 5 次鎖 1 分鐘。'
+              detail: '員工在店裡的平板或手機輸入自己的 4 位數打卡密碼就打卡（同店密碼不能重複），時間一律是伺服器時間。連錯 5 次鎖 1 分鐘。'
                   '打卡密碼：員工第一次在班表的打卡卡片自己設（4 位數、不能太好猜）；忘記或想換，由店長在「員工資料」點人重設（店長的由老闆設）。'),
           Wrap(spacing: 8, runSpacing: 8, children: [
             if (_owner)

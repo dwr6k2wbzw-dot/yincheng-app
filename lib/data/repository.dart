@@ -327,10 +327,8 @@ abstract class Repository {
   Future<void> setKioskAccount(String storeId, String userId);
   /// 登入的帳號是打卡用帳號就回它的店；不是（或資料庫還沒更新）回 null
   Future<KioskMine?> kioskMine();
-  /// 打卡用帳號：打卡名單（這家店班表上的人、有沒有密碼）
-  Future<List<KioskPerson>> kioskPeople();
-  /// 打卡用帳號：先點名字、再輸入那個人的 4 位數密碼打卡（時間是伺服器時間）
-  Future<PinPunchResult> pinPunch(String personId, String pin);
+  /// 打卡用帳號：輸入自己的 4 位數密碼打卡（ops 0131：靠密碼認人，時間是伺服器時間）
+  Future<PinPunchResult> pinPunch(String pin);
   /// 打卡密碼有沒有設定（看不到密碼本身）；資料庫還沒更新回 null
   Future<List<PinStatus>?> pinStatus(String storeId);
   /// 設定／重設打卡密碼；pin 是 null＝隨機產生（只在回傳這次看得到）

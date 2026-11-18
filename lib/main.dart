@@ -92,7 +92,8 @@ class YinchengApp extends StatelessWidget {
           title: '小城外',
           debugShowCheckedModeBanner: false,
           theme: buildTheme(palette),
-          builder: (context, child) => ContentWidthLimit(child: child!),
+          // 公用帳號（打卡用帳號）在平板上滿版（老闆 2026-11-18）；其他帳號在電腦、平板上置中一欄
+          builder: (context, child) => state.kiosk != null ? child! : ContentWidthLimit(child: child!),
           locale: const Locale('zh', 'TW'),
           supportedLocales: const [Locale('zh', 'TW'), Locale('en')],
           localizationsDelegates: const [
