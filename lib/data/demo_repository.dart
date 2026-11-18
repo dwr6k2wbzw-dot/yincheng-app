@@ -1301,7 +1301,9 @@ class DemoRepository implements Repository {
     final i = list.indexWhere((x) => x.id == t.id);
     final old = i >= 0 ? list[i] : null;
     final v = ReservationTable(id: t.id.isEmpty ? 'T${list.length + 1}' : t.id, name: t.name, seats: t.seats,
-        combinable: t.combinable, sort: t.sort, active: t.active, posX: old?.posX, posY: old?.posY, w: old?.w ?? 1, h: old?.h ?? 1, shape: old?.shape ?? 'round', floor: old?.floor ?? '1F',
+        combinable: t.combinable, sort: t.sort, active: t.active,
+        posX: old?.floor == t.floor ? old?.posX : null, posY: old?.floor == t.floor ? old?.posY : null,
+        w: old?.w ?? 1, h: old?.h ?? 1, shape: old?.shape ?? 'round', floor: t.floor,
         onlyDate: old?.onlyDate ?? t.onlyDate);
     if (i < 0) {
       list.add(v);

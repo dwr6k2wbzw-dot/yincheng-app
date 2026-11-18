@@ -1735,11 +1735,14 @@ class SupabaseRepository implements Repository {
 
   @override
   Future<void> saveReservationTable(String storeId, ReservationTable t) async {
-    final v = {'name': t.name.trim(), 'seats': t.seats, 'combinable': t.combinable, 'sort': t.sort, 'active': t.active};
+    final v = {'name': t.name.trim(), 'seats': t.seats, 'combinable': t.combinable, 'sort': t.sort, 'active': t.active, 'floor': t.floor};
     if (t.id.isEmpty) {
       await _db.from('reservation_tables').insert({'store_id': storeId, ...v, if (t.onlyDate != null) 'only_date': _day.format(t.onlyDate!)});
     } else {
-      final rows = await _db.from('reservation_tables').update(v).eq('id', t.id).select('id');
+      // 換樓層：位置清掉，座位圖會自動放到那層最下面（不會疊到那層原本的桌）
+      final cur = await _db.from('reservation_tables').select('floor').eq('id', t.id).maybeSingle();
+      final moved = cur != null && cur['floor'] != t.floor;
+      final rows = await _db.from('reservation_tables').update({...v, if (moved) 'pos_x': null, if (moved) 'pos_y': null}).eq('id', t.id).select('id');
       if (rows.isEmpty) throw Exception('message: 沒有權限修改桌位,');
     }
   }

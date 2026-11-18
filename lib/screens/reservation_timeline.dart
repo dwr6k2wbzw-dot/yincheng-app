@@ -570,7 +570,31 @@ class _ReservationTablesScreenState extends State<ReservationTablesScreen> {
       _repo.reservationTables(widget.storeId),
       _repo.tableDaysOff(widget.storeId, t, t.add(const Duration(days: 365))).then<List<TableDayOff>>((v) => v, onError: (_) => <TableDayOff>[]),
     ]);
-    return (r[0] as List<ReservationTable>, r[1] as List<TableDayOff>);
+    _all = r[0] as List<ReservationTable>;
+    return (_all, r[1] as List<TableDayOff>);
+  }
+
+  List<ReservationTable> _all = const [];
+
+  /// 這家店有哪些樓層（至少 1F）
+  List<String> get _floorOptions {
+    final f = {'1F', for (final t in _all) if (!t.deleted) t.floor}.toList()..sort();
+    return f;
+  }
+
+  /// 新桌預設放哪一層：桌號開頭英文跟哪些桌一樣就放那一層（A13 → A 桌那層），沒有就放桌子最多的那層
+  String _guessFloor(String name) {
+    final live = _all.where((t) => !t.deleted).toList();
+    if (live.isEmpty) return '1F';
+    String prefix(String n) => RegExp(r'^[^0-9]*').firstMatch(n.trim().toUpperCase())!.group(0)!;
+    final p = prefix(name);
+    final same = p.isEmpty ? <ReservationTable>[] : live.where((t) => prefix(t.name) == p).toList();
+    final pool = same.isNotEmpty ? same : live;
+    final count = <String, int>{};
+    for (final t in pool) {
+      count[t.floor] = (count[t.floor] ?? 0) + 1;
+    }
+    return (count.entries.toList()..sort((a, b) => b.value.compareTo(a.value))).first.key;
   }
 
   @override
@@ -597,6 +621,9 @@ class _ReservationTablesScreenState extends State<ReservationTablesScreen> {
     var active = t?.active ?? true;
     var oneDay = false; // 新增時：只有一天加開
     var day = _defaultDay;
+    var floor = t?.floor ?? _guessFloor('');
+    var floorPicked = t != null; // 自己選過樓層就不再照桌號猜
+    final floors = {..._floorOptions, floor}.toList()..sort();
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => StatefulBuilder(
@@ -634,7 +661,29 @@ class _ReservationTablesScreenState extends State<ReservationTablesScreen> {
               ] else if (t.onlyDate != null)
                 Text('只有 ${_tableDay(t.onlyDate!)} 加開（日子不能改，要換日子請刪掉再加開一張）',
                     style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
-              TextField(controller: name, maxLength: 12, autofocus: t == null, decoration: const InputDecoration(labelText: '桌號（例：A1、吧台1）')),
+              TextField(
+                controller: name,
+                maxLength: 12,
+                autofocus: t == null,
+                decoration: const InputDecoration(labelText: '桌號（例：A1、吧台1）'),
+                onChanged: (v) {
+                  if (!floorPicked) set(() => floor = _guessFloor(v));
+                },
+              ),
+              if (floors.length > 1) ...[
+                Text('在座位圖的哪一層', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+                const SizedBox(height: 6),
+                SegmentedButton<String>(
+                  segments: [for (final f in floors) ButtonSegment(value: f, label: Text(f))],
+                  selected: {floor},
+                  showSelectedIcon: false,
+                  onSelectionChanged: (v) => set(() {
+                    floor = v.first;
+                    floorPicked = true;
+                  }),
+                ),
+                const SizedBox(height: 4),
+              ],
               TextField(controller: seats, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '最多坐幾位')),
               TextField(controller: sort, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '排序（數字小的排上面）')),
               SwitchListTile(
@@ -672,9 +721,19 @@ class _ReservationTablesScreenState extends State<ReservationTablesScreen> {
           widget.storeId,
           ReservationTable(
               id: t?.id ?? '', name: name.text.trim(), seats: n, combinable: comb, sort: so, active: active,
-              onlyDate: t == null ? (oneDay ? day : null) : t.onlyDate));
+              floor: floor, onlyDate: t == null ? (oneDay ? day : null) : t.onlyDate));
       _changed = true;
-      if (mounted) showMessage(context, t == null && oneDay ? '已加開 ${name.text.trim()}（只有 ${_tableDay(day)}）' : '已儲存');
+      if (mounted) {
+        showMessage(
+            context,
+            t == null && oneDay
+                ? '已加開 ${name.text.trim()}：只有 ${_tableDay(day)} 的時間軸、座位圖（$floor）看得到'
+                : t == null
+                    ? '已新增 ${name.text.trim()}，在座位圖 $floor 最下面，可以到座位圖按「排版」拖到想要的位置'
+                    : t.floor != floor
+                        ? '已儲存，${name.text.trim()} 搬到座位圖 $floor 最下面'
+                        : '已儲存');
+      }
       _reload();
     } catch (e) {
       if (mounted) showMessage(context, friendlyError(e), error: true);
@@ -771,6 +830,7 @@ class _ReservationTablesScreenState extends State<ReservationTablesScreen> {
           Text(
               [
                 if (t.onlyDate != null) '只有 ${_tableDay(t.onlyDate!)}',
+                if (_floorOptions.length > 1) t.floor,
                 '${t.seats} 人',
                 if (t.combinable) '可併桌',
                 if (!t.active) '已停用',
