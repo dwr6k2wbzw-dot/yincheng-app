@@ -342,6 +342,10 @@ abstract class Repository {
   Future<void> pinClear(String personId);
   /// 員工資料一覽：老闆全部；店長身分證、帳號遮罩，看得到別人的薪率（ops 0110）、看不到可改自己的；其他人只有自己
   Future<List<StaffEntry>> staffDirectory(String storeId);
+  /// 不用打卡的人（ops 0134；老闆、店長讀得到）：異常清單、打卡比對不列，薪資天數不從打卡帶
+  Future<Set<String>> punchExemptIds(String storeId);
+  /// 設定／取消不用打卡（只有老闆）
+  Future<void> setPunchExempt(String storeId, String personId, bool exempt);
   /// 老闆確認（或取消確認）班表名字綁定的 App 帳號；userId＝畫面上看到的那個帳號，對不上就失敗
   Future<void> verifyBinding(String personId, String userId, {bool verify = true});
   /// 聯絡資料（老闆、店長）；payType 老闆、店長（不是自己）能改，傳 null＝不動

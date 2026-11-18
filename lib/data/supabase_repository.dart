@@ -2311,6 +2311,16 @@ class SupabaseRepository implements Repository {
       _db.rpc('payroll_set_exempt', params: {'p_store': storeId, 'p_person': personId, 'p_exempt': exempt});
 
   @override
+  Future<Set<String>> punchExemptIds(String storeId) async {
+    final rows = await _db.from('shift_people_hr').select('id').eq('store_id', storeId).eq('punch_exempt', true);
+    return {for (final r in rows) r['id'] as String};
+  }
+
+  @override
+  Future<void> setPunchExempt(String storeId, String personId, bool exempt) =>
+      _db.rpc('attendance_set_punch_exempt', params: {'p_store': storeId, 'p_person': personId, 'p_exempt': exempt});
+
+  @override
   Future<List<PayrollSlip>> myPayslips(String storeId) async =>
       _rpcRows(await _db.rpc('payroll_my_slips', params: {'p_store': storeId})).map(PayrollSlip.fromRow).toList();
 }
