@@ -178,13 +178,16 @@ class _AttendanceCardState extends State<AttendanceCard> {
                             staffOnly: true)))))),
             child: const Text('薪資'),
           ),
-        if (me.personId != null && !me.bindingPending)
+        if (me.personId != null && !me.bindingPending && !_owner)
           OutlinedButton(
             onPressed: () => Navigator.of(context)
                 .push(MaterialPageRoute(builder: (_) => MyPayslipsScreen(membership: widget.membership))),
             child: const Text('我的薪資單'),
           ),
       ];
+
+  /// 老闆帳號不放自己的打卡密碼、出勤、薪資單（老闆 2026-11-18；老闆帳號店裡也有人共用）
+  bool get _owner => widget.membership.role == Role.owner;
 
   Widget _notEnabled(AttendanceMe me) {
     final verified = me.personId != null && !me.bindingPending;
@@ -236,6 +239,8 @@ class _AttendanceCardState extends State<AttendanceCard> {
           if (me == null) return const SizedBox.shrink();
           if (!me.enabled) return _notEnabled(me);
           final last = me.lastPunchedAt;
+          // 老闆帳號：只留出勤管理、薪資，不放自己的打卡狀態與密碼
+          final mine = me.personId != null && !_owner;
           return Padding(
             padding: const EdgeInsets.only(top: 8),
             child: SectionCard(
@@ -246,7 +251,7 @@ class _AttendanceCardState extends State<AttendanceCard> {
                     Icon(Icons.dialpad, color: AppColors.primary),
                     const SizedBox(width: 8),
                     const Expanded(child: Text('打卡', style: TextStyle(fontSize: AppType.title, fontWeight: AppFont.heading))),
-                    if (me.personId != null)
+                    if (mine)
                       Text(me.onShift ? '上班中' : '未上班',
                           style: TextStyle(color: me.onShift ? AppColors.good : AppColors.muted, fontSize: AppType.small)),
                     Icon(_open ? Icons.expand_less : Icons.expand_more, color: AppColors.muted),
@@ -259,8 +264,8 @@ class _AttendanceCardState extends State<AttendanceCard> {
                 else if (me.bindingPending)
                   Text('你的帳號對應還沒生效，請店長或老闆在「班表人員」替你確認一次，之後才能打卡、看自己的出勤',
                       style: TextStyle(color: AppColors.warn, fontSize: AppType.small))
-                else if (me.personId == null)
-                  // 老闆、店長自己沒排班就不用提示（老闆 2026-11-18）
+                else if (!mine)
+                  // 老闆、店長自己沒排班就不用提示（老闆 2026-11-18）；老闆帳號不放自己的打卡狀態
                   if (!me.canManage)
                     Text('你的帳號還沒對應到員工資料：請店長或老闆在「班表人員」替你對應一次，之後就能打卡、看自己的出勤',
                         style: TextStyle(color: AppColors.warn, fontSize: AppType.small))
@@ -272,7 +277,7 @@ class _AttendanceCardState extends State<AttendanceCard> {
                           ? '${me.personName ?? ''}・最近沒有打卡'
                           : '${me.personName ?? ''}・上次${punchTypeLabel(me.lastPunchType ?? 'in')} ${_taipeiMdHm(last)}',
                       style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
-                if (me.personId != null && _myPin != null && !_myPin!.hasPin)
+                if (mine && _myPin != null && !_myPin!.hasPin)
                   if (_myPin!.canSet)
                     // 老闆 2026-11-16：員工自己設密碼。沒設的人一定要看到
                     Container(
@@ -293,7 +298,7 @@ class _AttendanceCardState extends State<AttendanceCard> {
                   else
                     Text('你還沒有打卡密碼，請老闆設定', style: TextStyle(color: AppColors.warn, fontSize: AppType.small)),
                 // ops 0125：設過之後本人不能自己改，忘記或想換由店長重設
-                if (_open && me.personId != null && _myPin != null && _myPin!.hasPin && !_myPin!.canSet)
+                if (_open && mine && _myPin != null && _myPin!.hasPin && !_myPin!.canSet)
                   Padding(
                     padding: const EdgeInsets.only(top: 6),
                     child: Text('打卡密碼已經設好；忘記或想換，請找店長重設',
@@ -302,10 +307,10 @@ class _AttendanceCardState extends State<AttendanceCard> {
                 if (_open) const SizedBox(height: 10),
                 if (_open)
                   Wrap(spacing: 8, runSpacing: 8, children: [
-                  if (me.personId != null && _myPin != null && _myPin!.canSet)
+                  if (mine && _myPin != null && _myPin!.canSet)
                     FilledButton.tonalIcon(
                         onPressed: () => _editPin(_myPin!), icon: const Icon(Icons.dialpad), label: const Text('打卡密碼')),
-                  if (me.personId != null)
+                  if (mine)
                     OutlinedButton(
                       onPressed: () => Navigator.of(context)
                           .push(MaterialPageRoute(
