@@ -21,7 +21,8 @@ class PayrollScreen extends StatefulWidget {
 String _n(double v) => v % 1 == 0 ? v.toStringAsFixed(0) : v.toStringAsFixed(v * 10 % 1 == 0 ? 1 : 2);
 
 /// 載入的結果和它是哪個月份綁在一起：切月時畫面上還是舊月份的資料，所有操作都用這個 month，不用 [_PayrollScreenState._month]
-typedef _MonthData = ({DateTime month, PayrollSettings settings, PayrollReport report, List<PayrollRow> rows});
+/// estimate：薪資預估（ops 0129）；讀不到（例如資料庫還沒更新）＝null，不影響其他部分
+typedef _MonthData = ({DateTime month, PayrollSettings settings, PayrollReport report, List<PayrollRow> rows, PayrollEstimate? estimate});
 
 class _PayrollScreenState extends State<PayrollScreen> {
   late DateTime _month = DateTime(bizToday().year, bizToday().month - 1, 1); // 預設上個月（正在看／正在載入的月份）
@@ -39,8 +40,15 @@ class _PayrollScreenState extends State<PayrollScreen> {
       repo.payrollSettings(_store),
       repo.payrollReport(_store, m),
       repo.payrollMonth(_store, m),
+      repo.payrollEstimate(_store, m).then<PayrollEstimate?>((v) => v, onError: (_) => null),
     ]);
-    return (month: m, settings: r[0] as PayrollSettings, report: r[1] as PayrollReport, rows: r[2] as List<PayrollRow>);
+    return (
+      month: m,
+      settings: r[0] as PayrollSettings,
+      report: r[1] as PayrollReport,
+      rows: r[2] as List<PayrollRow>,
+      estimate: r[3] as PayrollEstimate?,
+    );
   }
 
   void _reload() => setState(() {
@@ -217,6 +225,83 @@ class _PayrollScreenState extends State<PayrollScreen> {
     final name = c.text.trim();
     if (ok != true) return;
     await _run(() => _repo.setPayrollCompany(_store, name), name.isEmpty ? '已清掉，薪資單抬頭改回店名' : '已儲存薪資單抬頭');
+  }
+
+  /// 薪資預估（ops 0129）：薪率×班表；過完的月份草稿有填就用草稿的；發布後另外顯示實際應發
+  Widget _estimateCard(DateTime month, PayrollEstimate e) {
+    final visible = e.rows.where((r) => !r.hidden && r.basis != 'none').toList();
+    Widget part(String type, String label) => Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('$label・${e.countOf(type)} 人', style: TextStyle(color: AppColors.muted, fontSize: AppType.caption)),
+            Text(ntd(e.totalOf(type)), style: const TextStyle(fontSize: AppType.small, fontFeatures: tabular)),
+          ]),
+        );
+    return SectionCard(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.baseline, textBaseline: TextBaseline.alphabetic, children: [
+          Expanded(child: Text('${month.month} 月薪資預估', style: TextStyle(color: AppColors.muted))),
+          if (e.published) Text('已發布', style: TextStyle(color: AppColors.good, fontSize: AppType.small)),
+        ]),
+        const SizedBox(height: 2),
+        Text(ntd(e.total), style: const TextStyle(fontSize: AppType.display, fontWeight: AppFont.figure, fontFeatures: tabular)),
+        if (e.actualTotal != null)
+          Text('實際應發 ${ntd(e.actualTotal!)}',
+              style: TextStyle(color: AppColors.good, fontSize: AppType.small, fontFeatures: tabular)),
+        const SizedBox(height: 10),
+        Row(children: [part('monthly', '月薪'), part('daily', '日薪'), part('hourly', '時薪')]),
+        const SizedBox(height: 10),
+        Text('應發＝扣勞健保前。月薪算整月，日薪、時薪照班表的天數、時數；月份過完、薪資有填的改用填的。',
+            style: TextStyle(color: AppColors.muted, fontSize: AppType.caption)),
+        if (_owner)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text('總覽的人事（基底）沒手動填時，自動用${e.published ? '實際應發' : '這個數字'}。',
+                style: TextStyle(color: AppColors.muted, fontSize: AppType.caption)),
+          ),
+        if (e.untimed > 0)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text('有 ${e.untimed} 班沒有設時間，沒算進時數。到「出勤管理 → 比對班表 → 班的時間」設定後會自動算進來。',
+                style: TextStyle(color: AppColors.warn, fontSize: AppType.small)),
+          ),
+        if (e.hasHidden)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text('不含你自己那一列', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+          ),
+        Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            childrenPadding: const EdgeInsets.only(bottom: 8),
+            title: Text('每個人怎麼算（${visible.length} 人）', style: const TextStyle(fontSize: AppType.small)),
+            children: [
+              for (final r in visible)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 5),
+                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(r.name, style: const TextStyle(fontSize: AppType.small)),
+                        Text(
+                            [
+                              r.howLabel,
+                              if ((r.extra ?? 0) != 0) '獎金、加班等 ＋${ntd(r.extra!)}',
+                              if (r.untimed > 0) '${r.untimed} 班沒設時間',
+                            ].join('・'),
+                            style: TextStyle(
+                                color: r.untimed > 0 ? AppColors.warn : AppColors.muted, fontSize: AppType.caption)),
+                      ]),
+                    ),
+                    Text(ntd(r.estimate ?? 0), style: const TextStyle(fontSize: AppType.small, fontFeatures: tabular)),
+                  ]),
+                ),
+            ],
+          ),
+        ),
+      ]),
+    );
   }
 
   /// locked：載入中（切月、重新整理）或正在做事，所有按鈕都先停用
@@ -410,6 +495,7 @@ class _PayrollScreenState extends State<PayrollScreen> {
                       style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
                 ),
               ],
+              if (d.estimate != null) ...[_estimateCard(d.month, d.estimate!), const SizedBox(height: 8)],
               if (d.report.status == null)
                 SectionCard(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

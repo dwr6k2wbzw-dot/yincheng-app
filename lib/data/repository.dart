@@ -77,6 +77,8 @@ abstract class Repository {
   // 租金／人事成本（只有老闆；資料庫 RLS 也只允許老闆）
   Future<FixedCosts> fixedCosts(String storeId, DateTime month);
   Future<void> saveFixedCost(String storeId, DateTime month, String category, double amount);
+  /// 清掉手動填的租金／人事基底（人事清掉後改用薪資預估；ops 0129）
+  Future<void> clearFixedCost(String storeId, DateTime month, String category);
   // 損益手動支出明細（只有老闆；資料庫 0037 RLS 也只允許老闆）
   Future<List<ExpenseItem>> expenseItems(String storeId, DateTime month);
   Future<void> saveExpenseItem(String storeId, DateTime month, ExpenseItem item, {bool isNew = false});
@@ -362,6 +364,10 @@ abstract class Repository {
   Future<int> preparePayroll(String storeId, DateTime month);
   Future<List<PayrollRow>> payrollMonth(String storeId, DateTime month);
   Future<PayrollReport> payrollReport(String storeId, DateTime month);
+  /// 薪資預估（ops 0129）：每個人照薪率×班表算應發；老闆、店長（店長看不到自己那列）
+  Future<PayrollEstimate> payrollEstimate(String storeId, DateTime month);
+  /// 上次讀到的薪資預估（總覽先顯示用；沒有＝null）
+  PayrollEstimate? peekPayrollEstimate(String storeId, DateTime month) => null;
   /// 存一個人的薪資；days／hours 傳 null＝用打卡帶入的值。回傳實發金額。
   /// extras（ops 0126）：全勤、勞保、健保、眷屬健保、所得稅、領現、自訂項目；傳 null＝不動
   Future<double?> savePayrollEntry(String storeId, String personId, DateTime month,

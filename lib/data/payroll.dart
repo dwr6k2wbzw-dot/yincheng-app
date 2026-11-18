@@ -459,3 +459,96 @@ class PayrollSlip {
     ];
   }
 }
+
+/// 薪資預估的一個人（ops 0129 payroll_estimate）。金額都是「應發」（還沒扣勞健保、所得稅、扣項）
+class PayrollEstimateRow {
+  final String personId;
+  final String name;
+  final String? payType;
+  final double? rate;
+  /// monthly 月薪／schedule 照班表／payroll 照薪資草稿（月份過完、草稿有填）／none 沒有薪率
+  final String basis;
+  final double? days;
+  final double? hours;
+  final int schedDays;
+  final double schedHours;
+  /// 班表上沒有時間的班（例如 O 還沒設時間），沒算進時數
+  final int untimed;
+  /// 草稿裡的獎金、全勤、自訂收入、加班費
+  final double? extra;
+  final double? estimate;
+  /// 已發布的應發（沒發布＝null）
+  final double? actual;
+  final bool published;
+  /// 店長自己那一列：金額都是 null
+  final bool hidden;
+  const PayrollEstimateRow({
+    required this.personId,
+    required this.name,
+    this.payType,
+    this.rate,
+    this.basis = 'schedule',
+    this.days,
+    this.hours,
+    this.schedDays = 0,
+    this.schedHours = 0,
+    this.untimed = 0,
+    this.extra,
+    this.estimate,
+    this.actual,
+    this.published = false,
+    this.hidden = false,
+  });
+  factory PayrollEstimateRow.fromRow(Map<String, dynamic> r) => PayrollEstimateRow(
+        personId: r['person_id'] as String,
+        name: r['name'] as String? ?? '',
+        payType: r['pay_type'] as String?,
+        rate: _numOrNull(r['rate']),
+        basis: r['basis'] as String? ?? 'schedule',
+        days: _numOrNull(r['days']),
+        hours: _numOrNull(r['hours']),
+        schedDays: (r['sched_days'] as num?)?.toInt() ?? 0,
+        schedHours: _numOrNull(r['sched_hours']) ?? 0,
+        untimed: (r['untimed'] as num?)?.toInt() ?? 0,
+        extra: _numOrNull(r['extra']),
+        estimate: _numOrNull(r['estimate']),
+        actual: _numOrNull(r['actual']),
+        published: r['published'] as bool? ?? false,
+        hidden: r['hidden'] as bool? ?? false,
+      );
+
+  /// 一行說明怎麼算的，例如「時薪 200 × 29.5 小時（班表）」
+  String get howLabel {
+    String n(num v) => v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
+    String g(num v) => v.round().toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ',');
+    final r = rate == null ? '' : ' ${g(rate!)}';
+    final src = basis == 'payroll' ? '薪資草稿' : '班表';
+    return switch (payType) {
+      _ when basis == 'none' => '沒有薪資資料',
+      'monthly' => '月薪$r',
+      'daily' => '日薪$r × ${n(days ?? 0)} 天（$src）',
+      'hourly' => '時薪$r × ${n(hours ?? 0)} 小時（$src）',
+      _ => '',
+    };
+  }
+}
+
+/// 薪資預估合計（給薪資頁、總覽的人事基底）
+class PayrollEstimate {
+  final List<PayrollEstimateRow> rows;
+  const PayrollEstimate(this.rows);
+
+  bool get published => rows.any((r) => r.published);
+  /// 有看不到的列（店長自己）：合計不完整
+  bool get hasHidden => rows.any((r) => r.hidden);
+  /// 看得到的人的預估合計
+  double get total => rows.fold(0.0, (a, r) => a + (r.estimate ?? 0));
+  /// 已發布的實際應發合計（沒發布＝null）
+  double? get actualTotal => published ? rows.fold<double>(0.0, (a, r) => a + (r.actual ?? 0)) : null;
+  /// 總覽的人事基底沒手動填時用這個：發布了＝實際應發，沒發布＝預估
+  double get autoBase => actualTotal ?? total;
+  /// 班表上沒時間、沒算進時數的班
+  int get untimed => rows.where((r) => !r.hidden).fold(0, (a, r) => a + r.untimed);
+  double totalOf(String type) => rows.where((r) => r.payType == type).fold(0.0, (a, r) => a + (r.estimate ?? 0));
+  int countOf(String type) => rows.where((r) => r.payType == type && !r.hidden).length;
+}

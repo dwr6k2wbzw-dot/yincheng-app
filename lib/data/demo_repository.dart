@@ -666,6 +666,12 @@ class DemoRepository implements Repository {
     _fixed['$storeId-${month.year}-${month.month}-$category'] = amount;
   }
 
+  @override
+  Future<void> clearFixedCost(String storeId, DateTime month, String category) async {
+    if (_isStaff) throw Exception('message: 沒有權限執行這個動作。,');
+    _fixed.remove('$storeId-${month.year}-${month.month}-$category');
+  }
+
   final _expItems = <String, List<ExpenseItem>>{};  // 店家-年月 → 明細
   String _ek(String s, DateTime m) => '$s-${m.year}-${m.month}';
   // 0076 廠商資料（示範資料，只有老闆、店長看得到）
@@ -2038,6 +2044,38 @@ class DemoRepository implements Repository {
   Future<void> setPayrollExempt(String storeId, String personId, bool exempt) async {
     if (_isStaff || _isManager) throw Exception('message: 不計薪只有老闆能設,');
     exempt ? _payExempt.add(personId) : _payExempt.remove(personId);
+  }
+
+  @override
+  PayrollEstimate? peekPayrollEstimate(String storeId, DateTime month) => null;
+
+  /// 示範：照班表算（月薪整月、日薪×上班天數、時薪×上班天數×8 小時；O 當作沒設時間）
+  @override
+  Future<PayrollEstimate> payrollEstimate(String storeId, DateTime month) async {
+    _payNeedManager();
+    final k = _payKey(storeId, month), sm = await shiftMonth(storeId, month);
+    final pub = _payStatus[k] == 'published', self = _isManager && sm.people.isNotEmpty ? sm.people.first.id : null;
+    return PayrollEstimate([
+      for (final (i, p) in sm.people.indexed)
+        if (!_payExempt.contains(p.id))
+          () {
+            final type = i == 0 ? 'daily' : (p.kind == 'part' ? 'hourly' : 'monthly');
+            final base = switch (type) { 'daily' => 1800.0, 'monthly' => 36000.0 + i * 1000, _ => 200.0 };
+            final marks = (sm.marks[p.id] ?? const <int, String>{}).values.where(ShiftMonth.isOn).toList();
+            final untimed = marks.where((m) => m == 'O').length, days = marks.length;
+            final hours = (days - untimed) * 8.0;
+            final row = _payRows[k]?[p.id];
+            final extra = type == 'monthly' ? (row?.bonus ?? 0) + (row?.extras.attendanceBonus ?? 1000) : 0.0;
+            final est = switch (type) { 'daily' => base * days, 'hourly' => base * hours, _ => base } + extra;
+            final hide = p.id == self;
+            return PayrollEstimateRow(
+                personId: p.id, name: p.label, payType: type, rate: hide ? null : base,
+                basis: type == 'monthly' ? 'monthly' : 'schedule',
+                days: hide || type != 'daily' ? null : days.toDouble(), hours: hide || type != 'hourly' ? null : hours,
+                schedDays: days, schedHours: hours, untimed: untimed, extra: hide ? null : extra,
+                estimate: hide ? null : est, actual: !hide && pub ? row?.gross : null, published: pub, hidden: hide);
+          }(),
+    ]);
   }
 
   @override
