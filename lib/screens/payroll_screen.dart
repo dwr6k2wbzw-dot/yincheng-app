@@ -294,10 +294,10 @@ class _PayrollScreenState extends State<PayrollScreen> {
                             [
                               r.howLabel,
                               if ((r.extra ?? 0) != 0) '獎金、加班等 ＋${ntd(r.extra!)}',
-                              if (r.untimed > 0) '${r.untimed} 班沒設時間',
+                              if (r.untimed > 0 && r.basis == 'schedule') '${r.untimed} 班沒設時間',
                             ].join('・'),
                             style: TextStyle(
-                                color: r.untimed > 0 ? AppColors.warn : AppColors.muted, fontSize: AppType.caption)),
+                                color: r.untimed > 0 && r.basis == 'schedule' ? AppColors.warn : AppColors.muted, fontSize: AppType.caption)),
                       ]),
                     ),
                     Text(ntd(r.estimate ?? 0), style: const TextStyle(fontSize: AppType.small, fontFeatures: tabular)),

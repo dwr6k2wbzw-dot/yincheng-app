@@ -557,8 +557,8 @@ class PayrollEstimate {
     ];
     return parts.isEmpty ? null : parts.join('；');
   }
-  /// 班表上沒時間、沒算進時數的班
-  int get untimed => rows.where((r) => !r.hidden).fold(0, (a, r) => a + r.untimed);
+  /// 班表上沒時間、沒算進時數的班（只算照班表算的人；用薪資草稿時數的不影響）
+  int get untimed => rows.where((r) => !r.hidden && r.basis == 'schedule').fold(0, (a, r) => a + r.untimed);
   double totalOf(String type) => rows.where((r) => r.payType == type).fold(0.0, (a, r) => a + (r.estimate ?? 0));
   int countOf(String type) => rows.where((r) => r.payType == type && !r.hidden).length;
 }
