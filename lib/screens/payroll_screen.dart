@@ -259,6 +259,12 @@ class _PayrollScreenState extends State<PayrollScreen> {
             child: Text('總覽的人事（基底）沒手動填時，自動用${e.published ? '實際應發' : '這個數字'}。',
                 style: TextStyle(color: AppColors.muted, fontSize: AppType.caption)),
           ),
+        if (e.missingNames.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text('${e.missingNames.join('、')} 沒有薪資資料，預估算 0 元。到「員工資料」新增薪資後會自動算進來。',
+                style: TextStyle(color: AppColors.warn, fontSize: AppType.small)),
+          ),
         if (e.untimed > 0)
           Padding(
             padding: const EdgeInsets.only(top: 6),

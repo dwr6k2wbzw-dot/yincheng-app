@@ -376,6 +376,18 @@ void main() {
       expect(e.hasHidden, isTrue);
       expect(e.countOf('monthly'), 1);
     });
+    test('沒有薪資資料的人：列出名字、提醒預估不完整（Codex P2）', () {
+      final none = {...row('n', 'hourly', 0), 'rate': null, 'basis': 'none', 'estimate': null};
+      final e = PayrollEstimate([
+        PayrollEstimateRow.fromRow(row('a', 'monthly', 40000)),
+        PayrollEstimateRow.fromRow(none),
+        PayrollEstimateRow.fromRow(row('me', 'monthly', 0, hidden: true)),
+      ]);
+      expect(e.missingNames, ['示範n']);
+      expect(e.incompleteNote, contains('示範n 沒有薪資資料'));
+      expect(PayrollEstimate([PayrollEstimateRow.fromRow(row('a', 'monthly', 40000))]).incompleteNote, isNull);
+      expect(PayrollEstimate([PayrollEstimateRow.fromRow(row('c', 'hourly', 100, untimed: 2))]).incompleteNote, '2 班沒設時間，沒算進時數');
+    });
     test('怎麼算的說明', () {
       expect(PayrollEstimateRow.fromRow(row('c', 'hourly', 5900)).howLabel, '時薪 200 × 29.5 小時（班表）');
       expect(PayrollEstimateRow.fromRow(row('b', 'daily', 600)).howLabel, '日薪 200 × 3 天（班表）');

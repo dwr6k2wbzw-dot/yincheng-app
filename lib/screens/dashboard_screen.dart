@@ -39,6 +39,8 @@ class _DashboardData {
   double? get payrollBase => fixed.payroll ?? payrollEst?.autoBase;
   /// 人事基底是自動帶入的（沒手動填）
   bool get payrollAuto => fixed.payroll == null && payrollEst != null;
+  /// 人事基底是自動帶入、但預估不完整時的提醒（Codex P2：缺薪資資料的人不能悄悄算 0）
+  String? get payrollAutoNote => payrollAuto && !payrollEst!.published ? payrollEst!.incompleteNote : null;
   String get payrollBaseLabel => !payrollAuto
       ? '人事（基底）'
       : payrollEst!.published
@@ -739,6 +741,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Text('尚未輸入${missing.join('、')}，損益還不完整',
                 style: TextStyle(color: AppColors.warn, fontSize: AppType.small)),
           ),
+        if (d.payrollAutoNote != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text('人事預估不完整：${d.payrollAutoNote}',
+                style: TextStyle(color: AppColors.warn, fontSize: AppType.small)),
+          ),
         const SizedBox(height: 10),
         // 排序：租金、人事、進貨、雜項（老闆 2026-10-29）
         line('營業收入', s.revenue, minus: false),
@@ -809,6 +817,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       warnings: [
         if (d.fixed.rent == null) '尚未輸入租金',
         if (d.payrollBase == null) '尚未輸入人事',
+        if (d.payrollAutoNote != null) '人事預估不完整：${d.payrollAutoNote}',
       ],
     );
     try {

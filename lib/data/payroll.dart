@@ -547,6 +547,16 @@ class PayrollEstimate {
   double? get actualTotal => published ? rows.fold<double>(0.0, (a, r) => a + (r.actual ?? 0)) : null;
   /// 總覽的人事基底沒手動填時用這個：發布了＝實際應發，沒發布＝預估
   double get autoBase => actualTotal ?? total;
+  /// 沒有薪資資料、預估算 0 的人（不含看不到的那一列）
+  List<String> get missingNames => [for (final r in rows) if (!r.hidden && r.basis == 'none') r.name];
+  /// 預估不完整的提醒（沒有薪資資料的人、沒設時間的班）；沒有＝null
+  String? get incompleteNote {
+    final parts = [
+      if (missingNames.isNotEmpty) '${missingNames.join('、')} 沒有薪資資料，算 0 元',
+      if (untimed > 0) '$untimed 班沒設時間，沒算進時數',
+    ];
+    return parts.isEmpty ? null : parts.join('；');
+  }
   /// 班表上沒時間、沒算進時數的班
   int get untimed => rows.where((r) => !r.hidden).fold(0, (a, r) => a + r.untimed);
   double totalOf(String type) => rows.where((r) => r.payType == type).fold(0.0, (a, r) => a + (r.estimate ?? 0));
