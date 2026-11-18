@@ -537,8 +537,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 IconButton(tooltip: '下個月', onPressed: () => _shiftMonth(1), icon: const Icon(Icons.chevron_right)),
               ]),
               _todayCard(d),
-              AttendanceCard(
-                  membership: widget.membership, data: d, codeTimes: _codeTimes),
+              // 公用帳號（打卡平板）不放打卡卡片：打卡在第一頁（老闆 2026-11-18）
+              if (AppScope.of(context).kiosk?.storeId != widget.membership.storeId)
+                AttendanceCard(
+                    membership: widget.membership, data: d, codeTimes: _codeTimes),
               _draftCard(d),
               if (d.people.any((p) => p.active))
                 ShiftPlanCard(
