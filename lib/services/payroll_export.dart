@@ -52,18 +52,18 @@ class PayrollExport {
     return (income: inc, deduction: ded);
   }
 
-  /// 一個人每一欄的金額（照 [columns] 的欄位名）
-  Map<String, double> amountsOf(PayrollRow r) {
-    final s = slipOf(r), m = <String, double>{};
-    final inc = s.incomeLines();
-    for (final (i, l) in inc.indexed) {
+  /// 一個人每一欄的金額（照 [columns] 的欄位名）。收入、支出分開放：
+  /// 自訂項目可能跟另一邊同名（收入「獎金」、支出也自訂「獎金」），不能加在一起。
+  ({Map<String, double> income, Map<String, double> deduction}) amountsOf(PayrollRow r) {
+    final s = slipOf(r), inc = <String, double>{}, ded = <String, double>{};
+    for (final (i, l) in s.incomeLines().indexed) {
       final k = i == 0 ? '本薪' : l.label;
-      m[k] = (m[k] ?? 0) + l.amount;
+      inc[k] = (inc[k] ?? 0) + l.amount;
     }
     for (final l in s.deductionLines()) {
-      m[l.label] = (m[l.label] ?? 0) + l.amount;
+      ded[l.label] = (ded[l.label] ?? 0) + l.amount;
     }
-    return m;
+    return (income: inc, deduction: ded);
   }
 
   static String qtyOf(PayrollRow r) => switch (r.payType) {
@@ -118,8 +118,9 @@ Uint8List buildPayrollXlsx(PayrollExport p) {
   }
   r++;
 
-  final totals = <String, double>{};
-  void addTotal(String k, double v) => totals[k] = (totals[k] ?? 0) + v;
+  // 合計照欄位位置記（欄名可能重複：收入、支出各有同名的自訂項目）
+  final totals = <int, double>{};
+  void addTotal(int col, double v) => totals[col] = (totals[col] ?? 0) + v;
   for (final row in p.people) {
     var c = 0;
     put(c++, TextCellValue(row.slipName));
@@ -133,39 +134,40 @@ Uint8List buildPayrollXlsx(PayrollExport p) {
       continue;
     }
     final s = p.slipOf(row), a = p.amountsOf(row);
+    void money2(double v, {bool b = false}) {
+      put(c, DoubleCellValue(v), style: b ? moneyBold : money);
+      addTotal(c, v);
+      c++;
+    }
+
     for (final k in cols.income) {
-      if (a[k] != null) {
-        put(c, DoubleCellValue(a[k]!), style: money);
-        addTotal(k, a[k]!);
+      final v = a.income[k];
+      if (v != null) {
+        money2(v);
+      } else {
+        c++;
       }
-      c++;
     }
-    put(c++, DoubleCellValue(s.incomeTotal), style: moneyBold);
-    addTotal('收入合計', s.incomeTotal);
+    money2(s.incomeTotal, b: true);
     for (final k in cols.deduction) {
-      if (a[k] != null) {
-        put(c, DoubleCellValue(a[k]!), style: money);
-        addTotal(k, a[k]!);
+      final v = a.deduction[k];
+      if (v != null) {
+        money2(v);
+      } else {
+        c++;
       }
-      c++;
     }
-    put(c++, DoubleCellValue(s.deductionTotal), style: moneyBold);
-    addTotal('支出合計', s.deductionTotal);
-    final gross = s.gross!.roundToDouble();
-    put(c++, DoubleCellValue(gross), style: money);
-    addTotal('實領金額', gross);
-    put(c++, DoubleCellValue(s.cashPaid), style: money);
-    addTotal('領現金額', s.cashPaid);
-    put(c++, DoubleCellValue(s.transfer!), style: moneyBold);
-    addTotal('實際入帳金額', s.transfer!);
+    money2(s.deductionTotal, b: true);
+    money2(s.gross!.roundToDouble());
+    money2(s.cashPaid);
+    money2(s.transfer!, b: true);
     if ((row.note ?? '').trim().isNotEmpty) put(c, TextCellValue(row.note!.trim()));
     r++;
   }
 
   put(0, TextCellValue('合計（${p.people.length} 人）'), style: bold);
-  for (final (c, h) in head.indexed) {
-    if (c < 4 || totals[h] == null) continue;
-    put(c, DoubleCellValue(totals[h]!), style: moneyBold);
+  for (final e in totals.entries) {
+    put(e.key, DoubleCellValue(e.value), style: moneyBold);
   }
 
   // 欄寬照表頭字數（中文一個字約 2 格），最少 11 格，數字才放得下

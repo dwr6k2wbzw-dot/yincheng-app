@@ -31,8 +31,10 @@ void main() {
   });
 
   test('每個人的金額跟薪資單一樣', () {
-    expect(p.amountsOf(monthly), {'本薪': 40000, '加班費': 400, '獎金': 1000, '代扣勞保費': 900, '代扣健保費': 600, '借支': 300});
-    expect(p.amountsOf(hourly), {'本薪': 6100, '交通補助': 500});
+    expect(p.amountsOf(monthly).income, {'本薪': 40000, '加班費': 400, '獎金': 1000});
+    expect(p.amountsOf(monthly).deduction, {'代扣勞保費': 900, '代扣健保費': 600, '借支': 300});
+    expect(p.amountsOf(hourly).income, {'本薪': 6100, '交通補助': 500});
+    expect(p.amountsOf(hourly).deduction, isEmpty);
     expect(p.slipOf(monthly).transfer, 39600 - 5000);
   });
 
@@ -58,5 +60,25 @@ void main() {
     expect(double.parse(cell(total, '實際入帳金額')), 34600 + 6600);
     expect(rows.any((r) => r.first == '店長' || r.first == '老闆'), isFalse);
     expect(rows.any((r) => r.isNotEmpty && r.first.contains('不含你自己')), isTrue);
+  });
+
+  test('收入、支出同名的項目分開算（Codex P2）', () {
+    const same = PayrollRow(
+        personId: 'f', name: '周同名', payType: 'monthly', baseAmount: 30000, bonus: 1000,
+        extras: PayExtras(items: [PayItem(income: false, label: '獎金', amount: 200)]), gross: 30000 + 1000 - 200);
+    final q = PayrollExport(storeName: '虛構店', month: DateTime(2031, 3, 1), rows: const [same]);
+    expect(q.amountsOf(same).income['獎金'], 1000);
+    expect(q.amountsOf(same).deduction['獎金'], 200);
+    final x = Excel.decodeBytes(buildPayrollXlsx(q));
+    final rows = x.tables['薪資表']!.rows.map((r) => r.map((c) => c?.value?.toString() ?? '').toList()).toList();
+    final h = rows.firstWhere((r) => r.isNotEmpty && r.first == '姓名');
+    final first = h.indexOf('獎金'), second = h.lastIndexOf('獎金');
+    expect(second, greaterThan(first));
+    for (final r in [rows.firstWhere((r) => r.first == '周同名'), rows.firstWhere((r) => r.first.startsWith('合計'))]) {
+      expect(double.parse(r[first]), 1000);
+      expect(double.parse(r[second]), 200);
+      expect(double.parse(r[h.indexOf('收入合計')]), 31000);
+      expect(double.parse(r[h.indexOf('支出合計')]), 200);
+    }
   });
 }
