@@ -266,6 +266,8 @@ abstract class Repository {
   // 0061 時間軸：桌位、現場客
   Future<List<ReservationTable>> reservationTables(String storeId);
   Future<void> saveReservationTable(String storeId, ReservationTable t);
+  /// 刪除桌位（ops 0132；老闆、店長）：今天以後還有訂位排在這張桌就不能刪
+  Future<void> deleteReservationTable(String tableId);
   /// 座位圖排版（老闆 2026-11-01）：只存每張桌的位置與大小
   Future<void> saveTableLayout(String storeId, List<ReservationTable> tables);
   Future<void> addWalkIn(String storeId,

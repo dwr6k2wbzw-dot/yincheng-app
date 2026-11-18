@@ -1745,6 +1745,10 @@ class SupabaseRepository implements Repository {
   }
 
   @override
+  Future<void> deleteReservationTable(String tableId) async =>
+      _db.rpc('reservation_table_delete', params: {'p_table': tableId});
+
+  @override
   Future<void> saveTableLayout(String storeId, List<ReservationTable> tables) async {
     for (final t in tables) {
       if (t.id.isEmpty) continue;

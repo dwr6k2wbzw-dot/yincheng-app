@@ -1306,6 +1306,17 @@ class DemoRepository implements Repository {
     }
   }
   @override
+  Future<void> deleteReservationTable(String tableId) async {
+    for (final list in _demoTables.values) {
+      final i = list.indexWhere((x) => x.id == tableId);
+      if (i < 0) continue;
+      final t = list[i];
+      list[i] = ReservationTable(id: t.id, name: t.name, seats: t.seats, combinable: t.combinable, sort: t.sort, active: false,
+          posX: t.posX, posY: t.posY, w: t.w, h: t.h, shape: t.shape, floor: t.floor, deleted: true);
+    }
+  }
+
+  @override
   Future<void> saveTableLayout(String storeId, List<ReservationTable> tables) async {
     final list = _demoTables[storeId] ??= [];
     for (final t in tables) {
