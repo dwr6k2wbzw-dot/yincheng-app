@@ -223,6 +223,10 @@ class ReservationTable {
   final String floor;
   /// 已刪除（ops 0132）：桌位設定、座位圖、排桌都不出現；舊訂位照樣看得到桌號
   final bool deleted;
+  /// 只有這一天加開的桌（ops 0133）：其他天不出現、不能排；null＝每天都有
+  final DateTime? onlyDate;
+  /// 這天設了不開（不是存在資料庫的欄位；tablesForDay 算出來給畫面標示）
+  final bool dayOff;
   const ReservationTable({
     this.id = '',
     required this.name,
@@ -237,15 +241,17 @@ class ReservationTable {
     this.shape = 'round',
     this.floor = '1F',
     this.deleted = false,
+    this.onlyDate,
+    this.dayOff = false,
   });
   bool get placed => posX != null && posY != null;
-  ReservationTable copyWith({int? posX, int? posY, int? w, int? h, String? shape, String? floor, bool clearPos = false}) => ReservationTable(
+  ReservationTable copyWith({int? posX, int? posY, int? w, int? h, String? shape, String? floor, bool? active, bool? dayOff, bool clearPos = false}) => ReservationTable(
         id: id,
         name: name,
         seats: seats,
         combinable: combinable,
         sort: sort,
-        active: active,
+        active: active ?? this.active,
         posX: clearPos ? null : (posX ?? this.posX),
         posY: clearPos ? null : (posY ?? this.posY),
         w: w ?? this.w,
@@ -253,6 +259,8 @@ class ReservationTable {
         shape: shape ?? this.shape,
         floor: floor ?? this.floor,
         deleted: deleted,
+        onlyDate: onlyDate,
+        dayOff: dayOff ?? this.dayOff,
       );
   factory ReservationTable.fromRow(Map<String, dynamic> r) => ReservationTable(
         id: r['id'] as String,
@@ -268,7 +276,24 @@ class ReservationTable {
         shape: (r['shape'] as String?) ?? 'round',
         floor: (r['floor'] as String?) ?? '1F',
         deleted: r['deleted_at'] != null,
+        onlyDate: r['only_date'] == null ? null : DateTime.parse(r['only_date'] as String),
       );
+}
+
+/// 某一天看得到的桌（ops 0133）：只有別天加開的不列；這天設了不開的變成停用（有訂位的時間軸照樣列出來）
+List<ReservationTable> tablesForDay(List<ReservationTable> all, DateTime day, Set<String> offIds) => [
+      for (final t in all)
+        if (t.onlyDate == null || sameDay(t.onlyDate!, day)) offIds.contains(t.id) ? t.copyWith(active: false, dayOff: true) : t,
+    ];
+
+bool sameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
+
+/// 某張桌某一天不開（ops 0133）
+class TableDayOff {
+  final String tableId;
+  final DateTime date;
+  const TableDayOff(this.tableId, this.date);
+  factory TableDayOff.fromRow(Map<String, dynamic> r) => TableDayOff(r['table_id'] as String, DateTime.parse(r['off_date'] as String));
 }
 
 String hm(Object? v) {

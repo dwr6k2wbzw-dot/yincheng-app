@@ -268,6 +268,9 @@ abstract class Repository {
   Future<void> saveReservationTable(String storeId, ReservationTable t);
   /// 刪除桌位（ops 0132；老闆、店長）：今天以後還有訂位排在這張桌就不能刪
   Future<void> deleteReservationTable(String tableId);
+  /// 某張桌某一天不開（ops 0133；老闆、店長）：那天已經有訂位排在這張桌就不能設
+  Future<List<TableDayOff>> tableDaysOff(String storeId, DateTime from, DateTime to);
+  Future<void> setTableDayOff(String tableId, DateTime date, bool off);
   /// 座位圖排版（老闆 2026-11-01）：只存每張桌的位置與大小
   Future<void> saveTableLayout(String storeId, List<ReservationTable> tables);
   Future<void> addWalkIn(String storeId,

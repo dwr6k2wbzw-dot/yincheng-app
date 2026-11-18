@@ -127,6 +127,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
       _repo.reservations(_store, day, day),
       _repo.specialDays(_store, day, day).then<List<ReservationSpecialDay>>((v) => v, onError: (_) => <ReservationSpecialDay>[]),
       _repo.reservationTables(_store).then<List<ReservationTable>>((v) => v, onError: (_) => <ReservationTable>[]),
+      _repo.tableDaysOff(_store, day, day).then<List<TableDayOff>>((v) => v, onError: (_) => <TableDayOff>[]),
     ]);
     final list = r[1] as List<Reservation>;
     final special = (r[2] as List<ReservationSpecialDay>).firstOrNull;
@@ -137,7 +138,8 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
       guests = {}; // 讀不到熟客資料不影響訂位清單
     }
     if (gen == _loadGen) {
-      _tables = r[3] as List<ReservationTable>;
+      // 只有別天加開的桌不列、這天不開的變停用（ops 0133）
+      _tables = tablesForDay(r[3] as List<ReservationTable>, day, {for (final o in r[4] as List<TableDayOff>) o.tableId});
       _special = special;
       _guests = guests;
     }
@@ -195,7 +197,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
                     icon: const Icon(Icons.table_restaurant_outlined),
                     onPressed: () async {
                       final changed = await Navigator.of(context).push<bool>(MaterialPageRoute(
-                        builder: (_) => ReservationTablesScreen(storeId: _store, storeName: widget.membership.storeName),
+                        builder: (_) => ReservationTablesScreen(storeId: _store, storeName: widget.membership.storeName, day: _day),
                       ));
                       if (changed == true) _reload();
                     },

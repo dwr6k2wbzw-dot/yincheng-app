@@ -5,6 +5,7 @@ import 'models.dart';
 import 'person_names.dart';
 import 'purchase_items_math.dart';
 import 'repository.dart';
+import '../services/clock.dart';
 
 /// 示範資料：不連線，數字全部是虛構的示範值（不是真實營收），只用來看畫面與操作流程。
 /// 登入任何帳號都會以「老闆」身分進入；帳號含 staff 則以員工身分進入（可測試權限差異）。
@@ -1290,6 +1291,8 @@ class DemoRepository implements Repository {
           const ReservationTable(id: 'S3', name: 'S3', seats: 10, combinable: true, sort: 63, posX: 3, posY: 5, floor: '1F'),
           const ReservationTable(id: 'S4', name: 'S4', seats: 10, combinable: true, sort: 64, posX: 5, posY: 5, floor: '1F'),
           for (var i = 5; i <= 7; i++) ReservationTable(id: 'S$i', name: 'S$i', seats: 1, combinable: true, sort: 60 + i, posX: i - 2, posY: 0, floor: '1F'),
+          // 只有後天加開的一張（ops 0133 示範）
+          ReservationTable(id: 'X1', name: '加開1', seats: 6, sort: 90, floor: '1F', onlyDate: _demoDay(2)),
         ])
       ]..sort((a, b) => a.sort != b.sort ? a.sort.compareTo(b.sort) : a.name.compareTo(b.name));
   @override
@@ -1298,7 +1301,8 @@ class DemoRepository implements Repository {
     final i = list.indexWhere((x) => x.id == t.id);
     final old = i >= 0 ? list[i] : null;
     final v = ReservationTable(id: t.id.isEmpty ? 'T${list.length + 1}' : t.id, name: t.name, seats: t.seats,
-        combinable: t.combinable, sort: t.sort, active: t.active, posX: old?.posX, posY: old?.posY, w: old?.w ?? 1, h: old?.h ?? 1, shape: old?.shape ?? 'round', floor: old?.floor ?? '1F');
+        combinable: t.combinable, sort: t.sort, active: t.active, posX: old?.posX, posY: old?.posY, w: old?.w ?? 1, h: old?.h ?? 1, shape: old?.shape ?? 'round', floor: old?.floor ?? '1F',
+        onlyDate: old?.onlyDate ?? t.onlyDate);
     if (i < 0) {
       list.add(v);
     } else {
@@ -1312,8 +1316,27 @@ class DemoRepository implements Repository {
       if (i < 0) continue;
       final t = list[i];
       list[i] = ReservationTable(id: t.id, name: t.name, seats: t.seats, combinable: t.combinable, sort: t.sort, active: false,
-          posX: t.posX, posY: t.posY, w: t.w, h: t.h, shape: t.shape, floor: t.floor, deleted: true);
+          posX: t.posX, posY: t.posY, w: t.w, h: t.h, shape: t.shape, floor: t.floor, deleted: true, onlyDate: t.onlyDate);
     }
+  }
+
+  static DateTime _demoDay(int plus) {
+    final n = taipeiNow();
+    return DateTime(n.year, n.month, n.day + plus);
+  }
+  late final List<TableDayOff> _demoDaysOff = [TableDayOff('A12', _demoDay(2)), TableDayOff('A12', _demoDay(5))];
+  @override
+  Future<List<TableDayOff>> tableDaysOff(String storeId, DateTime from, DateTime to) async {
+    final ids = {for (final t in _demoTables[storeId] ?? const <ReservationTable>[]) t.id};
+    final f = DateTime(from.year, from.month, from.day), e = DateTime(to.year, to.month, to.day);
+    return [for (final o in _demoDaysOff) if (ids.contains(o.tableId) && !o.date.isBefore(f) && !o.date.isAfter(e)) o]
+      ..sort((a, b) => a.date.compareTo(b.date));
+  }
+  @override
+  Future<void> setTableDayOff(String tableId, DateTime date, bool off) async {
+    final d = DateTime(date.year, date.month, date.day);
+    _demoDaysOff.removeWhere((o) => o.tableId == tableId && o.date == d);
+    if (off) _demoDaysOff.add(TableDayOff(tableId, d));
   }
 
   @override

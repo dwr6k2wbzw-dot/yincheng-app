@@ -1737,7 +1737,7 @@ class SupabaseRepository implements Repository {
   Future<void> saveReservationTable(String storeId, ReservationTable t) async {
     final v = {'name': t.name.trim(), 'seats': t.seats, 'combinable': t.combinable, 'sort': t.sort, 'active': t.active};
     if (t.id.isEmpty) {
-      await _db.from('reservation_tables').insert({'store_id': storeId, ...v});
+      await _db.from('reservation_tables').insert({'store_id': storeId, ...v, if (t.onlyDate != null) 'only_date': _day.format(t.onlyDate!)});
     } else {
       final rows = await _db.from('reservation_tables').update(v).eq('id', t.id).select('id');
       if (rows.isEmpty) throw Exception('message: 沒有權限修改桌位,');
@@ -1747,6 +1747,17 @@ class SupabaseRepository implements Repository {
   @override
   Future<void> deleteReservationTable(String tableId) async =>
       _db.rpc('reservation_table_delete', params: {'p_table': tableId});
+
+  @override
+  Future<List<TableDayOff>> tableDaysOff(String storeId, DateTime from, DateTime to) async {
+    final rows = await _db.from('reservation_table_days_off').select('table_id, off_date')
+        .eq('store_id', storeId).gte('off_date', _day.format(from)).lte('off_date', _day.format(to)).order('off_date');
+    return rows.map(TableDayOff.fromRow).toList();
+  }
+
+  @override
+  Future<void> setTableDayOff(String tableId, DateTime date, bool off) async =>
+      _db.rpc('reservation_table_day_off', params: {'p_table': tableId, 'p_date': _day.format(date), 'p_off': off});
 
   @override
   Future<void> saveTableLayout(String storeId, List<ReservationTable> tables) async {
