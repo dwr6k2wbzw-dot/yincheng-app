@@ -6,7 +6,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yincheng_ops/data/demo_repository.dart';
 import 'package:yincheng_ops/data/payroll.dart';
 import 'package:yincheng_ops/data/repository.dart';
-import 'package:yincheng_ops/services/payslip_html.dart';
 
 void main() {
   group('試算公式（和資料庫 app.payroll_total 一樣）', () {
@@ -111,7 +110,7 @@ void main() {
 
     test('每一行：底薪、加班費、獎金、勞健保（扣）合起來＝實發', () {
       final lines = slip.lines();
-      expect(lines.map((l) => l.label), ['底薪', '加班費', '獎金', '勞健保自付額']);
+      expect(lines.map((l) => l.label), ['底薪', '加班費', '獎金', '代扣勞健保費']);
       expect(lines.fold<double>(0, (a, l) => a + l.amount), slip.gross);
     });
 
@@ -129,9 +128,6 @@ void main() {
       for (final l in lines) {
         expect(l.amount, l.amount.roundToDouble(), reason: '${l.label} 要是整數元');
       }
-      final html = payslipHtml([odd]);
-      expect(html, contains('進位調整'));
-      expect(html, contains('1,976'));
     });
 
     test('時薪、日薪的說明寫出單價 × 數量', () {
@@ -139,50 +135,6 @@ void main() {
       expect(h.lines().first.detail, '200 × 82.5 小時');
       final d = PayrollSlip(month: DateTime(2026, 9, 1), storeName: 's', personName: 'p', payType: 'daily', baseAmount: 1800, days: 3);
       expect(d.lines().single.amount, 5400);
-    });
-
-    test('網頁版：名字、備註會跳脫（不會被當成 HTML），金額有千分位', () {
-      final html = payslipHtml([slip]);
-      expect(html, contains('王&lt;小明&gt;'));
-      expect(html, isNot(contains('王<小明>')));
-      expect(html, contains('含 A&amp;B 活動'));
-      expect(html, contains('36,500'));
-      // 0126：支出放在右邊那一欄，金額是正的
-      expect(html, contains('<td>勞健保自付額</td><td class="n">1,100</td>'));
-      expect(html, contains('<td>收入合計</td><td class="n">37,600</td><td>支出合計</td><td class="n">1,100</td>'));
-      expect(html, contains('2026 年 9 月薪資單'));
-    });
-
-    test('草稿在標題旁標「草稿／尚未發布」；金額欄標新臺幣（元）；已發布的不標草稿', () {
-      final draft = payslipHtml([slip]);
-      expect(draft, contains('<span class="draft">草稿／尚未發布</span></h1>'));
-      expect(draft, contains('<title>【草稿】'));
-      expect(draft, contains('金額・新臺幣（元）'));
-      final pub = payslipHtml([
-        PayrollSlip(
-            month: slip.month, storeName: '示範店', personName: '阿明', payType: 'hourly', baseAmount: 200, hours: 10,
-            gross: 2000, publishedAt: DateTime(2026, 10, 5))
-      ]);
-      expect(pub, isNot(contains('草稿')));
-      expect(pub, contains('金額・新臺幣（元）'));
-    });
-
-    test('管理頁的清單轉成薪資單：照清單的發布狀態標草稿（清單沒有發布時間，頁尾只寫已發布）', () {
-      const row = PayrollRow(personId: 'p1', name: '阿明', payType: 'hourly', baseAmount: 200, hours: 10, gross: 2000);
-      const pubRow = PayrollRow(
-          personId: 'p1', name: '阿明', status: 'published', payType: 'hourly', baseAmount: 200, hours: 10, gross: 2000);
-      final m = DateTime(2026, 9, 1);
-      final draft = PayrollSlip.fromPayrollRow(row, m, '示範店'), pub = PayrollSlip.fromPayrollRow(pubRow, m, '示範店');
-      expect(draft.published, isFalse);
-      expect(pub.published, isTrue);
-      expect(payslipHtml([draft]), contains('草稿／尚未發布'));
-      expect(payslipHtml([draft]), contains('<title>【草稿】'));
-      final html = payslipHtml([pub]);
-      expect(html, isNot(contains('草稿')));
-      expect(html, contains('<p class="foot">已發布・'));
-      // 多人一起印：有一張草稿就整份標草稿；全部已發布就不標
-      expect(payslipHtml([pub, draft]), contains('<title>【草稿】薪資單'));
-      expect(payslipHtml([pub, pub]), contains('<title>薪資單'));
     });
 
     // ---------- ops 0126：薪資單改成收入／支出兩欄（老闆 2026-11-17）----------
@@ -234,7 +186,7 @@ void main() {
     test('薪資單：收入、支出各一欄，有金額才列；收入合計 − 支出合計 ＝ 實發；實際入帳 ＝ 實發 − 領現', () {
       expect(payrollTotal(payType: 'monthly', base: 44000, otHours: 8.5, bonus: 3000, extras: rich.extras), 48330);
       expect(rich.incomeLines().map((l) => l.label), ['底薪', '加班費', '全勤獎金', '獎金', '交通津貼']);
-      expect(rich.deductionLines().map((l) => l.label), ['勞保費', '健保費', '眷屬健保費', '所得稅', '制服']);
+      expect(rich.deductionLines().map((l) => l.label), ['代扣勞保費', '代扣健保費', '代扣眷屬健保費', '所得稅', '制服']);
       expect(rich.deductionLines().every((l) => l.amount > 0), isTrue); // 支出那一欄金額是正的
       expect(rich.incomeTotal, 51300);
       expect(rich.deductionTotal, 2970);
@@ -270,42 +222,24 @@ void main() {
       expect(PayrollSlip(month: DateTime(2031, 3, 1), storeName: '虛構店', companyName: '  ', personName: 'p', payType: 'daily').title, '虛構店');
     });
 
-    test('網頁版（存成 PDF）：抬頭是公司全名、姓名、收入／支出兩欄、合計、領現、實際入帳、備註', () {
-      final html = payslipHtml([rich]);
-      expect(html, contains('<h1>虛構餐飲股份有限公司</h1>'));
-      expect(html, contains('2031 年 3 月薪資單'));
-      expect(html, contains('姓名：王大明'));
-      expect(html, contains('<th colspan="2">收入</th><th colspan="2">支出</th>'));
-      expect(html, contains('<td>全勤獎金</td><td class="n">2,000</td><td>眷屬健保費</td><td class="n">700</td>')); // 第三列：收入、支出並排
-      expect(html, contains('<td>收入合計</td><td class="n">51,300</td><td>支出合計</td><td class="n">2,970</td>'));
-      expect(html, contains('<td colspan="3">實發金額</td><td class="n">48,330</td>'));
-      expect(html, contains('<td colspan="3">領現金額</td><td class="n">5,000</td>'));
-      expect(html, contains('<td colspan="3">實際入帳金額</td><td class="n">43,330</td>'));
-      expect(html, contains('備註：三月調薪'));
-      expect(html, isNot(contains('虛構店'))); // 有公司全名就不印店名
-      // 沒有領現的人不印「領現金額」「實際入帳金額」
-      final plain = payslipHtml([slip]);
-      expect(plain, isNot(contains('領現金額')));
-      expect(plain, isNot(contains('實際入帳金額')));
-      expect(plain, contains('<h1>示範店 <span class="draft">'));
+    test('老闆 2026-11-18：底薪下面不再寫「月薪」', () {
+      final m = PayrollSlip(month: DateTime(2031, 3, 1), storeName: 's', personName: 'p', payType: 'monthly', baseAmount: 40000, gross: 40000);
+      expect(m.incomeLines().first.label, '底薪');
+      expect(m.incomeLines().first.detail, '');
     });
 
     test('管理頁的清單轉成薪資單：姓名用全名、帶公司名稱和其他項目', () {
       const row = PayrollRow(
-          personId: 'p1', name: '王大明（阿明）', slipName: '王大明', payType: 'hourly', baseAmount: 200, hours: 10,
+          personId: 'p1', name: '王大明', slipName: '王大明', payType: 'hourly', baseAmount: 200, hours: 10,
           extras: PayExtras(laborIns: 277), gross: 1723);
       final s = PayrollSlip.fromPayrollRow(row, DateTime(2031, 3, 1), '虛構店', companyName: '虛構餐飲股份有限公司');
       expect(s.personName, '王大明');
       expect(s.title, '虛構餐飲股份有限公司');
-      expect(s.deductionLines().single.label, '勞保費');
+      expect(s.deductionLines().single.label, '代扣勞保費');
       // 沒另外給 slipName 的（舊資料）照名字
       expect(const PayrollRow(personId: 'p2', name: '阿明', payType: 'hourly').slipName, '阿明');
     });
 
-    test('一次印多人：一人一頁', () {
-      final html = payslipHtml([slip, slip]);
-      expect('<section class="slip">'.allMatches(html).length, 2);
-    });
   });
 
   group('示範資料', () {

@@ -810,7 +810,7 @@ class ShiftPerson {
   }
   bool get isFull => kind == 'full';
 
-  /// 全名（暱稱）
+  /// 顯示用：有全名只顯示全名（老闆 2026-11-18）
   String get label => personLabel(name, fullName);
 
   /// 窄的地方（班表格子的名字欄）只放全名

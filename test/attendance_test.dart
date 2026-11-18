@@ -108,9 +108,9 @@ void main() {
       ];
       final lines = buildAttendanceCsv(rows).split('\r\n');
       expect(lines.first.split(',').length, 13);
-      expect(lines[1], startsWith('2026-10-31,小安,上班,2026-10-31 18:00:00,隱城,QR,正常,,,,,算,p1'));
+      expect(lines[1], startsWith('2026-10-31,小安,上班,2026-10-31 18:00:00,隱城,QR,正常,,,,,計入工時,p1'));
       expect(lines[2], contains('2026-10-31,小安,下班,2026-11-01 02:05:00,隱城,QR,待確認,'));
-      expect(lines[2], contains(",不採用,'=重複,,不算,p2"));
+      expect(lines[2], contains(",不採用,'=重複,,不計入工時,p2"));
       // 老闆 2026-11-15：待確認的確認前不計入工時，CSV 要標出來
       final pending = AttendanceExportRow(
           businessDate: DateTime(2026, 11, 1),
@@ -123,7 +123,7 @@ void main() {
           flags: 'expired',
           counted: false,
           punchId: 'p3');
-      expect(buildAttendanceCsv([pending]).split('\r\n')[1], endsWith(',待確認（不算）,p3'));
+      expect(buildAttendanceCsv([pending]).split('\r\n')[1], endsWith(',待確認（不計入工時）,p3'));
       expect(attendanceCsvBytes(rows).take(3), [0xEF, 0xBB, 0xBF]);
       expect(attendanceCsvName('隱城', DateTime(2026, 11, 1), DateTime(2026, 11, 15)), '出勤_隱城_20261101-20261115.csv');
     });
@@ -266,6 +266,66 @@ void main() {
       final staff = DemoRepository();
       await staff.signIn('staff@x', 'x');
       expect((await staff.staffDirectory('yc')).map((x) => x.personId), ['f0']);
+    });
+  });
+
+  // 老闆 2026-11-18：漏打下班不能顯示「正常」；核准補登時對照班表，差超過 30 分鐘標紅
+  group('漏打下班、補登對照班表', () {
+    AttendanceExportRow r(String id, String name, String type, DateTime at, {String review = '', String flags = ''}) =>
+        AttendanceExportRow(
+            businessDate: DateTime(at.year, at.month, at.day),
+            personName: name,
+            punchType: type,
+            punchedAt: at,
+            storeName: '隱城',
+            source: 'pin',
+            status: 'ok',
+            flags: flags,
+            review: review.isEmpty ? null : review,
+            counted: true,
+            punchId: id);
+    final now = DateTime.utc(2026, 11, 18, 12);
+
+    test('上班之後 14 小時內有下班＝正常；沒有下班、又打了上班＝漏打；還在 14 小時內＝上班中', () {
+      final rows = [
+        r('a1', '小安', 'in', DateTime.utc(2026, 11, 10, 10)),
+        r('a2', '小安', 'out', DateTime.utc(2026, 11, 10, 17)), // 正常
+        r('a3', '小安', 'in', DateTime.utc(2026, 11, 11, 10)), // 隔天沒打下班就又上班 → 漏打
+        r('a4', '小安', 'in', DateTime.utc(2026, 11, 12, 10)),
+        r('a5', '小安', 'out', DateTime.utc(2026, 11, 13, 2)), // 16 小時後才下班 → 上一筆算漏打
+        r('b1', '小魚', 'in', DateTime.utc(2026, 11, 18, 2)), // 現在 12:00，才 10 小時 → 上班中
+        r('c1', '阿哲', 'in', DateTime.utc(2026, 11, 17, 2)), // 34 小時前、沒有下一筆 → 漏打
+      ];
+      expect(missingOutPunchIds(rows, now), {'a3', 'a4', 'c1'});
+    });
+
+    test('不採用、重複掃的卡不看', () {
+      final rows = [
+        r('d1', '小安', 'in', DateTime.utc(2026, 11, 10, 10)),
+        r('d2', '小安', 'in', DateTime.utc(2026, 11, 10, 10, 1), flags: 'duplicate'),
+        r('d3', '小安', 'out', DateTime.utc(2026, 11, 10, 17)),
+        r('d4', '小安', 'in', DateTime.utc(2026, 11, 11, 10), review: 'rejected'),
+      ];
+      expect(missingOutPunchIds(rows, now), isEmpty);
+    });
+
+    test('我的出勤：只看打卡，補登申請不算', () {
+      MyAttendanceRecord m(String id, String kind, String type, DateTime at) =>
+          MyAttendanceRecord(kind: kind, id: id, punchType: type, at: at, storeName: '隱城', status: 'ok');
+      final rows = [
+        m('m1', 'punch', 'in', DateTime.utc(2026, 11, 10, 10)),
+        m('m2', 'amendment', 'out', DateTime.utc(2026, 11, 10, 17)), // 還在審的補登
+      ];
+      expect(myMissingOutIds(rows, now), {'m1'});
+    });
+
+    test('補登時間跟班表差幾分鐘：晚班、過午夜、凌晨開始的班', () {
+      final d = DateTime(2026, 11, 14);
+      expect(scheduleDiffMinutes(businessDate: d, range: '18:00-00:30', punchType: 'in', at: DateTime(2026, 11, 14, 18, 40)), 40);
+      expect(scheduleDiffMinutes(businessDate: d, range: '18:00-00:30', punchType: 'out', at: DateTime(2026, 11, 15, 0, 10)), -20);
+      expect(scheduleDiffMinutes(businessDate: d, range: '18:00-00:30', punchType: 'out', at: DateTime(2026, 11, 14, 23, 50)), -40);
+      expect(scheduleDiffMinutes(businessDate: d, range: '02:00-06:00', punchType: 'in', at: DateTime(2026, 11, 15, 2, 0)), 0);
+      expect(scheduleDiffMinutes(businessDate: d, range: null, punchType: 'in', at: DateTime(2026, 11, 14, 18)), isNull);
     });
   });
 }
