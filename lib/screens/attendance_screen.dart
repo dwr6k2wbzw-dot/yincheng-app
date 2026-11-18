@@ -245,7 +245,7 @@ class _AttendanceCardState extends State<AttendanceCard> {
                   child: Row(children: [
                     Icon(Icons.dialpad, color: AppColors.primary),
                     const SizedBox(width: 8),
-                    const Expanded(child: Text('打卡（試行）', style: TextStyle(fontSize: AppType.title, fontWeight: AppFont.heading))),
+                    const Expanded(child: Text('打卡', style: TextStyle(fontSize: AppType.title, fontWeight: AppFont.heading))),
                     if (me.personId != null)
                       Text(me.onShift ? '上班中' : '未上班',
                           style: TextStyle(color: me.onShift ? AppColors.good : AppColors.muted, fontSize: AppType.small)),
