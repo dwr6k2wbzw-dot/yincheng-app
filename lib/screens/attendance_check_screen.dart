@@ -660,22 +660,33 @@ class _OvertimeFormState extends State<_OvertimeForm> {
   late double _hours = widget.hours ?? 1;
   final _reason = TextEditingController();
   bool _saving = false;
+  /// 送不出去的原因：顯示在表單裡（提示條會被表單蓋住，看起來像按了沒反應；老闆 2026-11-18）
+  String? _error;
+  bool _tried = false;
 
   bool get _after => _date.isBefore(bizToday());
 
   Future<void> _save() async {
     if (_reason.text.trim().length < 2) {
-      showMessage(context, '請寫加班的原因', error: true);
+      setState(() {
+        _tried = true;
+        _error = '請寫加班的原因（至少 2 個字）';
+      });
       return;
     }
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
     try {
       await AppScope.of(context).repo.requestOvertime(widget.storeId, widget.personId, _date, _hours, _reason.text.trim());
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {
-        setState(() => _saving = false);
-        showMessage(context, friendlyError(e), error: true);
+        setState(() {
+          _saving = false;
+          _error = friendlyError(e);
+        });
       }
     }
   }
@@ -739,8 +750,16 @@ class _OvertimeFormState extends State<_OvertimeForm> {
         TextField(
           controller: _reason,
           maxLength: 200,
-          decoration: InputDecoration(labelText: _after ? '原因（事後申請一定要寫清楚）' : '原因（例如：包場、盤點）'),
+          onChanged: (_) => setState(() => _error = null),
+          decoration: InputDecoration(
+              labelText: _after ? '原因（事後申請一定要寫清楚）' : '原因（例如：包場、盤點）',
+              errorText: _tried && _reason.text.trim().length < 2 ? '請寫原因' : null),
         ),
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(_error!, style: TextStyle(color: AppColors.bad, fontWeight: AppFont.heading)),
+          ),
         const SizedBox(height: 8),
         SizedBox(
           width: double.infinity,

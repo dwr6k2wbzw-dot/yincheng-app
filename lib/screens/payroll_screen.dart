@@ -6,6 +6,8 @@ import '../data/models.dart';
 import '../data/repository.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import '../services/payroll_export.dart' deferred as px;
+import '../services/pl_export.dart' deferred as pl;
 
 /// 薪資（老闆、店長；ops 0110）：每月帶入薪率與打卡時數 → 逐人填獎金、勞健保、加班 → 發布給員工看薪資單。
 /// 店長看不到、改不到自己的那一列，月報也不給總計（避免反推）。發布後不能改，老闆寫原因才能重新開啟。
@@ -310,6 +312,31 @@ class _PayrollScreenState extends State<PayrollScreen> {
     );
   }
 
+  /// 匯出這個月的薪資表（Excel；老闆 2026-11-18）。數字跟薪資單同一套算法
+  Future<void> _export(_MonthData d) async {
+    try {
+      await Future.wait([px.loadLibrary(), pl.loadLibrary()]);
+    } catch (e) {
+      if (mounted) showMessage(context, '匯出工具下載失敗，請檢查網路後再試', error: true);
+      return;
+    }
+    final e = px.PayrollExport(
+        storeName: widget.membership.storeName,
+        companyName: d.settings.companyName,
+        month: d.month,
+        published: d.report.published,
+        rows: d.rows,
+        revenue: d.report.total == null ? null : d.report.revenue,
+        costRate: d.report.costRate);
+    try {
+      final r = await pl.saveFile(px.buildPayrollXlsx(e), e.fileName, pl.xlsxMime);
+      if (!mounted) return;
+      if (r == 'downloaded') showMessage(context, '已下載 ${e.fileName}');
+    } catch (err) {
+      if (mounted) showMessage(context, '匯出失敗：$err', error: true);
+    }
+  }
+
   /// locked：載入中（切月、重新整理）或正在做事，所有按鈕都先停用
   Widget _summary(_MonthData d, bool locked) {
     final r = d.report, s = d.settings, rows = d.rows, month = d.month;
@@ -390,6 +417,8 @@ class _PayrollScreenState extends State<PayrollScreen> {
             OutlinedButton(onPressed: locked ? null : () => _prepare(month, true), child: const Text('重新帶入')),
           ],
           if (r.published && _owner) OutlinedButton(onPressed: locked ? null : () => _reopen(month), child: const Text('重新開啟')),
+          OutlinedButton.icon(
+              onPressed: locked ? null : () => _export(d), icon: const Icon(Icons.ios_share, size: 18), label: const Text('匯出薪資表')),
         ]),
       ]),
     );
@@ -563,6 +592,8 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
   late final _note = TextEditingController(text: r.note);
   final _reason = TextEditingController();
   bool _saving = false;
+  /// 點員工先看到他會收到的薪資單（老闆 2026-11-18）；「修改」分頁才是填數字的表單
+  bool _showSlip = true;
 
   static String _fmt(double? v) => v == null || v == 0 ? '' : _n(v);
   static double? _parse(TextEditingController c) => c.text.trim().isEmpty ? null : double.tryParse(c.text.trim());
@@ -702,6 +733,55 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
         extras: _extras,
       );
 
+  /// 這個人會收到的薪資單：照畫面上現在的數字（改了還沒儲存的也算進去）
+  PayrollSlip get _draftSlip => PayrollSlip(
+        month: widget.month,
+        storeName: widget.membership.storeName,
+        personName: r.slipName,
+        payType: r.payType,
+        baseAmount: r.baseAmount,
+        days: r.payType == 'daily' ? (_override ?? _auto) : r.days,
+        hours: r.payType == 'hourly' ? (_override ?? _auto) : r.hours,
+        otHours: r.payType == 'monthly' ? _parse(_ot1) ?? 0 : 0,
+        otHours2: r.payType == 'monthly' && _lsa ? _parse(_ot2) ?? 0 : 0,
+        otMode: r.otMode,
+        otRate: r.otRate,
+        bonus: _parse(_bonus) ?? 0,
+        insurance: _legacyIns ? _parse(_ins) ?? 0 : 0,
+        deduction: _parse(_ded) ?? 0,
+        extras: _extras,
+        companyName: widget.companyName,
+        note: _note.text.trim(),
+        gross: _preview?.toDouble(),
+        published: false,
+      );
+
+  /// 「薪資單」分頁：發布前預覽員工會看到的那一張
+  List<Widget> _slipTab() => [
+        Text(
+            _dirty
+                ? '照你剛改、還沒儲存的數字預覽；按「修改」分頁下面的「儲存」才會存起來。'
+                : '${r.slipName}會收到的薪資單長這樣。發布前員工看不到；要改數字到「修改」分頁。',
+            style: TextStyle(color: _dirty ? AppColors.warn : AppColors.muted, fontSize: AppType.small)),
+        const SizedBox(height: 10),
+        if (_blocked != null)
+          Text('$_blocked格式不對，先到「修改」分頁改好才能預覽', style: TextStyle(color: AppColors.bad))
+        else
+          PayslipCard(slip: _draftSlip),
+        OutlinedButton.icon(
+            onPressed: () => setState(() => _showSlip = false), icon: const Icon(Icons.edit_outlined, size: 18), label: const Text('修改')),
+      ];
+
+  /// 畫面上的數字跟存起來的不一樣（預覽要提醒還沒儲存）
+  bool get _dirty {
+    final s = PayrollSlip.fromPayrollRow(r, widget.month, widget.membership.storeName, companyName: widget.companyName);
+    final d = _draftSlip;
+    String sig(PayrollSlip x) => [
+          x.days, x.hours, x.otHours + x.otHours2, x.bonus, x.insurance, x.deduction, x.extras.toJson(), (x.note ?? '').trim(), x.gross
+        ].join('|');
+    return sig(s) != sig(d);
+  }
+
   Future<void> _save() async {
     if (_blocked != null || _cashError != null) return;
     setState(() => _saving = true);
@@ -840,7 +920,7 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
           _ro('加班時數', '${_n(r.otHours + r.otHours2)} 小時 × ${_n(r.otRate)} 元'),
       ],
       const Divider(height: 24),
-      PayslipTable(
+      PayslipCard(
           slip: PayrollSlip.fromPayrollRow(r, widget.month, widget.membership.storeName, companyName: widget.companyName)),
     ]);
   }
@@ -855,6 +935,21 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
     return Scaffold(
       appBar: AppBar(title: Text('${r.name}・${widget.month.month} 月')),
       body: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [
+        SegmentedButton<bool>(
+          segments: const [
+            ButtonSegment(value: true, label: Text('薪資單'), icon: Icon(Icons.receipt_long_outlined)),
+            ButtonSegment(value: false, label: Text('修改'), icon: Icon(Icons.edit_outlined)),
+          ],
+          selected: {_showSlip},
+          onSelectionChanged: (v) => setState(() => _showSlip = v.first),
+        ),
+        const SizedBox(height: 12),
+        if (_showSlip) ..._slipTab() else ..._form(unit, g),
+      ]),
+    );
+  }
+
+  List<Widget> _form(String unit, int? g) => [
         InfoLine(
             text: '${payrollTypeLabel(r.payType)} ${r.baseAmount == null ? '（沒有薪資）' : ntd(r.baseAmount!)}',
             icon: Icons.payments_outlined,
@@ -933,9 +1028,7 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
         const SizedBox(height: 16),
         FilledButton(
             onPressed: _saving || _blocked != null || _cashError != null ? null : _save, child: Text(_saving ? '儲存中…' : '儲存')),
-      ]),
-    );
-  }
+      ];
 }
 
 /// 我的薪資單（員工本人：綁定經老闆確認、老闆或店長已發布的月份）
