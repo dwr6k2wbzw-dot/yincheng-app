@@ -2113,12 +2113,8 @@ class SupabaseRepository implements Repository {
   }
 
   @override
-  Future<List<KioskPerson>> kioskPeople() async =>
-      [for (final r in await _db.rpc('attendance_kiosk_people') as List) KioskPerson.fromRow(r as Map<String, dynamic>)];
-
-  @override
-  Future<PinPunchResult> pinPunch(String personId, String pin) async => PinPunchResult.fromRow(
-      _rpcOne(await _db.rpc('attendance_pin_punch', params: {'p_person': personId, 'p_pin': pin})));
+  Future<PinPunchResult> pinPunch(String pin) async =>
+      PinPunchResult.fromRow(_rpcOne(await _db.rpc('attendance_pin_punch', params: {'p_pin': pin})));
 
   @override
   Future<List<PinStatus>?> pinStatus(String storeId) async {

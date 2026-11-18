@@ -254,7 +254,7 @@ class _AttendanceCardState extends State<AttendanceCard> {
                 ),
                 const SizedBox(height: 6),
                 if (AppScope.of(context).kiosk?.storeId == widget.membership.storeId)
-                  Text('這是店裡的打卡用帳號：打卡請用第一頁「打卡」，先點自己的名字、再輸入 4 位數密碼',
+                  Text('這是店裡的打卡用帳號：打卡請用第一頁「打卡」，輸入自己的 4 位數密碼',
                       style: TextStyle(color: AppColors.muted, fontSize: AppType.small))
                 else if (me.bindingPending)
                   Text('你的帳號對應還沒生效，請店長或老闆在「班表人員」替你確認一次，之後才能打卡、看自己的出勤',
@@ -286,7 +286,7 @@ class _AttendanceCardState extends State<AttendanceCard> {
                         Text('請先設定打卡密碼',
                             style: TextStyle(color: AppColors.warn, fontSize: AppType.title, fontWeight: AppFont.heading)),
                         const SizedBox(height: 2),
-                        Text('按下面「打卡密碼」自己設 4 位數；之後在店裡的打卡平板先點自己的名字、再輸入密碼',
+                        Text('按下面「打卡密碼」自己設 4 位數；之後在店裡的打卡平板輸入密碼就能打卡',
                             style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
                       ]),
                     )

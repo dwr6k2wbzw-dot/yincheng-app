@@ -261,16 +261,6 @@ class PinPunchResult {
       );
 }
 
-/// 打卡用帳號看的打卡名單（ops 0125）：先點名字再輸入密碼
-class KioskPerson {
-  final String personId;
-  final String name; // 顯示用：全名
-  final bool hasPin;
-  const KioskPerson({required this.personId, required this.name, required this.hasPin});
-  factory KioskPerson.fromRow(Map<String, dynamic> r) => KioskPerson(
-      personId: r['person_id'] as String, name: r['name'] as String? ?? '', hasPin: r['has_pin'] as bool? ?? false);
-}
-
 /// 打卡密碼設定狀態（看不到密碼本身）：老闆、店長看全部，其他人只有自己
 class PinStatus {
   final String personId;

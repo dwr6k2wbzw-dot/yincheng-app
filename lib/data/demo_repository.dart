@@ -1731,17 +1731,7 @@ class DemoRepository implements Repository {
   }
 
   @override
-  Future<List<KioskPerson>> kioskPeople() async {
-    if (!_isKiosk) throw Exception('message: 只有店裡的打卡用帳號可以看打卡名單,');
-    final m = await shiftMonth('yc', DateTime.now());
-    return [
-      for (final p in m.people)
-        if (p.active) KioskPerson(personId: p.id, name: p.label, hasPin: _pins.containsKey(p.id)),
-    ];
-  }
-
-  @override
-  Future<PinPunchResult> pinPunch(String personId, String pin) async {
+  Future<PinPunchResult> pinPunch(String pin) async {
     if (!_isKiosk) throw Exception('message: 只有店裡的打卡用帳號可以用密碼打卡,');
     if (_kioskXc) throw Exception('message: 小城外打卡尚未開啟,');
     final now = DateTime.now();
@@ -1750,19 +1740,19 @@ class DemoRepository implements Repository {
       return PinPunchResult(
           result: 'locked', lockedUntil: lock, message: '密碼連錯 5 次，請 ${lock.difference(now).inSeconds + 1} 秒後再試');
     }
-    final name = (await shiftMonth('yc', now)).people.firstWhere((p) => p.id == personId).label;
-    if (!_pins.containsKey(personId)) {
-      return PinPunchResult(result: 'no_pin', personName: name, remaining: 5, message: '「$name」還沒有打卡密碼：請在自己的 App 班表頁設定，或找店長幫你設');
-    }
-    if (_pins[personId] != pin) {
+    // ops 0131：靠密碼認人（同店不會重複）
+    final active = {for (final p in (await shiftMonth('yc', now)).people) if (p.active) p.id: p.label};
+    final personId = _pins.entries.where((e) => e.value == pin && active.containsKey(e.key)).firstOrNull?.key;
+    if (personId == null) {
       _pinFails++;
       if (_pinFails >= 5) {
         _pinFails = 0;
         _pinLockedUntil = now.add(const Duration(minutes: 1));
         return PinPunchResult(result: 'locked', lockedUntil: _pinLockedUntil, message: '密碼連錯 5 次，請 1 分鐘後再試');
       }
-      return PinPunchResult(result: 'wrong', remaining: 5 - _pinFails, message: '密碼不對，還可以試 ${5 - _pinFails} 次。忘記密碼請找店長重設');
+      return PinPunchResult(result: 'wrong', remaining: 5 - _pinFails, message: '找不到這組密碼，還可以試 ${5 - _pinFails} 次。忘記密碼請找店長重設');
     }
+    final name = active[personId]!;
     _pinFails = 0;
     final type = _pinLast[personId] == 'in' ? 'out' : 'in';
     _pinLast[personId] = type;
@@ -1796,15 +1786,18 @@ class DemoRepository implements Repository {
     if (_isManager && personId == 'f0') throw Exception('message: 店長的打卡密碼請老闆設定,');
     if (_isStaff && personId != 'f0') throw Exception('message: 沒有權限設定這個人的打卡密碼,');
     if (pin != null && !RegExp(r'^[0-9]{4}$').hasMatch(pin)) throw Exception('message: 打卡密碼要是 4 位數字,');
-    // ops 0125：不用跟別人不一樣；本人設過之後要店長重設
+    // ops 0131：同店不能跟別人一樣；本人設過之後要店長重設
     if (_isStaff && _pins.containsKey(personId)) {
       return const PinSetResult(result: 'reset_needed', message: '已經設過打卡密碼了。忘記或想換，請找店長重設');
     }
     if (pin != null && isWeakPunchPin(pin)) {
       return const PinSetResult(result: 'rejected', message: '這組太好猜了，請換一組（不能四個數字都一樣，也不能是連號）');
     }
+    if (pin != null && _pins.entries.any((e) => e.key != personId && e.value == pin)) {
+      return const PinSetResult(result: 'rejected', message: '這組密碼不能用，請換一組');
+    }
     var v = pin;
-    while (v == null || isWeakPunchPin(v)) {
+    while (v == null || isWeakPunchPin(v) || _pins.entries.any((e) => e.key != personId && e.value == v)) {
       v = (1000 + DateTime.now().microsecond % 9000).toString();
     }
     _pins[personId] = v;

@@ -34,10 +34,4 @@ void main() {
     final other = PayrollRow.fromRow({'person_id': 'someone-else', 'name': '支援的人'});
     expect(other.name, '支援的人');
   });
-
-  test('打卡名單：名字由資料庫給（已經是全名）', () {
-    final k = KioskPerson.fromRow({'person_id': 'n1', 'name': '王小明', 'has_pin': true});
-    expect(k.name, '王小明');
-    expect(k.hasPin, isTrue);
-  });
 }
