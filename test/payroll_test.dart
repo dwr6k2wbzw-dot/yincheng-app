@@ -110,7 +110,7 @@ void main() {
 
     test('每一行：底薪、加班費、獎金、勞健保（扣）合起來＝實發', () {
       final lines = slip.lines();
-      expect(lines.map((l) => l.label), ['底薪', '加班費', '獎金', '勞健保自付額']);
+      expect(lines.map((l) => l.label), ['底薪', '加班費', '獎金', '代扣勞健保費']);
       expect(lines.fold<double>(0, (a, l) => a + l.amount), slip.gross);
     });
 

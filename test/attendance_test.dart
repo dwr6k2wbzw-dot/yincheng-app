@@ -108,7 +108,7 @@ void main() {
       ];
       final lines = buildAttendanceCsv(rows).split('\r\n');
       expect(lines.first.split(',').length, 13);
-      expect(lines[1], startsWith('2026-10-31,小安,上班,2026-10-31 18:00:00,隱城,QR,正常,,,,,算,p1'));
+      expect(lines[1], startsWith('2026-10-31,小安,上班,2026-10-31 18:00:00,隱城,QR,正常,,,,,計入工時,p1'));
       expect(lines[2], contains('2026-10-31,小安,下班,2026-11-01 02:05:00,隱城,QR,待確認,'));
       expect(lines[2], contains(",不採用,'=重複,,不計入工時,p2"));
       // 老闆 2026-11-15：待確認的確認前不計入工時，CSV 要標出來
