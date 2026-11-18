@@ -819,13 +819,16 @@ class _StaffTab extends StatefulWidget {
 
 class _StaffTabState extends State<_StaffTab> {
   late Future<(List<StaffEntry>, Map<String, PinStatus>?)> _future = _load();
+  Set<String>? _exempt; // 不用打卡的人（ops 0134）；null＝資料庫還沒更新，不顯示
 
   /// 員工資料＋打卡密碼設了沒（ops 0112；資料庫還沒更新就不顯示密碼）
   Future<(List<StaffEntry>, Map<String, PinStatus>?)> _load() async {
     final repo = AppScope.of(context).repo, store = widget.membership.storeId;
     final pins = repo.pinStatus(store).then<List<PinStatus>?>((v) => v, onError: (_) => null);
+    final ex = repo.punchExemptIds(store).then<Set<String>?>((v) => v, onError: (_) => null);
     final list = await repo.staffDirectory(store);
     final p = await pins;
+    _exempt = await ex;
     return (list, p == null ? null : {for (final x in p) x.personId: x});
   }
 
@@ -852,12 +855,19 @@ class _StaffTabState extends State<_StaffTab> {
                   if (s.phone != null) s.phone!,
                   if (s.canSeePay && s.rateAmount != null) '${payTypeLabel(s.ratePayType)} ${ntd(s.rateAmount!)}',
                   bindingLabel(s),
-                  if (pins?[s.personId] case final p?) p.hasPin ? '打卡密碼已設定' : '打卡密碼未設定',
+                  if (_exempt?.contains(s.personId) ?? false)
+                    '不用打卡'
+                  else if (pins?[s.personId] case final p?)
+                    p.hasPin ? '打卡密碼已設定' : '打卡密碼未設定',
                 ].join('・')),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () async {
                   await Navigator.of(context).push(MaterialPageRoute(
-                      builder: (_) => StaffEditScreen(membership: widget.membership, entry: s, pin: pins?[s.personId])));
+                      builder: (_) => StaffEditScreen(
+                          membership: widget.membership,
+                          entry: s,
+                          pin: pins?[s.personId],
+                          punchExempt: _exempt?.contains(s.personId))));
                   // 回來重新讀（打卡密碼設了沒也會變）；setState 不能回傳 Future
                   if (mounted) {
                     setState(() {
@@ -876,10 +886,11 @@ String bindingLabel(StaffEntry s) => s.userId == null
     : '帳號 ${s.userName ?? '—'}${s.userVerified ? '' : '（還沒生效）'}';
 
 class StaffEditScreen extends StatefulWidget {
-  const StaffEditScreen({super.key, required this.membership, required this.entry, this.pin});
+  const StaffEditScreen({super.key, required this.membership, required this.entry, this.pin, this.punchExempt});
   final Membership membership;
   final StaffEntry entry;
   final PinStatus? pin; // 打卡密碼設了沒（ops 0112）；null＝資料庫還沒更新，不顯示
+  final bool? punchExempt; // 不用打卡（ops 0134）；null＝資料庫還沒更新，不顯示
   @override
   State<StaffEditScreen> createState() => _StaffEditScreenState();
 }
@@ -896,6 +907,7 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
   late String? _payType = widget.entry.payType;
   late bool _verified = widget.entry.userVerified;
   late bool? _hasPin = widget.pin?.hasPin;
+  late bool? _punchExempt = widget.punchExempt;
   Future<List<PayRate>>? _rates;
   bool _saving = false;
 
@@ -1008,6 +1020,28 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
             ),
     );
   }
+
+  /// 不用打卡（ops 0134，老闆 2026-11-18）：只有老闆能改，按了馬上生效
+  Widget _punchExemptRow() => SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        value: _punchExempt!,
+        onChanged: !_owner
+            ? null
+            : (v) async {
+                try {
+                  await _repo.setPunchExempt(widget.membership.storeId, widget.entry.personId, v);
+                  if (!mounted) return;
+                  setState(() => _punchExempt = v);
+                  showMessage(context, v ? '${widget.entry.name} 不用打卡了' : '${widget.entry.name} 要照常打卡');
+                } catch (e) {
+                  if (mounted) showMessage(context, friendlyError(e), error: true);
+                }
+              },
+        title: const Text('不用打卡'),
+        subtitle: Text(
+            _owner ? '沒打卡不會列異常，比對班表也不列他；薪資的天數、時數要自己填' : '只有老闆能改。開著＝沒打卡不會列異常、比對班表不列',
+            style: const TextStyle(fontSize: AppType.small)),
+      );
 
   Future<void> _save() async {
     setState(() => _saving = true);
@@ -1140,7 +1174,8 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
       appBar: AppBar(title: Text(e.name)),
       body: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [
         _binding(),
-        if (widget.pin != null) _pinRow(),
+        if (_punchExempt != null) _punchExemptRow(),
+        if (widget.pin != null && !(_punchExempt ?? false)) _pinRow(),
         const Divider(),
         TextField(controller: _phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: '電話')),
         TextField(controller: _ec, decoration: const InputDecoration(labelText: '緊急聯絡人')),

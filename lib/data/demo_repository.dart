@@ -1859,6 +1859,15 @@ class DemoRepository implements Repository {
         validUntil: DateTime.fromMillisecondsSinceEpoch((w + 1) * 30000));
   }
 
+  final Set<String> _punchExempt = {};
+  @override
+  Future<Set<String>> punchExemptIds(String storeId) async => {..._punchExempt};
+  @override
+  Future<void> setPunchExempt(String storeId, String personId, bool exempt) async {
+    if (_isStaff || _isManager) throw Exception('message: 不用打卡只有老闆能設,');
+    exempt ? _punchExempt.add(personId) : _punchExempt.remove(personId);
+  }
+
   @override
   Future<List<StaffEntry>> staffDirectory(String storeId) async {
     final m = await shiftMonth(storeId, DateTime.now());
