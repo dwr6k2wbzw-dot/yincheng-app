@@ -76,7 +76,7 @@ List<PlanIssue> editIssues({
         final full = p.isFull && !(r?.planAsPart ?? false);
         return PlanPerson(
           id: p.id,
-          name: p.name,
+          name: p.label,
           full: full,
           offTarget: data.stats[p.id]?.shouldOff ??
               r?.monthOff ??

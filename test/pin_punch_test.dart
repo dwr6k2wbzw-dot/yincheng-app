@@ -296,10 +296,10 @@ void main() {
       expect(find.text('打卡密碼：未設定'), findsOneWidget);
       await tester.tap(find.widgetWithText(OutlinedButton, '設定'));
       await _settle(tester);
-      expect(find.textContaining('規則：4 位數字'), findsOneWidget, reason: '規則在輸入的地方就寫出來');
+      expect(find.textContaining('4 位數字，不能相同或連號（如 1111、1234）'), findsOneWidget, reason: '規則在輸入的地方就寫出來');
       expect(find.textContaining('不能跟'), findsNothing, reason: '沒有「不能跟別人一樣」這條了');
       await _enterPin(tester, '0000', '0000');
-      expect(find.textContaining('太好猜'), findsOneWidget, reason: '老闆設也一樣擋太好猜的');
+      expect(find.textContaining('不能相同或連號（如 1111、1234），請換一組'), findsOneWidget, reason: '老闆設也一樣擋太好猜的');
       await expectLater(repo.pinSet('f1', '0000'), completion(predicate<PinSetResult>((r) => r.result == 'rejected' && r.message.contains('太好猜'))),
           reason: '資料庫也擋太好猜的，直接講原因');
       await tester.enterText(_dialog(find.byType(TextField)).first, '12');
@@ -351,15 +351,15 @@ void main() {
       await _settle(tester);
       expect(find.text('設定打卡密碼・$_ming'), findsOneWidget);
       expect(find.text('清除密碼'), findsNothing, reason: '員工只能設，不能清除');
-      expect(find.textContaining('規則：4 位數字'), findsOneWidget, reason: '規則在輸入的地方就寫出來');
+      expect(find.textContaining('4 位數字，不能相同或連號（如 1111、1234）'), findsOneWidget, reason: '規則在輸入的地方就寫出來');
       expect(find.textContaining('請找店長重設'), findsOneWidget);
       expect(_dialog(find.byType(TextField)), findsNWidgets(2), reason: '自己輸入，打兩次確認');
       await _enterPin(tester, '1593', '1539');
       expect(find.text('兩次輸入的不一樣，請再輸入一次'), findsOneWidget);
       await _enterPin(tester, '1111', '1111');
-      expect(find.textContaining('太好猜'), findsOneWidget);
+      expect(find.textContaining('不能相同或連號（如 1111、1234），請換一組'), findsOneWidget);
       await _enterPin(tester, '4321', '4321');
-      expect(find.textContaining('太好猜'), findsOneWidget, reason: '往下的連號也算');
+      expect(find.textContaining('不能相同或連號（如 1111、1234），請換一組'), findsOneWidget, reason: '往下的連號也算');
       await _enterPin(tester, '3691', '3691');
       expect(find.byType(AlertDialog), findsNothing, reason: '跟小魚同一組也可以；設好了，對話框關掉、不顯示密碼');
       expect(find.text('請先設定打卡密碼'), findsNothing);
@@ -401,7 +401,7 @@ void main() {
       expect(find.text('兩次輸入的不一樣，請再輸入一次'), findsOneWidget);
       expect(tester.takeException(), isNull, reason: '出現錯誤訊息後也不能超出畫面');
       await enter('1111', '1111');
-      expect(find.textContaining('太好猜'), findsOneWidget, reason: '最長的錯誤訊息');
+      expect(find.textContaining('不能相同或連號（如 1111、1234），請換一組'), findsOneWidget, reason: '最長的錯誤訊息');
       expect(tester.takeException(), isNull);
       // 隨機產生那個對話框也一樣
       await tester.ensureVisible(_dialog(find.widgetWithText(OutlinedButton, '隨機產生')));

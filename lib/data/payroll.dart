@@ -400,7 +400,7 @@ class PayrollSlip {
       switch (payType) {
         'daily' => (label: '日薪', detail: '${_n(b)} × ${_n(days ?? 0)} 天', amount: _r(b * (days ?? 0))),
         'hourly' => (label: '時薪', detail: '${_n(b)} × ${_n(hours ?? 0)} 小時', amount: _r(b * (hours ?? 0))),
-        _ => (label: '底薪', detail: '月薪', amount: _r(b)),
+        _ => (label: '底薪', detail: '', amount: _r(b)),
       },
       if (payType == 'monthly' && otHours + otHours2 > 0)
         (
@@ -419,11 +419,12 @@ class PayrollSlip {
 
   /// 支出那一欄：勞保、健保、眷屬健保、所得稅、（舊的）勞健保自付額、扣項、自訂支出。有金額才列；金額都是正的
   List<SlipLine> deductionLines() => [
-        if (extras.laborIns != 0) (label: '勞保費', detail: '', amount: _r(extras.laborIns)),
-        if (extras.healthIns != 0) (label: '健保費', detail: '', amount: _r(extras.healthIns)),
-        if (extras.dependentsIns != 0) (label: '眷屬健保費', detail: '', amount: _r(extras.dependentsIns)),
+        // 老闆 2026-11-18：勞保、健保、眷屬健保前面加「代扣」
+        if (extras.laborIns != 0) (label: '代扣勞保費', detail: '', amount: _r(extras.laborIns)),
+        if (extras.healthIns != 0) (label: '代扣健保費', detail: '', amount: _r(extras.healthIns)),
+        if (extras.dependentsIns != 0) (label: '代扣眷屬健保費', detail: '', amount: _r(extras.dependentsIns)),
         if (extras.incomeTax != 0) (label: '所得稅', detail: '', amount: _r(extras.incomeTax)),
-        if (insurance != 0) (label: '勞健保自付額', detail: '', amount: _r(insurance)),
+        if (insurance != 0) (label: '代扣勞健保費', detail: '', amount: _r(insurance)),
         if (deduction != 0) (label: '扣項', detail: '', amount: _r(deduction)),
         for (final i in extras.items)
           if (!i.income) (label: i.label, detail: '', amount: _r(i.amount)),

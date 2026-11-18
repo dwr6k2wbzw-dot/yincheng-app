@@ -10,7 +10,6 @@ import '../services/clock.dart';
 import '../services/pl_export.dart' deferred as pl;
 import '../theme.dart';
 import '../widgets/common.dart';
-import 'attendance_screen.dart' show showAmendmentForm;
 
 /// 打卡跟班表比對、加班申請（ops 0127，老闆 2026-11-17 六點需求的第 5、6 點）。
 /// ⑤ 比班表早到、晚走、遲到、早退超過 30 分鐘，沒排班有打卡、有排班沒打卡都列異常，可以匯出成報表
@@ -42,8 +41,9 @@ Widget _spanChips(_Span value, ValueChanged<_Span> onChanged) => Wrap(
 );
 
 /// 遲到、早退、沒打卡＝紅；早到、晚走、沒排班＝黃
+/// 跟班表差超過 30 分鐘（早到、遲到、早退、晚走）和整天沒打卡都標紅（老闆 2026-11-18）
 Color _issueColor(String k) => switch (k) {
-  'late_in' || 'early_out' || 'no_punch' => AppColors.bad,
+  'early_in' || 'late_in' || 'early_out' || 'late_out' || 'no_punch' => AppColors.bad,
   _ => AppColors.warn,
 };
 
@@ -125,39 +125,6 @@ class _ScheduleCheckTabState extends State<ScheduleCheckTab> with AutomaticKeepA
     if (changed && mounted) reload();
   }
 
-  Future<void> _requestFor(ScheduleCheckRow r) async {
-    final ok = await showOvertimeForm(
-      context,
-      storeId: widget.membership.storeId,
-      personId: r.personId,
-      personName: r.personName,
-      date: r.businessDate,
-      hours: r.suggestedOvertimeHours,
-      hint: r.lateOutMin == null ? null : '這天晚走 ${durationLabel(r.lateOutMin!)}（下班 ${_hm(r.lastOut)}）',
-    );
-    if (ok == true && mounted) {
-      showMessage(context, '已送出加班申請，要另一位店長或老闆核准');
-      widget.changed.value++;
-    }
-  }
-
-  Future<void> _amendFor(ScheduleCheckRow r) async {
-    final ok = await showAmendmentForm(
-      context,
-      storeId: widget.membership.storeId,
-      personId: r.personId,
-      personName: r.personName,
-      data: widget.data,
-      codeTimes: widget.codeTimes,
-      date: r.businessDate,
-      punchType: 'in',
-    );
-    if (ok == true && mounted) {
-      showMessage(context, '已送出補登，到「異常」核准');
-      widget.changed.value++;
-    }
-  }
-
   Future<void> _export(List<ScheduleCheckRow> rows) async {
     setState(() => _exporting = true);
     try {
@@ -207,7 +174,10 @@ class _ScheduleCheckTabState extends State<ScheduleCheckTab> with AutomaticKeepA
         : r.mark!.contains(':')
         ? '班 $times'
         : '班 ${r.mark} $times';
-    final punched = r.firstIn == null && r.lastOut == null ? '沒有打卡' : '打卡 ${_hm(r.firstIn)}–${_hm(r.lastOut)}';
+    final noPunch = r.firstIn == null && r.lastOut == null;
+    // 差超過 30 分鐘的那個時間標紅
+    final inOff = r.issues.contains('early_in') || r.issues.contains('late_in');
+    final outOff = r.issues.contains('early_out') || r.issues.contains('late_out');
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: SectionCard(
@@ -231,20 +201,25 @@ class _ScheduleCheckTabState extends State<ScheduleCheckTab> with AutomaticKeepA
               ],
             ),
             const SizedBox(height: 4),
-            Text(
-              '$plan｜$punched${r.punchPending ? '（有待確認的卡）' : ''}',
+            Text.rich(
+              TextSpan(children: [
+                TextSpan(text: '$plan｜'),
+                if (noPunch)
+                  const TextSpan(text: '沒有打卡')
+                else ...[
+                  const TextSpan(text: '打卡 '),
+                  TextSpan(text: _hm(r.firstIn), style: inOff ? TextStyle(color: AppColors.bad, fontWeight: AppFont.label) : null),
+                  const TextSpan(text: '–'),
+                  TextSpan(text: _hm(r.lastOut), style: outOff ? TextStyle(color: AppColors.bad, fontWeight: AppFont.label) : null),
+                ],
+                if (r.punchPending) const TextSpan(text: '（有待確認的卡）'),
+              ]),
               style: TextStyle(color: AppColors.muted, fontSize: AppType.small, fontFeatures: tabular),
             ),
             const SizedBox(height: 8),
             Wrap(spacing: 6, runSpacing: 6, children: [for (final i in r.issues) _pill(r.issueText(i), _issueColor(i))]),
             _overtimeLine(r),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                if (r.lateWithoutOvertime) TextButton(onPressed: () => _requestFor(r), child: const Text('替他申請加班')),
-                if (r.issues.contains('no_punch')) TextButton(onPressed: () => _amendFor(r), child: const Text('替他補登')),
-              ],
-            ),
+            const SizedBox(height: 6),
           ],
         ),
       ),
@@ -444,42 +419,6 @@ class _OvertimeTabState extends State<OvertimeTab> with AutomaticKeepAliveClient
     }
   }
 
-  /// 替人申請：這家店班表上還在的人
-  Future<void> _requestAnyone() async {
-    final List<AttendancePerson> people;
-    try {
-      final t = bizToday();
-      people = (await _repo.attendancePeople(
-        widget.membership.storeId,
-        t.subtract(const Duration(days: 31)),
-        t,
-      )).where((p) => !p.crossStore).toList();
-    } catch (e) {
-      if (mounted) showMessage(context, friendlyError(e), error: true);
-      return;
-    }
-    if (!mounted) return;
-    final p = await showModalBottomSheet<AttendancePerson>(
-      context: context,
-      isScrollControlled: true,
-      builder: (c) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            const ListTile(title: Text('替誰申請加班？')),
-            for (final x in people) ListTile(title: Text(x.name), onTap: () => Navigator.pop(c, x)),
-          ],
-        ),
-      ),
-    );
-    if (p == null || !mounted) return;
-    final ok = await showOvertimeForm(context, storeId: widget.membership.storeId, personId: p.personId, personName: p.name);
-    if (ok == true && mounted) {
-      showMessage(context, '已送出加班申請，要另一位店長或老闆核准');
-      widget.changed.value++;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -505,13 +444,9 @@ class _OvertimeTabState extends State<OvertimeTab> with AutomaticKeepAliveClient
                 text: '加班要先申請；沒有事先申請的，事後申請要寫原因',
                 icon: Icons.info_outline,
                 detail:
-                    '員工在「我的出勤」自己申請，店長也可以替人申請。核准時可以改時數（0.5 小時為一格）；退回要寫原因。'
+                    '加班只能本人在「我的出勤」申請（老闆 2026-11-18）。核准時可以改時數（0.5 小時為一格）；退回要寫原因。'
                     '店長不能核准自己的加班（老闆可以）。核准的加班會自動帶進那個月的薪資（月薪制的加班費；時薪、日薪照打卡時數算）；'
                     '薪資已經發布的月份要老闆重新開啟、再按「重新帶入」。',
-              ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(onPressed: _requestAnyone, icon: const Icon(Icons.more_time, size: 18), label: const Text('替人申請加班')),
               ),
               if (snap.hasError) ErrorView(message: friendlyError(snap.error!), onRetry: reload),
               if (!snap.hasData && !snap.hasError)
@@ -693,7 +628,7 @@ class HoursStepper extends StatelessWidget {
 }
 
 // =====================================================================
-// 加班申請表（本人，或店長替人）
+// 加班申請表（只有本人，ops 0128）
 // =====================================================================
 
 Future<bool?> showOvertimeForm(

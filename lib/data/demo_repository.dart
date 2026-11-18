@@ -225,7 +225,7 @@ class DemoRepository implements Repository {
   Future<int> undoShiftChange(String storeId, String changeId) async => 1;
   @override
   Future<void> assignShiftAccount(String personId, String? userId) async {}
-  /// 示範資料裡寫死的暱稱 → 顯示用的名字（全名（暱稱）），跟正式版從資料庫讀回來後的換法一樣
+  /// 示範資料裡寫死的暱稱 → 顯示用的名字（全名），跟正式版從資料庫讀回來後的換法一樣
   String _dn(String id, String nick) => personLabel(nick, _demoFullNames[nick]);
   static const _demoFullNames = {'阿明': '林志明', '小安': '陳怡安', '阿哲': '張哲瑋', '小魚': '余曉雯', '阿凱': '王凱文', '芳芳': '李芳芳'};
   @override
@@ -1495,7 +1495,7 @@ class DemoRepository implements Repository {
         AttendanceAnomaly(kind: 'pending', businessDate: _daysAgo(0), personId: 'p0', personName: _dn('p0', '小魚'),
             punchId: 'demo2', at: DateTime.now().subtract(const Duration(hours: 3)), punchType: 'in', detail: 'QR 碼過期'),
         for (final a in _att.where((r) => r.kind == 'amendment' && r.status == 'pending'))
-          AttendanceAnomaly(kind: 'amendment', personId: 'f0', personName: _dn('f0', '阿明'), amendmentId: a.id, at: a.at, punchType: a.punchType, detail: a.note),
+          AttendanceAnomaly(kind: 'amendment', businessDate: a.businessDate ?? DateTime(a.at.year, a.at.month, a.at.day), personId: 'f0', personName: _dn('f0', '阿明'), amendmentId: a.id, at: a.at, punchType: a.punchType, detail: a.note),
       ];
 
   @override

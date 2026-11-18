@@ -260,11 +260,12 @@ class _AttendanceCardState extends State<AttendanceCard> {
                   Text('你的帳號對應還沒生效，請店長或老闆在「班表人員」替你確認一次，之後才能打卡、看自己的出勤',
                       style: TextStyle(color: AppColors.warn, fontSize: AppType.small))
                 else if (me.personId == null)
-                  Text(
-                      me.canManage
-                          ? '你的帳號沒有對應班表上的人（自己有排班、要打卡才需要；在「班表人員」對應）'
-                          : '你的帳號還沒對應到員工資料：請店長或老闆在「班表人員」替你對應一次，之後就能打卡、看自己的出勤',
-                      style: TextStyle(color: me.canManage ? AppColors.muted : AppColors.warn, fontSize: AppType.small))
+                  // 老闆、店長自己沒排班就不用提示（老闆 2026-11-18）
+                  if (!me.canManage)
+                    Text('你的帳號還沒對應到員工資料：請店長或老闆在「班表人員」替你對應一次，之後就能打卡、看自己的出勤',
+                        style: TextStyle(color: AppColors.warn, fontSize: AppType.small))
+                  else
+                    const SizedBox.shrink()
                 else
                   Text(
                       last == null
@@ -377,6 +378,7 @@ class _MyAttendanceScreenState extends State<MyAttendanceScreen> {
             if (snap.hasError) return ErrorView(message: friendlyError(snap.error!), onRetry: () => setState(() => _future = _load()));
             if (!snap.hasData) return const Center(child: CircularProgressIndicator());
             final rows = snap.data!;
+            final missing = myMissingOutIds(rows, DateTime.now()); // 漏打下班不能顯示「正常」（老闆 2026-11-18）
             return ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 96), children: [
               // ops 0127：加班要先申請；沒有事先申請的，事後申請寫原因
               Padding(
@@ -395,11 +397,11 @@ class _MyAttendanceScreenState extends State<MyAttendanceScreen> {
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: Icon(r.isPunch ? Icons.qr_code_2 : Icons.edit_calendar,
-                      color: r.status == 'pending' ? AppColors.warn : AppColors.muted),
+                      color: missing.contains(r.id) ? AppColors.bad : r.status == 'pending' ? AppColors.warn : AppColors.muted),
                   title: Text('${punchTypeLabel(r.punchType)}・${_taipeiMdHm(r.at)}'),
                   subtitle: Text([
                     r.storeName,
-                    r.statusLabel,
+                    missing.contains(r.id) ? '漏打下班（請按「補登」補下班）' : r.statusLabel,
                     if (r.flags.isNotEmpty) r.flags.map(punchFlagLabel).join('、'),
                     if (r.note != null && r.note!.isNotEmpty) r.note!,
                   ].join('・')),

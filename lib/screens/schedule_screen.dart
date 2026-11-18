@@ -537,7 +537,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 IconButton(tooltip: '下個月', onPressed: () => _shiftMonth(1), icon: const Icon(Icons.chevron_right)),
               ]),
               _todayCard(d),
-              _myMonthCard(d),
               AttendanceCard(
                   membership: widget.membership, data: d, codeTimes: _codeTimes),
               _draftCard(d),
@@ -757,70 +756,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         const SizedBox(width: 4),
         Text(label, style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
       ]);
-
-  /// 我的班（第二批：員工最想看的是自己的班）：已經對應班表名字的人，一個月一張小月曆
-  Widget _myMonthCard(ShiftMonth d) {
-    final me = _repo.currentUserId;
-    final p = me == null ? null : d.people.where((x) => x.active && x.userId == me).firstOrNull;
-    if (p == null) return const SizedBox.shrink();
-    final days = d.days;
-    final firstWd = DateTime(_month.year, _month.month, 1).weekday % 7; // 週日＝0
-    final today = bizToday();
-    final work = (d.marks[p.id] ?? const <int, String>{}).values.where(ShiftMonth.isOn).length;
-    final off = d.offDays(p.id);
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: SectionCard(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Text('我的 ${_month.month} 月班', style: const TextStyle(fontWeight: FontWeight.w700)),
-            const Spacer(),
-            Text('上班 $work 天${p.isFull ? '・休 $off 天' : ''}',
-                style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
-          ]),
-          const SizedBox(height: 8),
-          Row(children: [
-            for (final w in ['日', '一', '二', '三', '四', '五', '六'])
-              Expanded(
-                  child: Text(w,
-                      textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted, fontSize: AppType.micro))),
-          ]),
-          const SizedBox(height: 4),
-          GridView.count(
-            crossAxisCount: 7,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            childAspectRatio: 1.25,
-            children: [
-              for (var i = 0; i < firstWd; i++) const SizedBox.shrink(),
-              for (var day = 1; day <= days; day++)
-                () {
-                  final m = d.mark(p.id, day);
-                  final isToday = today.year == _month.year && today.month == _month.month && today.day == day;
-                  return Container(
-                    margin: const EdgeInsets.all(1.5),
-                    decoration: BoxDecoration(
-                      color: _markBg(m),
-                      borderRadius: BorderRadius.circular(AppRadius.xs),
-                      border: isToday
-                          ? Border.all(color: AppColors.primary, width: 2)
-                          : (_markBg(m) == null ? Border.all(color: AppColors.cardHigh) : null),
-                    ),
-                    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      Text('$day', style: TextStyle(fontSize: AppType.micro, color: AppColors.muted)),
-                      Text(m == null ? '' : (ShiftMonth.isRange(m) ? m.split('-').first : m),
-                          maxLines: 1,
-                          overflow: TextOverflow.clip,
-                          style: const TextStyle(fontSize: AppType.small, fontWeight: FontWeight.w700, height: 1.1)),
-                    ]),
-                  );
-                }(),
-            ],
-          ),
-        ]),
-      ),
-    );
-  }
 
   Widget _todayCard(ShiftMonth d) {
     // 「今天」跟交接、提醒一樣以早上 6 點換日（凌晨還在營業時不會跳到隔天；2026-11-13）
@@ -1264,7 +1199,7 @@ class _PeopleScreenState extends State<_PeopleScreen> {
               TextField(
                   controller: name,
                   maxLength: 20,
-                  decoration: const InputDecoration(labelText: '暱稱', helperText: '顯示成「全名（暱稱）」')),
+                  decoration: const InputDecoration(labelText: '暱稱', helperText: '班表照片辨識、排班用；畫面上一律顯示全名')),
               SegmentedButton<String>(
                 segments: const [ButtonSegment(value: 'full', label: Text('正職')), ButtonSegment(value: 'part', label: Text('兼職'))],
                 selected: {kind},

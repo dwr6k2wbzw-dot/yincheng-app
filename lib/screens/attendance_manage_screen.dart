@@ -12,7 +12,6 @@ import '../services/pl_export.dart' deferred as pl;
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'attendance_check_screen.dart';
-import 'attendance_screen.dart';
 import 'kiosk_screen.dart' show kioskIdPref;
 import 'pin_punch_screen.dart' show editPunchPin;
 
@@ -152,13 +151,69 @@ class _AnomalyTab extends StatefulWidget {
 
 class _AnomalyTabState extends State<_AnomalyTab> with AutomaticKeepAliveClientMixin, _ReloadOnChange {
   _Range _range = _Range.week;
-  late Future<List<AttendanceAnomaly>> _future = _load();
+  late Future<_AnomalyData> _future = _load();
 
   Repository get _repo => AppScope.of(context).repo;
 
-  Future<List<AttendanceAnomaly>> _load() {
+  /// 異常清單＋跟班表差超過 30 分鐘的（老闆 2026-11-18：列為異常並標紅）＋V／O 的時間（核准補登時對照班表用）
+  Future<_AnomalyData> _load() async {
     final d = _rangeDates(_range);
-    return _repo.attendanceAnomalies(widget.membership.storeId, d.from, d.to);
+    final store = widget.membership.storeId;
+    final r = await Future.wait<Object>([
+      _repo.attendanceAnomalies(store, d.from, d.to),
+      _repo.scheduleCheck(store, d.from, d.to).catchError((_) => <ScheduleCheckRow>[]),
+      _repo.shiftMarkTimes(store).catchError((_) => <ShiftMarkTime>[]),
+    ]);
+    const timeIssues = {'early_in', 'late_in', 'early_out', 'late_out'};
+    return (
+      anomalies: r[0] as List<AttendanceAnomaly>,
+      offSchedule: [for (final x in r[1] as List<ScheduleCheckRow>) if (x.issues.any(timeIssues.contains)) x],
+      markTimes: r[2] as List<ShiftMarkTime>,
+    );
+  }
+
+  /// 班表上這個人那天的時段（例 18:00-00:30）；只看得到班表頁目前那個月，其他月份＝null
+  String? _planRange(String personId, DateTime day, List<ShiftMarkTime> times) {
+    final m = widget.data.month;
+    if (day.year != m.year || day.month != m.month) return null;
+    final mark = widget.data.mark(personId, day.day);
+    if (mark == null) return null;
+    if (mark.contains(':')) return mark;
+    return widget.codeTimes[mark] ?? markTimeOn(times, mark, day);
+  }
+
+  /// 核准補登時看的那一行：班表時間，跟補登時間差超過 30 分鐘標紅
+  Widget _planLine(AttendanceAnomaly a, List<ShiftMarkTime> times) {
+    final day = a.businessDate;
+    if (day == null || a.personId == null || a.at == null || a.punchType == null) return const SizedBox.shrink();
+    final m = widget.data.month;
+    final inMonth = day.year == m.year && day.month == m.month;
+    final mark = inMonth ? widget.data.mark(a.personId!, day.day) : null;
+    final range = _planRange(a.personId!, day, times);
+    final diff = scheduleDiffMinutes(businessDate: day, range: range, punchType: a.punchType!, at: toTaipei(a.at!));
+    final off = diff != null && diff.abs() > 30;
+    final String text;
+    if (!inMonth) {
+      text = '班表：請到班表頁切到 ${day.month} 月對照';
+    } else if (mark == null || !ShiftMonth.isOn(mark)) {
+      text = '班表：這天${mark == null ? '沒排班' : '排$mark'}';
+    } else if (range == null) {
+      text = '班表：$mark（沒設時間）';
+    } else {
+      final t = range.replaceFirst('-', '–');
+      text = diff == null
+          ? '班表 $t'
+          : '班表 $t・${diff == 0 ? '跟班表一樣' : '比班表${diff > 0 ? '晚' : '早'} ${durationLabel(diff.abs())}'}';
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Text(text,
+          style: TextStyle(
+              color: off || (inMonth && (mark == null || !ShiftMonth.isOn(mark))) ? AppColors.bad : AppColors.muted,
+              fontSize: AppType.small,
+              fontWeight: off ? AppFont.label : null,
+              fontFeatures: tabular)),
+    );
   }
 
   void _reload() => setState(() => _future = _load());
@@ -196,56 +251,6 @@ class _AnomalyTabState extends State<_AnomalyTab> with AutomaticKeepAliveClientM
     await _run(() => _repo.decideAmendment(a.amendmentId!, approve, note: note), approve ? '已核准' : '已退回');
   }
 
-  Future<void> _amendFor(AttendanceAnomaly a) async {
-    final ok = await showAmendmentForm(context,
-        storeId: widget.membership.storeId,
-        personId: a.personId!,
-        personName: a.personName,
-        data: widget.data,
-        codeTimes: widget.codeTimes,
-        date: a.businessDate,
-        punchType: a.kind == 'missing_in' ? 'in' : 'out');
-    if (ok == true && mounted) {
-      showMessage(context, '已送出補登，到「待審補登」核准');
-      widget.changed.value++;
-    }
-  }
-
-  /// 替人補登：這家店的人＋來支援過的別家店員工（依這家店的出勤紀錄）
-  Future<void> _amendAnyone() async {
-    final t = bizToday();
-    final List<AttendancePerson> people;
-    try {
-      people = await _repo.attendancePeople(widget.membership.storeId, t.subtract(const Duration(days: 62)), t);
-    } catch (e) {
-      if (mounted) showMessage(context, friendlyError(e), error: true);
-      return;
-    }
-    if (!mounted) return;
-    final p = await showModalBottomSheet<AttendancePerson>(
-      context: context,
-      isScrollControlled: true,
-      builder: (c) => SafeArea(
-        child: ListView(shrinkWrap: true, children: [
-          const ListTile(title: Text('替誰補登？'), subtitle: Text('別家店的人：最近在這家店打過卡（來支援）才列出')),
-          for (final x in people)
-            ListTile(
-              title: Text(x.name),
-              subtitle: x.crossStore ? Text('${x.homeStoreName ?? '別家店'}・來支援') : null,
-              onTap: () => Navigator.pop(c, x),
-            ),
-        ]),
-      ),
-    );
-    if (p == null || !mounted) return;
-    final ok = await showAmendmentForm(context,
-        storeId: widget.membership.storeId, personId: p.personId, personName: p.label, data: widget.data, codeTimes: widget.codeTimes);
-    if (ok == true && mounted) {
-      showMessage(context, '已送出補登，要另一位店長或老闆核准');
-      widget.changed.value++;
-    }
-  }
-
   List<Widget> _actions(AttendanceAnomaly a) => switch (a.kind) {
         'pending' || 'duplicate' when a.punchId != null => [
             TextButton(onPressed: () => _review(a, true), child: const Text('確認')),
@@ -255,9 +260,6 @@ class _AnomalyTabState extends State<_AnomalyTab> with AutomaticKeepAliveClientM
             TextButton(onPressed: () => _decide(a, true), child: const Text('核准')),
             TextButton(onPressed: () => _decide(a, false), child: const Text('退回')),
           ],
-        'missing_out' || 'missing_in' when a.personId != null => [
-            TextButton(onPressed: () => _amendFor(a), child: const Text('替他補登')),
-          ],
         _ => const [],
       };
 
@@ -266,28 +268,28 @@ class _AnomalyTabState extends State<_AnomalyTab> with AutomaticKeepAliveClientM
     super.build(context); // 保留分頁
     return RefreshIndicator(
         onRefresh: () async => _reload(),
-        child: FutureBuilder<List<AttendanceAnomaly>>(
+        child: FutureBuilder<_AnomalyData>(
           future: _future,
           builder: (context, snap) {
+            final list = snap.data?.anomalies ?? const <AttendanceAnomaly>[];
+            final off = snap.data?.offSchedule ?? const <ScheduleCheckRow>[];
+            final times = snap.data?.markTimes ?? const <ShiftMarkTime>[];
             return ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [
               _rangeChips(_range, (r) => setState(() {
                     _range = r;
                     _future = _load();
                   })),
               const InfoLine(
-                  text: '店長每天看一次：漏打、待確認、待審補登',
+                  text: '店長每天看一次：漏打、待確認、待審補登、跟班表差超過 30 分鐘',
                   icon: Icons.info_outline,
-                  detail: '確認／不採用都要寫原因，會記在異動紀錄。店長不能審自己的打卡和補登（老闆可以）。原始打卡不會被改掉，「不採用」只是不算。已經審過的要改，到「原始紀錄」點那一筆重新審核。'),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(onPressed: _amendAnyone, icon: const Icon(Icons.edit_calendar, size: 18), label: const Text('替人補登（含來支援的）')),
-              ),
+                  detail: '補登只能本人在「我的出勤」申請，店長核准；同一個人一個月第 4 次補登起只有老闆能核准。核准時對照班表時間，差超過 30 分鐘標紅。'
+                      '確認／不採用都要寫原因，會記在異動紀錄。店長不能審自己的打卡和補登（老闆可以）。原始打卡不會被改掉，「不採用」只是不算。已經審過的要改，到「原始紀錄」點那一筆重新審核。'),
               if (snap.hasError) ErrorView(message: friendlyError(snap.error!), onRetry: _reload),
               if (!snap.hasData && !snap.hasError) const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator())),
-              if (snap.hasData && snap.data!.isEmpty)
+              if (snap.hasData && list.isEmpty && off.isEmpty)
                 const Padding(padding: EdgeInsets.all(24), child: Center(child: Text('沒有異常'))),
               if (snap.hasData)
-                for (final a in snap.data!)
+                for (final a in list)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: SectionCard(
@@ -307,16 +309,59 @@ class _AnomalyTabState extends State<_AnomalyTab> with AutomaticKeepAliveClientM
                               if (a.detail != null && a.detail!.isNotEmpty) a.detail!,
                             ].join('・'),
                             style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+                        if (a.kind == 'amendment') _planLine(a, times),
                         Row(mainAxisAlignment: MainAxisAlignment.end, children: _actions(a)),
                       ]),
                     ),
                   ),
+              if (off.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 12, 0, 6),
+                  child: Text('跟班表差超過 30 分鐘・${off.length}',
+                      style: TextStyle(color: AppColors.bad, fontWeight: AppFont.label)),
+                ),
+              for (final r in off) _offCard(r),
             ]);
           },
         ),
       );
   }
+
+  /// 打卡跟班表差超過 30 分鐘：標紅（老闆 2026-11-18）。詳細在「比對班表」分頁
+  Widget _offCard(ScheduleCheckRow r) {
+    const timeIssues = ['early_in', 'late_in', 'early_out', 'late_out'];
+    final inOff = r.issues.contains('early_in') || r.issues.contains('late_in');
+    final outOff = r.issues.contains('early_out') || r.issues.contains('late_out');
+    String hm(DateTime? t) => t == null ? '—' : DateFormat('HH:mm').format(toTaipei(t));
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: SectionCard(
+        padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Text(timeIssues.where(r.issues.contains).map(r.issueText).join('、'),
+                style: TextStyle(color: AppColors.bad, fontWeight: AppFont.label)),
+            const SizedBox(width: 8),
+            Expanded(child: Text(r.personName, style: const TextStyle(fontWeight: AppFont.heading))),
+            Text(_md.format(r.businessDate), style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+          ]),
+          const SizedBox(height: 2),
+          Text.rich(
+            TextSpan(children: [
+              TextSpan(text: '班表 ${hm(r.planStart)}–${hm(r.planEnd)}｜打卡 '),
+              TextSpan(text: hm(r.firstIn), style: inOff ? TextStyle(color: AppColors.bad, fontWeight: AppFont.label) : null),
+              const TextSpan(text: '–'),
+              TextSpan(text: hm(r.lastOut), style: outOff ? TextStyle(color: AppColors.bad, fontWeight: AppFont.label) : null),
+            ]),
+            style: TextStyle(color: AppColors.muted, fontSize: AppType.small, fontFeatures: tabular),
+          ),
+        ]),
+      ),
+    );
+  }
 }
+
+typedef _AnomalyData = ({List<AttendanceAnomaly> anomalies, List<ScheduleCheckRow> offSchedule, List<ShiftMarkTime> markTimes});
 
 // ---------------- 出勤與匯出 ----------------
 
@@ -395,7 +440,7 @@ class _SessionTabState extends State<_SessionTab> with AutomaticKeepAliveClientM
           const InfoLine(
               text: '待確認的打卡，確認前不計入工時',
               icon: Icons.info_outline,
-              detail: '上班配 14 小時內的下班，營業日早上 6 點換日。有一筆還在待確認的段會標「待確認・不計入」，工時合計不算它；到「異常」或「原始紀錄」確認後才算。不採用的打卡不算。匯出 CSV 會列出每一筆原始打卡，「算不算」一欄標「待確認（不算）」。這階段不算薪資。'),
+              detail: '上班配 14 小時內的下班，營業日早上 6 點換日。有一筆還在待確認的段會標「待確認・不計入」，工時合計不算它；到「異常」或「原始紀錄」確認後才算。不採用的打卡不算。匯出 CSV 會列出每一筆原始打卡，「算不算」一欄標「待確認（不計入工時）」。這階段不算薪資。'),
           if (snap.hasData && snap.data!.isNotEmpty) _totals(snap.data!),
           if (snap.hasError) ErrorView(message: friendlyError(snap.error!), onRetry: () => setState(() => _future = _load())),
           if (!snap.hasData && !snap.hasError) const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator())),
@@ -453,7 +498,10 @@ class _RawTabState extends State<_RawTab> with AutomaticKeepAliveClientMixin, _R
         onRefresh: () async => setState(() => _future = _load()),
         child: FutureBuilder<List<AttendanceExportRow>>(
           future: _future,
-          builder: (context, snap) => ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [
+          builder: (context, snap) {
+            // 漏打下班（老闆 2026-11-18：不能顯示「正常」）
+            final missing = snap.hasData ? missingOutPunchIds(snap.data!, DateTime.now()) : const <String>{};
+            return ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [
             _rangeChips(_range, (r) => setState(() {
                   _range = r;
                   _future = _load();
@@ -467,28 +515,32 @@ class _RawTabState extends State<_RawTab> with AutomaticKeepAliveClientMixin, _R
             if (snap.hasData && snap.data!.isEmpty) const Padding(padding: EdgeInsets.all(24), child: Center(child: Text('這段期間沒有打卡'))),
             if (snap.hasData)
               for (final r in snap.data!.reversed)
-                ListTile(
+                _rawTile(r, missing.contains(r.punchId)),
+          ]);
+          },
+        ),
+      );
+  }
+
+  Widget _rawTile(AttendanceExportRow r, bool missingOut) => ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: Icon(r.source == 'amendment' ? Icons.edit_calendar : (r.source == 'pin' ? Icons.dialpad : Icons.qr_code_2),
-                      color: r.awaitingReview ? AppColors.warn : (r.counted ? AppColors.good : AppColors.muted)),
+                      color: missingOut ? AppColors.bad : r.awaitingReview ? AppColors.warn : (r.counted ? AppColors.good : AppColors.muted)),
                   title: Text('${r.personName}・${punchTypeLabel(r.punchType)} ${_mdHm(r.punchedAt)}'),
                   subtitle: Text([
                     if (r.storeName != widget.membership.storeName) r.storeName,
-                    if (!r.awaitingReview) rawReviewLabel(r), // 待確認已寫在最後的「待確認（不算）」
+                    if (missingOut) '漏打下班（這段不計入工時，要補登下班）'
+                    else if (!r.awaitingReview) rawReviewLabel(r), // 待確認已寫在最後的「待確認（不計入工時）」
                     if (r.flags.isNotEmpty) r.flags.split(' ').where((f) => f.isNotEmpty).map(punchFlagLabel).join('、'),
-                    r.countedLabel,
-                  ].join('・')),
+                    if (!missingOut) r.countedLabel,
+                  ].join('・'), style: missingOut ? TextStyle(color: AppColors.bad) : null),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () async {
                     // 審核成功就通知出勤、異常分頁一起更新（這個分頁也會重新讀取）
                     await Navigator.of(context).push(MaterialPageRoute(
-                        builder: (_) => PunchDetailScreen(row: r, onReviewed: () => widget.changed.value++)));
+                        builder: (_) => PunchDetailScreen(row: r, missingOut: missingOut, onReviewed: () => widget.changed.value++)));
                   },
-                ),
-          ]),
-        ),
-      );
-  }
+                );
 }
 
 String rawReviewLabel(AttendanceExportRow r) => switch (r.review) {
@@ -499,8 +551,10 @@ String rawReviewLabel(AttendanceExportRow r) => switch (r.review) {
 
 /// 一筆打卡：歷程（打卡、補登、每一次審核）＋重新審核
 class PunchDetailScreen extends StatefulWidget {
-  const PunchDetailScreen({super.key, required this.row, this.onReviewed});
+  const PunchDetailScreen({super.key, required this.row, this.missingOut = false, this.onReviewed});
   final AttendanceExportRow row;
+  /// 這筆上班卡之後沒有下班卡（漏打下班）
+  final bool missingOut;
   final VoidCallback? onReviewed;
   @override
   State<PunchDetailScreen> createState() => _PunchDetailScreenState();
@@ -541,17 +595,31 @@ class _PunchDetailScreenState extends State<PunchDetailScreen> {
         Text('${_mdHm(r.punchedAt)}・${r.storeName}・營業日 ${_md.format(r.businessDate)}', style: TextStyle(color: AppColors.muted)),
         const SizedBox(height: 8),
         Text(switch (current) {
+          _ when widget.missingOut && current != 'rejected' => '目前：漏打下班（這段不計入工時，要本人補登下班）',
           'confirmed' => '目前：已確認（計入工時）',
-          'rejected' => '目前：不採用（不計入）',
-          _ => r.status == 'pending' ? '目前：待確認（確認前不計入工時）' : '目前：正常（計入工時）',
-        }, style: TextStyle(color: current == null && r.status == 'pending' ? AppColors.warn : null, fontWeight: AppFont.label)),
-        const SizedBox(height: 8),
-        Wrap(spacing: 8, children: [
-          FilledButton.tonal(onPressed: current == 'confirmed' ? null : () => _review(true), child: Text(current == null ? '確認' : '改成確認')),
-          OutlinedButton(onPressed: current == 'rejected' ? null : () => _review(false), child: Text(current == null ? '不採用' : '改成不採用')),
-        ]),
-        const SizedBox(height: 4),
-        Text('要寫原因；店長不能審自己的打卡（老闆可以）', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+          'rejected' => '目前：不採用（不計入工時）',
+          _ => r.status == 'pending'
+              ? '目前：待確認（確認前不計入工時）'
+              : r.source == 'amendment'
+                  ? '目前：補登已核准（計入工時）'
+                  : '目前：正常（計入工時）',
+        }, style: TextStyle(
+            color: widget.missingOut && current != 'rejected'
+                ? AppColors.bad
+                : current == null && r.status == 'pending'
+                    ? AppColors.warn
+                    : null,
+            fontWeight: AppFont.label)),
+        // 已核准的（補登核准、已確認）不再顯示確認／不採用（老闆 2026-11-18）
+        if (!(r.source == 'amendment' || current == 'confirmed')) ...[
+          const SizedBox(height: 8),
+          Wrap(spacing: 8, children: [
+            FilledButton.tonal(onPressed: current == 'confirmed' ? null : () => _review(true), child: Text(current == null ? '確認' : '改成確認')),
+            OutlinedButton(onPressed: current == 'rejected' ? null : () => _review(false), child: Text(current == null ? '不採用' : '改成不採用')),
+          ]),
+          const SizedBox(height: 4),
+          Text('要寫原因；店長不能審自己的打卡（老闆可以）', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+        ],
         const Divider(height: 24),
         Text('歷程', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
         FutureBuilder<List<PunchHistoryEntry>>(

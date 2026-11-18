@@ -264,7 +264,7 @@ class PinPunchResult {
 /// 打卡用帳號看的打卡名單（ops 0125）：先點名字再輸入密碼
 class KioskPerson {
   final String personId;
-  final String name; // 顯示用：全名（暱稱）
+  final String name; // 顯示用：全名
   final bool hasPin;
   const KioskPerson({required this.personId, required this.name, required this.hasPin});
   factory KioskPerson.fromRow(Map<String, dynamic> r) => KioskPerson(
@@ -467,7 +467,7 @@ class AttendanceExportRow {
   });
   /// 待確認：確認前不計入工時（老闆 2026-11-15）
   bool get awaitingReview => status == 'pending' && review == null;
-  String get countedLabel => counted ? '算' : awaitingReview ? '待確認（不算）' : '不算';
+  String get countedLabel => counted ? '計入工時' : awaitingReview ? '待確認（不計入工時）' : '不計入工時';
   factory AttendanceExportRow.fromRow(Map<String, dynamic> r) => AttendanceExportRow(
         businessDate: _date(r['business_date']),
         personName: labelOfPerson(r['person_id'], r['person_name'] as String? ?? ''),
@@ -609,6 +609,59 @@ DateTime taipeiInstant(DateTime bizDate, int hour, int minute) =>
   final v = [for (var i = 1; i <= 4; i++) int.parse(m.group(i)!)];
   if (v[0] > 23 || v[2] > 23 || v[1] > 59 || v[3] > 59) return null;
   return (inH: v[0], inM: v[1], outH: v[2], outM: v[3]);
+}
+
+/// 漏打下班（老闆 2026-11-18：漏打下班的紀錄不能顯示「正常」）：上班卡之後 14 小時內沒有同一個人的下班卡
+/// （中間又打了上班也算）；最後一筆上班還不到 14 小時＝還在上班，不算漏打。不採用、重複掃的卡不看。
+/// 匯出沒有人的 id，用店名＋名字分人。
+Set<String> missingOutPunchIds(List<AttendanceExportRow> rows, DateTime now) => _missingOut([
+      for (final r in rows)
+        if (r.review != 'rejected' && !r.flags.split(' ').contains('duplicate'))
+          (key: '${r.storeName}|${r.personName}', id: r.punchId, type: r.punchType, at: r.punchedAt),
+    ], now);
+
+/// 我的出勤（本人）：同一套規則，只看打卡（補登申請不算）
+Set<String> myMissingOutIds(List<MyAttendanceRecord> rows, DateTime now) => _missingOut([
+      for (final r in rows)
+        if (r.isPunch && r.review != 'rejected' && !r.flags.contains('duplicate'))
+          (key: r.storeName, id: r.id, type: r.punchType, at: r.at),
+    ], now);
+
+Set<String> _missingOut(List<({String key, String id, String type, DateTime at})> xs, DateTime now) {
+  final byPerson = <String, List<({String key, String id, String type, DateTime at})>>{};
+  for (final x in xs) {
+    byPerson.putIfAbsent(x.key, () => []).add(x);
+  }
+  final missing = <String>{};
+  for (final list in byPerson.values) {
+    list.sort((a, b) => a.at.compareTo(b.at));
+    for (var i = 0; i < list.length; i++) {
+      final r = list[i];
+      if (r.type != 'in') continue;
+      final limit = r.at.add(const Duration(hours: 14));
+      final next = i + 1 < list.length ? list[i + 1] : null;
+      if (next == null && now.isBefore(limit)) continue; // 還在上班
+      if (next != null && next.type == 'out' && !next.at.isAfter(limit)) continue;
+      missing.add(r.id);
+    }
+  }
+  return missing;
+}
+
+/// 補登（或打卡）的時間跟班表差幾分鐘（正＝比班表晚）。老闆 2026-11-18：核准補登的畫面要看班表時間，差超過 30 分鐘標紅。
+/// range 是班表那格的時段（例 18:00-00:30）；at 是台北的牆上時間；班表沒有時間＝null。
+/// 早上 6 點以前開始的班算隔天；下班比上班早＝過午夜。
+int? scheduleDiffMinutes({required DateTime businessDate, required String? range, required String punchType, required DateTime at}) {
+  final t = scheduleTimes(range, const {});
+  if (t == null) return null;
+  final d = DateTime(businessDate.year, businessDate.month, businessDate.day);
+  var start = d.add(Duration(hours: t.inH, minutes: t.inM));
+  if (t.inH < 6) start = start.add(const Duration(days: 1));
+  var end = DateTime(start.year, start.month, start.day, t.outH, t.outM);
+  if (!end.isAfter(start)) end = end.add(const Duration(days: 1));
+  final plan = punchType == 'in' ? start : end;
+  final wall = DateTime(at.year, at.month, at.day, at.hour, at.minute);
+  return wall.difference(plan).inMinutes;
 }
 
 /// 一筆打卡的歷程（attendance_punch_history：補登申請、打卡、核准、每一次審核）

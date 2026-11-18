@@ -441,7 +441,7 @@ Future<bool> editPunchPin(BuildContext context,
         if (pin != null) {
           if (!RegExp(r'^[0-9]{4}$').hasMatch(pin)) return '打卡密碼要是 4 位數字';
           if (pin != c2.text.trim()) return '兩次輸入的不一樣，請再輸入一次';
-          if (isWeakPunchPin(pin)) return '四個相同數字或連號（像 1111、1234、4321）太好猜，請換一組';
+          if (isWeakPunchPin(pin)) return '不能相同或連號（如 1111、1234），請換一組';
         }
         final r = await repo.pinSet(personId, pin);
         if (!r.ok) return r.message;
@@ -468,11 +468,8 @@ Future<bool> editPunchPin(BuildContext context,
         title: Text('${hasPin ? '重設' : '設定'}打卡密碼・$name'),
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(
-              self
-                  ? '規則：4 位數字；不能四個數字都一樣，也不能是連號（像 1111、1234、4321）。'
-                      '設好之後誰都看不到；之後忘記或想換，請找店長重設。不想自己想可以按「隨機產生」。'
-                  : '規則：4 位數字；不能四個數字都一樣，也不能是連號（像 1111、1234、4321）。'
-                      '設好之後誰都看不到密碼；員工忘記了，由店長在這裡重設。',
+              // 老闆 2026-11-18 指定的說明文字
+              self ? '4 位數字，不能相同或連號（如 1111、1234）。忘記請找店長重設。' : '4 位數字，不能相同或連號（如 1111、1234）。',
               style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
           TextField(
             controller: c,
