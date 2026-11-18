@@ -456,6 +456,9 @@ class _AmendmentFormState extends State<_AmendmentForm> {
   bool _fromSchedule = false;
   final _reason = TextEditingController();
   bool _saving = false;
+  /// 送不出去的原因：顯示在表單裡（提示條會被表單蓋住，看起來像按了沒反應；老闆 2026-11-18）
+  String? _error;
+  bool _tried = false;
 
   /// 班表那天這個人的記號（只看班表頁目前那個月）
   String? get _mark {
@@ -477,10 +480,20 @@ class _AmendmentFormState extends State<_AmendmentForm> {
 
   Future<void> _save() async {
     if (_time == null || _reason.text.trim().isEmpty) {
-      showMessage(context, '請填時間和原因', error: true);
+      setState(() {
+        _tried = true;
+        _error = _time == null && _reason.text.trim().isEmpty
+            ? '請選時間、寫原因'
+            : _time == null
+                ? '請選時間'
+                : '請寫原因';
+      });
       return;
     }
-    setState(() => _saving = true);
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
     try {
       await AppScope.of(context).repo.requestAmendment(
           widget.storeId, widget.personId, _type, taipeiInstant(_date, _time!.hour, _time!.minute), _reason.text.trim(),
@@ -488,8 +501,10 @@ class _AmendmentFormState extends State<_AmendmentForm> {
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {
-        setState(() => _saving = false);
-        showMessage(context, friendlyError(e), error: true);
+        setState(() {
+          _saving = false;
+          _error = friendlyError(e);
+        });
       }
     }
   }
@@ -503,6 +518,7 @@ class _AmendmentFormState extends State<_AmendmentForm> {
   @override
   Widget build(BuildContext context) {
     final sched = _sched;
+    final noTime = _tried && _time == null;
     return Padding(
       padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.of(context).viewInsets.bottom),
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -529,19 +545,28 @@ class _AmendmentFormState extends State<_AmendmentForm> {
         ),
         ListTile(
           contentPadding: EdgeInsets.zero,
-          leading: const Icon(Icons.schedule),
-          title: Text(_time == null ? '選時間' : '${punchTypeLabel(_type)} ${_time!.format(context)}${_fromSchedule ? '（班表帶入）' : ''}'),
+          leading: Icon(Icons.schedule, color: noTime ? AppColors.bad : null),
+          title: Text(_time == null ? '選時間（必填）' : '${punchTypeLabel(_type)} ${_time!.format(context)}${_fromSchedule ? '（班表帶入）' : ''}',
+              style: noTime ? TextStyle(color: AppColors.bad) : null),
           onTap: () async {
             final t = await showTimePicker(context: context, initialTime: _time ?? const TimeOfDay(hour: 18, minute: 0));
-            if (t != null) setState(() { _time = t; _fromSchedule = false; });
+            if (t != null) setState(() { _time = t; _fromSchedule = false; _error = null; });
           },
           trailing: sched == null ? null : TextButton(onPressed: _prefill, child: const Text('從班表帶入')),
         ),
         TextField(
           controller: _reason,
           maxLength: 200,
-          decoration: const InputDecoration(labelText: '原因（例如：忘了打卡、手機沒電）'),
+          onChanged: (_) => setState(() => _error = null),
+          decoration: InputDecoration(
+              labelText: '原因（例如：忘了打卡、手機沒電）',
+              errorText: _tried && _reason.text.trim().isEmpty ? '請寫原因' : null),
         ),
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(_error!, style: TextStyle(color: AppColors.bad, fontWeight: AppFont.heading)),
+          ),
         const SizedBox(height: 8),
         SizedBox(
           width: double.infinity,
