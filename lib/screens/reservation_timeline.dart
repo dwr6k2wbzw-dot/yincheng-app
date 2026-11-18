@@ -252,7 +252,7 @@ class _ReservationTimelineState extends State<ReservationTimeline> {
       for (var i = 0; i < lanes.length; i++)
         (label(i == 0 ? '未排桌' : '', i == 0 ? '點一下排桌' : '', color: AppColors.warn), row(lanes[i], null)),
       for (final t in tables)
-        (label(t.name, '${t.seats} 人${t.combinable ? '・可併' : ''}${t.active ? '' : '・停用'}'), row(byTable[t.id] ?? const [], t)),
+        (label(t.name, '${t.seats} 人${t.combinable ? '・可併' : ''}${t.deleted ? '・已刪除' : t.active ? '' : '・停用'}'), row(byTable[t.id] ?? const [], t)),
     ];
 
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -485,7 +485,7 @@ Future<List<String>?> pickTables(BuildContext context,
                             '${t.seats} 人',
                             if (t.combinable) '可併',
                             if (busy.contains(t.id)) '這時段有人',
-                            if (!t.active) '已停用',
+                            if (t.deleted) '已刪除' else if (!t.active) '已停用',
                           ].join('・'),
                               style: TextStyle(fontSize: AppType.small, color: busy.contains(t.id) ? AppColors.warn : AppColors.muted)),
                         ),
@@ -535,7 +535,7 @@ Set<String> busyTables(List<Reservation> all, Reservation? me, int minute) {
   return out;
 }
 
-/// 桌位設定（0061）：老闆／店長新增、修改、停用（不能刪除）
+/// 桌位設定（0061、0132）：老闆／店長新增、修改、停用、刪除（今天以後還有訂位的不能刪）
 class ReservationTablesScreen extends StatefulWidget {
   const ReservationTablesScreen({super.key, required this.storeId, required this.storeName});
   final String storeId;
@@ -615,6 +615,33 @@ class _ReservationTablesScreenState extends State<ReservationTablesScreen> {
     }
   }
 
+  Future<void> _delete(ReservationTable t) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text('刪除桌號 ${t.name}？'),
+        content: const Text('刪除後不會再出現在桌位設定、座位圖和排桌。舊訂位上的桌號照樣保留。\n今天以後還有訂位排在這張桌的話，要先換到別桌才能刪。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.bad),
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('刪除'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await _repo.deleteReservationTable(t.id);
+      _changed = true;
+      if (mounted) showMessage(context, '已刪除桌號 ${t.name}');
+      _reload();
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => PopScope(
         canPop: false,
@@ -628,8 +655,9 @@ class _ReservationTablesScreenState extends State<ReservationTablesScreen> {
             builder: (context, snap) {
               if (snap.hasError) return ErrorView(message: friendlyError(snap.error!), onRetry: _reload);
               if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-              final list = snap.data!;
-              final next = list.isEmpty ? 1 : list.map((t) => t.sort).reduce((a, b) => a > b ? a : b) + 1;
+              final all = snap.data!;
+              final list = all.where((t) => !t.deleted).toList(); // 刪掉的不列（舊訂位照樣看得到桌號）
+              final next = all.isEmpty ? 1 : all.map((t) => t.sort).reduce((a, b) => a > b ? a : b) + 1;
               return Scaffold(
                 floatingActionButton: FloatingActionButton.extended(
                   onPressed: () => _edit(null, next),
@@ -637,7 +665,7 @@ class _ReservationTablesScreenState extends State<ReservationTablesScreen> {
                   label: const Text('新增桌位'),
                 ),
                 body: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 96), children: [
-                  Text('時間軸照這裡的順序排。停用的桌子不會出現在時間軸，舊訂位紀錄保留。',
+                  Text('時間軸照這裡的順序排。停用＝暫時不用（之後可以再打開）；刪除＝不要了。兩種都保留舊訂位紀錄。',
                       style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
                   const SizedBox(height: 8),
                   SectionCard(
@@ -650,7 +678,11 @@ class _ReservationTablesScreenState extends State<ReservationTablesScreen> {
                               style: TextStyle(fontWeight: FontWeight.w700, color: t.active ? null : AppColors.muted)),
                           subtitle: Text(['${t.seats} 人', if (t.combinable) '可併桌', if (!t.active) '已停用', '排序 ${t.sort}'].join('・'),
                               style: const TextStyle(fontSize: AppType.small)),
-                          trailing: const Icon(Icons.chevron_right),
+                          trailing: IconButton(
+                            tooltip: '刪除桌號 ${t.name}',
+                            icon: Icon(Icons.delete_outline, color: AppColors.muted),
+                            onPressed: () => _delete(t),
+                          ),
                         ),
                     ]),
                   ),
