@@ -252,7 +252,7 @@ class _ReservationTimelineState extends State<ReservationTimeline> {
       for (var i = 0; i < lanes.length; i++)
         (label(i == 0 ? '未排桌' : '', i == 0 ? '點一下排桌' : '', color: AppColors.warn), row(lanes[i], null)),
       for (final t in tables)
-        (label(t.name, '${t.seats} 人${t.combinable ? '・可併' : ''}${t.deleted ? '・已刪除' : t.active ? '' : '・停用'}'), row(byTable[t.id] ?? const [], t)),
+        (label(t.name, '${t.seats} 人${t.combinable ? '・可併' : ''}${t.deleted ? '・已刪除' : t.dayOff ? '・這天不開' : t.active ? '' : '・停用'}${t.onlyDate != null ? '・加開' : ''}'), row(byTable[t.id] ?? const [], t)),
     ];
 
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -485,7 +485,7 @@ Future<List<String>?> pickTables(BuildContext context,
                             '${t.seats} 人',
                             if (t.combinable) '可併',
                             if (busy.contains(t.id)) '這時段有人',
-                            if (t.deleted) '已刪除' else if (!t.active) '已停用',
+                            if (t.deleted) '已刪除' else if (t.dayOff) '這天不開' else if (!t.active) '已停用',
                           ].join('・'),
                               style: TextStyle(fontSize: AppType.small, color: busy.contains(t.id) ? AppColors.warn : AppColors.muted)),
                         ),
@@ -537,26 +537,57 @@ Set<String> busyTables(List<Reservation> all, Reservation? me, int minute) {
 
 /// 桌位設定（0061、0132）：老闆／店長新增、修改、停用、刪除（今天以後還有訂位的不能刪）
 class ReservationTablesScreen extends StatefulWidget {
-  const ReservationTablesScreen({super.key, required this.storeId, required this.storeName});
+  const ReservationTablesScreen({super.key, required this.storeId, required this.storeName, this.day});
   final String storeId;
   final String storeName;
+  /// 訂位管理畫面正在看的那一天：選「只有某一天」時預設帶這天
+  final DateTime? day;
   @override
   State<ReservationTablesScreen> createState() => _ReservationTablesScreenState();
 }
 
+const _tableWd = ['一', '二', '三', '四', '五', '六', '日'];
+String _tableDay(DateTime d) => '${d.month}/${d.day}（${_tableWd[d.weekday - 1]}）';
+
 class _ReservationTablesScreenState extends State<ReservationTablesScreen> {
-  Future<List<ReservationTable>>? _future;
+  Future<(List<ReservationTable>, List<TableDayOff>)>? _future;
   bool _changed = false;
 
   Repository get _repo => AppScope.of(context).repo;
+  DateTime get _today {
+    final n = taipeiNow();
+    return DateTime(n.year, n.month, n.day);
+  }
+
+  DateTime get _defaultDay {
+    final d = widget.day;
+    return d == null || d.isBefore(_today) ? _today : DateTime(d.year, d.month, d.day);
+  }
+
+  Future<(List<ReservationTable>, List<TableDayOff>)> _load() async {
+    final t = _today;
+    final r = await Future.wait<dynamic>([
+      _repo.reservationTables(widget.storeId),
+      _repo.tableDaysOff(widget.storeId, t, t.add(const Duration(days: 365))).then<List<TableDayOff>>((v) => v, onError: (_) => <TableDayOff>[]),
+    ]);
+    return (r[0] as List<ReservationTable>, r[1] as List<TableDayOff>);
+  }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _future ??= _repo.reservationTables(widget.storeId);
+    _future ??= _load();
   }
 
-  void _reload() => setState(() => _future = _repo.reservationTables(widget.storeId));
+  void _reload() => setState(() => _future = _load());
+
+  Future<DateTime?> _pickDay(String help, DateTime initial) => showDatePicker(
+        context: context,
+        helpText: help,
+        initialDate: initial,
+        firstDate: _today,
+        lastDate: _today.add(const Duration(days: 180)),
+      );
 
   Future<void> _edit(ReservationTable? t, int nextSort) async {
     final name = TextEditingController(text: t?.name ?? '');
@@ -564,13 +595,45 @@ class _ReservationTablesScreenState extends State<ReservationTablesScreen> {
     final sort = TextEditingController(text: '${t?.sort ?? nextSort}');
     var comb = t?.combinable ?? false;
     var active = t?.active ?? true;
+    var oneDay = false; // 新增時：只有一天加開
+    var day = _defaultDay;
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => StatefulBuilder(
         builder: (c, set) => AlertDialog(
           title: Text(t == null ? '新增桌位' : '修改桌位'),
           content: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              if (t == null) ...[
+                SegmentedButton<bool>(
+                  segments: const [
+                    ButtonSegment(value: false, label: Text('每天都有')),
+                    ButtonSegment(value: true, label: Text('只有一天加開')),
+                  ],
+                  selected: {oneDay},
+                  showSelectedIcon: false,
+                  onSelectionChanged: (v) => set(() => oneDay = v.first),
+                ),
+                if (oneDay)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.event_outlined, size: 18),
+                      label: Text('${_tableDay(day)} 加開'),
+                      onPressed: () async {
+                        final d = await _pickDay('選哪一天加開', day);
+                        if (d != null) set(() => day = d);
+                      },
+                    ),
+                  ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(oneDay ? '只有這天看得到、排得到。' : '固定的桌，每天都出現。',
+                      style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+                ),
+              ] else if (t.onlyDate != null)
+                Text('只有 ${_tableDay(t.onlyDate!)} 加開（日子不能改，要換日子請刪掉再加開一張）',
+                    style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
               TextField(controller: name, maxLength: 12, autofocus: t == null, decoration: const InputDecoration(labelText: '桌號（例：A1、吧台1）')),
               TextField(controller: seats, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '最多坐幾位')),
               TextField(controller: sort, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '排序（數字小的排上面）')),
@@ -580,13 +643,13 @@ class _ReservationTablesScreenState extends State<ReservationTablesScreen> {
                 onChanged: (v) => set(() => comb = v),
                 title: const Text('可以跟旁邊的桌子併桌'),
               ),
-              if (t != null)
+              if (t != null && t.onlyDate == null)
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   value: active,
                   onChanged: (v) => set(() => active = v),
                   title: const Text('使用中'),
-                  subtitle: const Text('關掉＝停用（不會出現在時間軸，舊的訂位紀錄保留）', style: TextStyle(fontSize: AppType.small)),
+                  subtitle: const Text('關掉＝每天都停用（不會出現在時間軸，舊的訂位紀錄保留）', style: TextStyle(fontSize: AppType.small)),
                 ),
             ]),
           ),
@@ -605,10 +668,66 @@ class _ReservationTablesScreenState extends State<ReservationTablesScreen> {
       return;
     }
     try {
-      await _repo.saveReservationTable(widget.storeId,
-          ReservationTable(id: t?.id ?? '', name: name.text.trim(), seats: n, combinable: comb, sort: so, active: active));
+      await _repo.saveReservationTable(
+          widget.storeId,
+          ReservationTable(
+              id: t?.id ?? '', name: name.text.trim(), seats: n, combinable: comb, sort: so, active: active,
+              onlyDate: t == null ? (oneDay ? day : null) : t.onlyDate));
       _changed = true;
-      if (mounted) showMessage(context, '已儲存');
+      if (mounted) showMessage(context, t == null && oneDay ? '已加開 ${name.text.trim()}（只有 ${_tableDay(day)}）' : '已儲存');
+      _reload();
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+    }
+  }
+
+  /// 垃圾桶：每天都有的桌先問「只有某一天不開」還是「永久刪除」；加開的桌直接問要不要刪
+  Future<void> _remove(ReservationTable t) async {
+    if (t.onlyDate != null) return _delete(t);
+    final pick = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (c) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+            child: Text('桌號 ${t.name}', style: const TextStyle(fontSize: AppType.title, fontWeight: FontWeight.w700)),
+          ),
+          ListTile(
+            leading: const Icon(Icons.event_busy_outlined),
+            title: const Text('只有某一天不開'),
+            subtitle: const Text('選一天，那天不能排這張桌；其他天照常'),
+            onTap: () => Navigator.pop(c, 'day'),
+          ),
+          ListTile(
+            leading: Icon(Icons.delete_outline, color: AppColors.bad),
+            title: Text('永久刪除', style: TextStyle(color: AppColors.bad)),
+            subtitle: const Text('每天都不再出現；舊訂位上的桌號保留'),
+            onTap: () => Navigator.pop(c, 'delete'),
+          ),
+          const SizedBox(height: 12),
+        ]),
+      ),
+    );
+    if (!mounted || pick == null) return;
+    if (pick == 'delete') return _delete(t);
+    final d = await _pickDay('${t.name} 哪一天不開', _defaultDay);
+    if (d == null || !mounted) return;
+    try {
+      await _repo.setTableDayOff(t.id, d, true);
+      _changed = true;
+      if (mounted) showMessage(context, '${t.name} ${_tableDay(d)} 不開，其他天照常');
+      _reload();
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+    }
+  }
+
+  Future<void> _undoDayOff(ReservationTable t, DateTime d) async {
+    try {
+      await _repo.setTableDayOff(t.id, d, false);
+      _changed = true;
+      if (mounted) showMessage(context, '已取消，${t.name} ${_tableDay(d)} 照常開');
       _reload();
     } catch (e) {
       if (mounted) showMessage(context, friendlyError(e), error: true);
@@ -616,11 +735,14 @@ class _ReservationTablesScreenState extends State<ReservationTablesScreen> {
   }
 
   Future<void> _delete(ReservationTable t) async {
+    final extra = t.onlyDate != null;
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: Text('刪除桌號 ${t.name}？'),
-        content: const Text('刪除後不會再出現在桌位設定、座位圖和排桌。舊訂位上的桌號照樣保留。\n今天以後還有訂位排在這張桌的話，要先換到別桌才能刪。'),
+        title: Text(extra ? '刪除加開的 ${t.name}（${_tableDay(t.onlyDate!)}）？' : '永久刪除桌號 ${t.name}？'),
+        content: Text(extra
+            ? '這天就不會再有這張桌。舊訂位上的桌號照樣保留。\n已經有訂位排在這張桌的話，要先換到別桌才能刪。'
+            : '每天都不會再出現在桌位設定、座位圖和排桌。舊訂位上的桌號照樣保留。\n今天以後還有訂位排在這張桌的話，要先換到別桌才能刪。'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
           FilledButton(
@@ -642,6 +764,44 @@ class _ReservationTablesScreenState extends State<ReservationTablesScreen> {
     }
   }
 
+  Widget _tile(ReservationTable t, int next, List<DateTime> offs) => ListTile(
+        onTap: () => _edit(t, next),
+        title: Text(t.name, style: TextStyle(fontWeight: FontWeight.w700, color: t.active ? null : AppColors.muted)),
+        subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(
+              [
+                if (t.onlyDate != null) '只有 ${_tableDay(t.onlyDate!)}',
+                '${t.seats} 人',
+                if (t.combinable) '可併桌',
+                if (!t.active) '已停用',
+                '排序 ${t.sort}',
+              ].join('・'),
+              style: const TextStyle(fontSize: AppType.small)),
+          if (offs.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Wrap(spacing: 6, runSpacing: 6, children: [
+                for (final d in offs)
+                  InputChip(
+                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.padded,
+                    label: Text('${_tableDay(d)} 不開', style: TextStyle(fontSize: AppType.small, color: AppColors.warn)),
+                    side: BorderSide(color: AppColors.warn.withValues(alpha: .5)),
+                    deleteIcon: const Icon(Icons.close, size: 16),
+                    deleteButtonTooltipMessage: '取消，${_tableDay(d)} 照常開',
+                    onDeleted: () => _undoDayOff(t, d),
+                    onPressed: () => _undoDayOff(t, d),
+                  ),
+              ]),
+            ),
+        ]),
+        trailing: IconButton(
+          tooltip: '刪除桌號 ${t.name}',
+          icon: Icon(Icons.delete_outline, color: AppColors.muted),
+          onPressed: () => _remove(t),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) => PopScope(
         canPop: false,
@@ -650,14 +810,23 @@ class _ReservationTablesScreenState extends State<ReservationTablesScreen> {
         },
         child: Scaffold(
           appBar: AppBar(title: Text('桌位設定・${widget.storeName}')),
-          body: FutureBuilder<List<ReservationTable>>(
+          body: FutureBuilder<(List<ReservationTable>, List<TableDayOff>)>(
             future: _future,
             builder: (context, snap) {
               if (snap.hasError) return ErrorView(message: friendlyError(snap.error!), onRetry: _reload);
               if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-              final all = snap.data!;
-              final list = all.where((t) => !t.deleted).toList(); // 刪掉的不列（舊訂位照樣看得到桌號）
+              final (all, offs) = snap.data!;
+              final today = _today;
+              final live = all.where((t) => !t.deleted).toList(); // 刪掉的不列（舊訂位照樣看得到桌號）
+              final daily = live.where((t) => t.onlyDate == null).toList();
+              final extra = live.where((t) => t.onlyDate != null && !t.onlyDate!.isBefore(today)).toList()
+                ..sort((a, b) => a.onlyDate != b.onlyDate ? a.onlyDate!.compareTo(b.onlyDate!) : a.sort.compareTo(b.sort));
               final next = all.isEmpty ? 1 : all.map((t) => t.sort).reduce((a, b) => a > b ? a : b) + 1;
+              List<DateTime> offsOf(ReservationTable t) => [for (final o in offs) if (o.tableId == t.id) o.date];
+              Widget head(String s) => Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 16, 4, 6),
+                    child: Text(s, style: TextStyle(color: AppColors.muted, fontSize: AppType.small, fontWeight: FontWeight.w700)),
+                  );
               return Scaffold(
                 floatingActionButton: FloatingActionButton.extended(
                   onPressed: () => _edit(null, next),
@@ -665,27 +834,14 @@ class _ReservationTablesScreenState extends State<ReservationTablesScreen> {
                   label: const Text('新增桌位'),
                 ),
                 body: ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 96), children: [
-                  Text('時間軸照這裡的順序排。停用＝暫時不用（之後可以再打開）；刪除＝不要了。兩種都保留舊訂位紀錄。',
+                  Text('時間軸照這裡的順序排。某一天臨時多一張：新增時選「只有一天加開」；某一天不開：點垃圾桶選「只有某一天不開」，其他天都不受影響。',
                       style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
-                  const SizedBox(height: 8),
-                  SectionCard(
-                    padding: EdgeInsets.zero,
-                    child: Column(children: [
-                      for (final t in list)
-                        ListTile(
-                          onTap: () => _edit(t, next),
-                          title: Text(t.name,
-                              style: TextStyle(fontWeight: FontWeight.w700, color: t.active ? null : AppColors.muted)),
-                          subtitle: Text(['${t.seats} 人', if (t.combinable) '可併桌', if (!t.active) '已停用', '排序 ${t.sort}'].join('・'),
-                              style: const TextStyle(fontSize: AppType.small)),
-                          trailing: IconButton(
-                            tooltip: '刪除桌號 ${t.name}',
-                            icon: Icon(Icons.delete_outline, color: AppColors.muted),
-                            onPressed: () => _delete(t),
-                          ),
-                        ),
-                    ]),
-                  ),
+                  if (extra.isNotEmpty) ...[
+                    head('加開的桌（只有那一天）'),
+                    SectionCard(padding: EdgeInsets.zero, child: Column(children: [for (final t in extra) _tile(t, next, const [])])),
+                  ],
+                  head('每天都有的桌'),
+                  SectionCard(padding: EdgeInsets.zero, child: Column(children: [for (final t in daily) _tile(t, next, offsOf(t))])),
                 ]),
               );
             },
