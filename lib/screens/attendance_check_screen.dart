@@ -874,6 +874,8 @@ class _MarkTimesSheet extends StatefulWidget {
 class _MarkTimesSheetState extends State<_MarkTimesSheet> {
   late Future<List<ShiftMarkTime>> _future = _load();
   bool _changed = false;
+  // 錯誤直接顯示在這個表單裡（下方提示會被表單蓋住看不到）
+  String? _error;
 
   Future<List<ShiftMarkTime>> _load() => AppScope.of(context).repo.shiftMarkTimes(widget.storeId);
 
@@ -894,13 +896,14 @@ class _MarkTimesSheetState extends State<_MarkTimesSheet> {
     if (end == null) return null;
     String f(TimeOfDay t) => '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
     if (f(start) == f(end)) {
-      if (mounted) showMessage(context, '上班、下班不能同一個時間', error: true);
+      if (mounted) setState(() => _error = '上班、下班不能同一個時間，沒有存。請再點一次重選');
       return null;
     }
     return '${f(start)}-${f(end)}';
   }
 
   Future<void> _edit(String mark, int weekday, String? current) async {
+    if (mounted) setState(() => _error = null);
     final r = await _pickRange(current);
     if (r == null || !mounted) return;
     try {
@@ -912,11 +915,12 @@ class _MarkTimesSheetState extends State<_MarkTimesSheet> {
         });
       }
     } catch (e) {
-      if (mounted) showMessage(context, friendlyError(e), error: true);
+      if (mounted) setState(() => _error = '沒有存成功：${friendlyError(e)}');
     }
   }
 
   Future<void> _delete(String mark, int weekday) async {
+    setState(() => _error = null);
     try {
       await AppScope.of(context).repo.deleteShiftMarkTime(widget.storeId, mark, weekday);
       if (mounted) {
@@ -926,7 +930,7 @@ class _MarkTimesSheetState extends State<_MarkTimesSheet> {
         });
       }
     } catch (e) {
-      if (mounted) showMessage(context, friendlyError(e), error: true);
+      if (mounted) setState(() => _error = '沒有拿掉：${friendlyError(e)}');
     }
   }
 
@@ -1026,6 +1030,18 @@ class _MarkTimesSheetState extends State<_MarkTimesSheet> {
               ),
               const SizedBox(height: 12),
               if (snap.hasError) ErrorView(message: friendlyError(snap.error!), onRetry: () => setState(() => _future = _load())),
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.error_outline, color: AppColors.bad, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(_error!, style: TextStyle(color: AppColors.bad, fontWeight: AppFont.heading))),
+                    ],
+                  ),
+                ),
               if (snap.hasData) ...[_markBlock('V', '上班', snap.data!), _markBlock('O', '', snap.data!)],
               Align(
                 alignment: Alignment.centerRight,

@@ -168,11 +168,13 @@ Uint8List buildPayrollXlsx(PayrollExport p) {
     put(c, DoubleCellValue(totals[h]!), style: moneyBold);
   }
 
-  sh.setColumnWidth(0, 14);
-  sh.setColumnWidth(3, 14);
-  for (var c = 4; c < head.length - 1; c++) {
-    sh.setColumnWidth(c, 12);
+  // 欄寬照表頭字數（中文一個字約 2 格），最少 11 格，數字才放得下
+  for (var c = 0; c < head.length - 1; c++) {
+    final w = head[c].length * 2.2 + 3;
+    sh.setColumnWidth(c, w < 11 ? 11 : w);
   }
+  sh.setColumnWidth(0, 14);
+  sh.setColumnWidth(2, 13); // 這一欄上方也放「人事成本率」
   sh.setColumnWidth(head.length - 1, 30);
   excel.setDefaultSheet(sheetName);
   final bytes = excel.encode();
