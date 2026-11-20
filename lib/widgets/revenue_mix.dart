@@ -20,7 +20,7 @@ bool isMultiLineStore(String storeName) => StoreFeatures.of(storeName).multiLine
 
 /// 依店家決定營收要拆成哪幾項：
 ///   隱城：酒水／餐食（／專案）
-///   小城外：咖啡／調酒／拉麵／訂金（調酒＝酒水＋餐食＋專案，與小城外 Excel 相同）
+///   小城外：咖啡／酒吧／拉麵／訂金（酒吧＝酒水＋餐食＋專案，與小城外 Excel 的「調酒」相同）
 List<RevenuePart> revenueParts(
   String storeName, {
   required double drinks,
@@ -33,7 +33,7 @@ List<RevenuePart> revenueParts(
   if (isMultiLineStore(storeName)) {
     return [
       RevenuePart('咖啡', coffee, coffeeColor),
-      RevenuePart('調酒', drinks + food + project, AppColors.primary),
+      RevenuePart('酒吧', drinks + food + project, AppColors.primary), // 老闆 2026-11-21：調酒改叫酒吧
       RevenuePart('拉麵', ramen, ramenColor),
       if (deposit != 0) RevenuePart('訂金', deposit, AppColors.muted),
     ];

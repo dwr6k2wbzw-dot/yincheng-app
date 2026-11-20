@@ -301,7 +301,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final cmp = _compareSides(d, multi);
     final avgText = avgTicket == null ? '—' : money.format(avgTicket.round());
     final avgSub = multi
-        ? '調酒收入 ÷ 來客數'
+        ? '酒吧收入 ÷ 來客數'
         : s.dailyAvgTicket != null && s.dailyAvgTicket != s.avgTicket ? '不含活動 ${ntd(s.dailyAvgTicket!)}' : null;
 
     if (gold) {
@@ -367,7 +367,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               for (final p in parts)
                 _amount(p.label, p.amount, p.color,
                     // 小城外調酒＝酒水＋餐食，另外列出餐食金額（老闆 2026-11-04）
-                    sub: multi && p.label == '調酒' && s.foodRevenue != 0 ? '含餐食 ${ntd(s.foodRevenue)}' : null),
+                    sub: multi && p.label == '酒吧' && s.foodRevenue != 0 ? '含餐食 ${ntd(s.foodRevenue)}' : null),
             ]),
             const SizedBox(height: 10),
             MixBar(parts: parts, height: 4),
@@ -490,7 +490,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           for (final p in parts) ...[
             _kv(p.label, p.amount, dot: p.color),
             // 小城外調酒＝酒水＋餐食，另外列出餐食金額（老闆 2026-11-04）
-            if (multi && p.label == '調酒' && s.foodRevenue != 0) _kv('　其中餐食', s.foodRevenue),
+            if (multi && p.label == '酒吧' && s.foodRevenue != 0) _kv('　其中餐食', s.foodRevenue),
           ],
           const SizedBox(height: 8),
           MixBar(parts: parts, height: 6),
