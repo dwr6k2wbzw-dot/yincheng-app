@@ -281,6 +281,8 @@ class DemoRepository implements Repository {
   @override
   Future<void> deleteShiftPairRule(String id) async => _pairRules.removeWhere((r) => r.id == id);
   @override
+  Future<Map<int, Set<String>>?> shiftOffTaken(String storeId, DateTime month) async => null; // App 自己算
+  @override
   Future<void> setShiftRequest(String storeId, String personId, DateTime date, String? kind) async {
     final m = _shiftReq.putIfAbsent(personId, () => {});
     if (kind == null) {

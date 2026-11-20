@@ -936,6 +936,22 @@ class SupabaseRepository implements Repository {
 
 
   @override
+  Future<Map<int, Set<String>>?> shiftOffTaken(String storeId, DateTime month) async {
+    try {
+      final rows = await _db.rpc('shift_off_taken',
+          params: {'p_store': storeId, 'p_month': _day.format(DateTime(month.year, month.month))}) as List;
+      final m = <int, Set<String>>{};
+      for (final r in rows) {
+        m.putIfAbsent(DateTime.parse(r['req_date'] as String).day, () => {}).add(r['person_id'] as String);
+      }
+      return m;
+    } on PostgrestException catch (e) {
+      if (e.code != 'PGRST202' && e.code != '42883') rethrow;
+      return null;
+    }
+  }
+
+  @override
   Future<void> setShiftRequest(String storeId, String personId, DateTime date, String? kind) async {
     if (kind == null) {
       final rows = await _db.from('shift_requests').delete().eq('person_id', personId).eq('req_date', _day.format(date)).select('person_id');
