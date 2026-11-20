@@ -182,6 +182,8 @@ abstract class Repository {
   Future<Map<int, Set<String>>?> shiftOffTaken(String storeId, DateTime month);
   /// 這個月每位正職的特休（ops 0138）。null＝資料庫還沒更新，照舊手動填
   Future<Map<String, SpecialLeave>?> specialLeaveStatus(String storeId, DateTime month);
+  /// 我在這家店看不看得到薪資頁（ops 0139：小城外的店長看不到）。資料庫還沒更新回 true
+  Future<bool> payrollAccess(String storeId);
   /// 把某人「現在剩幾天」改成 balance（老闆；店長不能改自己的）
   Future<void> setSpecialLeave(String personId, double balance, {String? note});
   Future<void> saveShiftRule(String storeId, ShiftRule r);

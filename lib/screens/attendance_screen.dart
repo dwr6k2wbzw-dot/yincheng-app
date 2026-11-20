@@ -92,6 +92,7 @@ class AttendanceCard extends StatefulWidget {
 class _AttendanceCardState extends State<AttendanceCard> {
   Future<AttendanceMe?>? _future;
   PinStatus? _myPin; // 自己的打卡密碼設了沒（看不到密碼本身）
+  bool _payrollOk = true; // ops 0139：小城外的店長看不到薪資頁
   // 班表頁第二批：打卡卡片預設收起來，班表往上移；按標題展開，記在這支手機（讀寫不到就照預設）
   static const _openKey = 'attendance_card_open';
   bool _open = false;
@@ -137,6 +138,13 @@ class _AttendanceCardState extends State<AttendanceCard> {
     try {
       final me = await repo.attendanceMe(store);
       if (me != null && me.enabled && me.personId != null && !me.bindingPending) _loadPin(repo, store);
+      if (me != null && me.canManage && widget.membership.role == Role.manager) {
+        // 讀不到就當作看不到（不要讓店長誤進一個打不開的頁面）
+        final ok = await repo.payrollAccess(store).catchError((_) => false);
+        if (mounted && store == widget.membership.storeId) _payrollOk = ok;
+      } else {
+        _payrollOk = true;
+      }
       return me;
     } catch (_) {
       return null; // 打卡讀不到不影響班表
@@ -164,7 +172,7 @@ class _AttendanceCardState extends State<AttendanceCard> {
   /// 老闆、店長照樣進得了員工資料（老闆在這裡確認帳號綁定）；員工確認後才能到隱城掃碼支援。
   /// 薪資（第二階段 ops 0110）：老闆、店長做薪資；綁定經老闆確認的員工看自己的薪資單
   List<Widget> _payrollButtons(AttendanceMe me) => [
-        if (me.canManage)
+        if (me.canManage && _payrollOk)
           OutlinedButton(
             onPressed: () => Navigator.of(context).push(MaterialPageRoute(
                 builder: (_) => PayrollScreen(
