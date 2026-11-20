@@ -9,9 +9,10 @@ const check = (name, got, want) => { const y = JSON.stringify(got) === JSON.stri
 const avail = (profile) => JSON.stringify({ ...base, ...(profile === undefined ? {} : { profile }) });
 const evil = '<img src=x onerror="window.__x=1">';
 
-async function open(url, locale, bySlug) {
+async function open(url, locale, bySlug, init) {
   const b = await chromium.launch(process.env.CHROME ? { executablePath: process.env.CHROME, args: ['--no-sandbox'] } : {});
   const p = await b.newPage({ viewport: { width: 390, height: 844 }, locale, timezoneId: 'Asia/Taipei' });
+  if (init) await p.addInitScript(init);
   await p.route('**/rest/v1/rpc/reservation_availability', (r) => {
     const s = JSON.parse(r.request().postData()).p_slug;
     r.fulfill({ status: 200, contentType: 'application/json', body: bySlug[s] || bySlug['*'] });
@@ -78,6 +79,38 @@ const read = (p) => p.evaluate(() => ({
     const r = await read(p);
     check('舊資料庫：店名、地址照常', [r.store, r.info.includes('測試地址')], ['測試店', true]);
     check('舊資料庫：日期照常可以選', await p.$$eval('#cal button[data-d]', (x) => x.length) > 0, true);
+    await b.close();
+  }
+  // 4. 部署快照有 logo、封面照，資料庫把它們清空 → 畫面要拿掉；資料庫還沒更新（沒有 profile）→ 保留快照（Codex 審查）
+  const snap = "window.YC_PRE = { snap: { logo_url: 'logo-xcw.png', hero_url: 'hero-xcw.jpg', hero_pos: '22% 45%' } };";
+  const look = (p) => p.evaluate(() => ({ logo: !document.getElementById('logo').hidden, hero: document.querySelector('.brand').classList.contains('hero'),
+    bg: document.querySelector('.brand').style.backgroundImage, fav: document.getElementById('fav').getAttribute('href') }));
+  {
+    const { b, p } = await open('index.html?s=snap&anim=0', 'zh-TW', { '*': avail({ langs: ['zh'] }) }, snap);
+    check('資料庫清空圖：logo、封面照、分頁小圖都拿掉', await look(p), { logo: false, hero: false, bg: '', fav: 'data:,' });
+    await b.close();
+  }
+  {
+    const { b, p } = await open('index.html?s=snap&anim=0', 'zh-TW', { '*': avail(undefined) }, snap);
+    const r = await look(p);
+    check('資料庫還沒更新：保留快照的 logo、封面照', [r.logo, r.hero], [true, true]);
+    await b.close();
+  }
+  {
+    const { b, p } = await open('index.html?s=snap&anim=0', 'zh-TW', { '*': avail({ langs: ['zh'], logo_url: 'logo-yincheng.png', hero_url: 'hero-yincheng.jpg' }) }, snap);
+    const r = await look(p);
+    check('資料庫換了圖：用資料庫的', [r.logo, r.bg.includes('hero-yincheng.jpg'), (await p.$eval('#logo', (x) => x.getAttribute('src'))).startsWith('logo-yincheng.png')], [true, true, true]);
+    await b.close();
+  }
+  for (const [name, prof, want] of [['我的訂位：資料庫沒有 logo 就不放', { logo_url: null }, false], ['我的訂位：資料庫還沒更新用快照', undefined, true]]) {
+    const b = await chromium.launch(process.env.CHROME ? { executablePath: process.env.CHROME, args: ['--no-sandbox'] } : {});
+    const p = await b.newPage();
+    await p.addInitScript(snap);
+    await p.route('**/rest/v1/rpc/reservation_by_token', (r) => r.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ slug: 'snap', display_name: '測試店', date: '2026-11-18', time: '20:00', party: 2, name: '王 先生', status: 'confirmed', ...(prof ? { profile: prof } : {}) }) }));
+    await p.goto('http://localhost:8766/cancel.html?t=00000000-0000-4000-8000-000000000001', { waitUntil: 'networkidle' });
+    await p.waitForTimeout(300);
+    check(name, await p.$eval('#logo', (x) => !x.hidden), want);
     await b.close();
   }
   console.log('\n通過 ' + pass + '，失敗 ' + fail);

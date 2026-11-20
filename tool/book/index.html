@@ -97,21 +97,28 @@
   const pick = (m) => (m && (m[YCI.lang] ?? m.zh)) || '';
   const txt = (s) => YC.esc(s).replace(/\n/g, '<br>');
   let look = {};
-  function applyLook(p) {
-    if (p.logo_url && p.logo_url !== look.logo) { const u = YC.asset(p.logo_url); $('logo').src = u; $('logo').alt = ''; $('logo').hidden = false; $('fav').href = u; }
-    const b = document.querySelector('.brand');
-    if (p.hero_url && p.hero_url !== look.hero) { b.classList.add('hero'); b.style.backgroundImage = "url('" + YC.asset(p.hero_url) + "')"; }
-    if (p.hero_url) b.style.backgroundPosition = p.hero_pos || '';  // 照片取景，例：小城外往右移，露出左上的壁燈（老闆 2026-10-24）
-    look = { logo: p.logo_url || look.logo, hero: p.hero_url || look.hero };
+  // fromDb：資料庫回來的那份（以它為準：資料庫沒有 logo、封面照就拿掉部署快照的舊圖）
+  function applyLook(p, fromDb) {
+    const lg = $('logo'), b = document.querySelector('.brand');
+    if (p.logo_url) {
+      if (p.logo_url !== look.logo) { const u = YC.asset(p.logo_url); lg.src = u; $('fav').href = u; }
+      lg.alt = ''; lg.hidden = false;
+    } else if (fromDb && look.logo) { lg.hidden = true; lg.removeAttribute('src'); $('fav').href = 'data:,'; }
+    if (p.hero_url) {
+      if (p.hero_url !== look.hero) { b.classList.add('hero'); b.style.backgroundImage = "url('" + YC.asset(p.hero_url) + "')"; }
+      b.style.backgroundPosition = p.hero_pos || '';  // 照片取景，例：小城外往右移，露出左上的壁燈（老闆 2026-10-24）
+    } else if (fromDb && look.hero) { b.classList.remove('hero'); b.style.backgroundImage = ''; b.style.backgroundPosition = ''; }
+    look = fromDb ? { logo: p.logo_url, hero: p.hero_url } : { logo: p.logo_url || look.logo, hero: p.hero_url || look.hero };
   }
   applyLook(P);
 
   async function load() {
     info = await YC.rpc('reservation_availability', { p_slug: slug });
+    const fromDb = !!info.profile;
     P = info.profile || P;  // 資料庫還沒更新（沒有 profile）時保留部署時寫好的那份
     // 店家只開放部分語言：切換列只留那幾個；客人的語言不在裡面就改用中文
     if (YCI.restrict(P.langs)) $('phone').required = YCI.lang === 'zh';
-    applyLook(P);
+    applyLook(P, fromDb);
     // 標題照語言（例：英文顯示英文店名，跟 Google、媒體一致）；沒填就用訂位設定的店名
     $('store').textContent = pick(P.title) || info.display_name;
     if (!document.documentElement.dataset.slug) document.title = info.display_name + ' ' + T('booking');

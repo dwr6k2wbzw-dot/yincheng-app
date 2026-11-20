@@ -32,8 +32,8 @@
   let want = null; // 想改成幾位
   function show(r, msg) {
     const lg = document.getElementById('logo');
-    // logo 存在訂位頁資料（0135）；資料庫還沒更新時用部署時寫好的那份
-    const lf = (r.profile && r.profile.logo_url) || ((window.YC_PRE || {})[r.slug] || {}).logo_url;
+    // logo 存在訂位頁資料（0135，以它為準）；資料庫還沒更新（沒有 profile）時才用部署時寫好的那份
+    const lf = r.profile ? r.profile.logo_url : ((window.YC_PRE || {})[r.slug] || {}).logo_url;
     if (lf && lg.hidden) { lg.src = YC.asset(lf); lg.hidden = false; document.getElementById('fav').href = YC.asset(lf); }
     if (want == null) want = r.requested_party && r.party_request_status === 'pending' ? r.requested_party : r.party;
     const pending = r.party_request_status === 'pending';
