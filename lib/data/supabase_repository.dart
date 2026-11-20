@@ -965,6 +965,16 @@ class SupabaseRepository implements Repository {
   }
 
   @override
+  Future<bool> payrollAccess(String storeId) async {
+    try {
+      return await _db.rpc('payroll_access_mine', params: {'p_store': storeId}) == true;
+    } on PostgrestException catch (e) {
+      if (e.code != 'PGRST202' && e.code != '42883') rethrow;
+      return true;
+    }
+  }
+
+  @override
   Future<void> setSpecialLeave(String personId, double balance, {String? note}) =>
       _db.rpc('special_leave_set', params: {'p_person': personId, 'p_balance': balance, 'p_note': note});
 

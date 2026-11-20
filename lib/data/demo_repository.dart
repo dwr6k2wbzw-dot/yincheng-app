@@ -304,6 +304,8 @@ class DemoRepository implements Repository {
     };
   }
   @override
+  Future<bool> payrollAccess(String storeId) async => true;
+  @override
   Future<void> setSpecialLeave(String personId, double balance, {String? note}) async => _leaveAdj[personId] = balance;
   @override
   Future<void> setShiftRequest(String storeId, String personId, DateTime date, String? kind) async {
