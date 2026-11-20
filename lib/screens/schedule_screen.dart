@@ -197,10 +197,20 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     });
     try {
       await _repo.setShift(_store, p.id, DateTime(_month.year, _month.month, day), mark);
+      // 劃上或拿掉「特休」：特休剩餘是資料庫算的，重新讀一次（Codex P2）
+      if (_leave != null && (mark == '特休' || current == '特休')) _refreshLeave();
     } catch (e) {
       if (mounted) showMessage(context, friendlyError(e), error: true);
       _reload();
     }
+  }
+
+  Future<void> _refreshLeave() async {
+    final m = _month;
+    try {
+      final v = await _repo.specialLeaveStatus(_store, m);
+      if (mounted && m == _month) setState(() => _leave = v);
+    } catch (_) {}
   }
 
   /// 排上班前先檢查（2026-11-16 健檢 B1）：指休的日子、另一家店那天有班＝不能存；

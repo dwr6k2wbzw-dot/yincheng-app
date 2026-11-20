@@ -428,6 +428,19 @@ bool _better(List<int> a, List<int> b) {
 }
 
 /// 排之前先檢查設定：互相衝突、人不夠的地方先講。level 0＝要先改好才能排，3＝提醒。
+/// 店長在填指休頁劃的特休（ops 0138）：排之前先固定成「特休」，不算在應休裡（_fullTarget 會扣掉）。
+/// 不看排班時是不是當兼職（正職勾了「排班時當兼職」也一樣，Codex P2）；排之前的檢查和排班用同一份（Codex P2）。
+Map<String, Map<int, String>> withSpecialLeave(Map<String, Map<int, String>> fixed, Map<String, Map<int, String>> requests) {
+  if (!requests.values.any((r) => r.containsValue('special'))) return fixed;
+  final out = {for (final e in fixed.entries) e.key: {...e.value}};
+  requests.forEach((pid, r) {
+    r.forEach((d, k) {
+      if (k == 'special') out.putIfAbsent(pid, () => {}).putIfAbsent(d, () => '特休');
+    });
+  });
+  return out;
+}
+
 List<PlanIssue> precheckPlan({
   required int year,
   required int month,
@@ -438,6 +451,7 @@ List<PlanIssue> precheckPlan({
   Map<String, Map<int, String>> requests = const {},
   List<PairRule> pairRules = const [],
 }) {
+  fixed = withSpecialLeave(fixed, requests);
   final days = DateTime(year, month + 1, 0).day;
   int wd(int d) => DateTime(year, month, d).weekday;
   final out = <PlanIssue>[];
@@ -516,6 +530,7 @@ PlanResult planShifts({
   int seed = 0,
   int tries = 40,
 }) {
+  fixed = withSpecialLeave(fixed, requests);
   Map<String, Map<int, String>>? best;
   PlanCheck? bestCheck;
   final n = max(1, tries);
@@ -578,14 +593,6 @@ Map<String, Map<int, String>> _planOnce({
       if (e.key < 1 || e.key > days) continue;
       out[p.id]![e.key] = e.value;
       if (_isWork(e.value)) work[p.id]!.add(e.key);
-    }
-    // 店長在填指休頁劃的特休（ops 0138）：排之前先固定成「特休」，不算在應休裡（_fullTarget 會扣掉）
-    if (p.full) {
-      for (final e in (requests[p.id] ?? const <int, String>{}).entries) {
-        if (e.value == 'special' && e.key >= 1 && e.key <= days && !out[p.id]!.containsKey(e.key)) {
-          out[p.id]![e.key] = '特休';
-        }
-      }
     }
   }
   final hasOn = {for (final p in people) p.id: (requests[p.id] ?? const {}).values.any((v) => v == 'on')};

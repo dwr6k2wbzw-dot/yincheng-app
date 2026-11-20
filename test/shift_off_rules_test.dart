@@ -54,4 +54,20 @@ void main() {
     expect(row.values.where((m) => m == '休' || m == '指休').length, 8); // 應休 8 天照樣休滿
     expect(row.values.where(isWorkMark).length, 31 - 8 - 1);
   });
+
+  test('排班時當兼職的正職：店長劃的特休照樣排成特休（Codex P2）', () {
+    const p = PlanPerson(id: 'k', name: '凱', full: false, marks: ['V'], maxShifts: 10);
+    final r = planShifts(
+        year: 2026, month: 12, people: [p], needByDay: {for (var d = 1; d <= 31; d++) d: 1}, minFullByDay: const {},
+        requests: {'k': {5: 'special'}});
+    expect(r.entries['k']![5], '特休');
+  });
+
+  test('排之前的檢查也把店長劃的特休算進去（Codex P2）', () {
+    const p = PlanPerson(id: 'a', name: '甲', full: true, offTarget: 8, marks: ['V'], maxShifts: 22);
+    final issues = precheckPlan(
+        year: 2026, month: 12, people: [p], needByDay: {for (var d = 1; d <= 31; d++) d: 1}, minFullByDay: const {},
+        requests: {'a': {5: 'special'}});
+    expect(issues.where((i) => i.level == 0), isEmpty);
+  });
 }
