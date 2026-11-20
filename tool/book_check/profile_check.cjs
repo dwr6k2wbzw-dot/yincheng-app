@@ -27,8 +27,8 @@ const read = (p) => p.evaluate(() => ({
   logo: !document.getElementById('logo').hidden,
   hero: document.querySelector('.brand').classList.contains('hero'),
   info: document.getElementById('info').innerText,
-  langs: [...document.querySelectorAll('nav.langs button')].filter((x) => !x.hidden).map((x) => x.dataset.lang).join(','),
-  navHidden: document.querySelector('nav.langs').hidden,
+  langs: [...document.querySelectorAll('nav.langs button')].filter((x) => x.getClientRects().length > 0).map((x) => x.dataset.lang).join(','),
+  navHidden: document.querySelector('nav.langs').getClientRects().length === 0,  // 畫面上真的看不到（Codex 審查）
   lang: document.documentElement.lang,
   phoneRequired: document.getElementById('phone').required,
   anim: document.documentElement.classList.contains('anim'),
