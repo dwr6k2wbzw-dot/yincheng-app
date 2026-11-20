@@ -9,7 +9,7 @@
       "小城外珈琲 Caffé CityNorth",
       "Bar CityNorth"
     ],
-    "description": "大稻埕老宅二樓的調酒酒吧，王家衛風格。週六、日下午是咖啡與咖啡調酒時段，每晚 18:00 起是經典酒吧時段。",
+    "description": "大稻埕老宅二樓的調酒酒吧。週六、日下午是咖啡與咖啡調酒時段，每晚 18:00 起是經典酒吧時段。",
     "telephone": "+886-2-2559-5560",
     "streetAddress": "民生西路362巷15號2樓",
     "addressLocality": "大同區",
@@ -66,7 +66,7 @@
     "en": {
       "displayName": "Bar CityNorth",
       "title": "Bar CityNorth 小城外 | Cocktail & coffee bar in a historic house, Dadaocheng, Taipei | Reservations",
-      "description": "A cocktail bar on the second floor of a historic house in Dadaocheng, Taipei, with a Wong Kar-wai mood. Coffee and coffee cocktails on Saturday and Sunday afternoons; classic cocktails every night from 18:00.",
+      "description": "A cocktail bar on the second floor of a historic house in Dadaocheng, Taipei. Coffee and coffee cocktails on Saturday and Sunday afternoons; classic cocktails every night from 18:00.",
       "streetAddress": "2F, No. 15, Lane 362, Minsheng W. Rd.",
       "addressLocality": "Datong District",
       "servesCuisine": [

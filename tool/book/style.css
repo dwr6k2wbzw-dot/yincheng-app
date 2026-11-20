@@ -206,7 +206,7 @@ body { position:relative; }
 @keyframes popcorn { 0% { opacity:0; transform:translate(0, 0) rotate(0); } 10% { opacity:1; } 60% { opacity:1; transform:translate(var(--x), var(--y)) rotate(var(--r)); }
   100% { opacity:0; transform:translate(calc(var(--x) * 1.1), calc(var(--y) * -0.2 + 220px)) rotate(var(--r)); } }
 
-/* ---------------- 小城外：老宅、王家衛（anim.js，老闆 2026-10-18） ---------------- */
+/* ---------------- 小城外：老宅（anim.js，老闆 2026-10-18） ---------------- */
 /* 開場：老時鐘滴答＋一句話 */
 .intro.wk { background:radial-gradient(ellipse at 50% 42%, #1E2A22 0%, #0B0F0C 70%); flex-direction:column; gap:28px; animation:none; }
 .intro.wk.out { animation:wkOut .8s steps(6) forwards; }
@@ -247,7 +247,7 @@ body { position:relative; }
 @keyframes smoke { 0% { transform:translateY(0) scale(1); opacity:0; } 30% { opacity:1; } 100% { transform:translateY(-70%) scale(1.5) translateX(10%); opacity:0; } }
 @keyframes neonOn { 0% { opacity:0; } 8% { opacity:1; } 12% { opacity:.2; } 18% { opacity:1; } 22% { opacity:.4; } 26%, 100% { opacity:1; } }
 
-/* 卡片：抽格浮上來（王家衛的 step-printing） */
+/* 卡片：抽格浮上來（step-printing） */
 .wkw .card.rv { transition:opacity .8s steps(6), transform .8s steps(6), filter .8s steps(6); filter:blur(3px); }
 .wkw .card.rv.in { filter:none; }
 .wkw button.chip.on, .wkw button.cd.on { box-shadow:0 0 0 1px #D98A6E, 0 0 16px rgba(201,80,63,.45); }
@@ -476,10 +476,10 @@ form.card > .note:last-child { text-align:center; }
 #done { text-align:center; padding:30px 20px; }
 #done .big.ok { font-family:"Noto Serif TC", "Songti TC", serif; letter-spacing:.3em; text-indent:.3em; }
 .hold { text-align:left; }
-/* 小城外（王家衛）保留自己的紅色點綴 */
+/* 小城外保留自己的紅色點綴 */
 .wkw .label::before { background:#D98A6E; box-shadow:0 0 8px rgba(217,138,110,.6); }
 
-/* ---- 小城外開場 grand 加強（老闆 2026-10-22：光影＋王家衛鏡頭感）---- */
+/* ---- 小城外開場 grand 加強（老闆 2026-10-22：光影＋鏡頭感）---- */
 .intro.wk-grand { padding-top:0; overflow:hidden; perspective:900px; }
 .intro.wk-grand .stage { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; padding-top:6vh;
   transform-origin:42% 45%; animation:camPush 3.8s 1.2s steps(19) both; }

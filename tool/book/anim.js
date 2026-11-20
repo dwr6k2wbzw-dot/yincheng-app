@@ -3,7 +3,7 @@
 //   2. 封面：背景照片慢慢推近、放映機光束掃過、底片顆粒；店名像對焦一樣清楚起來
 //   3. 卡片：往下滑時一張張浮上來；選日期、時段會輕輕彈一下
 //   4. 訂位成功：變成一張電影票，蓋上「已訂位」章，爆米花噴出來
-//   小城外（老闆 2026-10-18：老宅、王家衛）另一套：開場老時鐘＋一句話、封面壁燈閃爍＋煙、
+//   小城外（老闆 2026-10-18：老宅）另一套：開場老時鐘＋一句話、封面壁燈閃爍＋煙、
 //   店名霓虹抽格（step-printing），訂位成功變一張手寫便條：時鐘指到訂位時間、蓋郵戳。
 // 手機設定「減少動態效果」時全部不動；網址加 ?anim=0 也可以關掉。
 (function () {
@@ -106,7 +106,7 @@
         const a = (i * 30 - 90) * Math.PI / 180;
         nums += '<text x="' + (200 + Math.cos(a) * 33).toFixed(1) + '" y="' + (128 + Math.sin(a) * 33 + 3).toFixed(1) + '">' + r + '</text>';
       });
-      // 2026-10-22 老闆選「光影＋王家衛鏡頭感」：（天井樓梯）→ 黑暗中桌燈亮起、彩色玻璃投在老牆、光束裡飄灰塵、
+      // 2026-10-22 老闆選「光影＋鏡頭感」：（天井樓梯）→ 黑暗中桌燈亮起、彩色玻璃投在老牆、光束裡飄灰塵、
       // 窗外雨夜霓虹、鐘擺抽格殘影、墨綠暗紅調色＋底片顆粒＋暗角、鏡頭慢慢推近
       let dust = '', rain = '', bokeh = '';
       for (let i = 0; i < 22; i++) dust += '<i style="left:' + (8 + Math.random() * 80).toFixed(1) + '%;top:' + (10 + Math.random() * 80).toFixed(1) + '%;animation-delay:' + (-Math.random() * 6).toFixed(2) + 's;animation-duration:' + (5 + Math.random() * 4).toFixed(1) + 's"></i>';
@@ -159,7 +159,7 @@
         '<circle cx="200" cy="128" r="26" fill="none" stroke="#9C7A3A" stroke-width="1" opacity=".6"/>' + nums +
         '<line x1="200" y1="128" x2="200" y2="108" class="gh"/><line x1="200" y1="128" x2="200" y2="96" class="gm"/><circle cx="200" cy="128" r="3" fill="#3A2A12"/>' +
         '<rect x="152" y="210" width="96" height="290" fill="url(#wd)"/><rect x="166" y="226" width="68" height="250" rx="3" fill="#2A140A" stroke="#A86A34" stroke-width="2"/>' +
-        // 鐘擺＋兩道抽格殘影（王家衛 step-printing）
+        // 鐘擺＋兩道抽格殘影（step-printing）
         '<g class="pend ghost g2nd"><line x1="200" y1="228" x2="200" y2="400" stroke="#C9A04E" stroke-width="2"/><circle cx="200" cy="410" r="20" fill="url(#gd)"/></g>' +
         '<g class="pend ghost g1st"><line x1="200" y1="228" x2="200" y2="400" stroke="#C9A04E" stroke-width="2"/><circle cx="200" cy="410" r="20" fill="url(#gd)"/></g>' +
         '<g class="pend"><line x1="200" y1="228" x2="200" y2="400" stroke="#C9A04E" stroke-width="2"/><circle cx="200" cy="410" r="20" fill="url(#gd)"/></g>' +
