@@ -1,3 +1,4 @@
+import 'shift_off_rules.dart';
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -282,6 +283,28 @@ class DemoRepository implements Repository {
   Future<void> deleteShiftPairRule(String id) async => _pairRules.removeWhere((r) => r.id == id);
   @override
   Future<Map<int, Set<String>>?> shiftOffTaken(String storeId, DateTime month) async => null; // App 自己算
+  final Map<String, double> _leaveAdj = {};
+  @override
+  Future<Map<String, SpecialLeave>?> specialLeaveStatus(String storeId, DateTime month) async {
+    final d = await shiftMonth(storeId, month);
+    final now = DateTime.now();
+    return {
+      for (final p in d.people.where((p) => p.isFull))
+        p.id: SpecialLeave(
+          start: DateTime(2026, 11, 1),
+          balance: (_leaveAdj[p.id] ?? 7) - d.leaveDays(p.id),
+          usedInMonth: d.leaveDays(p.id),
+          nextGrantDate: p.hireDate == null
+              ? null
+              : lsaSpecialGrants(p.hireDate!).map((g) => g.$1).where((x) => x.isAfter(now)).firstOrNull,
+          nextGrantDays: p.hireDate == null
+              ? null
+              : lsaSpecialGrants(p.hireDate!).where((g) => g.$1.isAfter(now)).firstOrNull?.$2.toDouble(),
+        ),
+    };
+  }
+  @override
+  Future<void> setSpecialLeave(String personId, double balance, {String? note}) async => _leaveAdj[personId] = balance;
   @override
   Future<void> setShiftRequest(String storeId, String personId, DateTime date, String? kind) async {
     final m = _shiftReq.putIfAbsent(personId, () => {});

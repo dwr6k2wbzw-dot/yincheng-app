@@ -33,4 +33,46 @@ void main() {
     expect(offCheck(takenDays: const {}, mine: {...five}..remove(5), personId: 'a', day: 10).overLimit, isFalse);
     expect(offCheck(takenDays: const {}, mine: {...five, 9: 'on'}, personId: 'a', day: 9).overLimit, isTrue);
   });
+
+  test('勞基法特休：半年 3、1 年 7、2 年 10、3～4 年 14、5～9 年 15、10 年 16、24 年起 30', () {
+    final g = lsaSpecialGrants(DateTime(2025, 7, 18));
+    expect(g.first, (DateTime(2026, 1, 18), 3));
+    expect(g[1], (DateTime(2026, 7, 18), 7));
+    expect([for (final x in g.skip(2).take(9)) x.$2], [10, 14, 14, 15, 15, 15, 15, 15, 16]);
+    expect(g[24].$2, 30);
+    expect(g[30].$2, 30);
+  });
+
+  test('店長劃的特休：排班先固定成特休，不算在應休裡', () {
+    const p = PlanPerson(id: 'a', name: '甲', full: true, offTarget: 8, marks: ['V']);
+    final r = planShifts(
+        year: 2026, month: 12, people: [p], needByDay: {for (var d = 1; d <= 31; d++) d: 1}, minFullByDay: const {},
+        requests: {'a': {5: 'special', 6: 'off'}});
+    final row = r.entries['a']!;
+    expect(row[5], '特休');
+    expect(row[6], '指休');
+    expect(row.values.where((m) => m == '休' || m == '指休').length, 8); // 應休 8 天照樣休滿
+    expect(row.values.where(isWorkMark).length, 31 - 8 - 1);
+  });
+
+  test('排班時當兼職的正職：店長劃的特休照樣排成特休（Codex P2）', () {
+    const p = PlanPerson(id: 'k', name: '凱', full: false, marks: ['V'], maxShifts: 10);
+    final r = planShifts(
+        year: 2026, month: 12, people: [p], needByDay: {for (var d = 1; d <= 31; d++) d: 1}, minFullByDay: const {},
+        requests: {'k': {5: 'special'}});
+    expect(r.entries['k']![5], '特休');
+  });
+
+  test('排之前的檢查也把店長劃的特休算進去（Codex P2）', () {
+    const p = PlanPerson(id: 'a', name: '甲', full: true, offTarget: 8, marks: ['V'], maxShifts: 22);
+    final issues = precheckPlan(
+        year: 2026, month: 12, people: [p], needByDay: {for (var d = 1; d <= 31; d++) d: 1}, minFullByDay: const {},
+        requests: {'a': {5: 'special'}});
+    expect(issues.where((i) => i.level == 0), isEmpty);
+  });
+
+  test('原本是休、指休的格子，店長劃特休後改成特休；排上班的留著給檢查擋（Codex P2）', () {
+    final f = withSpecialLeave({'a': {5: '休', 6: '指休', 7: 'V'}}, {'a': {5: 'special', 6: 'special', 7: 'special', 8: 'special'}});
+    expect(f['a'], {5: '特休', 6: '特休', 7: 'V', 8: '特休'});
+  });
 }

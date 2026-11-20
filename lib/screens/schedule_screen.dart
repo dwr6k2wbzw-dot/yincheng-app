@@ -5,6 +5,7 @@ import '../app_state.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
 import '../data/schedule_health.dart';
+import '../data/shift_off_rules.dart';
 import '../data/shift_marks.dart';
 import '../services/slip_scan.dart';
 import '../theme.dart';
@@ -56,6 +57,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   late Future<ShiftMonth> _future;
   ShiftMonth? _data;
   ShiftPlanSetup? _setup; // 每天要幾人、指休等（讀不到就是 null，不影響看班表）
+  Map<String, SpecialLeave>? _leave; // 特休自動算（ops 0138；null＝資料庫還沒更新，照舊手動填）
   bool _started = false;
 
   bool get _canEdit => widget.membership.isManager;
@@ -89,11 +91,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       _repo.shiftMonth(_store, m),
       // 排班設定只拿來判斷「排好了沒」和標出缺人的日子；讀不到不擋班表（2026-11-16 健檢）
       _repo.shiftPlanSetup(_store, m).then<ShiftPlanSetup?>((v) => v, onError: (_) => null),
+      _repo.specialLeaveStatus(_store, m).then<Map<String, SpecialLeave>?>((v) => v, onError: (_) => null),
     ]);
     final d = r[0] as ShiftMonth;
     if (m == _month) {
       _data = d;
       _setup = r[1] as ShiftPlanSetup?;
+      _leave = r[2] as Map<String, SpecialLeave>?;
     }
     return d;
   }
@@ -193,10 +197,20 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     });
     try {
       await _repo.setShift(_store, p.id, DateTime(_month.year, _month.month, day), mark);
+      // 劃上或拿掉「特休」：特休剩餘是資料庫算的，重新讀一次（Codex P2）
+      if (_leave != null && (mark == '特休' || current == '特休')) _refreshLeave();
     } catch (e) {
       if (mounted) showMessage(context, friendlyError(e), error: true);
       _reload();
     }
+  }
+
+  Future<void> _refreshLeave() async {
+    final m = _month;
+    try {
+      final v = await _repo.specialLeaveStatus(_store, m);
+      if (mounted && m == _month) setState(() => _leave = v);
+    } catch (_) {}
   }
 
   /// 排上班前先檢查（2026-11-16 健檢 B1）：指休的日子、另一家店那天有班＝不能存；
@@ -309,7 +323,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     final hoursMode = _codeHours != null;
     String f(double? v) => v == null ? '' : (v == v.roundToDouble() ? v.toInt().toString() : v.toString());
     final s = TextEditingController(text: f(hoursMode ? st.compUnused : st.shouldOff));
-    final u = TextEditingController(text: f(hoursMode ? st.specialTotal : st.prevUnused));
+    // ops 0138：特休改成自動算，這裡只能「改成現在剩幾天」（空白＝不改）
+    final lv = _leave?[p.id];
+    final auto = _leave != null && p.isFull;
+    final u = TextEditingController(text: auto ? '' : f(hoursMode ? st.specialTotal : st.prevUnused));
     DateTime? hire = p.hireDate;
     String? errS, errU;
     final ok = await showDialog<bool>(
@@ -320,8 +337,25 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           content: Column(mainAxisSize: MainAxisSize.min, children: [
             TextField(controller: s, keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 decoration: InputDecoration(labelText: hoursMode ? '未休／補休（天）' : '本月應休（天）', errorText: errS)),
-            TextField(controller: u, keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: InputDecoration(labelText: hoursMode ? '累計特休（天）' : '原未休特休（天）', errorText: errU)),
+            if (auto) ...[
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                    [
+                      '特休剩餘 ${lv?.balance == null ? '—' : _num(lv!.balance!)} 天（自動算，含 ${_month.month} 月劃的特休）',
+                      if (lv?.nextGrantDate != null)
+                        '下次 ${DateFormat('yyyy/M/d').format(lv!.nextGrantDate!)} 到職滿期，自動加 ${_num(lv.nextGrantDays ?? 0)} 天',
+                      if (hire == null) '沒填報到日，不會自動加特休',
+                    ].join('\n'),
+                    style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+              ),
+              TextField(controller: u, keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(labelText: '改成剩幾天', errorText: errU,
+                      helperText: '空白＝不改；只有要更正時才填，會記下是誰改的', helperMaxLines: 2)),
+            ] else
+              TextField(controller: u, keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(labelText: hoursMode ? '累計特休（天）' : '原未休特休（天）', errorText: errU)),
             const SizedBox(height: 8),
             ListTile(
               contentPadding: EdgeInsets.zero,
@@ -355,9 +389,16 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           _store,
           p.id,
           _month,
-          hoursMode
-              ? ShiftStats(shouldOff: st.shouldOff, prevUnused: st.prevUnused, compUnused: a, specialTotal: b)
-              : ShiftStats(shouldOff: a, prevUnused: b, compUnused: st.compUnused, specialTotal: st.specialTotal));
+          auto
+              ? (hoursMode
+                  ? ShiftStats(shouldOff: st.shouldOff, prevUnused: st.prevUnused, compUnused: a, specialTotal: st.specialTotal)
+                  : ShiftStats(shouldOff: a, prevUnused: st.prevUnused, compUnused: st.compUnused, specialTotal: st.specialTotal))
+              : hoursMode
+                  ? ShiftStats(shouldOff: st.shouldOff, prevUnused: st.prevUnused, compUnused: a, specialTotal: b)
+                  : ShiftStats(shouldOff: a, prevUnused: b, compUnused: st.compUnused, specialTotal: st.specialTotal));
+      if (auto && b != null && b != lv?.balance) {
+        await _repo.setSpecialLeave(p.id, b, note: '${_month.month} 月統計調整');
+      }
       if (hire != p.hireDate) {
         await _repo.saveShiftPerson(_store, ShiftPerson(id: p.id, name: p.name, fullName: p.fullName, kind: p.kind, sortOrder: p.sortOrder, hireDate: hire, active: p.active, roleCode: p.roleCode, userId: p.userId));
       }
@@ -906,6 +947,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     });
   }
 
+  static const _leaveRule =
+      '特休剩餘＝起算的天數 − 班表上劃「特休」的天數 ＋ 到職滿期自動加的天數（照報到日，勞基法：滿半年 3 天、1 年 7 天、2 年 10 天、3～4 年 14 天、5～9 年 15 天、10 年起每年多 1 天，最多 30 天）。'
+      '加的天數到了那天才算進去；排在之後的特休，排上去就先扣。沒填報到日不會自動加。點名字可以看下次加幾天、調整天數。';
+
   Widget _monthSummary(ShiftMonth d, List<ShiftPerson> full) {
     String n(double? v) => v == null ? '—' : (v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1));
     TableRow row(List<String> cells, {bool head = false, VoidCallback? onTap}) => TableRow(children: [
@@ -930,10 +975,19 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         Table(
           columnWidths: const {0: FlexColumnWidth(1.3)},
           children: [
-            row(['', '應休', '已休', '原未休\n特休', '剩餘未休\n特休', '報到日'], head: true),
+            row(_leave != null ? ['', '應休', '已休', '特休\n剩餘', '報到日'] : ['', '應休', '已休', '原未休\n特休', '剩餘未休\n特休', '報到日'], head: true),
             for (final p in full)
               () {
                 final st = d.stats[p.id] ?? const ShiftStats();
+                if (_leave != null) {
+                  return row([
+                    p.shortLabel,
+                    n(st.shouldOff),
+                    n(d.offDays(p.id).toDouble()),
+                    n(_leave![p.id]?.balance),
+                    p.hireDate == null ? '—' : DateFormat('yy/M/d').format(p.hireDate!),
+                  ], onTap: _canEdit ? () => _editStats(p, d) : null);
+                }
                 final should = st.shouldOff, prev = st.prevUnused;
                 final taken = d.offDays(p.id).toDouble();
                 // 排「特休」的天數直接用掉特休（0072，老闆 2026-10-27 隱城也加特休）
@@ -951,11 +1005,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           ],
         ),
         const SizedBox(height: 4),
-        const InfoLine(
+        InfoLine(
           icon: null,
           padding: EdgeInsets.zero,
           text: '怎麼算的',
-          detail: '已休＝休＋指休；剩餘未休特休＝原未休特休 −（已休 − 應休）− 排特休的天數',
+          detail: _leave != null
+              ? '已休＝休＋指休（特休不算）。$_leaveRule'
+              : '已休＝休＋指休；剩餘未休特休＝原未休特休 −（已休 − 應休）− 排特休的天數',
         ),
       ]),
     );
@@ -997,17 +1053,19 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   '${d.workDays(p.id)}',
                   p.isFull ? '${d.offDays(p.id)}' : '—',
                   p.isFull ? n(st.compUnused) : '—',
-                  p.isFull ? n(st.specialTotal) : '—',
+                  p.isFull ? n(_leave != null ? _leave![p.id]?.balance : st.specialTotal) : '—',
                 ], onTap: _canEdit && p.isFull ? () => _editStats(p, d) : null);
               }(),
           ],
         ),
         const SizedBox(height: 4),
-        const InfoLine(
+        InfoLine(
           icon: null,
           padding: EdgeInsets.zero,
           text: '怎麼算的',
-          detail: '總時數＝整個月（含月底最後一天）；月休＝休＋指休（特休另計、不算月休）；未休／補休、累計特休由老闆或店長填。',
+          detail: _leave != null
+              ? '總時數＝整個月（含月底最後一天）；月休＝休＋指休（特休另計、不算月休）；未休／補休由老闆或店長填。累計特休自動算：$_leaveRule'
+              : '總時數＝整個月（含月底最後一天）；月休＝休＋指休（特休另計、不算月休）；未休／補休、累計特休由老闆或店長填。',
         ),
       ]),
     );
