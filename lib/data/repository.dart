@@ -177,6 +177,8 @@ abstract class Repository {
   Future<ShiftPlanSetup> shiftPlanSetup(String storeId, DateTime month);
   /// kind：off 想休／on 可以上／null 清掉
   Future<void> setShiftRequest(String storeId, String personId, DateTime date, String? kind);
+  /// 這個月哪幾天已經有正職指休（日 → 人員 id；ops 0137）。null＝資料庫還沒更新，App 自己算
+  Future<Map<int, Set<String>>?> shiftOffTaken(String storeId, DateTime month);
   Future<void> saveShiftRule(String storeId, ShiftRule r);
   Future<void> saveShiftStaffing(String storeId, Map<int, StaffingNeed> staffing);
   /// need 為 null＝取消這天的特別人力

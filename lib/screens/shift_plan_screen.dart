@@ -6,6 +6,7 @@ import '../app_state.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
 import '../data/schedule_health.dart';
+import '../data/shift_off_rules.dart';
 import '../data/shift_marks.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -192,6 +193,7 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
   ShiftMonth? _sm;
   ShiftPlanSetup? _setup;
   String? _personId; // 正在填誰的
+  Map<int, Set<String>>? _takenDb; // ops 0137：哪幾天已經有正職指休（null＝資料庫還沒更新）
   Object? _error;
   bool _loading = true;
 
@@ -215,7 +217,8 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
     try {
       final r = await Future.wait<dynamic>([
         _repo.shiftMonth(_store, _month),
-        _repo.shiftPlanSetup(_store, _month)
+        _repo.shiftPlanSetup(_store, _month),
+        _repo.shiftOffTaken(_store, _month),
       ]);
       final sm = r[0] as ShiftMonth;
       final me = sm.people
@@ -225,6 +228,7 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
       setState(() {
         _sm = sm;
         _setup = r[1] as ShiftPlanSetup;
+        _takenDb = r[2] as Map<int, Set<String>>?;
         _personId ??= me?.id ??
             (_manager
                 ? sm.people.where((p) => p.active).firstOrNull?.id
@@ -271,12 +275,48 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
     final order =
         _planFull(p, _setup) ? [null, 'off', 'on'] : [null, 'on', 'off'];
     final next = order[(order.indexOf(cur) + 1) % order.length];
+    // ops 0137：同一天只能一位正職指休、每月最多 5 天；員工直接擋，老闆店長提醒後可以超過
+    if (next == 'off' && _planFull(p, _setup)) {
+      final c = offCheck(takenDays: _taken, mine: _setup!.requests[p.id] ?? const {}, personId: p.id, day: day);
+      if (c.taken.isNotEmpty || c.overLimit) {
+        if (!_manager) {
+          showMessage(
+              context,
+              c.taken.isNotEmpty
+                  ? '已有人指休，請找店長協調班表'
+                  : '一個月最多指休 $shiftOffMonthMax 天，要再多請找店長協調班表',
+              error: true);
+          return;
+        }
+        final names = c.taken.map((id) => _sm?.people.where((x) => x.id == id).firstOrNull?.label ?? '').where((n) => n.isNotEmpty).join('、');
+        final ok = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text('還是要替${p.label}填 ${_month.month}/$day 指休？'),
+            content: Text([
+              if (c.taken.isNotEmpty) '這天${names.isEmpty ? '已經有正職' : names}指休了。',
+              if (c.overLimit) '${p.label}這個月已經指休 $shiftOffMonthMax 天。',
+              '員工自己填會被擋下來，老闆、店長協調好可以超過。',
+            ].join('\n')),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+              FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('還是要填')),
+            ],
+          ),
+        );
+        if (ok != true || !mounted) return;
+      }
+    }
     setState(() {
       final m = _setup!.requests.putIfAbsent(p.id, () => {});
       if (next == null) {
         m.remove(day);
       } else {
         m[day] = next;
+      }
+      if (_takenDb != null && _planFull(p, _setup)) {
+        final t = _takenDb!.putIfAbsent(day, () => {});
+        next == 'off' ? t.add(p.id) : t.remove(p.id);
       }
     });
     try {
@@ -287,6 +327,9 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
       _load();
     }
   }
+
+  Map<int, Set<String>> get _taken =>
+      offTakenDays(fromDb: _takenDb, people: _sm?.people ?? const [], setup: _setup ?? const ShiftPlanSetup());
 
   @override
   Widget build(BuildContext context) {
@@ -384,7 +427,7 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
                 p == null
                     ? ''
                     : _planFull(p, _setup)
-                        ? '點一下＝指休，再點＝想上班，再點＝取消。目前指休 $offCount 天${onCount > 0 ? '、想上班 $onCount 天' : ''}。'
+                        ? '點一下＝指休，再點＝想上班，再點＝取消。目前指休 $offCount 天${onCount > 0 ? '、想上班 $onCount 天' : ''}。\n同一天只能一位正職指休（先填先贏），每月最多 $shiftOffMonthMax 天；要再多請找店長協調班表。'
                         : '點一下＝可以上，再點＝不能上，再點＝取消。有填可以上，排班就只排那些天。目前可以上 $onCount 天${offCount > 0 ? '、不能上 $offCount 天' : ''}。',
                 style: const TextStyle(fontSize: AppType.small),
               ),
@@ -408,7 +451,8 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
             children: [
               for (var i = 0; i < firstWd; i++) const SizedBox.shrink(),
               for (var d = 1; d <= days; d++)
-                _dayCell(d, mine[d], othersOff(d), sm.notes[d]),
+                _dayCell(d, mine[d], othersOff(d), sm.notes[d],
+                    taken: p != null && _planFull(p, _setup) && mine[d] != 'off' && ({...?_taken[d]}..remove(p.id)).isNotEmpty),
             ],
           ),
           const SizedBox(height: 8),
@@ -434,7 +478,7 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
             style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
       ]);
 
-  Widget _dayCell(int d, String? kind, int others, String? note) {
+  Widget _dayCell(int d, String? kind, int others, String? note, {bool taken = false}) {
     final bg = kind == 'off'
         ? const Color(0xFFE0A34A).withValues(alpha: 0.85)
         : kind == 'on'
@@ -465,7 +509,9 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
                           ? (_person == null || _planFull(_person!, _setup)
                               ? '想上'
                               : '可以上')
-                          : (note ?? ''),
+                          : taken
+                              ? '已有人'
+                              : (note ?? ''),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: AppType.micro)),
