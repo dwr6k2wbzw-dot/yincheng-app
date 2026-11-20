@@ -91,7 +91,7 @@ Uint8List buildPayrollXlsx(PayrollExport p) {
     '姓名', '計薪方式', '薪資', '天數／時數',
     ...cols.income, '收入合計',
     ...cols.deduction, '支出合計',
-    '實領金額', '領現金額', '實際入帳金額', '備註',
+    '實際入帳金額', '備註',
   ];
 
   put(0, TextCellValue('${p.title}　${DateFormat('yyyy 年 M 月').format(p.month)} 薪資表（${p.published ? '已發布' : '草稿，還沒發布'}）'),
@@ -158,9 +158,7 @@ Uint8List buildPayrollXlsx(PayrollExport p) {
       }
     }
     money2(s.deductionTotal, b: true);
-    money2(s.gross!.roundToDouble());
-    money2(s.cashPaid);
-    money2(s.transfer!, b: true);
+    money2(s.gross!.roundToDouble(), b: true);
     if ((row.note ?? '').trim().isNotEmpty) put(c, TextCellValue(row.note!.trim()));
     r++;
   }

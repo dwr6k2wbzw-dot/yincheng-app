@@ -467,7 +467,6 @@ class _PayrollScreenState extends State<PayrollScreen> {
                   if (r.bonus + r.extras.income != 0) '獎金等 ＋${ntd(r.bonus + r.extras.income)}',
                   if (r.insurance + r.deduction + r.extras.deduction != 0)
                     '支出 −${ntd(r.insurance + r.deduction + r.extras.deduction)}',
-                  if (r.extras.cashPaid != 0) '領現 ${ntd(r.extras.cashPaid)}',
                 ].join('・'));
     return ListTile(
       contentPadding: EdgeInsets.zero,
@@ -581,13 +580,12 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
   late final _bonus = TextEditingController(text: _fmt(r.bonus));
   late final _ins = TextEditingController(text: _fmt(r.insurance));
   late final _ded = TextEditingController(text: _fmt(r.deduction));
-  // ops 0126：全勤獎金、勞保、健保、眷屬健保、所得稅、領現、自訂項目
+  // ops 0126：全勤獎金、勞保、健保、眷屬健保、所得稅、自訂項目（領現 2026-11-20 移出畫面）
   late final _att = TextEditingController(text: _fmt(r.extras.attendanceBonus));
   late final _lab = TextEditingController(text: _fmt(r.extras.laborIns));
   late final _hea = TextEditingController(text: _fmt(r.extras.healthIns));
   late final _dep = TextEditingController(text: _fmt(r.extras.dependentsIns));
   late final _tax = TextEditingController(text: _fmt(r.extras.incomeTax));
-  late final _cash = TextEditingController(text: _fmt(r.extras.cashPaid));
   late final List<PayItem> _items = [...r.extras.items];
   late final _note = TextEditingController(text: r.note);
   final _reason = TextEditingController();
@@ -616,7 +614,6 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
     _hea: (2, 99999999),
     _dep: (2, 99999999),
     _tax: (2, 99999999),
-    _cash: (2, 99999999),
   };
 
   /// 舊的「勞健保自付額」（合計）：只有已經填過的才顯示，之後分開填勞保、健保
@@ -634,7 +631,6 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
         (_tax, '金額'),
         if (_legacyIns) (_ins, '金額'),
         (_ded, '金額'),
-        (_cash, '金額'),
       ];
 
   /// 有欄位格式、小數位數、上限不對或時數不是 0.5 的倍數：停止試算、不能存。回傳要顯示的哪一類（時數／天數／金額）
@@ -654,21 +650,16 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
         healthIns: ins ? _parse(_hea) ?? 0 : 0,
         dependentsIns: ins ? _parse(_dep) ?? 0 : 0,
         incomeTax: _parse(_tax) ?? 0,
-        cashPaid: _parse(_cash) ?? 0,
+        cashPaid: r.extras.cashPaid, // 老闆 2026-11-20：領現金額移出畫面，原本的值不動
         items: _items);
   }
 
-  /// 領現是實發裡發現金的那一部分，不能比實發多
-  String? get _cashError {
-    final g = _preview, c = _parse(_cash) ?? 0;
-    return g != null && c > g ? '領現金額不能比實發金額多（實發 ${ntd(g)}）' : null;
-  }
   bool get _lsa => r.otMode == 'lsa';
   double? get _auto => r.payType == 'daily' ? r.autoDays : r.autoHours;
 
   @override
   void dispose() {
-    for (final c in [_qty, _ot1, _ot2, _bonus, _ins, _ded, _att, _lab, _hea, _dep, _tax, _cash, _note, _reason]) {
+    for (final c in [_qty, _ot1, _ot2, _bonus, _ins, _ded, _att, _lab, _hea, _dep, _tax, _note, _reason]) {
       c.dispose();
     }
     super.dispose();
@@ -783,7 +774,7 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
   }
 
   Future<void> _save() async {
-    if (_blocked != null || _cashError != null) return;
+    if (_blocked != null) return;
     setState(() => _saving = true);
     try {
       final o = _override;
@@ -993,21 +984,6 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
         if (_legacyIns) _num(_ins, '勞健保自付額（舊的合計欄位）', helper: '之後請分開填勞保、健保；這一格改成空白就不會再出現'),
         _num(_ded, '其他扣項'),
         ..._itemRows(false),
-        _head('發薪方式'),
-        TextField(
-          controller: _cash,
-          enabled: r.editable,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-          onChanged: (_) => setState(() {}),
-          decoration: InputDecoration(
-              labelText: '領現金額',
-              helperText: '實發金額裡發現金的部分（沒有就留空）；實際入帳＝實發−領現',
-              helperMaxLines: 3,
-              errorText: _error(_cash) ?? (_blocked == null ? _cashError : null),
-              errorMaxLines: 2),
-        ),
-        const SizedBox(height: 8),
         TextField(controller: _note, enabled: r.editable, maxLength: 200, decoration: const InputDecoration(labelText: '備註（薪資單上看得到）')),
         TextField(controller: _reason, enabled: r.editable, maxLength: 200, decoration: const InputDecoration(labelText: '修改原因（記在修改紀錄，可空白）')),
         const SizedBox(height: 12),
@@ -1015,19 +991,11 @@ class _PayrollEditScreenState extends State<PayrollEditScreen> {
         _blocked != null
             ? Text('實際入帳金額：$_blocked格式待修正，暫不計算',
                 style: TextStyle(fontSize: AppType.title, fontWeight: AppFont.heading, color: AppColors.bad))
-            : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                // 老闆 2026-11-18：「實發金額」改叫「實際入帳金額」；有領現時先列實領金額
-                if (g != null && (_parse(_cash) ?? 0) > 0 && _cashError == null) ...[
-                  Text('實際入帳金額 ${ntd(g - roundYuan(_parse(_cash)!))}',
-                      style: const TextStyle(fontSize: AppType.heading, fontWeight: AppFont.heading)),
-                  Text('實領 ${ntd(g)}・領現 ${ntd(_parse(_cash)!)}', style: TextStyle(color: AppColors.muted)),
-                ] else
-                  Text('實際入帳金額 ${g == null ? '—' : ntd(g)}',
-                      style: const TextStyle(fontSize: AppType.heading, fontWeight: AppFont.heading)),
-              ]),
+            : Text('實際入帳金額 ${g == null ? '—' : ntd(g)}',
+                style: const TextStyle(fontSize: AppType.heading, fontWeight: AppFont.heading)),
         const SizedBox(height: 16),
         FilledButton(
-            onPressed: _saving || _blocked != null || _cashError != null ? null : _save, child: Text(_saving ? '儲存中…' : '儲存')),
+            onPressed: _saving || _blocked != null ? null : _save, child: Text(_saving ? '儲存中…' : '儲存')),
       ];
 }
 
@@ -1069,7 +1037,7 @@ class _MyPayslipsScreenState extends State<MyPayslipsScreen> {
 }
 
 /// 薪資單的表格（老闆 2026-11-17 指定的格式）：分「收入／支出」兩欄、有金額才列；
-/// 下面收入合計／支出合計、實際入帳金額（有領現才多「實領金額」「領現金額」）、備註欄。
+/// 下面收入合計／支出合計、實際入帳金額、備註欄（領現金額老闆 2026-11-20 移出）。
 class PayslipTable extends StatelessWidget {
   const PayslipTable({super.key, required this.slip});
   final PayrollSlip slip;
@@ -1115,7 +1083,6 @@ class PayslipTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cash = slip.cashPaid;
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       IntrinsicHeight(
         child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -1125,14 +1092,7 @@ class PayslipTable extends StatelessWidget {
         ]),
       ),
       const Divider(height: 20),
-      // 老闆 2026-11-18：「實發金額」改叫「實際入帳金額」；有領現時多列實領、領現
-      if (cash == 0)
-        _total('實際入帳金額', slip.gross == null ? '—' : ntd(slip.gross!.round()), big: true)
-      else ...[
-        _total('實領金額', slip.gross == null ? '—' : ntd(slip.gross!.round())),
-        _total('領現金額', ntd(cash.round())),
-        _total('實際入帳金額', slip.transfer == null ? '—' : ntd(slip.transfer!.round()), big: true),
-      ],
+      _total('實際入帳金額', slip.gross == null ? '—' : ntd(slip.gross!.round()), big: true),
       // 備註欄：一定有這一欄，沒寫就空著（老闆 2026-11-18）
       const Divider(height: 20),
       Text('備註', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
