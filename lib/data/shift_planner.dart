@@ -435,7 +435,10 @@ Map<String, Map<int, String>> withSpecialLeave(Map<String, Map<int, String>> fix
   final out = {for (final e in fixed.entries) e.key: {...e.value}};
   requests.forEach((pid, r) {
     r.forEach((d, k) {
-      if (k == 'special') out.putIfAbsent(pid, () => {}).putIfAbsent(d, () => '特休');
+      if (k != 'special') return;
+      final row = out.putIfAbsent(pid, () => {});
+      // 原本是休、指休的格子改成特休（Codex P2）；原本排上班的留著，檢查會列成「填了特休卻排上班」
+      if (row[d] == null || row[d] == '休' || row[d] == '指休') row[d] = '特休';
     });
   });
   return out;

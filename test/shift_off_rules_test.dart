@@ -70,4 +70,9 @@ void main() {
         requests: {'a': {5: 'special'}});
     expect(issues.where((i) => i.level == 0), isEmpty);
   });
+
+  test('原本是休、指休的格子，店長劃特休後改成特休；排上班的留著給檢查擋（Codex P2）', () {
+    final f = withSpecialLeave({'a': {5: '休', 6: '指休', 7: 'V'}}, {'a': {5: 'special', 6: 'special', 7: 'special', 8: 'special'}});
+    expect(f['a'], {5: '特休', 6: '特休', 7: 'V', 8: '特休'});
+  });
 }
