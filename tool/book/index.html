@@ -93,7 +93,7 @@
     return v;
   })();
   // 店家的 logo、封面照、介紹、低消…（0135 起存在資料庫 booking_profiles，每家店一份，跟著 reservation_availability 回來）。
-  // 部署時寫好的 YC_PRE 先畫第一個畫面，資料庫回來後以資料庫為準。店家填的字一律跳脫後才顯示。
+  // 部署時寫好的 YC_PRE（整份快照）先畫第一個畫面，資料庫回來後以資料庫為準。店家填的字一律跳脫後才顯示。
   let P = (window.YC_PRE || {})[slug] || {};
   const pick = (m) => (m && (m[YCI.lang] ?? m.zh)) || '';
   const txt = (s) => YC.esc(s).replace(/\n/g, '<br>');

@@ -63,14 +63,23 @@ jobs:
           v=$(echo "${{ github.sha }}" | cut -c1-8)
           sed -i -E "s#(href|src)=\"(style\.css|common\.js|i18n\.js|theme\.js|anim\.js)\"#\1=\"\2?v=$v\"#g" build/web/book/*.html
           grep -o 'style.css?v=[0-9a-f]*' build/web/book/index.html
-          # 訂位頁資料的快照（ops 0135）：有專屬網址的店的 logo、封面照先寫進頁面，第一個畫面不用等資料庫（之後以資料庫為準）；
-          # YC_V＝這一版的版本號，logo、封面照網址都加上它
+          # 訂位頁資料的快照（ops 0135）：有專屬網址的店的訂位頁資料先寫進頁面，logo、封面照第一個畫面就有；
+          # 資料庫回來後以資料庫為準（資料庫還沒有這份資料時整份照快照顯示）。YC_V＝這一版的版本號，內建的圖都加上它
           python3 - "$v" build/web/book/index.html build/web/book/cancel.html <<'PY'
           import json, sys
           v, pages = sys.argv[1], sys.argv[2:]
           st = json.load(open('tool/book/stores.json', encoding='utf-8'))
-          pre = {k: {f: s['profile'][f] for f in ('logo_url', 'hero_url', 'hero_pos') if s['profile'].get(f)}
-                 for k, s in st.items() if isinstance(s, dict) and 'profile' in s}
+          pre = {}
+          for k, s in st.items():
+              if not (isinstance(s, dict) and 'profile' in s):
+                  continue
+              p = dict(s['profile'])
+              o = (s.get('sister') or {}).get('slug')  # 姊妹店（跟資料庫回的一樣只帶顯示用的欄位）
+              if o in st and 'profile' in st[o]:
+                  op = st[o]['profile']
+                  p['sister'] = {'slug': o, 'title': op.get('title', {}), 'short_name': op.get('short_name', {}),
+                                 'intro': op.get('intro', {}), 'display_name': st[o]['displayName']}
+              pre[k] = p
           tag = '<script>window.YC_V=%s;window.YC_PRE=%s;</script>' % (json.dumps(v), json.dumps(pre, ensure_ascii=False).replace('</', '<\\/'))
           for p in pages:
               h = open(p, encoding='utf-8').read()

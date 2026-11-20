@@ -91,9 +91,14 @@ const read = (p) => p.evaluate(() => ({
     await b.close();
   }
   {
-    const { b, p } = await open('index.html?s=snap&anim=0', 'zh-TW', { '*': avail(undefined) }, snap);
+    const full = "window.YC_PRE = { snap: { logo_url: 'logo-xcw.png', hero_url: 'hero-xcw.jpg', title: { en: 'Snap Bar' }, min_spend: 600, " +
+      "min_spend_text: { zh: '每人一杯飲品{amount}' }, info_rows: [{ label: { zh: '營業時間' }, text: { zh: '18:00～01:00' } }] } };";
+    const { b, p } = await open('index.html?s=snap&anim=0&lang=en', 'en-US', { '*': avail(undefined) }, full);
     const r = await look(p);
     check('資料庫還沒更新：保留快照的 logo、封面照', [r.logo, r.hero], [true, true]);
+    const t = await read(p);
+    check('資料庫還沒更新：低消、營業時間、英文店名照快照顯示（Codex 審查）',
+      [t.store, t.info.includes('NT$600 per person.'), t.info.includes('18:00～01:00')], ['Snap Bar', true, true]);
     await b.close();
   }
   {
