@@ -8,7 +8,7 @@ let pass = 0, fail = 0;
 const check = (name, got, want) => { const y = JSON.stringify(got) === JSON.stringify(want); y ? pass++ : fail++; console.log((y ? 'PASS ' : 'FAIL ') + name + (y ? '' : '  got=' + JSON.stringify(got) + ' want=' + JSON.stringify(want))); };
 
 async function run(name, plan, steps) {
-  const b = await chromium.launch();
+  const b = await chromium.launch(process.env.CHROME ? { executablePath: process.env.CHROME, args: ['--no-sandbox'] } : {});
   const p = await b.newPage({ viewport: { width: 390, height: 844 }, locale: 'zh-TW', timezoneId: 'Asia/Taipei' });
   const calls = [];
   await p.route('**/rest/v1/rpc/reservation_availability', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: avail }));

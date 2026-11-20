@@ -38,5 +38,7 @@ window.YC = {
     const d = new Date(iso + 'T00:00:00');
     return (d.getMonth() + 1) + '/' + d.getDate() + '（週' + this.week[d.getDay()] + '）';
   },
+  // 訂位頁內建的圖（logo、封面照）加上這一版的版本號（部署時寫在 YC_V），網頁一換新手機就不會用到舊圖
+  asset(f) { return f + (window.YC_V ? '?v=' + window.YC_V : ''); },
   esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); },
 };

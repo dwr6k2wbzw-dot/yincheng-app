@@ -2,14 +2,15 @@
 
 訂位頁的內容原本全靠 JavaScript 載入，搜尋引擎和 AI 只看得到「載入中」。
 這裡把 stores.json 的地址、電話、營業時間、低消，
-1) 先寫成頁面上看得到的資訊卡（跟 index.html 的 renderInfo() 中文版一樣，載入後 JS 會用同樣內容蓋過去）、
+1) 先寫成頁面上看得到的資訊卡（跟 index.html 的 renderInfo() 同一套畫法，讀 stores.json 的 profile＝訂位頁資料的快照；
+   載入後 JS 會用資料庫的內容蓋過去）、
 2) 再寫成 schema.org 結構化資料（JSON-LD）。
 兩者內容一致，客人和機器看到的是同一份事實。
 
 用法：python3 seo.py <stores.json> <頁面.html> <slug> <中文頁網址> [en]
 
 最後加 en（2026-11-10）：頁面是英文靜態頁 book/<店>/en/，店家事實、固定文字、結構化資料都換成英文，
-讓英文搜尋和 AI 讀得到。英文字串來自 i18n.js（用 i18n_dump.js 取出），英文標題、介紹在 stores.json 的 en。
+讓英文搜尋和 AI 讀得到。固定文字來自 i18n.js（用 i18n_dump.js 取出），英文標題、介紹在 stores.json 的 en。
 """
 import html
 import os
@@ -32,38 +33,35 @@ def row(key, body):
     return '<div class="irow"><span class="ik">%s</span><span>%s</span></div>' % (key, body)
 
 
-def info_rows(slug, s):
-    # 跟 index.html renderInfo()、i18n.js 中文字串一致；改那邊時這裡也要改
-    addr = '台北市' + s['addressLocality'] + s['streetAddress']
-    q = urllib.parse.quote(addr)
-    rows = [
-        row('地址', '<a href="https://www.google.com/maps/search/?api=1&amp;query=%s" target="_blank" rel="noopener">%s</a><small>（%s）</small>'
-            % (q, html.escape(addr), html.escape(s['directions']))),
-        row('電話', '<a href="tel:%s">%s</a>' % (s['telephone'].replace('-', ''), s['phoneDisplay'])),
-        row('低消', '每人一杯飲品%s%s<span class="nw">每人 %d 元</span><br>（無限時）' % ('<br>' if s['minSpendWhen'].startswith('週') else '，', s['minSpendWhen'], s['minSpend'])),
-    ]
-    if slug == 'xcw':
-        rows.append(row('咖啡', '咖啡與咖啡調酒時段營業時間：每週六、日 13:00～17:30<br>無開放預約'))
-        rows.append(row('酒吧', '經典酒吧時段營業時間：18:00～24:00（週五、六～01:00）<br>無公休日'))
-    if slug == 'yincheng':
-        rows.append(row('營業時間', '週日至週四 18:00～01:00<br>週五、六 19:00～02:00（無公休日）'))
-    return ''.join(rows)
+def pick(m, lang):
+    m = m or {}
+    return m.get(lang) or m.get('zh') or ''
 
 
-def info_rows_en(slug, s, t):
-    # 跟 index.html renderInfo() 英文版一樣；字串來自 i18n.js
+def txt(v):
+    return html.escape(v, quote=True).replace('\n', '<br>')
+
+
+def info_rows(s, t, lang):
+    # 跟 index.html renderInfo() 一樣的畫法：地址、電話、低消、店家自己加的列（profile＝訂位頁資料的快照）
+    p = s['profile']
     q = urllib.parse.quote('台北市' + s['addressLocality'] + s['streetAddress'])
+    addr, note = '台北市' + s['addressLocality'] + s['streetAddress'], '（%s）' % s['directions']
+    if (p.get('address_i18n') or {}).get(lang):
+        addr, note = p['address_i18n'][lang], (p.get('directions_i18n') or {}).get(lang, '')
     rows = [
-        row(t['address'], '<a href="https://www.google.com/maps/search/?api=1&amp;query=%s" target="_blank" rel="noopener">%s</a><small>%s</small>'
-            % (q, html.escape(t['addr'][slug]), html.escape(t['addrNote'][slug]))),
+        row(t['address'], '<a href="https://www.google.com/maps/search/?api=1&amp;query=%s" target="_blank" rel="noopener">%s</a>%s'
+            % (q, html.escape(addr), '<small>%s</small>' % html.escape(note) if note else '')),
         row(t['tel'], '<a href="tel:%s">%s</a>' % (s['telephone'].replace('-', ''), s['phoneDisplay'])),
-        row(t['minSpend'], t['minSpendTextYc'] if slug == 'yincheng' else t['minSpendText']),
     ]
-    if slug == 'xcw':
-        rows.append(row(t['coffee'], t['coffeeText']))
-        rows.append(row(t['bar'], t['barText']))
-    if slug == 'yincheng':
-        rows.append(row(t['hoursLabel'], t['ycHours']))
+    amt = '<span class="nw">%s</span>' % html.escape(t['minAmount'].replace('{n}', str(p['min_spend']))) if p.get('min_spend') else ''
+    mt = pick(p.get('min_spend_text'), lang)
+    if mt or amt:
+        rows.append(row(t['minSpend'], txt(mt).replace('{amount}', amt) if mt else amt))
+    for r in p.get('info_rows') or []:
+        k, v = pick(r.get('label'), lang), pick(r.get('text'), lang)
+        if k and v:
+            rows.append(row(html.escape(k), txt(v)))
     return ''.join(rows)
 
 
@@ -112,11 +110,11 @@ def main():
     s = stores[slug]
     e = s['en'] if en else None
     h = open(page, encoding='utf-8').read()
+    t = json.loads(subprocess.check_output(['node', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'i18n_dump.js'), 'en' if en else 'zh']))
     if en:
-        t = json.loads(subprocess.check_output(['node', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'i18n_dump.js'), 'en']))
         hours = '; '.join('%s %s–%s' % ({'週日至週四': 'Sun–Thu', '週五、六': 'Fri–Sat', '週六、日': 'Sat–Sun'}[day_label(x['days'])], x['opens'], x['closes']) for x in s['hours'])
         desc = '%s Address: %s. Phone %s. Hours: %s. Book online with instant confirmation.' % (
-            e['description'], t['addr'][slug], s['phoneDisplay'], hours)
+            e['description'], s['profile']['address_i18n']['en'], s['phoneDisplay'], hours)
         page_url = url + 'en/'
         # 這頁比中文頁深一層；html 標上英文，i18n.js 看到 data-lang 就用英文
         assert '<base href="../">' in h and ' lang="zh-Hant-TW">' in h
@@ -154,7 +152,7 @@ def main():
                   % (html.escape(label), rest, arrow, sister_url, html.escape(name)), 1)
     old = '<div class="card info" id="info" hidden></div>'
     assert old in h, '找不到資訊卡'
-    h = h.replace(old, '<div class="card info" id="info">%s</div>' % (info_rows_en(slug, s, t) if en else info_rows(slug, s)), 1)
+    h = h.replace(old, '<div class="card info" id="info">%s</div>' % info_rows(s, t, 'en' if en else 'zh'), 1)
     # 標題：店名直接寫在 HTML（載入後 JS 會設成同一個店名，不會閃）
     h, n = re.subn(r'<h1 id="store" data-i18n="booking">[^<]*</h1>', '<h1 id="store">%s</h1>' % html.escape(e['displayName'] if en else s['displayName']), h, count=1)
     assert n == 1, '找不到標題'
