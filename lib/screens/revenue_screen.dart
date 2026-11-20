@@ -326,7 +326,7 @@ class _WeekdayStatsState extends State<_WeekdayStats> {
           icon: null,
           padding: EdgeInsets.zero,
           text: '粗體是平均最高的那天',
-          detail: '平均營業額、來客＝該星期幾每天的平均；客單＝${widget.multi ? '調酒收入' : '營業額'}合計 ÷ 來客合計。',
+          detail: '平均營業額、來客＝該星期幾每天的平均；客單＝${widget.multi ? '酒吧收入' : '營業額'}合計 ÷ 來客合計。',
         ),
       ]),
     );
@@ -790,7 +790,7 @@ class _RevenueFormScreenState extends State<RevenueFormScreen> {
         child: Column(children: [
           _sumRow('收款合計', ntd(d.received), bold: true),
           _sumRow('明細合計', ntd(detail)),
-          if (avg != null && d.received > 0) _sumRow(_multi ? '客單（調酒）' : '客單價', ntd(avg)),
+          if (avg != null && d.received > 0) _sumRow(_multi ? '客單（酒吧）' : '客單價', ntd(avg)),
           if (mismatch) _sumRow('差額', ntd(diff), color: AppColors.warn),
         ]),
       ),
