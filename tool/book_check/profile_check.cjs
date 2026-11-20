@@ -102,6 +102,14 @@ const read = (p) => p.evaluate(() => ({
     check('資料庫換了圖：用資料庫的', [r.logo, r.bg.includes('hero-yincheng.jpg'), (await p.$eval('#logo', (x) => x.getAttribute('src'))).startsWith('logo-yincheng.png')], [true, true, true]);
     await b.close();
   }
+  // 版本號只加在內建的圖上；其他網址（之後店家上傳的圖）原樣不動（Codex 審查）
+  {
+    const url = 'https://img.example.com/a.png?token=abc';
+    const { b, p } = await open('index.html?s=snap&anim=0', 'zh-TW', { '*': avail({ langs: ['zh'], logo_url: url }) }, snap + " window.YC_V = 'v1';");
+    check('外部圖片網址不加版本號', await p.$eval('#logo', (x) => x.getAttribute('src')), url);
+    check('內建的圖加版本號', await p.evaluate(() => YC.asset('logo-xcw.png')), 'logo-xcw.png?v=v1');
+    await b.close();
+  }
   for (const [name, prof, want] of [['我的訂位：資料庫沒有 logo 就不放', { logo_url: null }, false], ['我的訂位：資料庫還沒更新用快照', undefined, true]]) {
     const b = await chromium.launch(process.env.CHROME ? { executablePath: process.env.CHROME, args: ['--no-sandbox'] } : {});
     const p = await b.newPage();

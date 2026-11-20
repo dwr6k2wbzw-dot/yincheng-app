@@ -17,7 +17,8 @@
   var p = (window.YC_PRE || {})[s];
   if (!p || !p.hero_url) return;
   var l = document.createElement('link');
-  l.rel = 'preload'; l.as = 'image'; l.href = p.hero_url + (window.YC_V ? '?v=' + window.YC_V : ''); l.fetchPriority = 'high';
+  // 版本號只加在內建的圖上（同 common.js 的 YC.asset）
+  l.rel = 'preload'; l.as = 'image'; l.href = p.hero_url + (window.YC_V && /^[a-z0-9][a-z0-9-]*\.(png|jpe?g|webp)$/.test(p.hero_url) ? '?v=' + window.YC_V : ''); l.fetchPriority = 'high';
   document.head.appendChild(l);
 })();
 </script>
@@ -105,7 +106,7 @@
       lg.alt = ''; lg.hidden = false;
     } else if (fromDb && look.logo) { lg.hidden = true; lg.removeAttribute('src'); $('fav').href = 'data:,'; }
     if (p.hero_url) {
-      if (p.hero_url !== look.hero) { b.classList.add('hero'); b.style.backgroundImage = "url('" + YC.asset(p.hero_url) + "')"; }
+      if (p.hero_url !== look.hero) { b.classList.add('hero'); b.style.backgroundImage = "url('" + YC.asset(p.hero_url).replace(/['"\\\s()]/g, (c) => '%' + c.charCodeAt(0).toString(16).padStart(2, '0').toUpperCase()) + "')"; }
       b.style.backgroundPosition = p.hero_pos || '';  // 照片取景，例：小城外往右移，露出左上的壁燈（老闆 2026-10-24）
     } else if (fromDb && look.hero) { b.classList.remove('hero'); b.style.backgroundImage = ''; b.style.backgroundPosition = ''; }
     look = fromDb ? { logo: p.logo_url, hero: p.hero_url } : { logo: p.logo_url || look.logo, hero: p.hero_url || look.hero };
