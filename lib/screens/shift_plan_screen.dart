@@ -272,8 +272,12 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
     }
     final cur = _setup!.requests[p.id]?[day];
     // 正職：想休 → 想上班 → 取消；兼職：可以上 → 不能上 → 取消
-    final order =
-        _planFull(p, _setup) ? [null, 'off', 'on'] : [null, 'on', 'off'];
+    // 老闆、店長替正職填時多一個「特休」（ops 0138；員工不能自己劃特休）
+    final order = _planFull(p, _setup)
+        ? (_manager ? [null, 'off', 'special', 'on'] : [null, 'off', 'on'])
+        : p.isFull && _manager
+            ? [null, 'on', 'off', 'special']
+            : [null, 'on', 'off'];
     final next = order[(order.indexOf(cur) + 1) % order.length];
     // ops 0137：同一天只能一位正職指休、每月最多 5 天；員工直接擋，老闆店長提醒後可以超過
     if (next == 'off' && _planFull(p, _setup)) {
@@ -366,6 +370,7 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
         req.entries.where((e) => e.key != p?.id && e.value[d] == 'off').length;
     final offCount = mine.values.where((v) => v == 'off').length;
     final onCount = mine.values.where((v) => v == 'on').length;
+    final specialCount = mine.values.where((v) => v == 'special').length;
 
     return ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
@@ -427,7 +432,7 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
                 p == null
                     ? ''
                     : _planFull(p, _setup)
-                        ? '點一下＝指休，再點＝想上班，再點＝取消。目前指休 $offCount 天${onCount > 0 ? '、想上班 $onCount 天' : ''}。\n同一天只能一位正職指休（先填先贏），每月最多 $shiftOffMonthMax 天；要再多請找店長協調班表。'
+                        ? '${_manager ? '點一下＝指休，再點＝特休，再點＝想上班，再點＝取消' : '點一下＝指休，再點＝想上班，再點＝取消'}。目前指休 $offCount 天${onCount > 0 ? '、想上班 $onCount 天' : ''}${specialCount > 0 ? '、特休 $specialCount 天' : ''}。特休由店長劃，不算在應休裡。\n同一天只能一位正職指休（先填先贏），每月最多 $shiftOffMonthMax 天；要再多請找店長協調班表。'
                         : '點一下＝可以上，再點＝不能上，再點＝取消。有填可以上，排班就只排那些天。目前可以上 $onCount 天${offCount > 0 ? '、不能上 $offCount 天' : ''}。',
                 style: const TextStyle(fontSize: AppType.small),
               ),
@@ -459,6 +464,7 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
           Wrap(spacing: 12, runSpacing: 4, children: [
             _legend(const Color(0xFFE0A34A), '指休／不能上'),
             _legend(AppColors.good, '可以上／想上班'),
+            if (_manager) _legend(const Color(0xFFC0392B), '特休（店長劃）'),
             Text('右上小數字＝其他人指休',
                 style:
                     TextStyle(color: AppColors.muted, fontSize: AppType.small)),
@@ -481,6 +487,8 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
   Widget _dayCell(int d, String? kind, int others, String? note, {bool taken = false}) {
     final bg = kind == 'off'
         ? const Color(0xFFE0A34A).withValues(alpha: 0.85)
+        : kind == 'special'
+            ? const Color(0xFFC0392B).withValues(alpha: 0.75) // 跟班表的特休同一個紅色
         : kind == 'on'
             ? AppColors.good.withValues(alpha: 0.75)
             : null;
@@ -501,7 +509,9 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
                       fontWeight: FontWeight.w700,
                       color: _open ? null : AppColors.muted)),
               Text(
-                  kind == 'off'
+                  kind == 'special'
+                      ? '特休'
+                      : kind == 'off'
                       ? (_person == null || _planFull(_person!, _setup)
                           ? '指休'
                           : '不能上')

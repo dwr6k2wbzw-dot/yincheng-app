@@ -108,7 +108,7 @@ class ShiftPlanSetup {
   final Map<int, int> specialDays; // 日 → 這天要幾人（特別日子）
   final int deadline; // 每月幾號前填好下個月
   final Map<String, ShiftRule> rules; // 人 → 條件（員工只讀得到自己的）
-  final Map<String, Map<int, String>> requests; // 人 → 日 → off／on
+  final Map<String, Map<int, String>> requests; // 人 → 日 → off／on／special（店長劃的特休，ops 0138）
   final List<PairRule> pairRules; // 自訂規則（只有老闆店長讀得到）
   final int? preferRun; // 0098：盡量不要連上超過幾天（null＝不設；硬上限仍是每人的最多連上）
   final Map<String, Set<int>> otherStoreDays; // 0098：人 → 這個月在另一家店有班的日子（只有老闆店長拿得到）
@@ -306,10 +306,10 @@ PlanCheck validateSchedule({
     final req = requests[p.id] ?? const <int, String>{};
     restDays[p.id] = row.entries.where((e) => e.key >= 1 && e.key <= days && (e.value == '休' || e.value == '指休')).length;
 
-    final offBad = [for (final d in w) if (req[d] == 'off') d]..sort();
+    final offBad = [for (final d in w) if (req[d] == 'off' || req[d] == 'special') d]..sort();
     if (offBad.isNotEmpty) {
       hard += offBad.length;
-      issues.add(PlanIssue('off', 0, '${p.name} ${_dayList(month, offBad)} 填了指休卻排上班', personId: p.id, days: offBad));
+      issues.add(PlanIssue('off', 0, '${p.name} ${_dayList(month, offBad)} 填了指休或特休卻排上班', personId: p.id, days: offBad));
     }
     final busyBad = [for (final d in w) if (p.busy.contains(d)) d]..sort();
     if (busyBad.isNotEmpty) {
@@ -448,7 +448,7 @@ List<PlanIssue> precheckPlan({
     if ((needByDay[d] ?? 0) <= 0) return false;
     if (p.noWeekdays.contains(wd(d)) || p.busy.contains(d)) return false;
     final r = requests[p.id]?[d];
-    if (r == 'off') return false;
+    if (r == 'off' || r == 'special') return false;
     if (!p.full && (requests[p.id] ?? const {}).values.any((v) => v == 'on') && r != 'on') return false;
     return true;
   }
@@ -579,6 +579,14 @@ Map<String, Map<int, String>> _planOnce({
       out[p.id]![e.key] = e.value;
       if (_isWork(e.value)) work[p.id]!.add(e.key);
     }
+    // 店長在填指休頁劃的特休（ops 0138）：排之前先固定成「特休」，不算在應休裡（_fullTarget 會扣掉）
+    if (p.full) {
+      for (final e in (requests[p.id] ?? const <int, String>{}).entries) {
+        if (e.value == 'special' && e.key >= 1 && e.key <= days && !out[p.id]!.containsKey(e.key)) {
+          out[p.id]![e.key] = '特休';
+        }
+      }
+    }
   }
   final hasOn = {for (final p in people) p.id: (requests[p.id] ?? const {}).values.any((v) => v == 'on')};
   int needOf(int d) => needByDay[d] ?? 0;
@@ -642,7 +650,7 @@ Map<String, Map<int, String>> _planOnce({
     if (needOf(d) <= 0) return false; // 這天不用排人
     if (p.noWeekdays.contains(wd(d)) || p.busy.contains(d)) return false;
     final r = requests[p.id]?[d];
-    if (r == 'off') return false;
+    if (r == 'off' || r == 'special') return false;
     if (!p.full && hasOn[p.id]! && r != 'on') return false;
     for (final x in pairRules) {
       if (!x.isApart) continue;

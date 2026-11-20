@@ -34,3 +34,32 @@ Map<int, Set<String>> offTakenDays(
   final count = mine.entries.where((e) => e.key != day && e.value == 'off').length;
   return (taken: taken, overLimit: count >= shiftOffMonthMax);
 }
+
+/// 一位正職這個月的特休（ops 0138）：餘額＝起算數字＋調整＋到職滿期自動加 − 劃特休的天數
+class SpecialLeave {
+  final DateTime? start; // 從哪天開始自動算
+  final double? balance; // 這個月月底為止剩幾天（還沒起算＝null）
+  final int usedInMonth;
+  final double grantedInMonth;
+  final DateTime? nextGrantDate;
+  final double? nextGrantDays;
+  const SpecialLeave({this.start, this.balance, this.usedInMonth = 0, this.grantedInMonth = 0, this.nextGrantDate, this.nextGrantDays});
+
+  static double? _n(Object? v) => v == null ? null : (v as num).toDouble();
+  factory SpecialLeave.fromRow(Map<String, dynamic> r) => SpecialLeave(
+        start: r['start_date'] == null ? null : DateTime.parse(r['start_date'] as String),
+        balance: _n(r['balance']),
+        usedInMonth: (r['used_in_month'] as num?)?.toInt() ?? 0,
+        grantedInMonth: _n(r['granted_in_month']) ?? 0,
+        nextGrantDate: r['next_grant_date'] == null ? null : DateTime.parse(r['next_grant_date'] as String),
+        nextGrantDays: _n(r['next_grant_days']),
+      );
+}
+
+/// 勞基法第 38 條（週年制）：到職滿這個期間加幾天，跟資料庫 app.lsa_special_grants 同一套
+List<(DateTime, int)> lsaSpecialGrants(DateTime hire, {int years = 30}) => [
+      (DateTime(hire.year, hire.month + 6, hire.day), 3),
+      for (var y = 1; y <= years; y++)
+        (DateTime(hire.year + y, hire.month, hire.day),
+            y == 1 ? 7 : y == 2 ? 10 : y <= 4 ? 14 : y <= 9 ? 15 : (15 + y - 9).clamp(0, 30)),
+    ];

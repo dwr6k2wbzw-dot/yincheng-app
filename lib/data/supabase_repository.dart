@@ -1,3 +1,4 @@
+import 'shift_off_rules.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -950,6 +951,22 @@ class SupabaseRepository implements Repository {
       return null;
     }
   }
+
+  @override
+  Future<Map<String, SpecialLeave>?> specialLeaveStatus(String storeId, DateTime month) async {
+    try {
+      final rows = await _db.rpc('special_leave_status',
+          params: {'p_store': storeId, 'p_month': _day.format(DateTime(month.year, month.month))}) as List;
+      return {for (final r in rows) r['person_id'] as String: SpecialLeave.fromRow(Map<String, dynamic>.from(r as Map))};
+    } on PostgrestException catch (e) {
+      if (e.code != 'PGRST202' && e.code != '42883') rethrow;
+      return null;
+    }
+  }
+
+  @override
+  Future<void> setSpecialLeave(String personId, double balance, {String? note}) =>
+      _db.rpc('special_leave_set', params: {'p_person': personId, 'p_balance': balance, 'p_note': note});
 
   @override
   Future<void> setShiftRequest(String storeId, String personId, DateTime date, String? kind) async {
