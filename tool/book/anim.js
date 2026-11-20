@@ -10,8 +10,11 @@
   const q = new URLSearchParams(location.search);
   const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   if (reduce || q.get('anim') === '0') return;
+  // 這套動畫是替兩家店量身做的；其他店（公版）不放（0135，2026-11-20）
+  const animSlug = q.get('s') || document.documentElement.dataset.slug || '';
+  if (!['yincheng', 'xcw'].includes(animSlug)) return;
   const lang = (window.YCI && YCI.lang) || 'zh';
-  const wkw = (q.get('s') || document.documentElement.dataset.slug) === 'xcw'; // 小城外：老宅、王家衛
+  const wkw = animSlug === 'xcw'; // 小城外：老宅風格
   const W = {
     zh: { skip: '點一下跳過', stamp: '已訂位', admit: '入場券', seat: '座位保留中',
           line: '時間，在這裡慢了下來', see: (t) => t + '，不見不散' },

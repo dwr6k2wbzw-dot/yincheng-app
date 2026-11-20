@@ -5,6 +5,7 @@
 - 資料存取都經過 `lib/data/repository.dart` 的介面：正式版 `supabase_repository.dart`、示範版 `demo_repository.dart`。新增介面方法時兩邊都要實作。
 - 角色：老闆 owner、店長 manager、正職 staff、兼職 parttime、調酒師 bartender（`Membership` 有 `isManager`、`canSeeRevenue`、`isPartTime`）。
 - 客人訂位頁是純網頁：`tool/book/`（index.html、cancel.html、common.js、i18n.js、style.css、anim.js、theme.js）。
+- 訂位頁上每家店自己的內容（logo、封面照、大標、介紹、外語地址、低消、營業時間等資訊卡的列、姊妹店）存在**資料庫的訂位頁資料**（booking_profiles），不在程式裡；要改這些內容屬於規則 3「需要資料庫修改」。
 - 畫面文字一律用**台灣繁體中文**、口語、簡短。顏色用 `lib/theme.dart` 的 `AppColors`，常用元件在 `lib/widgets/common.dart`。照現有畫面的寫法與風格改。
 
 ## 規則（一定要遵守）

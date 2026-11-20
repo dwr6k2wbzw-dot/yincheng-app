@@ -21,12 +21,7 @@
       privacy: '送出即表示同意店家使用您的姓名、電話與 Email 聯繫這次訂位，不會用於其他用途。',
       paused: '目前暫停線上訂位，請直接聯絡店家。', noDays: '目前沒有可以訂的日期。',
       partyNote: (n) => '線上訂位一組最多 ' + n + ' 位；更多人數或包場請直接聯絡店家。',
-      address: '地址', tel: '電話', minSpend: '低消', coffee: '咖啡',
-      coffeeText: '咖啡與咖啡調酒時段營業時間：每週六、日 13:00～17:30<br>無開放預約',
-      bar: '酒吧', barText: '經典酒吧時段營業時間：18:00～24:00（週五、六～01:00）<br>無公休日',
-      hoursLabel: '營業時間', ycHours: '週日至週四 18:00～01:00<br>週五、六 19:00～02:00（無公休日）',
-      minSpendTextYc: (amt) => '每人一杯飲品<br>週五、六及國定假日前夕<span class="nw">每人 ' + amt + ' 元</span><br>（無限時）',
-      minSpendText: (amt) => '每人一杯飲品，國定假日前夕<span class="nw">每人 ' + amt + ' 元</span><br>（無限時）',
+      address: '地址', tel: '電話', minSpend: '低消', minAmount: (amt) => '每人 ' + amt + ' 元',
       prevMonth: '上個月', nextMonth: '下個月', monthTitle: (y, m) => y + '年' + m + '月',
       week: ['日', '一', '二', '三', '四', '五', '六'],
       window: (n) => '僅開放' + (n === 7 ? '一週' : n + '日') + '內訂位',
@@ -35,8 +30,6 @@
       dateLabel: (d) => (d.getMonth() + 1) + '/' + d.getDate() + '（週' + D.zh.week[d.getDay()] + '）',
       noSlots: '這天沒有開放的時段',
       altTitle: '這天還可以訂我們的另一家店', altGo: (n) => '改訂' + n,
-      storeName: { yincheng: '隱城', xcw: '小城外' },
-      storeIntro: { xcw: '位於大稻埕的老宅酒吧', yincheng: '位於大安區的小城外二店' },
       dayFull: '這天的訂位已滿，請選別天或直接來電。',
       dayLeft: (n) => '這天只剩 ' + n + ' 位，請調整人數或選別天。',
       largeFull: (n) => '這天 ' + n + ' 位以上的訂位已滿，請選別天或直接來電。',
@@ -67,12 +60,7 @@
       privacy: 'By submitting, you agree that we may use your name, phone and email only to contact you about this reservation.',
       paused: 'Online reservations are paused. Please contact us directly.', noDays: 'No dates are available right now.',
       partyNote: (n) => 'Online reservations are for up to ' + n + ' guests. For larger groups or private events, please contact us.',
-      address: 'Address', tel: 'Phone', minSpend: 'Minimum', coffee: 'Café',
-      coffeeText: 'Coffee & coffee cocktail hours: Sat–Sun 13:00–17:30<br>Walk-in only (no reservations)',
-      bar: 'Bar', barText: 'Classic bar hours: 18:00–24:00 (Fri–Sat until 01:00)<br>Open every day',
-      hoursLabel: 'Hours', ycHours: 'Sun–Thu 18:00–01:00<br>Fri–Sat 19:00–02:00 (open every day)',
-      minSpendTextYc: (amt) => 'One drink per person. Fri, Sat & eve of national holidays: <span class="nw">NT$' + amt + ' per person.</span><br>(No time limit)',
-      minSpendText: (amt) => 'One drink per person. Eve of national holidays: <span class="nw">NT$' + amt + ' per person.</span><br>(No time limit)',
+      address: 'Address', tel: 'Phone', minSpend: 'Minimum', minAmount: (amt) => 'NT$' + amt + ' per person.',
       prevMonth: 'Previous month', nextMonth: 'Next month', monthTitle: (y, m) => ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][m - 1] + ' ' + y,
       week: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
       window: (n) => 'Bookings open up to ' + (n === 7 ? 'one week' : n + ' days') + ' ahead',
@@ -81,11 +69,6 @@
       dateLabel: (d) => D.en.week[d.getDay()] + ' ' + (d.getMonth() + 1) + '/' + d.getDate(),
       noSlots: 'No times available on this day',
       altTitle: 'Our sister bar still has seats on this day', altGo: (n) => 'Book ' + n,
-      storeName: { yincheng: 'Hidden City', xcw: 'Bar CityNorth' },
-      storeIntro: { xcw: 'A bar in a historic old house in Dadaocheng', yincheng: 'Bar CityNorth\'s second bar, in Da\'an District' },
-      // 英文地址（顯示用；地圖連結仍用中文地址查）
-      addr: { xcw: '2F, No. 15, Lane 362, Minsheng W. Rd., Datong Dist., Taipei', yincheng: '2F., No. 160, Sec. 3, Xinyi Rd., Da\'an Dist., Taipei' },
-      addrNote: { xcw: '(walk through the ground-floor passage to the courtyard, then take the stairs to 2F)', yincheng: '(enter beside the Hidden City ticket booth on the ground floor, then take the stairs to 2F)' },
       dayFull: 'This day is fully booked. Please choose another day or call us.',
       dayLeft: (n) => 'Only ' + n + ' seats left on this day. Please adjust the party size or choose another day.',
       largeFull: (n) => 'Reservations for ' + n + ' or more guests are full on this day. Please choose another day or call us.',
@@ -116,12 +99,7 @@
       privacy: '送信により、お名前・電話番号・メールアドレスを本予約のご連絡のみに使用することに同意したものとみなされます。',
       paused: '現在オンライン予約を停止しています。直接お店にご連絡ください。', noDays: '現在予約できる日付がありません。',
       partyNote: (n) => 'オンライン予約は1組 ' + n + ' 名様までです。それ以上の人数や貸切は直接お店にご連絡ください。',
-      address: '住所', tel: '電話', minSpend: '最低消費', coffee: 'カフェ',
-      coffeeText: 'コーヒー・コーヒーカクテルの営業時間：毎週土・日 13:00～17:30<br>ご予約不可',
-      bar: 'バー', barText: 'クラシックバーの営業時間：18:00～24:00（金・土は～01:00）<br>定休日なし',
-      hoursLabel: '営業時間', ycHours: '日〜木 18:00～01:00<br>金・土 19:00～02:00（定休日なし）',
-      minSpendTextYc: (amt) => 'お一人様1ドリンク<br>金・土・祝日の前日は<span class="nw">お一人様 ' + amt + ' 元</span><br>（時間制限なし）',
-      minSpendText: (amt) => 'お一人様1ドリンク、祝日の前日は<span class="nw">お一人様 ' + amt + ' 元</span><br>（時間制限なし）',
+      address: '住所', tel: '電話', minSpend: '最低消費', minAmount: (amt) => 'お一人様 ' + amt + ' 元',
       prevMonth: '前の月', nextMonth: '次の月', monthTitle: (y, m) => y + '年' + m + '月',
       week: ['日', '月', '火', '水', '木', '金', '土'],
       window: (n) => 'ご予約は' + (n === 7 ? '1週間' : n + '日') + '先まで',
@@ -130,8 +108,6 @@
       dateLabel: (d) => (d.getMonth() + 1) + '/' + d.getDate() + '（' + D.ja.week[d.getDay()] + '）',
       noSlots: 'この日は予約できる時間がありません',
       altTitle: 'この日は姉妹店にまだお席があります', altGo: (n) => n + 'を予約する',
-      storeName: { yincheng: '隱城', xcw: '小城外' },
-      storeIntro: { xcw: '大稻埕にある古民家バー', yincheng: '大安区にある小城外の2号店' },
       dayFull: 'この日は満席です。別の日を選ぶか、お電話ください。',
       dayLeft: (n) => 'この日は残り ' + n + ' 席です。人数を調整するか、別の日をお選びください。',
       largeFull: (n) => 'この日は ' + n + ' 名様以上のご予約が満席です。別の日を選ぶか、お電話ください。',
@@ -209,6 +185,28 @@
       const names = { zh: '中文', en: 'English', ja: '日本語' };
       return '<nav class="langs" aria-label="Language">' + LANGS.map(l =>
         '<button type="button" data-lang="' + l + '"' + (l === lang ? ' class="on" aria-current="true"' : '') + '>' + names[l] + '</button>').join('') + '</nav>';
+    },
+    // 店家只開放部分語言（訂位頁資料 langs，0135）：切換列只留那幾個（只剩一個就不顯示）；
+    // 客人目前的語言不在裡面就改用中文（不重新整理）。有換語言回傳 true。
+    restrict(allowed) {
+      const ok = Array.isArray(allowed) ? LANGS.filter((l) => allowed.includes(l)) : LANGS;
+      if (!ok.length) return false;
+      let changed = false;
+      if (!ok.includes(lang)) {
+        lang = ok.includes('zh') ? 'zh' : ok[0]; this.lang = lang; changed = true;
+        if (window.YC) YC.week = D[lang].week;
+        this.apply();
+      }
+      const nav = document.querySelector('nav.langs');
+      if (nav) {
+        nav.hidden = ok.length < 2;
+        nav.querySelectorAll('button[data-lang]').forEach((b) => {
+          b.hidden = !ok.includes(b.dataset.lang);
+          const on = b.dataset.lang === lang; b.classList.toggle('on', on);
+          if (on) b.setAttribute('aria-current', 'true'); else b.removeAttribute('aria-current');
+        });
+      }
+      return changed;
     },
     mountSwitcher() {
       const box = document.createElement('div');

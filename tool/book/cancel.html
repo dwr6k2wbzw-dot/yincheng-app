@@ -7,6 +7,7 @@
 <title>我的訂位</title>
 <meta name="theme-color" content="#0A0A09">
 <link rel="icon" id="fav" href="data:,">
+<!--PRE-->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600&amp;display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
@@ -31,8 +32,9 @@
   let want = null; // 想改成幾位
   function show(r, msg) {
     const lg = document.getElementById('logo');
-    const lf = r.slug === 'yincheng' ? 'logo-yincheng.png' : r.slug === 'xcw' ? 'logo-xcw.png' : '';
-    if (lf) { lg.src = lf; lg.hidden = false; document.getElementById('fav').href = lf; }
+    // logo 存在訂位頁資料（0135，以它為準）；資料庫還沒更新（沒有 profile）時才用部署時寫好的那份
+    const lf = r.profile ? r.profile.logo_url : ((window.YC_PRE || {})[r.slug] || {}).logo_url;
+    if (lf && lg.hidden) { lg.src = YC.asset(lf); lg.hidden = false; document.getElementById('fav').href = YC.asset(lf); }
     if (want == null) want = r.requested_party && r.party_request_status === 'pending' ? r.requested_party : r.party;
     const pending = r.party_request_status === 'pending';
     let h = '<p class="big">' + YC.esc(r.display_name) + '</p><p>' + YC.dateLabel(r.date) + ' ' + r.time + '　' + T('guests', r.party) + '<br>' +

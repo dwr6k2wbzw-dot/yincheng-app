@@ -6,15 +6,19 @@
 <title>線上訂位</title>
 <meta name="theme-color" content="#0A0A09">
 <link rel="icon" id="fav" href="data:,">
+<!--PRE-->
 <script>
 // 主圖優先下載（2026-11-13，Modern Web Guidance：optimize-image-priority）：
-// 照片原本等下面的程式跑完才設成背景，瀏覽器太晚發現；這裡在 <head> 先依店家預載，網址和背景用的一樣（部署會一起加版本號）
+// 照片原本等下面的程式跑完才設成背景，瀏覽器太晚發現；這裡在 <head> 先預載。
+// 0135 起 logo、封面照存在資料庫（每家店一份）；部署時把有專屬網址的店先寫一份在 YC_PRE（上一行，部署時換成程式），
+// 讓第一個畫面不用等資料庫；資料庫回來後以資料庫為準。網址和背景用的一樣（同一個版本號）。
 (function () {
   var s = new URLSearchParams(location.search).get('s') || document.documentElement.dataset.slug || '';
-  var h = { yincheng: 'hero-yincheng.jpg', xcw: 'hero-xcw.jpg' }[s];
-  if (!h) return;
+  var p = (window.YC_PRE || {})[s];
+  if (!p || !p.hero_url) return;
   var l = document.createElement('link');
-  l.rel = 'preload'; l.as = 'image'; l.href = h; l.fetchPriority = 'high';
+  // 版本號只加在內建的圖上（同 common.js 的 YC.asset）
+  l.rel = 'preload'; l.as = 'image'; l.href = p.hero_url + (window.YC_V && /^[a-z0-9][a-z0-9-]*\.(png|jpe?g|webp)$/.test(p.hero_url) ? '?v=' + window.YC_V : ''); l.fetchPriority = 'high';
   document.head.appendChild(l);
 })();
 </script>
@@ -88,19 +92,36 @@
     } catch (_) {}
     return v;
   })();
-  // 店家 logo（依網址 ?s=）
-  const logos = { yincheng: 'logo-yincheng.png', xcw: 'logo-xcw.png' };
-  if (logos[slug]) { $('logo').src = logos[slug]; $('logo').alt = ''; $('logo').hidden = false; $('fav').href = logos[slug]; }
-  // 標題區背景照片（老闆 2026-10-15：隱城）
-  const heros = { yincheng: 'hero-yincheng.jpg', xcw: 'hero-xcw.jpg' };
-  // 照片取景：小城外往右移，露出左上的壁燈（老闆 2026-10-24）
-  const heroPos = { xcw: '22% 45%' };
-  if (heros[slug]) { const b = document.querySelector('.brand'); b.classList.add('hero'); b.style.backgroundImage = "url('" + heros[slug] + "')"; if (heroPos[slug]) b.style.backgroundPosition = heroPos[slug]; }
+  // 店家的 logo、封面照、介紹、低消…（0135 起存在資料庫 booking_profiles，每家店一份，跟著 reservation_availability 回來）。
+  // 部署時寫好的 YC_PRE（整份快照）先畫第一個畫面，資料庫回來後以資料庫為準。店家填的字一律跳脫後才顯示。
+  let P = (window.YC_PRE || {})[slug] || {};
+  const pick = (m) => (m && (m[YCI.lang] ?? m.zh)) || '';
+  const txt = (s) => YC.esc(s).replace(/\n/g, '<br>');
+  let look = {};
+  // fromDb：資料庫回來的那份（以它為準：資料庫沒有 logo、封面照就拿掉部署快照的舊圖）
+  function applyLook(p, fromDb) {
+    const lg = $('logo'), b = document.querySelector('.brand');
+    if (p.logo_url) {
+      if (p.logo_url !== look.logo) { const u = YC.asset(p.logo_url); lg.src = u; $('fav').href = u; }
+      lg.alt = ''; lg.hidden = false;
+    } else if (fromDb && look.logo) { lg.hidden = true; lg.removeAttribute('src'); $('fav').href = 'data:,'; }
+    if (p.hero_url) {
+      if (p.hero_url !== look.hero) { b.classList.add('hero'); b.style.backgroundImage = "url('" + YC.asset(p.hero_url).replace(/['"\\\s()]/g, (c) => '%' + c.charCodeAt(0).toString(16).padStart(2, '0').toUpperCase()) + "')"; }
+      b.style.backgroundPosition = p.hero_pos || '';  // 照片取景，例：小城外往右移，露出左上的壁燈（老闆 2026-10-24）
+    } else if (fromDb && look.hero) { b.classList.remove('hero'); b.style.backgroundImage = ''; b.style.backgroundPosition = ''; }
+    look = fromDb ? { logo: p.logo_url, hero: p.hero_url } : { logo: p.logo_url || look.logo, hero: p.hero_url || look.hero };
+  }
+  applyLook(P);
 
   async function load() {
     info = await YC.rpc('reservation_availability', { p_slug: slug });
-    // 英文顯示英文店名（跟 Google、媒體一致）；各店專屬網址的標題部署時已寫好，不再蓋掉（2026-11-10）
-    $('store').textContent = (YCI.lang === 'en' && T('storeName')[slug]) || info.display_name;
+    const fromDb = !!info.profile;
+    P = info.profile || P;  // 資料庫還沒更新（沒有 profile）時保留部署時寫好的那份
+    // 店家只開放部分語言：切換列只留那幾個；客人的語言不在裡面就改用中文
+    if (YCI.restrict(P.langs)) $('phone').required = YCI.lang === 'zh';
+    applyLook(P, fromDb);
+    // 標題照語言（例：英文顯示英文店名，跟 Google、媒體一致）；沒填就用訂位設定的店名
+    $('store').textContent = pick(P.title) || info.display_name;
     if (!document.documentElement.dataset.slug) document.title = info.display_name + ' ' + T('booking');
     $('contact').textContent = info.contact_note || '';
     renderInfo();
@@ -125,22 +146,23 @@
     if (info.address) {
       const q = encodeURIComponent(info.address.replace(/[（(].*?[）)]/g, '').trim());
       let m = info.address.match(/^(.*?)\s*([（(].*[）)])\s*$/);
-      const en = (T('addr') || {})[slug];  // 英文地址（只有英文有）
-      if (en) m = [null, en, T('addrNote')[slug]];
+      const la = (P.address_i18n || {})[YCI.lang];  // 外語地址（例：英文）；中文用訂位設定的地址
+      if (la) m = [null, la, (P.directions_i18n || {})[YCI.lang] || ''];
       rows.push('<div class="irow"><span class="ik">' + T('address') + '</span><span><a href="https://www.google.com/maps/search/?api=1&amp;query=' + q + '" target="_blank" rel="noopener">' +
-        YC.esc(m ? m[1] : info.address) + '</a>' + (m ? '<small>' + YC.esc(m[2]) + '</small>' : '') + '</span></div>');
+        YC.esc(m ? m[1] : info.address) + '</a>' + (m && m[2] ? '<small>' + YC.esc(m[2]) + '</small>' : '') + '</span></div>');
     }
     if (info.phone) {
       rows.push('<div class="irow"><span class="ik">' + T('tel') + '</span><span><a href="tel:' + YC.esc(info.phone.replace(/[^0-9+]/g, '')) + '">' + YC.esc(info.phone) + '</a></span></div>');
     }
-    // 低消（老闆 2026-10-17；隱城週五六也是 800，老闆 2026-11-04）
-    const minAmt = { yincheng: 800, xcw: 600 }[slug];
-    if (minAmt) rows.push('<div class="irow"><span class="ik">' + T('minSpend') + '</span><span>' + T(slug === 'yincheng' ? 'minSpendTextYc' : 'minSpendText', minAmt) + '</span></div>');
-    // 小城外咖啡時段（老闆 2026-10-19）：週六日下午，不開放預約
-    if (slug === 'xcw') rows.push('<div class="irow"><span class="ik">' + T('coffee') + '</span><span>' + T('coffeeText') + '</span></div>');
-    if (slug === 'xcw') rows.push('<div class="irow"><span class="ik">' + T('bar') + '</span><span>' + T('barText') + '</span></div>');
-    // 隱城營業時間（2026-11-04，跟 Google 商家檔案一致）
-    if (slug === 'yincheng') rows.push('<div class="irow"><span class="ik">' + T('hoursLabel') + '</span><span>' + T('ycHours') + '</span></div>');
+    // 低消：文字裡的 {amount} 換成「每人 800 元」（照語言、不斷行）；只填金額沒填文字就只寫金額
+    const amt = P.min_spend ? '<span class="nw">' + YC.esc(T('minAmount', P.min_spend)) + '</span>' : '';
+    const mt = pick(P.min_spend_text);
+    if (mt || amt) rows.push('<div class="irow"><span class="ik">' + T('minSpend') + '</span><span>' + (mt ? txt(mt).replace(/\{amount\}/g, amt) : amt) + '</span></div>');
+    // 店家自己加的列（例：小城外的咖啡、酒吧時段，隱城的營業時間）
+    for (const r of P.info_rows || []) {
+      const k = pick(r.label), v = pick(r.text);
+      if (k && v) rows.push('<div class="irow"><span class="ik">' + YC.esc(k) + '</span><span>' + txt(v) + '</span></div>');
+    }
     $('info').innerHTML = rows.join('');
     $('info').hidden = !rows.length;
   }
@@ -211,11 +233,12 @@
     renderAlt(cur, ok);
   }
   // 兩家互推（老闆 2026-10-18）：這家這天滿了（或人數放不下），另一家同一天還訂得到 → 顯示「改訂另一家」
-  const OTHER = { yincheng: 'xcw', xcw: 'yincheng' };
+  // 另一家＝訂位頁資料裡設定的姊妹店（0135，只能是同一個組織的店）
+  const sis = () => (P.sister && P.sister.slug) || null;
   let other = null, otherLoading = null;
   async function loadOther() {
-    if (!OTHER[slug]) return null;
-    if (!otherLoading) otherLoading = YC.rpc('reservation_availability', { p_slug: OTHER[slug] }).then((r) => (other = r)).catch(() => null);
+    if (!sis()) return null;
+    if (!otherLoading) otherLoading = YC.rpc('reservation_availability', { p_slug: sis() }).then((r) => (other = r)).catch(() => null);
     return otherLoading;
   }
   function otherOk(d, p) {
@@ -229,12 +252,16 @@
     const box = $('alt');
     const show = () => {
       const od = other && other.enabled ? other.days.find((x) => x.date === day) : null;
-      if (!cur || cur.closed || ok || !otherOk(od, party)) { box.hidden = true; box.innerHTML = ''; return; }
-      const o = OTHER[slug];
-      const href = o + '/?d=' + day + '&p=' + party + '&lang=' + YCI.lang + '&ref=' + (slug === 'xcw' ? 'from-xcw' : 'from-yc');
+      if (!sis() || !cur || cur.closed || ok || !otherOk(od, party)) { box.hidden = true; box.innerHTML = ''; return; }
+      const S = P.sister, o = S.slug;
+      // 有專屬網址的店（部署時產生 book/<店>/）連專屬網址，其他用 ?s=；來源記號沿用統計看得懂的 from-yc、from-xcw
+      const from = slug === 'yincheng' ? 'from-yc' : ('from-' + slug).slice(0, 20);
+      const href = ((window.YC_PRE || {})[o] ? o + '/?' : '?s=' + encodeURIComponent(o) + '&') +
+        'd=' + day + '&p=' + party + '&lang=' + YCI.lang + '&ref=' + encodeURIComponent(from);
+      const nm = pick(S.short_name) || pick(S.title) || S.display_name || '';
       box.innerHTML = '<p class="altk">' + T('altTitle') + '</p>' +
-        '<p class="altn">' + YC.esc(T('storeName')[o]) + '<small>' + YC.esc(T('storeIntro')[o]) + '</small></p>' +
-        '<a class="altb" href="' + href + '">' + YC.esc(T('altGo', T('storeName')[o])) + ' →</a>';
+        '<p class="altn">' + YC.esc(nm) + (pick(S.intro) ? '<small>' + YC.esc(pick(S.intro)) + '</small>' : '') + '</p>' +
+        '<a class="altb" href="' + YC.esc(href) + '">' + YC.esc(T('altGo', nm)) + ' →</a>';
       box.hidden = false;
     };
     if (!cur || cur.closed || ok) { box.hidden = true; return; }
