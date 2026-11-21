@@ -994,7 +994,7 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
     ]);
   }
 
-  /// 打卡密碼：已設定／未設定（看不到密碼本身）；老闆、店長可設定、重設、清除，店長的由老闆設定
+  /// 打卡密碼：已設定／未設定（看不到密碼本身）；老闆、店長可設定、重設、清除；店長自己的：沒設時自己設，之後由老闆重設（ops 0141）
   Widget _pinRow() {
     final p = widget.pin!;
     final canClear = p.canSet && (_owner || widget.membership.role == Role.manager);
@@ -1004,7 +1004,7 @@ class _StaffEditScreenState extends State<StaffEditScreen> {
       title: Text(_hasPin! ? '打卡密碼：已設定' : '打卡密碼：未設定'),
       subtitle: Text(p.canSet
           ? '4 位數字、不能太好猜；設好之後誰都看不到。員工忘記了在這裡重設'
-          : (p.mine ? '店長的打卡密碼請老闆設定' : '只有老闆、店長能設定')),
+          : (p.mine ? '已經設好了；忘記或想換，請老闆重設' : '只有老闆、店長能設定')),
       trailing: !p.canSet
           ? null
           : OutlinedButton(

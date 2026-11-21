@@ -162,7 +162,7 @@ class _AttendanceCardState extends State<AttendanceCard> {
         _future = _load();
       });
 
-  /// 自己設打卡密碼（只有還沒設的時候；店長的請老闆設定）
+  /// 自己設打卡密碼（只有還沒設的時候；ops 0141 起店長也能自己設）
   Future<void> _editPin(PinStatus p) async {
     final changed = await editPunchPin(context, personId: p.personId, name: p.name, hasPin: p.hasPin, self: true);
     if (changed && mounted) _reload();
@@ -309,7 +309,10 @@ class _AttendanceCardState extends State<AttendanceCard> {
                 if (_open && mine && _myPin != null && _myPin!.hasPin && !_myPin!.canSet)
                   Padding(
                     padding: const EdgeInsets.only(top: 6),
-                    child: Text('打卡密碼已經設好；忘記或想換，請找店長重設',
+                    child: Text(
+                        widget.membership.role == Role.manager
+                            ? '打卡密碼已經設好；忘記或想換，請找老闆重設'
+                            : '打卡密碼已經設好；忘記或想換，請找店長重設',
                         style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
                   ),
                 if (_open) const SizedBox(height: 10),
