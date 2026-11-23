@@ -769,7 +769,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         const Divider(height: 20),
         IntrinsicHeight(
           child: Row(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            _fixedItem(d, 'rent', '租金（基底）', d.fixed.rent, s.revenue),
+            // 租金基底的名稱照科目（老闆 2026-11-23：小城外叫「世代營業提成」）
+            _fixedItem(d, 'rent', d.accounts.isEmpty ? '租金（基底）' : baseLabel(d.accounts, 'rent_base', '租金（基底）'),
+                d.fixed.rent, s.revenue),
             const SizedBox(width: 12),
             _payrollBaseItem(d, s.revenue),
           ]),
@@ -850,10 +852,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       summary: s,
       multiLineRevenue: StoreFeatures.of(widget.membership.storeName).multiLineRevenue,
       payrollBase: d.payrollBase,
-      payrollBaseLabel: d.payrollBaseLabel,
       rentBase: d.fixed.rent,
       cardFee: d.cardFee(s),
-      cardFeeLabel: '刷卡手續費（${_ratePct(d.cardFeeRate)}%）',
       items: d.items,
       recurring: d.recurring,
       warnings: [
