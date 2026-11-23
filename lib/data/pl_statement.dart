@@ -1,6 +1,6 @@
-// 損益表（會計科目格式，ops 0142，老闆 2026-11-23）：照科目加總，分成
-// 營業收入／進貨成本／營業費用／本期淨利，順序固定；沒有金額的科目也列出來；
-// 一個科目有多筆時，科目那一行是合計，下面逐筆列出明細。
+// 損益表（ops 0142，老闆 2026-11-23 第二版）：維持 營業收入／進貨／雜項／租金／人事 五大項＋本期淨利；
+// 雜項裡照會計科目分組，科目那一行是合計，兩筆以上時下面逐筆列出明細；
+// 占營收 % 只在各大項的合計和本期淨利；不放括號說明和說明欄。
 // 只負責把數字排好（純 Dart，可測試）；Excel 排版在 services/pl_export.dart。
 
 import 'models.dart';
@@ -27,8 +27,12 @@ class AccountStatement {
   final double revenueTotal;
   final List<PlDetail> purchase;
   final double purchaseTotal;
-  final List<PlAccountRow> expenses;
-  final double expenseTotal;
+  final List<PlAccountRow> misc; // 雜項：照科目分組
+  final double miscTotal;
+  final List<PlDetail> rent;
+  final double rentTotal;
+  final List<PlDetail> payroll;
+  final double payrollTotal;
   final List<String> warnings;
   const AccountStatement({
     required this.title,
@@ -38,11 +42,15 @@ class AccountStatement {
     required this.revenueTotal,
     required this.purchase,
     required this.purchaseTotal,
-    required this.expenses,
-    required this.expenseTotal,
+    required this.misc,
+    required this.miscTotal,
+    required this.rent,
+    required this.rentTotal,
+    required this.payroll,
+    required this.payrollTotal,
     this.warnings = const [],
   });
-  double get profit => revenueTotal - purchaseTotal - expenseTotal;
+  double get profit => revenueTotal - purchaseTotal - miscTotal - rentTotal - payrollTotal;
   double share(double v) => revenueTotal == 0 ? 0 : v / revenueTotal;
 }
 
@@ -56,7 +64,7 @@ class PlEntry {
   const PlEntry({this.accountId, this.autoKind, required this.label, required this.amount, this.note});
 }
 
-/// 把支出照科目排好。找不到科目的（沒選、科目停用了、自動項目沒有對應的科目）放在最後「未選科目」，不會不見。
+/// 把支出照科目排好（只列有金額的科目）。找不到科目的（沒選、自動項目沒有對應的科目）放在最後「未選科目」，不會不見。
 List<PlAccountRow> groupByAccount(List<PlAccount> accounts, List<PlEntry> entries) {
   final sorted = [...accounts]..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
   final byId = {for (final a in sorted) a.id: a};
@@ -82,10 +90,10 @@ List<PlAccountRow> groupByAccount(List<PlAccount> accounts, List<PlEntry> entrie
   }
 
   return [
-    // 停用的科目：有金額才列
+    // 只列這一區有金額的科目
     for (final a in sorted)
-      if (a.active || (buckets[a.id] ?? const []).any((e) => e.amount != 0)) row(a.name, buckets[a.id] ?? const []),
-    if (orphan.isNotEmpty) row('（未選科目）', orphan),
+      if ((buckets[a.id] ?? const []).any((e) => e.amount != 0)) row(a.name, buckets[a.id]!),
+    if (orphan.isNotEmpty) row('未選科目', orphan),
   ];
 }
 
@@ -120,7 +128,16 @@ List<PlDetail> purchaseLines(MonthlySummary s) {
 
 String plTitle(String storeLabel, DateTime month) => '${storeLabel}_${month.month}月份損益表';
 
-/// 組出整張損益表（跟總覽「本月損益」卡片同一算法：營收 − 進貨（不含雜項類）− 雜項 − 租金 − 人事）
+/// 基底那一筆的名稱：照自動歸進來的科目，拿掉「租金支出-」和括號（例：租金支出-世代(營業提成) → 世代營業提成）
+String baseLabel(List<PlAccount> accounts, String autoKind, String fallback) {
+  final a = accounts.where((x) => x.autoKind == autoKind).firstOrNull;
+  if (a == null) return fallback;
+  final n = a.name.replaceFirst('租金支出-', '').replaceAll(RegExp(r'[()（）]'), '').trim();
+  return n.isEmpty ? fallback : n;
+}
+
+/// 組出整張損益表（跟總覽「本月損益」卡片同一算法：營收 − 進貨（不含雜項類）− 雜項 − 租金 − 人事；
+/// 每一筆照它選的大項放，雜項裡再照科目分組）
 AccountStatement accountStatementOf({
   required List<PlAccount> accounts,
   required String storeLabel,
@@ -129,24 +146,37 @@ AccountStatement accountStatementOf({
   required MonthlySummary summary,
   required bool multiLineRevenue,
   required double? payrollBase,
-  String payrollBaseLabel = '人事（基底）',
   required double? rentBase,
   required double cardFee,
-  String cardFeeLabel = '刷卡手續費',
   required List<ExpenseItem> items,
   required List<RecurringExpenseItem> recurring,
   List<String> warnings = const [],
 }) {
-  final entries = <PlEntry>[
-    if (payrollBase != null) PlEntry(autoKind: 'payroll_base', label: payrollBaseLabel, amount: payrollBase),
-    if (rentBase != null) PlEntry(autoKind: 'rent_base', label: '租金（基底）', amount: rentBase),
-    if (cardFee != 0) PlEntry(autoKind: 'card_fee', label: cardFeeLabel, amount: cardFee),
-    PlEntry(autoKind: 'purchase_misc', label: '雜項類進貨', amount: summary.miscCost),
-    for (final it in recurring)
-      PlEntry(accountId: it.accountId, label: it.name, amount: it.amountFor(month), note: it.note),
-    for (final it in items) PlEntry(accountId: it.accountId, label: it.name, amount: it.amount, note: it.note),
+  final misc = <PlEntry>[
+    PlEntry(autoKind: 'purchase_misc', label: '進貨雜項', amount: summary.miscCost),
+    if (cardFee != 0) PlEntry(autoKind: 'card_fee', label: '刷卡手續費', amount: cardFee),
   ];
-  final rows = groupByAccount(accounts, entries);
+  final rent = <PlDetail>[
+    if (rentBase != null) PlDetail(baseLabel(accounts, 'rent_base', '租金'), rentBase),
+  ];
+  final payroll = <PlDetail>[
+    if (payrollBase != null) PlDetail(baseLabel(accounts, 'payroll_base', '薪資'), payrollBase),
+  ];
+  void add(String category, String? accountId, String label, double amount, String? note) {
+    if (category == 'misc') {
+      misc.add(PlEntry(accountId: accountId, label: label, amount: amount, note: note));
+    } else if (amount != 0) {
+      (category == 'rent' ? rent : payroll).add(PlDetail(label, amount));
+    }
+  }
+
+  for (final it in recurring) {
+    add(it.category, it.accountId, it.name, it.amountFor(month), it.note);
+  }
+  for (final it in items) {
+    add(it.category, it.accountId, it.name, it.amount, it.note);
+  }
+  double sum(Iterable<double> v) => v.fold(0.0, (t, x) => t + x);
   final m = month.month.toString().padLeft(2, '0');
   return AccountStatement(
     title: plTitle(storeLabel, month),
@@ -156,8 +186,12 @@ AccountStatement accountStatementOf({
     revenueTotal: summary.revenue,
     purchase: purchaseLines(summary),
     purchaseTotal: summary.purchaseCost,
-    expenses: rows,
-    expenseTotal: entries.fold(0.0, (t, e) => t + e.amount),
+    misc: groupByAccount(accounts, misc),
+    miscTotal: sum(misc.map((e) => e.amount)),
+    rent: rent,
+    rentTotal: sum(rent.map((e) => e.amount)),
+    payroll: payroll,
+    payrollTotal: sum(payroll.map((e) => e.amount)),
     warnings: warnings,
   );
 }
