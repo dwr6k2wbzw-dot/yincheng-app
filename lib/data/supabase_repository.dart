@@ -377,29 +377,55 @@ class SupabaseRepository implements Repository {
         .eq('category', category);
   }
 
+  /// 資料庫還沒有 0142 的欄位（account_id、note）：讀寫都退回舊欄位（Codex P2）
+  static bool _noPlColumns(PostgrestException e) => e.code == '42703' || e.code == 'PGRST204';
+  static Map<String, dynamic> _withoutPl(Map<String, dynamic> row) => {...row}..remove('account_id')..remove('note');
+
   @override
   Future<List<ExpenseItem>> expenseItems(String storeId, DateTime month) async {
-    final rows = await _db
+    Future<List<Map<String, dynamic>>> q(String cols) => _db
         .from('expense_items')
-        .select('id, name, category, amount')
+        .select(cols)
         .eq('store_id', storeId)
         .eq('period_month', _day.format(DateTime(month.year, month.month, 1)))
         .order('created_at');
+    List<Map<String, dynamic>> rows;
+    try {
+      rows = await q('id, name, category, amount, account_id, note');
+    } on PostgrestException catch (e) {
+      if (!_noPlColumns(e)) rethrow;
+      rows = await q('id, name, category, amount');
+    }
     return _remember(_ck('items', [storeId, _mk(month)]), rows, (raw) => _rows(raw).map(ExpenseItem.fromRow).toList());
   }
 
   @override
   Future<void> saveExpenseItem(String storeId, DateTime month, ExpenseItem item, {bool isNew = false}) async {
-    final row = {'name': item.name.trim(), 'category': item.category, 'amount': item.amount};
-    if (isNew) {
-      await _db.from('expense_items').insert({
-        ...row,
-        'store_id': storeId,
-        'period_month': _day.format(DateTime(month.year, month.month, 1)),
-      });
-    } else {
-      final r = await _db.from('expense_items').update(row).eq('id', item.id).select('id');
-      if (r.isEmpty) throw Exception('message: 沒有權限修改（只有老闆可以）,');
+    final row = {
+      'name': item.name.trim(),
+      'category': item.category,
+      'amount': item.amount,
+      'account_id': item.accountId,
+      'note': (item.note ?? '').trim().isEmpty ? null : item.note!.trim(),
+    };
+    Future<void> write(Map<String, dynamic> row) async {
+      if (isNew) {
+        await _db.from('expense_items').insert({
+          ...row,
+          'store_id': storeId,
+          'period_month': _day.format(DateTime(month.year, month.month, 1)),
+        });
+      } else {
+        final r = await _db.from('expense_items').update(row).eq('id', item.id).select('id');
+        if (r.isEmpty) throw Exception('message: 沒有權限修改（只有老闆可以）,');
+      }
+    }
+
+    try {
+      await write(row);
+    } on PostgrestException catch (e) {
+      if (!_noPlColumns(e)) rethrow;
+      await write(_withoutPl(row));
     }
   }
 
@@ -448,6 +474,33 @@ class SupabaseRepository implements Repository {
   }
 
   @override
+  Future<List<PlAccount>> plAccounts(String storeId) async {
+    try {
+      final rows = await _db
+          .from('pl_accounts')
+          .select('id, name, category, auto_kind, sort_order, active')
+          .eq('store_id', storeId)
+          .order('sort_order');
+      return rows.map(PlAccount.fromRow).toList();
+    } on PostgrestException catch (e) {
+      if (e.code == 'PGRST205' || e.code == '42P01') return const []; // 資料庫還沒有科目表（0142 之前）
+      rethrow;
+    }
+  }
+
+  @override
+  Future<String?> plTitle(String storeId) async {
+    try {
+      final r = await _db.from('store_settings').select('pl_title').eq('store_id', storeId).maybeSingle();
+      final t = (r?['pl_title'] as String?)?.trim();
+      return t == null || t.isEmpty ? null : t;
+    } on PostgrestException catch (e) {
+      if (e.code == '42703') return null;
+      rethrow;
+    }
+  }
+
+  @override
   Future<void> saveCardFeeRate(String storeId, double rate) async {
     await _db.from('store_settings').upsert({'store_id': storeId, 'card_fee_rate': rate}, onConflict: 'store_id');
   }
@@ -455,23 +508,41 @@ class SupabaseRepository implements Repository {
   // ---------------- 0039 每月固定支出 ----------------
   @override
   Future<List<RecurringExpenseItem>> recurringExpenseItems(String storeId) async {
-    final rows = await _db
-        .from('recurring_expense_items')
-        .select('id, name, category, amount, recurring_expense_amounts(from_month, amount)')
-        .eq('store_id', storeId)
-        .eq('active', true)
-        .order('created_at');
+    Future<List<Map<String, dynamic>>> q(String cols) =>
+        _db.from('recurring_expense_items').select(cols).eq('store_id', storeId).eq('active', true).order('created_at');
+    List<Map<String, dynamic>> rows;
+    try {
+      rows = await q('id, name, category, amount, account_id, note, recurring_expense_amounts(from_month, amount)');
+    } on PostgrestException catch (e) {
+      if (!_noPlColumns(e)) rethrow;
+      rows = await q('id, name, category, amount, recurring_expense_amounts(from_month, amount)');
+    }
     return _remember(_ck('recurring', [storeId]), rows, (raw) => _rows(raw).map(RecurringExpenseItem.fromRow).toList());
   }
 
   @override
   Future<void> saveRecurringExpenseItem(String storeId, RecurringExpenseItem item, {bool isNew = false}) async {
-    final row = {'name': item.name.trim(), 'category': item.category, 'amount': item.amount};
-    if (isNew) {
-      await _db.from('recurring_expense_items').insert({...row, 'store_id': storeId});
-    } else {
-      final r = await _db.from('recurring_expense_items').update(row).eq('id', item.id).select('id');
-      if (r.isEmpty) throw Exception('message: 沒有權限修改（只有老闆可以）,');
+    final row = {
+      'name': item.name.trim(),
+      'category': item.category,
+      'amount': item.amount,
+      'account_id': item.accountId,
+      'note': (item.note ?? '').trim().isEmpty ? null : item.note!.trim(),
+    };
+    Future<void> write(Map<String, dynamic> row) async {
+      if (isNew) {
+        await _db.from('recurring_expense_items').insert({...row, 'store_id': storeId});
+      } else {
+        final r = await _db.from('recurring_expense_items').update(row).eq('id', item.id).select('id');
+        if (r.isEmpty) throw Exception('message: 沒有權限修改（只有老闆可以）,');
+      }
+    }
+
+    try {
+      await write(row);
+    } on PostgrestException catch (e) {
+      if (!_noPlColumns(e)) rethrow;
+      await write(_withoutPl(row));
     }
   }
 

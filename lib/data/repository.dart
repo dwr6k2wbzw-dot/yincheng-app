@@ -86,6 +86,10 @@ abstract class Repository {
   Future<void> deleteExpenseItem(String itemId);
   // 0039：刷卡手續費率（預設 0.02）＋每月固定支出
   Future<double> cardFeeRate(String storeId);
+  /// 損益表的會計科目（ops 0142，只有老闆）。資料庫還沒更新回空的（匯出用舊格式）
+  Future<List<PlAccount>> plAccounts(String storeId);
+  /// 損益表抬頭用的店名（ops 0142 store_settings.pl_title；沒設回 null＝用店名）
+  Future<String?> plTitle(String storeId);
   Future<void> saveCardFeeRate(String storeId, double rate);
   Future<List<RecurringExpenseItem>> recurringExpenseItems(String storeId);
   Future<void> saveRecurringExpenseItem(String storeId, RecurringExpenseItem item, {bool isNew = false});

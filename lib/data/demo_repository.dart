@@ -748,7 +748,13 @@ class DemoRepository implements Repository {
     if (_isStaff) throw Exception('message: 沒有權限,');
     final list = _expItems.putIfAbsent(_ek(storeId, month), () => []);
     list.removeWhere((e) => e.id == item.id);
-    list.add(ExpenseItem(id: isNew ? 'e${_seq++}' : item.id, name: item.name, category: item.category, amount: item.amount));
+    list.add(ExpenseItem(
+        id: isNew ? 'e${_seq++}' : item.id,
+        name: item.name,
+        category: item.category,
+        amount: item.amount,
+        accountId: item.accountId,
+        note: item.note));
   }
   @override
   Future<void> deleteExpenseItem(String itemId) async {
@@ -762,6 +768,24 @@ class DemoRepository implements Repository {
   final _recurring = <String, List<RecurringExpenseItem>>{};
   @override
   Future<double> cardFeeRate(String storeId) async => _cardFeeRate[storeId] ?? 0.02;
+  // ops 0142 示範：隱城的科目（照老闆的損益表）
+  @override
+  Future<List<PlAccount>> plAccounts(String storeId) async {
+    if (_isStaff) return const [];
+    const names = [
+      ('薪資支出', 'payroll', 'payroll_base'), ('保險費-勞健保+退休金', 'payroll', null), ('租金支出-房屋', 'rent', 'rent_base'),
+      ('租金支出-租賃稅', 'rent', null), ('租金支出-租賃補充保費', 'rent', null), ('水電瓦斯費', 'misc', null),
+      ('租金支出-ICHEF', 'rent', null), ('其他費用-垃圾清運費', 'misc', null), ('其他費用-雜項', 'misc', 'purchase_misc'),
+      ('職工福利', 'payroll', null), ('廣告費', 'misc', null), ('郵電費', 'misc', null), ('修繕費', 'misc', null),
+      ('保險費', 'misc', null), ('手續費', 'misc', 'card_fee'), ('會計師', 'misc', null), ('內帳記帳費', 'misc', null),
+    ];
+    return [
+      for (final (i, n) in names.indexed)
+        PlAccount(id: 'acc$i', name: n.$1, category: n.$2, autoKind: n.$3, sortOrder: i + 1),
+    ];
+  }
+  @override
+  Future<String?> plTitle(String storeId) async => storeId == 'yc' ? '隱城(二店)' : null;
   @override
   Future<void> saveCardFeeRate(String storeId, double rate) async {
     if (_isStaff) throw Exception('message: 沒有權限,');
@@ -781,7 +805,9 @@ class DemoRepository implements Repository {
         name: item.name,
         category: item.category,
         amount: item.amount,
-        amountsFrom: old?.amountsFrom ?? const {}));
+        amountsFrom: old?.amountsFrom ?? const {},
+        accountId: item.accountId,
+        note: item.note));
   }
   @override
   Future<void> setRecurringAmountFrom(String itemId, DateTime month, double amount) async {
@@ -791,7 +817,7 @@ class DemoRepository implements Repository {
       if (i < 0) continue;
       final e = l[i];
       l[i] = RecurringExpenseItem(
-          id: e.id, name: e.name, category: e.category, amount: e.amount,
+          id: e.id, name: e.name, category: e.category, amount: e.amount, accountId: e.accountId, note: e.note,
           amountsFrom: {...e.amountsFrom, DateTime(month.year, month.month): amount});
     }
   }

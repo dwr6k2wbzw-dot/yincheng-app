@@ -6,6 +6,8 @@ import '../app_state.dart';
 import '../services/load_timing.dart';
 import '../data/month_compare.dart';
 import '../data/models.dart';
+import '../data/pl_statement.dart';
+import '../data/store_features.dart';
 import '../data/repository.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -29,6 +31,9 @@ class _DashboardData {
   List<ExpenseItem> items = const [];
   List<RecurringExpenseItem> recurring = const []; // 每月固定支出（0039）
   double cardFeeRate = 0.02; // 刷卡手續費率（0039）
+  List<PlAccount> accounts = const []; // 損益表的會計科目（ops 0142）；空的＝資料庫還沒更新，匯出用舊格式
+  String? plTitle; // 損益表抬頭的店名（例「小城外(一店)」）
+  PlAccount? accountOf(String? id) => id == null ? null : accounts.where((a) => a.id == id).firstOrNull;
   DateTime month = DateTime.now();
   List<DailyRevenue> days = const []; // 本月與上個月每日營收（趨勢線、較上月同期）
   /// 前 3 個月的月彙總（[0]＝上個月；上個月／近 3 個月平均的來客與客單，老闆 2026-10-29）；讀不到的月份＝null
@@ -162,6 +167,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           repo.cardFeeRate(id),
           // 薪資預估：讀不到（例如資料庫還沒更新）就當沒有，人事基底照舊
           repo.payrollEstimate(id, _month).then<PayrollEstimate?>((v) => v, onError: (_) => null),
+          // 會計科目、損益表抬頭（ops 0142）：讀不到就用舊格式
+          repo.plAccounts(id).then<List<PlAccount>>((v) => v, onError: (_) => const <PlAccount>[]),
+          repo.plTitle(id).then<String?>((v) => v, onError: (_) => null),
         ],
       ]);
       d.summary = r[0] as MonthlySummary;
@@ -173,6 +181,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         d.recurring = r[5] as List<RecurringExpenseItem>;
         d.cardFeeRate = r[6] as double;
         d.payrollEst = r[7] as PayrollEstimate?;
+        d.accounts = r[8] as List<PlAccount>;
+        d.plTitle = r[9] as String?;
       }
     }
     markLoad('總覽資料');
@@ -781,6 +791,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (mounted) showMessage(context, '匯出工具下載失敗，請檢查網路後再試', error: true);
       return;
     }
+    if (d.accounts.isNotEmpty) return _exportAccountPl(d, s);
     detail(String cat, double? base, String baseLabel) => [
           if (base != null) pl.PlLine(baseLabel, base),
           for (final it in d.recurring.where((e) => e.category == cat)) pl.PlLine(it.name, it.amountFor(d.month), '每月固定'),
@@ -829,6 +840,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  /// 會計科目格式（ops 0142，老闆 2026-11-23）：照科目加總，數字與上面卡片同一算法
+  Future<void> _exportAccountPl(_DashboardData d, MonthlySummary s) async {
+    final st = accountStatementOf(
+      accounts: d.accounts,
+      storeLabel: d.plTitle ?? widget.membership.storeName,
+      storeName: widget.membership.storeName,
+      month: d.month,
+      summary: s,
+      multiLineRevenue: StoreFeatures.of(widget.membership.storeName).multiLineRevenue,
+      payrollBase: d.payrollBase,
+      payrollBaseLabel: d.payrollBaseLabel,
+      rentBase: d.fixed.rent,
+      cardFee: d.cardFee(s),
+      cardFeeLabel: '刷卡手續費（${_ratePct(d.cardFeeRate)}%）',
+      items: d.items,
+      recurring: d.recurring,
+      warnings: [
+        if (d.fixed.rent == null && d.itemsOf('rent') + d.recurringOf('rent') == 0) '尚未輸入租金',
+        if (d.payrollBase == null) '尚未輸入人事',
+        if (d.payrollAutoNote != null) '人事預估不完整：${d.payrollAutoNote}',
+      ],
+    );
+    try {
+      final r = await pl.saveFile(pl.buildAccountPlXlsx(st), st.fileName, pl.xlsxMime);
+      if (!mounted) return;
+      if (r == 'downloaded') showMessage(context, '已下載 ${st.fileName}');
+    } catch (e) {
+      if (mounted) showMessage(context, '匯出失敗：$e', error: true);
+    }
+  }
+
   // 其他支出明細：刷卡手續費（自動）＋每月固定＋一次性；老闆新增，金額加進所選大類
   Widget _expenseItemsSection(_DashboardData d, MonthlySummary s) {
     final cardFee = d.cardFee(s);
@@ -852,11 +894,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // 每月固定支出
       for (final it in d.recurring)
         _expItemRow(ExpenseItem.categoryLabels[it.category] ?? it.category, it.name, it.amountFor(d.month),
-            tag: '每月固定', onTap: () => _editRecurring(d, it)),
+            tag: '每月固定', account: _accountLabel(d, it.accountId), onTap: () => _editRecurring(d, it)),
       // 一次性支出
       for (final it in d.items)
         _expItemRow(ExpenseItem.categoryLabels[it.category] ?? it.category, it.name, it.amount,
-            onTap: () => _editItem(d, it)),
+            account: _accountLabel(d, it.accountId), onTap: () => _editItem(d, it)),
     ]);
   }
 
@@ -867,7 +909,45 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return s;
   }
 
-  Widget _expItemRow(String catLabel, String name, double amount, {String? tag, required VoidCallback onTap}) => Padding(
+  /// 新增／修改支出：會計科目下拉選單＋備註（ops 0142）。資料庫還沒有科目表就不顯示
+  List<Widget> _accountFields(
+      _DashboardData d, String? accountId, TextEditingController note, void Function(PlAccount?) onPick) {
+    if (d.accounts.isEmpty) return const [];
+    final options = [
+      for (final a in d.accounts)
+        if (a.active || a.id == accountId) a,
+    ];
+    return [
+      const SizedBox(height: 12),
+      DropdownButtonFormField<String?>(
+        value: options.any((a) => a.id == accountId) ? accountId : null,
+        isExpanded: true,
+        decoration: const InputDecoration(labelText: '會計科目（匯出損益表照這個加總）'),
+        items: [
+          const DropdownMenuItem<String?>(value: null, child: Text('未選')),
+          for (final a in options) DropdownMenuItem<String?>(value: a.id, child: Text(a.name, overflow: TextOverflow.ellipsis)),
+        ],
+        onChanged: (v) => onPick(d.accountOf(v)),
+      ),
+      const SizedBox(height: 8),
+      TextField(
+        controller: note,
+        maxLength: 100,
+        decoration: const InputDecoration(labelText: '備註（損益表上看得到，可空白）'),
+      ),
+    ];
+  }
+
+  /// 支出明細下面那行小字：選了哪個會計科目（沒選的提醒）；資料庫還沒有科目表就不顯示
+  (String, bool)? _accountLabel(_DashboardData d, String? accountId) {
+    if (d.accounts.isEmpty) return null;
+    final a = d.accountOf(accountId);
+    return a == null ? ('未選會計科目', true) : (a.name, false);
+  }
+
+  Widget _expItemRow(String catLabel, String name, double amount,
+          {String? tag, (String, bool)? account, required VoidCallback onTap}) =>
+      Padding(
         padding: const EdgeInsets.only(bottom: 6),
         child: Material(
           color: AppColors.cardHigh,
@@ -884,7 +964,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   child: Text(catLabel, style: const TextStyle(fontSize: AppType.caption)),
                 ),
                 const SizedBox(width: 8),
-                Expanded(child: Text(name, style: const TextStyle(fontSize: AppType.small))),
+                Expanded(
+                  child: account == null
+                      ? Text(name, style: const TextStyle(fontSize: AppType.small))
+                      : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text(name, style: const TextStyle(fontSize: AppType.small)),
+                          Text(account.$1,
+                              style: TextStyle(fontSize: AppType.caption, color: account.$2 ? AppColors.warn : AppColors.muted)),
+                        ]),
+                ),
                 if (tag != null) ...[
                   Text(tag, style: TextStyle(fontSize: AppType.caption, color: AppColors.muted)),
                   const SizedBox(width: 8),
@@ -902,6 +990,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final amount = TextEditingController(text: item == null ? '' : item.amount.round().toString());
     var category = item?.category ?? 'misc';
     var recurring = false; // 每月固定（只在新增時可選）
+    String? accountId = item?.accountId; // 會計科目（ops 0142）
+    final note = TextEditingController(text: item?.note ?? '');
     final result = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
@@ -925,6 +1015,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9]'))],
               decoration: const InputDecoration(prefixText: '\$ ', labelText: '金額'),
             ),
+            ..._accountFields(d, accountId, note, (a) => setSheet(() {
+                  accountId = a?.id;
+                  if (a != null) category = a.category; // 選了科目就照科目的大項
+                })),
             const SizedBox(height: 12),
             Text('算進哪個大項', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
             const SizedBox(height: 6),
@@ -974,13 +1068,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (recurring && item == null) {
           await repo.saveRecurringExpenseItem(
             widget.membership.storeId,
-            RecurringExpenseItem(id: '', name: name.text.trim(), category: category, amount: double.parse(amount.text)),
+            RecurringExpenseItem(
+                id: '', name: name.text.trim(), category: category, amount: double.parse(amount.text),
+                accountId: accountId, note: note.text.trim()),
             isNew: true,
           );
         } else {
           await repo.saveExpenseItem(
             widget.membership.storeId, d.month,
-            ExpenseItem(id: item?.id ?? '', name: name.text.trim(), category: category, amount: double.parse(amount.text)),
+            ExpenseItem(
+                id: item?.id ?? '', name: name.text.trim(), category: category, amount: double.parse(amount.text),
+                accountId: accountId, note: note.text.trim()),
             isNew: item == null,
           );
         }
@@ -997,6 +1095,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final monthAmount = item.amountFor(d.month);
     final amount = TextEditingController(text: monthAmount.round().toString());
     var category = item.category;
+    String? accountId = item.accountId; // 會計科目（ops 0142）
+    final note = TextEditingController(text: item.note ?? '');
     final result = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
@@ -1019,6 +1119,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9]'))],
                 decoration: const InputDecoration(prefixText: '\$ ', labelText: '金額'),
               ),
+              ..._accountFields(d, accountId, note, (a) => setSheet(() {
+                    accountId = a?.id;
+                    if (a != null) category = a.category;
+                  })),
               const SizedBox(height: 12),
               Text('算進哪個大項', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
               const SizedBox(height: 6),
@@ -1057,10 +1161,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         await repo.deleteRecurringExpenseItem(item.id);
       } else {
         // 項目名稱、大項改了套用到每個月；金額改了只從這個月起（0090，老闆 2026-11-04）
-        if (name.text.trim() != item.name || category != item.category) {
+        if (name.text.trim() != item.name ||
+            category != item.category ||
+            accountId != item.accountId ||
+            note.text.trim() != (item.note ?? '')) {
           await repo.saveRecurringExpenseItem(
             widget.membership.storeId,
-            RecurringExpenseItem(id: item.id, name: name.text.trim(), category: category, amount: item.amount),
+            RecurringExpenseItem(
+                id: item.id, name: name.text.trim(), category: category, amount: item.amount,
+                accountId: accountId, note: note.text.trim()),
           );
         }
         final v = double.parse(amount.text);

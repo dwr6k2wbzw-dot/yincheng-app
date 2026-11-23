@@ -574,18 +574,42 @@ class ExpenseItem {
   final String name;
   final String category; // rent / payroll / misc
   final double amount;
-  ExpenseItem({required this.id, required this.name, required this.category, required this.amount});
+  final String? accountId; // 會計科目（ops 0142）
+  final String? note; // 備註（損益表上看得到）
+  ExpenseItem({required this.id, required this.name, required this.category, required this.amount, this.accountId, this.note});
   factory ExpenseItem.fromRow(Map<String, dynamic> r) => ExpenseItem(
         id: r['id'] as String,
         name: r['name'] as String,
         category: r['category'] as String,
         amount: (r['amount'] as num).toDouble(),
+        accountId: r['account_id'] as String?,
+        note: r['note'] as String?,
       );
   static const categoryLabels = {'rent': '租金', 'payroll': '人事', 'misc': '雜項'};
   /// 常見支出項（可自行輸入其他）。刷卡手續費已改為自動計算（0039），不再放這裡
   static const commonNames = [
     '勞保', '健保', '勞退', '電費', '水費', '電信費', '營業稅', '會計費', '租賃稅', '其他',
   ];
+}
+
+/// 損益表的會計科目（ops 0142，老闆專屬）：每家店一份，順序照老闆的損益表
+class PlAccount {
+  final String id;
+  final String name;
+  final String category; // 算進損益卡片的哪一大項：rent / payroll / misc
+  final String? autoKind; // 自動進來的歸這裡：payroll_base 人事基底、rent_base 租金基底、card_fee 刷卡手續費、purchase_misc 進貨雜項
+  final int sortOrder;
+  final bool active;
+  const PlAccount(
+      {required this.id, required this.name, required this.category, this.autoKind, this.sortOrder = 0, this.active = true});
+  factory PlAccount.fromRow(Map<String, dynamic> r) => PlAccount(
+        id: r['id'] as String,
+        name: r['name'] as String,
+        category: r['category'] as String,
+        autoKind: r['auto_kind'] as String?,
+        sortOrder: (r['sort_order'] as num?)?.toInt() ?? 0,
+        active: r['active'] as bool? ?? true,
+      );
 }
 
 /// 每月固定支出（0039，老闆專屬）：設一次每個月自動帶入損益明細。category 同 ExpenseItem
@@ -596,13 +620,23 @@ class RecurringExpenseItem {
   final double amount; // 原本的金額（還沒在任何月份改過金額前，每個月都用這個）
   /// 0090（老闆 2026-11-04）：某月起改成的金額（月初 → 金額）。改金額只從那個月起生效，過去月份不變。
   final Map<DateTime, double> amountsFrom;
+  final String? accountId; // 會計科目（ops 0142）
+  final String? note; // 備註（損益表上看得到）
   RecurringExpenseItem(
-      {required this.id, required this.name, required this.category, required this.amount, this.amountsFrom = const {}});
+      {required this.id,
+      required this.name,
+      required this.category,
+      required this.amount,
+      this.amountsFrom = const {},
+      this.accountId,
+      this.note});
   factory RecurringExpenseItem.fromRow(Map<String, dynamic> r) => RecurringExpenseItem(
         id: r['id'] as String,
         name: r['name'] as String,
         category: r['category'] as String,
         amount: (r['amount'] as num).toDouble(),
+        accountId: r['account_id'] as String?,
+        note: r['note'] as String?,
         amountsFrom: {
           for (final a in (r['recurring_expense_amounts'] as List? ?? const []))
             DateTime.parse(a['from_month'] as String): (a['amount'] as num).toDouble(),
