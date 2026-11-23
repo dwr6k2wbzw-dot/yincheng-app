@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:excel/excel.dart';
 import 'package:intl/intl.dart';
 
+export 'pl_account_xlsx.dart';
+
 /// 一鍵匯出當月損益表（老闆 2026-10-12）：產生 Excel（.xlsx），用手機的分享選單「儲存到檔案」。
 /// 數字與 App「本月損益」卡片同一算法（由畫面算好傳進來，這裡只負責排版）。
 class PlLine {

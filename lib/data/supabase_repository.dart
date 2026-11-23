@@ -381,7 +381,7 @@ class SupabaseRepository implements Repository {
   Future<List<ExpenseItem>> expenseItems(String storeId, DateTime month) async {
     final rows = await _db
         .from('expense_items')
-        .select('id, name, category, amount')
+        .select('id, name, category, amount, account_id, note')
         .eq('store_id', storeId)
         .eq('period_month', _day.format(DateTime(month.year, month.month, 1)))
         .order('created_at');
@@ -390,7 +390,13 @@ class SupabaseRepository implements Repository {
 
   @override
   Future<void> saveExpenseItem(String storeId, DateTime month, ExpenseItem item, {bool isNew = false}) async {
-    final row = {'name': item.name.trim(), 'category': item.category, 'amount': item.amount};
+    final row = {
+      'name': item.name.trim(),
+      'category': item.category,
+      'amount': item.amount,
+      'account_id': item.accountId,
+      'note': (item.note ?? '').trim().isEmpty ? null : item.note!.trim(),
+    };
     if (isNew) {
       await _db.from('expense_items').insert({
         ...row,
@@ -448,6 +454,33 @@ class SupabaseRepository implements Repository {
   }
 
   @override
+  Future<List<PlAccount>> plAccounts(String storeId) async {
+    try {
+      final rows = await _db
+          .from('pl_accounts')
+          .select('id, name, category, auto_kind, sort_order, active')
+          .eq('store_id', storeId)
+          .order('sort_order');
+      return rows.map(PlAccount.fromRow).toList();
+    } on PostgrestException catch (e) {
+      if (e.code == 'PGRST205' || e.code == '42P01') return const []; // 資料庫還沒有科目表（0142 之前）
+      rethrow;
+    }
+  }
+
+  @override
+  Future<String?> plTitle(String storeId) async {
+    try {
+      final r = await _db.from('store_settings').select('pl_title').eq('store_id', storeId).maybeSingle();
+      final t = (r?['pl_title'] as String?)?.trim();
+      return t == null || t.isEmpty ? null : t;
+    } on PostgrestException catch (e) {
+      if (e.code == '42703') return null;
+      rethrow;
+    }
+  }
+
+  @override
   Future<void> saveCardFeeRate(String storeId, double rate) async {
     await _db.from('store_settings').upsert({'store_id': storeId, 'card_fee_rate': rate}, onConflict: 'store_id');
   }
@@ -457,7 +490,7 @@ class SupabaseRepository implements Repository {
   Future<List<RecurringExpenseItem>> recurringExpenseItems(String storeId) async {
     final rows = await _db
         .from('recurring_expense_items')
-        .select('id, name, category, amount, recurring_expense_amounts(from_month, amount)')
+        .select('id, name, category, amount, account_id, note, recurring_expense_amounts(from_month, amount)')
         .eq('store_id', storeId)
         .eq('active', true)
         .order('created_at');
@@ -466,7 +499,13 @@ class SupabaseRepository implements Repository {
 
   @override
   Future<void> saveRecurringExpenseItem(String storeId, RecurringExpenseItem item, {bool isNew = false}) async {
-    final row = {'name': item.name.trim(), 'category': item.category, 'amount': item.amount};
+    final row = {
+      'name': item.name.trim(),
+      'category': item.category,
+      'amount': item.amount,
+      'account_id': item.accountId,
+      'note': (item.note ?? '').trim().isEmpty ? null : item.note!.trim(),
+    };
     if (isNew) {
       await _db.from('recurring_expense_items').insert({...row, 'store_id': storeId});
     } else {
