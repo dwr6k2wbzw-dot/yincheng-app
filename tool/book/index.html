@@ -27,6 +27,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600&amp;display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 <!--OG-->
+<!--GA-->
 </head>
 <body>
 <main>
@@ -317,6 +318,8 @@
       const done = $('done'); done.hidden = false;
       done.innerHTML = '<p class="big ok">' + T('booked') + '</p><p class="big">' + YC.esc(r.display_name) + '</p><p>' + YC.dateLabel(r.date) + ' ' + r.time + '　' + T('guests', r.party) + '<br>' + YC.esc(YCI.name(r.name)) + '</p><p class="hold">' + T('hold') + '</p><p class="note" id="mailNote">' + T('mailing') + '</p>' +
         '<p class="note">' + T('manageHint', 'cancel.html?t=' + r.token + '&lang=' + YCI.lang) + '</p>';
+      // GA4（2026-11-24，見 ga.py）：訂位成功只送人數，姓名、電話、Email、日期時間等其他訂位內容都不送；部署時沒放 GA4 就沒有 gtag，什麼都不送
+      if (window.gtag) gtag('event', 'booking_complete', { party_size: r.party });
       const sent = await YC.mail(r.token, 'confirm');
       $('mailNote').textContent = sent ? T('mailSent', $('email').value) : T('mailLate');
     } catch (ex) {

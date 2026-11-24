@@ -53,6 +53,8 @@ jobs:
           fi
           exit $rc
       - name: 客人訂位頁（純網頁，不用 Flutter；0050）
+        env:
+          GA4_ID: ${{ vars.BOOKING_GA4_ID }}
         run: |
           # Google Search Console 驗證檔與網站地圖（2026-11-04）
           cp tool/seo/* build/web/
@@ -90,6 +92,8 @@ jobs:
           # 分享預覽卡（老闆 2026-10-18）：各店專屬網址 book/<店>/，頁面帶店家的 og 標籤（LINE／IG／FB 預覽用）
           # 正式網址是 booking.barcitynorth.com（老闆 2026-11-24，見下面 booking 工作）；舊網址 …/yincheng-app/book/ 照樣打得開，正式網址也指向新網域
           site="https://booking.barcitynorth.com"
+          # GA4（2026-11-24，見 tool/book/ga.py）：repo 變數 BOOKING_GA4_ID 有填才載入，沒填訂位頁什麼都不送；只放訂位頁，不放取消頁
+          python3 tool/book/ga.py "$GA4_ID" "$site" build/web/book/index.html
           og() { # $1 slug、$2 標題、$3 說明、$4 網址
             printf '%s' "<meta property=\"og:type\" content=\"website\"><meta property=\"og:site_name\" content=\"$2\"><meta property=\"og:title\" content=\"$2｜線上訂位\"><meta property=\"og:description\" content=\"$3\"><meta property=\"og:url\" content=\"$4\"><meta property=\"og:image\" content=\"$site/og-$1.jpg?v=$v\"><meta property=\"og:image:width\" content=\"1200\"><meta property=\"og:image:height\" content=\"630\"><meta name=\"twitter:card\" content=\"summary_large_image\"><meta name=\"description\" content=\"$3\">"
           }
