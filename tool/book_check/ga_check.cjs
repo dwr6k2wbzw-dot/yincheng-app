@@ -1,5 +1,6 @@
 // 訂位頁 GA4（2026-11-24，tool/book/ga.py）的檢查：沒填評估 ID 不載入；有填時訂位成功只送 booking_complete＋人數，不送個人資料。
-// 有填 ID 的那兩次載入 Google 真的 gtag.js（要能上網），但送往 GA 的請求全部攔下來檢查、不會真的送出；
+// 有填 ID 的那兩次用正式的評估 ID 載入 Google 真的 gtag.js（要能上網）：假的 ID 沒有後台設定，測不出 config 被略過的問題
+// （2026-11-24 正式站實測）。送往 GA 的請求全部攔下來檢查、不會真的送出；
 // 對資料庫的請求也攔下來，不會真的訂位。資料都是假的。
 // 用法（要有 playwright）：先在 tool/book 開 `python3 -m http.server 8766`，再 `node tool/book_check/ga_check.cjs`。
 const { chromium } = require('playwright');
@@ -33,7 +34,8 @@ function parseHits(url, body) {
 }
 
 // 網址帶假的日期、人數、Email、取消碼；來源是帶取消碼的取消頁，檢查這些都不會送到 GA
-const PAGE = 'http://localhost:8766/ga-test.html?s=yincheng&intro=0&d=2026-11-18&p=2&email=b%40test.tw&t=URLSECRET&utm_source=ig';
+const PAGE = 'http://localhost:8766/ga-test.html?s=yincheng&intro=0&d=2026-11-18&p=2&email=b%40test.tw&t=URLSECRET&_gl=1*abc*_ga*MTIz&utm_source=ig';
+const ID = 'G-6G8JJPVC7B';
 const FROM = 'http://localhost:8766/cancel.html?t=REFSECRET';
 
 async function run(name, html, result, steps) {
@@ -76,20 +78,23 @@ async function run(name, html, result, steps) {
   check('沒填 ID：記號拿掉、沒有 Google 的程式', [none.html.includes('<!--GA-->'), none.html.includes('googletagmanager')], [false, false]);
   const bad = inject('UA-12345-1');
   check('ID 格式不對：不載入、部署記錄有警告', [bad.html.includes('googletagmanager'), bad.out.includes('::warning')], [false, true]);
-  const good = inject('G-TEST1234');
-  check('有填 ID：載入 Google 的程式', good.html.includes('gtag/js?id=G-TEST1234'), true);
+  const good = inject(ID);
+  check('有填 ID：放進 Google 的程式和評估 ID', [good.html.includes('googletagmanager.com/gtag/js?id='), good.html.includes(JSON.stringify(ID))], [true, true]);
 
   await run('沒填 ID 時訂位成功', none.html, 'ok', async (s) => {
     check('沒填 ID：沒有連到 Google、沒有 gtag', [s.google.length, s.hits.length, s.gtag], [0, 0, 'undefined']);
     check('沒填 ID：客人照樣看到訂位成功', s.done, true);
   });
   await run('有填 ID 時訂位成功', good.html, 'ok', async (s) => {
-    check('有填 ID：載入 gtag/js', s.google.some((u) => u.includes('/gtag/js?id=G-TEST1234')), true);
+    check('有填 ID：載入 gtag/js', s.google.some((u) => u.includes('/gtag/js?id=' + ID)), true);
     const config = s.layer.find((a) => a[0] === 'config');
     check('跨網域：官網和訂位頁', config && config[2].linker.domains, ['barcitynorth.com', 'booking.barcitynorth.com']);
     check('訂位成功只送一次 booking_complete，只帶人數', s.layer.filter((a) => a[0] === 'event'), [['event', 'booking_complete', { party_size: 2 }]]);
     const pv = s.hits.find((h) => h.en === 'page_view');
-    check('網址只留店別和來源', pv && pv.dl, 'http://localhost:8766/ga-test.html?s=yincheng&utm_source=ig');
+    check('網址只留店別和來源（日期、人數、Email、取消碼、_gl 拿掉）', pv && pv.dl, 'http://localhost:8766/ga-test.html?s=yincheng&utm_source=ig');
+    check('之後的事件也是清理過的網址', [...new Set(s.hits.map((h) => h.dl))], ['http://localhost:8766/ga-test.html?s=yincheng&utm_source=ig']);
+    const fst = s.hits.find((h) => h.en === 'form_start');
+    check('form_start 的 form_destination 也是清理過的網址', fst && fst['ep.form_destination'], 'http://localhost:8766/ga-test.html?s=yincheng&utm_source=ig');
     check('來源網址（取消頁）拿掉取消碼', pv && pv.dr, 'http://localhost:8766/cancel.html');
     const bc = s.hits.filter((h) => h.en === 'booking_complete');
     check('GA 收到一次 booking_complete，人數 2', bc.map((h) => h['epn.party_size']), ['2']);
