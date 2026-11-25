@@ -22,11 +22,11 @@ void main() {
       expect(RevenueMonths.shift(dec, 1, min: RevenueMonths.floor, max: dec), DateTime(2026, 12));
     });
 
-    test('預設：平常是本月；1 號還沒有資料，看上個月（1 月 1 日看前一年 12 月）', () {
+    test('預設一律是本月：1 號也是本月（老闆 2026-11-25），1 月 1 日是當年 1 月', () {
       expect(RevenueMonths.initial(DateTime(2026, 11, 25)), DateTime(2026, 11));
       expect(RevenueMonths.initial(DateTime(2026, 11, 2)), DateTime(2026, 11));
-      expect(RevenueMonths.initial(DateTime(2026, 11, 1)), DateTime(2026, 10));
-      expect(RevenueMonths.initial(DateTime(2027, 1, 1)), DateTime(2026, 12));
+      expect(RevenueMonths.initial(DateTime(2026, 11, 1)), DateTime(2026, 11));
+      expect(RevenueMonths.initial(DateTime(2027, 1, 1)), DateTime(2027, 1));
     });
 
     test('最早：至少到 2025-01；資料更早就到資料最早的月份', () {

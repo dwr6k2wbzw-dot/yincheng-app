@@ -12,11 +12,8 @@ class RevenueMonths {
   /// 最晚：營業日今天的月份（不能切到未來）
   static DateTime latest(DateTime today) => DateTime(today.year, today.month);
 
-  /// 預設：到昨天為止的月份（1 號看上個月，跟「銷售品項累計」原本一樣，1 號當天還沒有資料）
-  static DateTime initial(DateTime today) {
-    final y = DateTime(today.year, today.month, today.day - 1);
-    return DateTime(y.year, y.month);
-  }
+  /// 預設：營業日今天的月份（老闆 2026-11-25：1 號也看本月，不改成上個月）
+  static DateTime initial(DateTime today) => latest(today);
 
   /// 最早：最早一筆營收的月份和 2025-01 取比較早的
   static DateTime earliest(DateTime? firstEntry) {

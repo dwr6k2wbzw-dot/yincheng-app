@@ -15,8 +15,12 @@ import '../widgets/revenue_mix.dart';
 /// 每日營收：列表＋手動登記／修改。老闆／店長／正職可手動登記暫記（source=app）；
 /// 營收以 Dropbox 日報表為準，匯入同一天會自動覆蓋暫記。Excel 匯入的那筆只有老闆／店長能改。
 class RevenueScreen extends StatefulWidget {
-  const RevenueScreen({super.key, required this.membership});
+  const RevenueScreen({super.key, required this.membership, this.initialMonth, this.onMonthChanged});
   final Membership membership;
+
+  /// 切換店家時沿用的月份（老闆 2026-11-25：兩家店對照用，不跳回本月）；沒給就是本月
+  final DateTime? initialMonth;
+  final ValueChanged<DateTime>? onMonthChanged;
   @override
   State<RevenueScreen> createState() => _RevenueScreenState();
 }
@@ -28,7 +32,7 @@ class _RevenueScreenState extends State<RevenueScreen> {
   bool _started = false;
 
   /// 正在看的月份（◀ ▶ 切換，老闆 2026-11-25）；下拉更新、登記／修改後留在這個月
-  DateTime _month = RevenueMonths.initial(bizToday());
+  late DateTime _month = widget.initialMonth ?? RevenueMonths.initial(bizToday());
 
   /// 可手動登記營收：老闆／店長／正職（兼職、調酒師看不到這頁）
   bool get _canWrite => widget.membership.canSeeRevenue;
@@ -79,10 +83,13 @@ class _RevenueScreenState extends State<RevenueScreen> {
         _future = _load();
       });
 
-  void _switchMonth(DateTime m) => setState(() {
-        _month = m;
-        _future = _load();
-      });
+  void _switchMonth(DateTime m) {
+    widget.onMonthChanged?.call(m);
+    setState(() {
+      _month = m;
+      _future = _load();
+    });
+  }
 
   Future<void> _open({RevenueEntry? entry}) async {
     final saved = await Navigator.push<bool>(

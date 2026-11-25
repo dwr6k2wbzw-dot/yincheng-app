@@ -9,9 +9,11 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yincheng_ops/app_state.dart';
 import 'package:yincheng_ops/data/demo_repository.dart';
 import 'package:yincheng_ops/data/models.dart';
+import 'package:yincheng_ops/main.dart';
 import 'package:yincheng_ops/screens/revenue_screen.dart';
 import 'package:yincheng_ops/theme.dart';
 import 'package:yincheng_ops/widgets/format.dart';
@@ -95,9 +97,8 @@ void main() {
     expect(repo.ranges, contains('${_init.year}-${_init.month}-1~${_monthEnd(_init)}'));
     expect(repo.itemMonths, ['${_init.year}-${_init.month}']);
     expect(find.text('${_init.month} 月銷售品項累計'), findsOneWidget);
-    if (_init == RevenueMonths.latest(_today)) {
-      expect(_arrow(tester, Icons.chevron_right).onPressed, isNull);
-    }
+    expect(_init, DateTime(_today.year, _today.month), reason: '1 號也是本月（老闆 2026-11-25）');
+    expect(_arrow(tester, Icons.chevron_right).onPressed, isNull);
   });
 
   testWidgets('◀ 切到上個月：每日清單、品項累計換成那個月；星期平均仍查近 12 週', (tester) async {
@@ -158,4 +159,47 @@ void main() {
     expect(repo.ranges, contains('${_prev.year}-${_prev.month}-1~${_monthEnd(_prev)}'));
     expect(repo.itemMonths, ['${_prev.year}-${_prev.month}']);
   });
+
+  testWidgets('切換店家：月份停在原本看的月份，兩家店對照（老闆 2026-11-25）', (tester) async {
+    tester.view.physicalSize = const Size(800, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    SharedPreferences.setMockInitialValues({});
+    final repo = _Repo(); // 兩家店都回同一批假營收（示範資料的小城外沒有營收，畫面不會出現月份列）
+    final state = AppState(repo);
+    await tester.pumpWidget(YinchengApp(state: state));
+    await tester.pump();
+    await tester.runAsync(() => repo.signIn('owner@x', 'x'));
+    await _settle(tester);
+    await tester.tap(find.descendant(of: find.byType(NavigationBar), matching: find.text('營收')));
+    await _settle(tester);
+    expect(find.text(_label(_init)), findsOneWidget);
+    await tester.tap(find.byTooltip('上個月'));
+    await _settle(tester);
+    expect(find.text(_label(_prev)), findsOneWidget);
+
+    Membership store(String id) => state.memberships.firstWhere((m) => m.storeId == id);
+    await tester.runAsync(() => state.switchStore(store('xc')));
+    await _settle(tester);
+    expect(tester.widget<RevenueScreen>(find.byType(RevenueScreen)).membership.storeId, 'xc');
+    expect(find.text(_label(_prev)), findsOneWidget);
+    expect(find.text(_label(_init)), findsNothing);
+
+    // 在小城外再往前切一個月，切回隱城也停在那個月
+    final prev2 = DateTime(_prev.year, _prev.month - 1);
+    await tester.tap(find.byTooltip('上個月'));
+    await _settle(tester);
+    await tester.runAsync(() => state.switchStore(store('yc')));
+    await _settle(tester);
+    expect(tester.widget<RevenueScreen>(find.byType(RevenueScreen)).membership.storeId, 'yc');
+    expect(find.text(_label(prev2)), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  }, timeout: const Timeout(Duration(seconds: 90)));
+}
+
+/// 整個 App 有載入動畫，不能用 pumpAndSettle 等到全部停
+Future<void> _settle(WidgetTester tester) async {
+  for (var i = 0; i < 10; i++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
 }
