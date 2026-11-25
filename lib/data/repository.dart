@@ -62,11 +62,16 @@ abstract class Repository {
 
   // 每日營收（老闆／店長）
   Future<List<RevenueEntry>> revenueEntries(String storeId, {int limit = 60});
+  /// 指定期間（含頭尾）的每日營收，新到舊；營收頁換月份用
+  Future<List<RevenueEntry>> revenueEntriesBetween(String storeId, DateTime from, DateTime to);
+  /// 最早一筆每日營收的營業日；還沒有任何紀錄回 null（營收頁月份最早切到哪）
+  Future<DateTime?> firstRevenueDate(String storeId);
   Future<RevenueEntry?> revenueEntryFor(String storeId, DateTime bizDate);
   Future<void> saveRevenueEntry(String storeId, RevenueEntry e);
   Future<DateTime?> lastExcelSync(String storeId);
   /// 有 iCHEF 資料的營業日（0096）：這些天的來客、酒水、餐食、現金、刷卡以 iCHEF 為準
-  Future<Set<DateTime>> ichefDays(String storeId, {int limit = 120});
+  /// 給 [from]／[to] 只查那段期間（不限筆數）
+  Future<Set<DateTime>> ichefDays(String storeId, {int limit = 120, DateTime? from, DateTime? to});
   /// 某營業日 iCHEF 的現金；那天還沒有 iCHEF 資料回 null。
   /// 小城外有 iCHEF 的日子，現金＝這個數字＋咖啡＋拉麵（資料庫 0096 每次寫入都這樣重算）
   Future<double?> ichefCash(String storeId, DateTime bizDate);

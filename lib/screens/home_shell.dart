@@ -29,6 +29,8 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> with SingleTickerProviderStateMixin {
   // 選到哪一頁記分頁名稱、不記位置：打卡頁（ops 0112）是背景讀到才插在最前面，原本選的頁不會跳成別頁
   String? _tabLabel;
+  // 營收頁看的月份：頁面以店家 id 當 key，切換店家會重建，月份記在這裡才能停在原本的月份（老闆 2026-11-25）
+  DateTime? _revenueMonth;
   // 切換分頁時整頁淡入（不重建頁面，各頁的捲動位置、輸入都保留）
   late final AnimationController _fade = AnimationController(vsync: this, duration: AppMotion.fast, value: 1);
   late final Animation<double> _fadeCurve = CurvedAnimation(parent: _fade, curve: AppMotion.curve);
@@ -124,7 +126,11 @@ class _HomeShellState extends State<HomeShell> with SingleTickerProviderStateMix
       ),
       if (m.canSeeRevenue)
         (
-          RevenueScreen(key: ValueKey('r-${m.storeId}'), membership: m),
+          RevenueScreen(
+              key: ValueKey('r-${m.storeId}'),
+              membership: m,
+              initialMonth: _revenueMonth,
+              onMonthChanged: (month) => _revenueMonth = month),
           const NavigationDestination(
               icon: Icon(Icons.point_of_sale_outlined), selectedIcon: Icon(Icons.point_of_sale_outlined), label: '營收'),
         ),

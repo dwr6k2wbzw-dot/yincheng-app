@@ -9,22 +9,30 @@ import '../data/repository.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/item_sections.dart';
+import '../widgets/month_switcher.dart';
 import '../widgets/revenue_mix.dart';
 
 /// 每日營收：列表＋手動登記／修改。老闆／店長／正職可手動登記暫記（source=app）；
 /// 營收以 Dropbox 日報表為準，匯入同一天會自動覆蓋暫記。Excel 匯入的那筆只有老闆／店長能改。
 class RevenueScreen extends StatefulWidget {
-  const RevenueScreen({super.key, required this.membership});
+  const RevenueScreen({super.key, required this.membership, this.initialMonth, this.onMonthChanged});
   final Membership membership;
+
+  /// 切換店家時沿用的月份（老闆 2026-11-25：兩家店對照用，不跳回本月）；沒給就是本月
+  final DateTime? initialMonth;
+  final ValueChanged<DateTime>? onMonthChanged;
   @override
   State<RevenueScreen> createState() => _RevenueScreenState();
 }
 
 class _RevenueScreenState extends State<RevenueScreen> {
-  late Future<(List<RevenueEntry>, DateTime?, Set<DateTime>)> _future;
+  late Future<_RevenueData> _future;
   /// 已載入的品項（依營業日快取，捲動回來不重抓）
   final _items = <DateTime, Future<List<ItemSale>>>{};
   bool _started = false;
+
+  /// 正在看的月份（◀ ▶ 切換，老闆 2026-11-25）；下拉更新、登記／修改後留在這個月
+  late DateTime _month = widget.initialMonth ?? RevenueMonths.initial(bizToday());
 
   /// 可手動登記營收：老闆／店長／正職（兼職、調酒師看不到這頁）
   bool get _canWrite => widget.membership.canSeeRevenue;
@@ -44,14 +52,23 @@ class _RevenueScreenState extends State<RevenueScreen> {
     _future = _load();
   }
 
-  Future<(List<RevenueEntry>, DateTime?, Set<DateTime>)> _load() async {
+  Future<_RevenueData> _load() async {
     final repo = AppScope.of(context).repo;
     final id = widget.membership.storeId;
-    final list = await repo.revenueEntries(id, limit: 120); // 星期平均可看近 12 週
-    final last = _excelSynced ? await repo.lastExcelSync(id) : null;
-    // iCHEF 沒資料或讀不到（舊資料庫）不影響營收列表
-    final ichef = await repo.ichefDays(id).catchError((_) => <DateTime>{});
-    return (list, last, ichef);
+    final month = _month;
+    final today = bizToday();
+    final monthEnd = DateTime(month.year, month.month + 1, 0);
+    // 星期平均（本月／近 4 週／近 12 週）以今天為準，不跟著切換的月份
+    final weekFrom = today.subtract(const Duration(days: 84));
+    final (list, week, last, ichef, first) = await (
+      repo.revenueEntriesBetween(id, month, monthEnd),
+      repo.revenueEntriesBetween(id, weekFrom, DateTime(today.year, today.month + 1, 0)),
+      _excelSynced ? repo.lastExcelSync(id) : Future<DateTime?>.value(),
+      // iCHEF 沒資料或讀不到（舊資料庫）不影響營收列表
+      repo.ichefDays(id, from: month, to: monthEnd).catchError((_) => <DateTime>{}),
+      repo.firstRevenueDate(id),
+    ).wait;
+    return _RevenueData(month, list, week, last, ichef, first);
   }
 
   Future<List<ItemSale>> _itemsFor(DateTime d) =>
@@ -66,6 +83,14 @@ class _RevenueScreenState extends State<RevenueScreen> {
         _future = _load();
       });
 
+  void _switchMonth(DateTime m) {
+    widget.onMonthChanged?.call(m);
+    setState(() {
+      _month = m;
+      _future = _load();
+    });
+  }
+
   Future<void> _open({RevenueEntry? entry}) async {
     final saved = await Navigator.push<bool>(
       context,
@@ -73,6 +98,12 @@ class _RevenueScreenState extends State<RevenueScreen> {
     );
     if (saved == true) _reload();
   }
+
+  /// 日報表先打好、還沒營業的日子（例：隱城 11/8 員旅，全是 0）不顯示（老闆 2026-11-05）
+  static List<RevenueEntry> _shown(List<RevenueEntry> all, DateTime today) => [
+        for (final e in all)
+          if (!(e.bizDate.isAfter(today) && e.received == 0 && e.guests == 0 && e.drinks + e.food + e.project + e.coffee + e.ramen == 0)) e
+      ];
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -83,20 +114,26 @@ class _RevenueScreenState extends State<RevenueScreen> {
                 icon: const Icon(Icons.add),
                 label: const Text('登記營收'),
               ),
-        body: FutureBuilder<(List<RevenueEntry>, DateTime?, Set<DateTime>)>(
+        body: FutureBuilder<_RevenueData>(
           future: _future,
           builder: (context, snap) {
-            if (snap.hasError) return ErrorView(message: friendlyError(snap.error!), onRetry: _reload);
+            final loading = snap.connectionState != ConnectionState.done;
+            if (snap.hasError && !loading) return ErrorView(message: friendlyError(snap.error!), onRetry: _reload);
             if (!snap.hasData) return const Center(child: CircularProgressIndicator());
-            final (all, last, ichef) = snap.data!;
-            // 日報表先打好、還沒營業的日子（例：隱城 11/8 員旅，全是 0）不顯示（老闆 2026-11-05）
+            // 換月份載入中：先留著上一個月的畫面（變淡），月份列已經換成新的月份
+            final data = snap.data!;
             final today = bizToday();
-            final list = [
-              for (final e in all)
-                if (!(e.bizDate.isAfter(today) && e.received == 0 && e.guests == 0 && e.drinks + e.food + e.project + e.coffee + e.ramen == 0)) e
-            ];
-            final banner = _excelSynced ? _SyncBanner(last: last, canWrite: _canWrite) : null;
-            if (list.isEmpty) {
+            final list = _shown(data.entries, today);
+            final banner = _excelSynced ? _SyncBanner(last: data.last, canWrite: _canWrite) : null;
+            final min = RevenueMonths.earliest(data.first);
+            final nav = MonthSwitcher(
+              key: const Key('revenue-month'),
+              month: _month,
+              min: min,
+              max: RevenueMonths.latest(today),
+              onChanged: _switchMonth,
+            );
+            if (data.first == null && list.isEmpty) {
               return ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 96), children: [
                 if (banner != null) banner,
                 const SizedBox(height: 120),
@@ -108,25 +145,37 @@ class _RevenueScreenState extends State<RevenueScreen> {
                     style: TextStyle(color: AppColors.muted)),
               ]);
             }
-            // 列表上方：同步說明（若有）＋星期平均
+            // 列表上方：月份切換＋同步說明（若有）＋星期平均＋這個月的品項累計
             final headers = <Widget>[
+              nav,
+              // 固定佔一格：載入條出現、消失時，下面的卡片位置不變，品項累計才不會被重建、重查
+              SizedBox(height: 2, child: loading ? const LinearProgressIndicator(minHeight: 2) : null),
               if (banner != null) banner,
-              _WeekdayStats(entries: list, multi: isMultiLineStore(widget.membership.storeName)),
-              // 當月銷售品項累計（老闆 2026-11-13）：只算有 iCHEF 的日子，沒有的列「未計入」
-              if (ichef.isNotEmpty)
+              _WeekdayStats(entries: _shown(data.week, today), multi: isMultiLineStore(widget.membership.storeName)),
+              // 銷售品項累計（老闆 2026-11-13）：只算有 iCHEF 的日子，沒有的列「未計入」；跟著切換的月份
+              if (data.ichef.isNotEmpty)
                 MonthItemsSection(
                   storeId: widget.membership.storeId,
                   version: _version,
                   load: AppScope.of(context).repo.monthItemSales,
                   entries: list,
-                  ichef: ichef,
+                  ichef: data.ichef,
+                  month: data.month,
                   wrap: (child) => SectionCard(child: child),
+                ),
+              if (list.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 48),
+                  child: Text('${data.month.year} 年 ${data.month.month} 月沒有營收紀錄',
+                      textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted)),
                 ),
             ];
             final offset = headers.length;
             return RefreshIndicator(
               onRefresh: () async => _reload(),
               child: ListView.separated(
+                // 月份只有幾天、清單不滿一頁也要能下拉更新
+                physics: const AlwaysScrollableScrollPhysics(),
                 // 底部留 96：浮動按鈕高 56＋邊距 16，再多一點，捲到底最後一列才不會被蓋住
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
                 itemCount: list.length + offset,
@@ -135,19 +184,37 @@ class _RevenueScreenState extends State<RevenueScreen> {
                   if (i < offset) return headers[i];
                   final e = list[i - offset];
                   final day = DateTime(e.bizDate.year, e.bizDate.month, e.bizDate.day);
-                  final fromIchef = ichef.contains(day);
-                  return _RevenueTile(
-                      e: e,
-                      storeName: widget.membership.storeName,
-                      ichef: fromIchef,
-                      items: fromIchef ? _itemsFor(day) : null,
-                      onTap: _canOpenRow(e) ? () => _open(entry: e) : null);
+                  final fromIchef = data.ichef.contains(day);
+                  return Opacity(
+                    opacity: loading ? 0.5 : 1,
+                    child: _RevenueTile(
+                        e: e,
+                        storeName: widget.membership.storeName,
+                        ichef: fromIchef,
+                        items: fromIchef ? _itemsFor(day) : null,
+                        onTap: _canOpenRow(e) ? () => _open(entry: e) : null),
+                  );
                 },
               ),
             );
           },
         ),
       );
+}
+
+/// 營收頁一次載入的資料：[month] 是這批資料的月份（換月份載入中，畫面上的月份列可能已經是下一個月）
+class _RevenueData {
+  const _RevenueData(this.month, this.entries, this.week, this.last, this.ichef, this.first);
+  final DateTime month;
+  /// 這個月的每日營收（新到舊）
+  final List<RevenueEntry> entries;
+  /// 星期平均用：近 12 週＋本月
+  final List<RevenueEntry> week;
+  final DateTime? last;
+  /// 這個月有 iCHEF 資料的營業日
+  final Set<DateTime> ichef;
+  /// 最早一筆營收的營業日（月份最早切到哪）
+  final DateTime? first;
 }
 
 class _RevenueTile extends StatelessWidget {
