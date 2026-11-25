@@ -167,6 +167,30 @@ void main() {
       expect(find.text('12 月銷售品項累計'), findsOneWidget);
     });
 
+    testWidgets('營收頁切換月份（老闆 2026-11-25）：給了 month 就查那個月，未計入也照那個月算', (tester) async {
+      final calls = <String>[];
+      Future<List<ItemSale>> load(String store, DateTime m) async {
+        calls.add('$store ${m.year}/${m.month}');
+        return const [ItemSale(name: 'Gimlet', qty: 1, amount: 100, listAmount: 100)];
+      }
+
+      final oct = [for (final d in [1, 2, 3]) RevenueEntry(bizDate: DateTime(2026, 10, d), cash: 1000)];
+      Widget at(DateTime month, List<RevenueEntry> es, Set<DateTime> ic) => MaterialApp(
+          home: Scaffold(
+              body: MonthItemsSection(
+                  storeId: 'yc', version: 0, load: load, entries: es, ichef: ic, month: month, today: () => DateTime(2026, 11, 25))));
+      await tester.pumpWidget(at(DateTime(2026, 10), oct, {DateTime(2026, 10, 2)}));
+      await tester.pumpAndSettle();
+      expect(find.text('10 月銷售品項累計'), findsOneWidget);
+      expect(find.text('未計入（那天沒有 iCHEF 資料）：10/1、10/3'), findsOneWidget);
+      // 跨年切到前一年 12 月
+      await tester.pumpWidget(at(DateTime(2025, 12), [RevenueEntry(bizDate: DateTime(2025, 12, 31), cash: 1000)], {DateTime(2025, 12, 31)}));
+      await tester.pumpAndSettle();
+      expect(find.text('12 月銷售品項累計'), findsOneWidget);
+      expect(find.textContaining('未計入'), findsNothing);
+      expect(calls, ['yc 2026/10', 'yc 2025/12']);
+    });
+
     testWidgets('查詢失敗顯示錯誤和重試，不當成沒有資料', (tester) async {
       var fail = true;
       Future<List<ItemSale>> load(String store, DateTime m) async {

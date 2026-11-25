@@ -580,6 +580,16 @@ class DemoRepository implements Repository {
   }
 
   @override
+  Future<List<RevenueEntry>> revenueEntriesBetween(String storeId, DateTime from, DateTime to) async => [
+        for (final e in await revenueEntries(storeId))
+          if (!e.bizDate.isBefore(from) && !e.bizDate.isAfter(to)) e
+      ];
+
+  @override
+  Future<DateTime?> firstRevenueDate(String storeId) async =>
+      (await revenueEntries(storeId)).map((e) => e.bizDate).fold<DateTime?>(null, (a, d) => a == null || d.isBefore(a) ? d : a);
+
+  @override
   Future<RevenueEntry?> revenueEntryFor(String storeId, DateTime bizDate) async {
     for (final e in _revList(storeId)) {
       if (e.bizDate.year == bizDate.year && e.bizDate.month == bizDate.month && e.bizDate.day == bizDate.day) return e;
@@ -604,11 +614,12 @@ class DemoRepository implements Repository {
 
   // 示範：最近 7 筆營收有 iCHEF 品項（假資料）
   @override
-  Future<Set<DateTime>> ichefDays(String storeId, {int limit = 120}) async {
+  Future<Set<DateTime>> ichefDays(String storeId, {int limit = 120, DateTime? from, DateTime? to}) async {
     final list = List.of(_revList(storeId))..sort((a, b) => b.bizDate.compareTo(a.bizDate));
     return {
       for (final e in list.where((e) => !_noIchef.contains(e.id)).take(7))
-        DateTime(e.bizDate.year, e.bizDate.month, e.bizDate.day)
+        if ((from == null || !e.bizDate.isBefore(from)) && (to == null || !e.bizDate.isAfter(to)))
+          DateTime(e.bizDate.year, e.bizDate.month, e.bizDate.day)
     };
   }
 

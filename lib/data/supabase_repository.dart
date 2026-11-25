@@ -239,6 +239,32 @@ class SupabaseRepository implements Repository {
   }
 
   @override
+  Future<List<RevenueEntry>> revenueEntriesBetween(String storeId, DateTime from, DateTime to) async {
+    final rows = await _db
+        .from('daily_revenue')
+        .select(_revCols)
+        .eq('store_id', storeId)
+        .eq('kind', 'daily')
+        .gte('biz_date', _day.format(from))
+        .lte('biz_date', _day.format(to))
+        .order('biz_date', ascending: false);
+    return rows.map(RevenueEntry.fromRow).toList();
+  }
+
+  @override
+  Future<DateTime?> firstRevenueDate(String storeId) async {
+    final r = await _db
+        .from('daily_revenue')
+        .select('biz_date')
+        .eq('store_id', storeId)
+        .eq('kind', 'daily')
+        .order('biz_date')
+        .limit(1)
+        .maybeSingle();
+    return r == null ? null : DateTime.parse(r['biz_date'] as String);
+  }
+
+  @override
   Future<RevenueEntry?> revenueEntryFor(String storeId, DateTime bizDate) async {
     final r = await _db
         .from('daily_revenue')
@@ -279,13 +305,13 @@ class SupabaseRepository implements Repository {
   }
 
   @override
-  Future<Set<DateTime>> ichefDays(String storeId, {int limit = 120}) async {
-    final rows = await _db
-        .from('ichef_daily')
-        .select('biz_date')
-        .eq('store_id', storeId)
-        .order('biz_date', ascending: false)
-        .limit(limit);
+  Future<Set<DateTime>> ichefDays(String storeId, {int limit = 120, DateTime? from, DateTime? to}) async {
+    var q = _db.from('ichef_daily').select('biz_date').eq('store_id', storeId);
+    if (from != null) q = q.gte('biz_date', _day.format(from));
+    if (to != null) q = q.lte('biz_date', _day.format(to));
+    final rows = from != null || to != null
+        ? await q.order('biz_date', ascending: false)
+        : await q.order('biz_date', ascending: false).limit(limit);
     return {for (final r in rows) DateTime.parse(r['biz_date'] as String)};
   }
 

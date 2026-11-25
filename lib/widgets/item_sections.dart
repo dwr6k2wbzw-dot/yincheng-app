@@ -230,6 +230,7 @@ class MonthItemsSection extends StatefulWidget {
     required this.load,
     required this.entries,
     required this.ichef,
+    this.month,
     this.today,
     this.wrap,
   });
@@ -238,6 +239,9 @@ class MonthItemsSection extends StatefulWidget {
   final MonthItemsLoader load;
   final List<RevenueEntry> entries;
   final Set<DateTime> ichef;
+
+  /// 要看的月份（營收頁 ◀ ▶ 切換，老闆 2026-11-25）；沒給就是到昨天為止的月份
+  final DateTime? month;
 
   /// 營業日的今天（測試可指定；預設 bizToday()）
   final DateTime Function()? today;
@@ -261,7 +265,7 @@ class _MonthItemsSectionState extends State<MonthItemsSection> {
   }
 
   void _ensure({bool force = false}) {
-    final month = _monthOf(_today);
+    final month = widget.month ?? _monthOf(_today);
     final key = (widget.storeId, widget.version, month);
     if (!force && key == _key) return;
     _key = key;
