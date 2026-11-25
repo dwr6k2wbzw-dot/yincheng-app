@@ -252,7 +252,8 @@ class MonthItemsSection extends StatefulWidget {
 }
 
 class _MonthItemsSectionState extends State<MonthItemsSection> {
-  Future<List<ItemSale>>? _future;
+  /// 結果跟查詢的店家、月份綁在一起：切月份時 FutureBuilder 會先留著上一次的結果，不能拿舊月份的品項配新月份的標題
+  Future<({Object of, List<ItemSale> items})>? _future;
   Object? _key;
   late DateTime _month;
 
@@ -270,13 +271,14 @@ class _MonthItemsSectionState extends State<MonthItemsSection> {
     if (!force && key == _key) return;
     _key = key;
     _month = month;
-    _future = widget.load(widget.storeId, month);
+    final of = (widget.storeId, month);
+    _future = widget.load(widget.storeId, month).then((items) => (of: of, items: items));
   }
 
   @override
   Widget build(BuildContext context) {
     _ensure(); // 店家、版本、月份沒變就沿用上一次的查詢
-    return FutureBuilder<List<ItemSale>>(
+    return FutureBuilder<({Object of, List<ItemSale> items})>(
       future: _future,
       builder: (context, snap) {
         final wrap = widget.wrap ?? (w) => w;
@@ -291,7 +293,9 @@ class _MonthItemsSectionState extends State<MonthItemsSection> {
             TextButton(onPressed: () => setState(() => _ensure(force: true)), child: const Text('重試')),
           ]));
         }
-        final list = snap.data;
+        // 換店家或月份後、新的還沒回來：先空著（同店同月重新整理才沿用舊結果）
+        final data = snap.data;
+        final list = data != null && data.of == (widget.storeId, _month) ? data.items : null;
         if (list == null || list.isEmpty) return const SizedBox.shrink();
         return wrap(MonthItemsCard(
           month: _month,

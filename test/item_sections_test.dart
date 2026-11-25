@@ -1,4 +1,6 @@
 // 2026-11-13 品項銷售分酒水／餐食兩區（老闆）：小計＝那一區品項加總（含服務費，＝每日營收酒水／餐食）
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yincheng_ops/data/models.dart';
@@ -189,6 +191,37 @@ void main() {
       expect(find.text('12 月銷售品項累計'), findsOneWidget);
       expect(find.textContaining('未計入'), findsNothing);
       expect(calls, ['yc 2026/10', 'yc 2025/12']);
+    });
+
+    testWidgets('切月份時新月份還沒查回來，不拿舊月份的品項配新月份的標題（程式審查 2026-11-25）', (tester) async {
+      final pending = <String, Completer<List<ItemSale>>>{};
+      Future<List<ItemSale>> load(String store, DateTime m) => (pending['${m.month}'] = Completer()).future;
+      Widget at(DateTime month, {int version = 0}) => MaterialApp(
+          home: Scaffold(
+              body: MonthItemsSection(
+                  storeId: 'yc', version: version, load: load, entries: const [], ichef: const {}, month: month, today: () => DateTime(2026, 11, 25))));
+      await tester.pumpWidget(at(DateTime(2026, 11)));
+      pending['11']!.complete(const [ItemSale(name: 'November Sour', qty: 1, amount: 100, listAmount: 100)]);
+      await tester.pumpAndSettle();
+      expect(find.text('11 月銷售品項累計'), findsOneWidget);
+
+      await tester.pumpWidget(at(DateTime(2026, 10)));
+      await tester.pump();
+      expect(find.text('November Sour'), findsNothing);
+      expect(find.text('10 月銷售品項累計'), findsNothing);
+
+      pending['10']!.complete(const [ItemSale(name: 'October Gimlet', qty: 1, amount: 100, listAmount: 100)]);
+      await tester.pumpAndSettle();
+      expect(find.text('10 月銷售品項累計'), findsOneWidget);
+      expect(find.text('October Gimlet'), findsOneWidget);
+
+      // 同一個月重新整理（version +1）：新結果回來前照舊顯示，不閃掉
+      await tester.pumpWidget(at(DateTime(2026, 10), version: 1));
+      await tester.pump();
+      expect(find.text('October Gimlet'), findsOneWidget);
+      pending['10']!.complete(const [ItemSale(name: 'October Gimlet', qty: 2, amount: 200, listAmount: 200)]);
+      await tester.pumpAndSettle();
+      expect(find.text('October Gimlet'), findsOneWidget);
     });
 
     testWidgets('查詢失敗顯示錯誤和重試，不當成沒有資料', (tester) async {
