@@ -10,6 +10,7 @@ import '../data/shift_off_rules.dart';
 import '../data/shift_marks.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'shift_assistant_screen.dart';
 
 part 'shift_auto_plan_screen.dart';
 
@@ -1064,7 +1065,20 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('排班條件')),
+      appBar: AppBar(title: const Text('排班條件'), actions: [
+        // ops 0154：用講的改排班設定，只在公版出現（隱城／小城外這一份畫面不變）
+        if (shiftAssistantVisible && widget.membership.isManager)
+          IconButton(
+            tooltip: '用講的改排班設定（AI）',
+            icon: const Icon(Icons.auto_awesome_outlined),
+            onPressed: () async {
+              await Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => ShiftAssistantScreen(membership: widget.membership)));
+              // 回來後重新讀設定（還沒存的每日人力修改先留著，不蓋掉）
+              if (mounted && !_staffDirty) _load();
+            },
+          ),
+      ]),
       body: _error != null
           ? ErrorView(message: friendlyError(_error!), onRetry: _load)
           : _setup == null

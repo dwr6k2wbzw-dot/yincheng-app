@@ -1886,9 +1886,17 @@ class SupabaseRepository implements Repository {
   }
 
   @override
-  Future<AssistReply> askBookingAssistant(String storeId, String message, List<AssistTurn> history) async {
+  Future<AssistReply> askBookingAssistant(String storeId, String message, List<AssistTurn> history) =>
+      _askAssistant('booking-assistant', '訂位設定', storeId, message, history);
+
+  @override
+  Future<AssistReply> askShiftAssistant(String storeId, String message, List<AssistTurn> history) =>
+      _askAssistant('shift-assistant', '排班條件', storeId, message, history);
+
+  /// 問 AI 設定助理（Edge Function booking-assistant／shift-assistant；回的格式一樣）
+  Future<AssistReply> _askAssistant(String fn, String where, String storeId, String message, List<AssistTurn> history) async {
     try {
-      final r = await _db.functions.invoke('booking-assistant', body: {
+      final r = await _db.functions.invoke(fn, body: {
         'store_id': storeId,
         'message': message,
         'history': [
@@ -1904,7 +1912,7 @@ class SupabaseRepository implements Repository {
       final msg = d is Map && d['error'] is String
           ? d['error'] as String
           : e.status == 404
-              ? 'AI 助理還沒開通，請直接在訂位設定裡改'
+              ? 'AI 助理還沒開通，請直接在$where裡改'
               : 'AI 助理暫時沒有回應，請稍後再試';
       throw Exception('message: $msg,');
     }
@@ -1933,6 +1941,31 @@ class SupabaseRepository implements Repository {
   @override
   Future<void> undoBookingAssist(String id) async {
     await _db.rpc('booking_assist_undo', params: {'p_id': id});
+  }
+
+  @override
+  Future<void> applyShiftAssist(String storeId, String request, List<AssistChange> changes) async {
+    await _db.rpc('shift_assist_apply', params: {
+      'p_store': storeId,
+      'p_request': request,
+      'p_changes': [for (final c in changes) c.raw],
+    });
+  }
+
+  @override
+  Future<List<AssistRecord>> shiftAssistHistory(String storeId) async {
+    final rows = await _db
+        .from('shift_assist_changes')
+        .select('id, applied_at, request, changes, undone_at')
+        .eq('store_id', storeId)
+        .order('applied_at', ascending: false)
+        .limit(20);
+    return [for (final r in rows) AssistRecord.fromRow(r)];
+  }
+
+  @override
+  Future<void> undoShiftAssist(String id) async {
+    await _db.rpc('shift_assist_undo', params: {'p_id': id});
   }
 
   Future<ImportResult> _reservationImport(String storeId, List<ImportRow> rows, String? fileName, String? requestId, bool dry) async {
