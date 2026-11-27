@@ -437,41 +437,53 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       return;
     }
     if (photo == null) return;
-    // 上傳前先記住店和月份：上傳途中切換月份，照片和辨識都還是這個月（Codex P2）
-    final store = _store, month = _month, api = _photoApi;
+    // 上傳前先拿好資料來源、店和月份，上傳、辨識整段不經過畫面（Codex P2 兩輪）：
+    // 上傳途中切換月份、離開班表頁或切換店，照片和辨識都還是原本那家店、那個月，辨識照樣啟動；畫面還在才更新。
+    final repo = _repo, store = _store, month = _month, api = _photoApi;
     try {
-      await uploadShiftPhotoThenRead(
-        _repo,
+      final r = await uploadShiftPhotoThenRead(
+        repo,
         storeId: store,
         month: month,
         bytes: dataUrlBytes(photo),
         // 公版（ops 0153）：上傳完直接辨識，不用等每小時同步
-        read: api
-            ? (s, m) async {
-                if (mounted) showMessage(context, '已新增 ${m.month} 月班表照片，開始辨識');
-                await _readPhotos(store: s, month: m);
-              }
-            : null,
+        read: api,
+        onUploaded: () {
+          if (!mounted) return;
+          showMessage(context, '已新增 ${month.month} 月班表照片，開始辨識');
+          setState(() {
+            _reading = true;
+            _future = _load();
+          });
+        },
       );
-      if (api) return;
-      if (mounted) showMessage(context, '已新增 ${month.month} 月班表照片，會自動辨識成草稿（1 小時內）');
-      _reload();
+      if (!mounted) return;
+      if (r.read) {
+        showMessage(context, r.cells == null ? '照片在辨識途中有變動，請再按一次「開始辨識」' : '${month.month} 月班表照片辨識好了（讀到 ${r.cells} 格），請確認草稿');
+      } else {
+        showMessage(context, '已新增 ${month.month} 月班表照片，會自動辨識成草稿（1 小時內）');
+      }
     } catch (e) {
       if (mounted) showMessage(context, friendlyError(e), error: true);
+    } finally {
+      if (mounted) {
+        if (_reading) setState(() => _reading = false);
+        _reload();
+      }
     }
   }
 
-  /// api 模式：請後臺立刻辨識照片（讀完草稿卡片變成「辨識好了」）。
-  /// 沒給店、月份＝畫面上這個月；上傳完接著辨識時一律帶上傳的那個月。
-  Future<void> _readPhotos({String? store, DateTime? month}) async {
+  /// api 模式：按「開始辨識」時請後臺立刻辨識畫面上這個月的照片（讀完草稿卡片變成「辨識好了」）。
+  /// 上傳完接著辨識走 [uploadShiftPhotoThenRead]，不經過這裡。
+  Future<void> _readPhotos() async {
     if (_reading) return;
-    final target = month ?? _month, targetStore = store ?? _store;
+    final repo = _repo, target = _month, targetStore = _store;
     setState(() {
       _reading = true;
       _future = _load();
     });
     try {
-      final cells = await _repo.readShiftPhotos(targetStore, target);
+      final cells = await repo.readShiftPhotos(targetStore, target);
       if (!mounted) return;
       showMessage(context, cells == null ? '照片在辨識途中有變動，請再按一次「開始辨識」' : '${target.month} 月班表照片辨識好了（讀到 $cells 格），請確認草稿');
     } catch (e) {

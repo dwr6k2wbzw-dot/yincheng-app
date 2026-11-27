@@ -34,37 +34,77 @@ void main() {
   test('上傳途中切換月份：照片和辨識都還是上傳的那個月（Codex P2）', () async {
     final repo = _SlowUploadRepo();
     var shownMonth = DateTime(2032, 12); // 畫面上目前的月份
-    final readCalls = <String>[];
+    final done = uploadShiftPhotoThenRead(repo, storeId: 's1', month: shownMonth, bytes: Uint8List.fromList([0xff, 0xd8]), read: true);
+    shownMonth = DateTime(2033, 1); // 上傳還沒好，使用者切到下個月
+    expect(repo.readMonths, isEmpty, reason: '上傳完成前不辨識');
+    repo.gate.complete();
+    final r = await done;
+    expect(shownMonth, DateTime(2033, 1));
+    expect(repo.uploadedMonths.last, 's1 2032-12');
+    expect(repo.readMonths, ['s1 2032-12']);
+    expect(r.read, isTrue);
+    expect(r.cells, 5);
+  });
+
+  test('上傳途中畫面被關掉（離開班表頁、切換店）：辨識照樣啟動，不碰畫面（Codex P2 第二輪）', () async {
+    final repo = _SlowUploadRepo();
+    var screenAlive = true;
+    var touchedScreenAfterClose = false;
     final done = uploadShiftPhotoThenRead(
       repo,
       storeId: 's1',
-      month: shownMonth,
-      bytes: Uint8List.fromList([0xff, 0xd8]),
-      read: (s, m) async => readCalls.add('$s ${m.year}-${m.month}'),
+      month: DateTime(2032, 12),
+      bytes: Uint8List.fromList([1]),
+      read: true,
+      // 跟班表頁一樣：畫面不在就不碰它
+      onUploaded: () {
+        if (!screenAlive) return;
+        touchedScreenAfterClose = true;
+      },
     );
-    shownMonth = DateTime(2033, 1); // 上傳還沒好，使用者切到下個月
-    expect(readCalls, isEmpty, reason: '上傳完成前不辨識');
+    screenAlive = false; // 上傳還沒好，畫面就被關掉
     repo.gate.complete();
-    await done;
-    expect(shownMonth, DateTime(2033, 1));
-    expect(repo.uploadedMonths, ['2032-12']);
-    expect(readCalls, ['s1 2032-12']);
+    final r = await done;
+    expect(repo.readMonths, ['s1 2032-12'], reason: '辨識要照樣啟動');
+    expect(r.read, isTrue);
+    expect(touchedScreenAfterClose, isFalse);
   });
 
-  test('沒有給辨識（兩家店的每小時同步）：只上傳', () async {
+  test('辨識失敗：錯誤丟回給呼叫的人（不吞掉）', () async {
+    final repo = _SlowUploadRepo()..gate.complete()..readError = Exception('次數用完了');
+    await expectLater(
+      uploadShiftPhotoThenRead(repo, storeId: 's1', month: DateTime(2032, 12), bytes: Uint8List.fromList([1]), read: true),
+      throwsA(isA<Exception>()),
+    );
+  });
+
+  test('沒有要辨識（兩家店的每小時同步）：只上傳', () async {
     final repo = _SlowUploadRepo()..gate.complete();
-    await uploadShiftPhotoThenRead(repo, storeId: 's1', month: DateTime(2032, 12), bytes: Uint8List.fromList([1]));
-    expect(repo.uploadedMonths, ['2032-12']);
+    var notified = false;
+    final r = await uploadShiftPhotoThenRead(repo,
+        storeId: 's1', month: DateTime(2032, 12), bytes: Uint8List.fromList([1]), onUploaded: () => notified = true);
+    expect(repo.uploadedMonths, ['s1 2032-12']);
+    expect(repo.readMonths, isEmpty);
+    expect(r.read, isFalse);
+    expect(notified, isFalse);
   });
 }
 
 class _SlowUploadRepo extends DemoRepository {
   final gate = Completer<void>();
   final uploadedMonths = <String>[];
+  final readMonths = <String>[];
+  Exception? readError;
   @override
   Future<void> uploadShiftPhoto(String storeId, DateTime month, Uint8List jpeg) async {
     await gate.future;
-    uploadedMonths.add('${month.year}-${month.month}');
+    uploadedMonths.add('$storeId ${month.year}-${month.month}');
+  }
+
+  @override
+  Future<int?> readShiftPhotos(String storeId, DateTime month) async {
+    if (readError != null) throw readError!;
+    readMonths.add('$storeId ${month.year}-${month.month}');
+    return 5;
   }
 }
-
