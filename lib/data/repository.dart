@@ -8,13 +8,16 @@ import 'booking_assist.dart';
 import 'booking_import.dart';
 import 'models.dart';
 import 'payroll.dart';
+import 'platform_wish.dart';
 import 'purchase_items_math.dart';
 import 'reservation_models.dart';
+import 'shift_links.dart';
 import 'shift_planner.dart';
 export 'attendance_models.dart';
 export 'booking_assist.dart';
 export 'change_request_models.dart';
 export 'payroll.dart';
+export 'platform_wish.dart';
 export 'reservation_models.dart';
 export 'shift_planner.dart';
 
@@ -185,6 +188,12 @@ abstract class Repository {
   /// 0113：老闆直接替班表人員指定 App 帳號（＝確認）；userId null＝解除
   Future<void> assignShiftAccount(String personId, String? userId);
   Future<List<ShiftAccountCandidate>> shiftAccountCandidates(String storeId);
+  /// 兩家店同一個人（0098）：我也是老闆、同一個組織的其他店，和那幾家店班表上的人（不是這家店的老闆＝空的）
+  Future<List<ShiftLinkStore>> shiftLinkStores(String storeId);
+  /// 連結兩家店的兩個人（shift_link_people；只有兩家都是老闆的人）
+  Future<void> linkShiftPeople(String personId, String otherPersonId);
+  /// 解除這個人的連結（shift_unlink_person；只剩一個人的連結資料庫會一起清掉）
+  Future<void> unlinkShiftPerson(String personId);
 
   // 自動排班（0073）
   /// 這個月的排班設定：每日人力、特別日子、截止日、排班條件（員工只讀得到自己的）、大家填的想休／可上
@@ -216,6 +225,8 @@ abstract class Repository {
   Future<void> saveShiftPlanDraft(String storeId, DateTime month, Map<String, Map<int, String>> plan, Map<String, Set<int>> locked);
   Future<void> deleteShiftPlanDraft(String storeId, DateTime month);
   Future<void> saveShiftPreferRun(String storeId, int? days);
+  /// 0150 指休規則：同一天最多幾位正職、每人每月最多幾天（null＝不限）；只有老闆店長
+  Future<void> saveShiftOffLimits(String storeId, int? perDay, int? monthMax);
   Future<String> remindShiftRequests(String storeId, DateTime month);
 
   // 交接事項與工作提醒（同店成員可看、可寫交接、可打勾；提醒只有老闆／店長能建立）
@@ -308,6 +319,11 @@ abstract class Repository {
   Future<int> undoReservationImport(String batchId);
   /// 匯出用：這家店全部的訂位（含已取消、隱藏的）
   Future<List<Reservation>> allReservations(String storeId);
+  // 許願單（ops 0149，公版；只有老闆、店長）：寫一則送到平台待辦，平台回覆狀態和說明
+  /// 這家店的許願單（新的在前）
+  Future<List<PlatformWish>> platformWishes(String storeId);
+  /// 寫一則（每家店每個月最多 20 則），回傳 id
+  Future<String> createPlatformWish(String storeId, String title, String body);
   Future<List<Reservation>> reservations(String storeId, DateTime from, DateTime to);
   Future<void> addReservation(String storeId,
       {required DateTime date, required String time, required int party, required String name, required String phone, String? email, String? note, List<String> tableIds = const []});

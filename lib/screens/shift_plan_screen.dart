@@ -279,17 +279,19 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
             ? [null, 'on', 'off', 'special']
             : [null, 'on', 'off'];
     final next = order[(order.indexOf(cur) + 1) % order.length];
-    // ops 0137：同一天只能一位正職指休、每月最多 5 天；員工直接擋，老闆店長提醒後可以超過
+    // ops 0137／0150：同一天最多幾位正職指休、每月最多幾天（每家店自己設）；員工直接擋，老闆店長提醒後可以超過
     if (next == 'off' && _planFull(p, _setup)) {
-      final c = offCheck(takenDays: _taken, mine: _setup!.requests[p.id] ?? const {}, personId: p.id, day: day);
-      if (c.taken.isNotEmpty || c.overLimit) {
+      final perDay = _setup!.offPerDay, monthMax = _setup!.offMonthMax;
+      final c = offCheck(
+          takenDays: _taken,
+          mine: _setup!.requests[p.id] ?? const {},
+          personId: p.id,
+          day: day,
+          perDay: perDay,
+          monthMax: monthMax);
+      if (c.dayFull || c.overLimit) {
         if (!_manager) {
-          showMessage(
-              context,
-              c.taken.isNotEmpty
-                  ? '已有人指休，請找店長協調班表'
-                  : '一個月最多指休 $shiftOffMonthMax 天，要再多請找店長協調班表',
-              error: true);
+          showMessage(context, offBlockedText(dayFull: c.dayFull, perDay: perDay, monthMax: monthMax), error: true);
           return;
         }
         final names = c.taken.map((id) => _sm?.people.where((x) => x.id == id).firstOrNull?.label ?? '').where((n) => n.isNotEmpty).join('、');
@@ -298,8 +300,8 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
           builder: (ctx) => AlertDialog(
             title: Text('還是要替${p.label}填 ${_month.month}/$day 指休？'),
             content: Text([
-              if (c.taken.isNotEmpty) '這天${names.isEmpty ? '已經有正職' : names}指休了。',
-              if (c.overLimit) '${p.label}這個月已經指休 $shiftOffMonthMax 天。',
+              if (c.dayFull) '這天${names.isEmpty ? '已經有正職' : names}指休了${perDay != null && perDay > 1 ? '（最多 $perDay 位）' : ''}。',
+              if (c.overLimit) '${p.label}這個月已經指休 $monthMax 天。',
               '員工自己填會被擋下來，老闆、店長協調好可以超過。',
             ].join('\n')),
             actions: [
@@ -432,7 +434,7 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
                 p == null
                     ? ''
                     : _planFull(p, _setup)
-                        ? '${_manager ? '點一下＝指休，再點＝特休，再點＝想上班，再點＝取消' : '點一下＝指休，再點＝想上班，再點＝取消'}。目前指休 $offCount 天${onCount > 0 ? '、想上班 $onCount 天' : ''}${specialCount > 0 ? '、特休 $specialCount 天' : ''}。特休由店長劃，不算在應休裡。\n同一天只能一位正職指休（先填先贏），每月最多 $shiftOffMonthMax 天；要再多請找店長協調班表。'
+                        ? '${_manager ? '點一下＝指休，再點＝特休，再點＝想上班，再點＝取消' : '點一下＝指休，再點＝想上班，再點＝取消'}。目前指休 $offCount 天${onCount > 0 ? '、想上班 $onCount 天' : ''}${specialCount > 0 ? '、特休 $specialCount 天' : ''}。特休由店長劃，不算在應休裡。\n${offRuleText(_setup!.offPerDay, _setup!.offMonthMax)}'
                         : '點一下＝可以上，再點＝不能上，再點＝取消。有填可以上，排班就只排那些天。目前可以上 $onCount 天${offCount > 0 ? '、不能上 $offCount 天' : ''}。',
                 style: const TextStyle(fontSize: AppType.small),
               ),
@@ -861,6 +863,58 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
     }
   }
 
+  /// 0150 員工指休規則：同一天最多幾位正職、每人每月最多幾天（每家店自己設；不限＝空白）
+  Future<void> _editOffLimits() async {
+    int? perDay = _setup!.offPerDay, monthMax = _setup!.offMonthMax;
+    var dayVal = perDay ?? shiftOffPerDayDefault, monthVal = monthMax ?? shiftOffMonthMaxDefault;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, set) {
+          Widget row(String label, bool limited, ValueChanged<bool> onLimit, Widget stepper) => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+                    subtitle: Text(limited ? '有上限' : '不限'),
+                    value: limited,
+                    onChanged: onLimit,
+                  ),
+                  if (limited) stepper,
+                ],
+              );
+          return AlertDialog(
+            title: const Text('員工指休規則'),
+            content: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                row('同一天最多幾位正職指休', perDay != null, (v) => set(() => perDay = v ? dayVal : null),
+                    _Stepper(value: dayVal, min: 1, max: 20, onChanged: (x) => set(() => perDay = dayVal = x), suffix: ' 位')),
+                const SizedBox(height: 4),
+                row('每人每月最多指休幾天', monthMax != null, (v) => set(() => monthMax = v ? monthVal : null),
+                    _Stepper(value: monthVal, min: 1, max: 31, onChanged: (x) => set(() => monthMax = monthVal = x), suffix: ' 天')),
+                const SizedBox(height: 8),
+                Text('先填先贏；員工超過會被擋，老闆、店長替人填可以超過。',
+                    style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+              ]),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(c), child: const Text('取消')),
+              FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('儲存')),
+            ],
+          );
+        },
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await _repo.saveShiftOffLimits(_store, perDay, monthMax);
+      _load();
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+    }
+  }
+
   /// 照過去兩個月的班表整理每個人的習慣（哪幾天不上、一個月幾天、各星期的班別），店長勾選確認後才存成排班條件
   Future<void> _importHabits() async {
     final m = widget.month;
@@ -1148,6 +1202,27 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
                           ]),
                         ),
                       ),
+                      // ops 0150：指休規則的設定入口只在公版出現（隱城／小城外這一份畫面不變）
+                      if (offLimitsSettingVisible) ...[
+                        const SizedBox(height: 10),
+                        SectionCard(
+                          child: InkWell(
+                            onTap: _editOffLimits,
+                          child: Row(children: [
+                            const Expanded(
+                                child: Text('員工指休規則',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.w700))),
+                            Flexible(
+                              child: Text(
+                                  '${_setup!.offPerDay == null ? '每天不限' : '同一天 ${_setup!.offPerDay} 位'}・${_setup!.offMonthMax == null ? '每月不限' : '每月 ${_setup!.offMonthMax} 天'}',
+                                  textAlign: TextAlign.end),
+                            ),
+                            const Icon(Icons.chevron_right),
+                          ]),
+                        ),
+                      ),
+                      ],
                       const SizedBox(height: 10),
                       _pairRulesCard(),
                       const SizedBox(height: 10),

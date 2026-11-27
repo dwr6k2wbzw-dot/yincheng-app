@@ -9,6 +9,7 @@ import 'models.dart';
 import 'person_names.dart';
 import 'purchase_items_math.dart';
 import 'repository.dart';
+import 'shift_links.dart';
 import '../services/clock.dart';
 
 /// 示範資料：不連線，數字全部是虛構的示範值（不是真實營收），只用來看畫面與操作流程。
@@ -168,7 +169,8 @@ class DemoRepository implements Repository {
               fullName: _demoFullNames[n],
               sortOrder: i,
               userId: i == 0 && !_isKiosk ? 'demo-user' : null,
-              userVerified: i == 0 && !_isKiosk),
+              userVerified: i == 0 && !_isKiosk,
+              linkId: _demoLinks['f$i']),
         for (final (i, n) in parts.keys.indexed)
           ShiftPerson(
               id: 'p$i',
@@ -177,7 +179,8 @@ class DemoRepository implements Repository {
               kind: 'part',
               sortOrder: 10 + i,
               userId: i == 1 ? 'u2' : null,
-              userVerified: i == 1),
+              userVerified: i == 1,
+              linkId: _demoLinks['p$i']),
       ],
       marks,
       future ? const {} : const {3: '月會日'},
@@ -230,6 +233,45 @@ class DemoRepository implements Repository {
   Future<int> undoShiftChange(String storeId, String changeId) async => 1;
   @override
   Future<void> assignShiftAccount(String personId, String? userId) async {}
+
+  // 0098 示範：兩家店同一個人。隱城的「小安」已經連到小城外的「陳怡安」，其他人可以試著連
+  final _demoLinks = <String, String>{'f1': 'L1', 'xf1': 'L1'};
+  static const _demoXcPeople = [
+    ('xf0', '阿豪', '吳俊豪', 'full'),
+    ('xf1', '怡安', '陳怡安', 'full'),
+    ('xf2', '小魚', '余曉雯', 'part'),
+    ('xf3', '阿德', null, 'part'),
+  ];
+  @override
+  Future<List<ShiftLinkStore>> shiftLinkStores(String storeId) async {
+    // 只有兩家店都是老闆的人看得到（示範：隱城老闆身分；正職、店長、打卡帳號、新開的店都沒有）
+    if (storeId != 'yc' || _isStaff || _isManager || _isKiosk || _isNew) return const [];
+    return [
+      ShiftLinkStore(storeId: 'xc', storeName: '小城外', people: [
+        for (final (i, (id, nick, full, kind)) in _demoXcPeople.indexed)
+          ShiftPerson(id: id, name: nick, fullName: full, kind: kind, sortOrder: i, linkId: _demoLinks[id]),
+      ]),
+    ];
+  }
+
+  @override
+  Future<void> linkShiftPeople(String personId, String otherPersonId) async {
+    if (_isStaff || _isManager) throw Exception('message: 只有兩家店的老闆能連結,');
+    final a = _demoLinks[personId], b = _demoLinks[otherPersonId];
+    if (a != null && b != null && a != b) throw Exception('message: 同一家店已經有另一個人連到這個人了，請先解除,');
+    final v = a ?? b ?? 'L${DateTime.now().microsecondsSinceEpoch}';
+    _demoLinks[personId] = v;
+    _demoLinks[otherPersonId] = v;
+  }
+
+  @override
+  Future<void> unlinkShiftPerson(String personId) async {
+    if (_isStaff || _isManager) throw Exception('message: 只有老闆能解除連結,');
+    final v = _demoLinks.remove(personId);
+    if (v == null) return;
+    final rest = [for (final e in _demoLinks.entries) if (e.value == v) e.key];
+    if (rest.length < 2) rest.forEach(_demoLinks.remove);
+  }
   /// 示範資料裡寫死的暱稱 → 顯示用的名字（全名），跟正式版從資料庫讀回來後的換法一樣
   String _dn(String id, String nick) => personLabel(nick, _demoFullNames[nick]);
   static const _demoFullNames = {'阿明': '林志明', '小安': '陳怡安', '阿哲': '張哲瑋', '小魚': '余曉雯', '阿凱': '王凱文', '芳芳': '李芳芳'};
@@ -277,7 +319,7 @@ class DemoRepository implements Repository {
   @override
   Future<ShiftPlanSetup> shiftPlanSetup(String storeId, DateTime month) async => ShiftPlanSetup(
       staffing: _staffing, specialDays: _staffDays, deadline: _deadline, rules: _shiftRules, requests: _shiftReq, pairRules: [..._pairRules],
-      preferRun: _preferRun);
+      preferRun: _preferRun, offPerDay: _offPerDay, offMonthMax: _offMonthMax);
   final _pairRules = <PairRule>[];
   @override
   Future<void> addShiftPairRule(String storeId, String a, String b, String kind) async =>
@@ -354,6 +396,13 @@ class DemoRepository implements Repository {
   Future<void> deleteShiftPlanDraft(String storeId, DateTime month) async => _planDrafts.remove('$storeId|${month.year}-${month.month}');
   @override
   Future<void> saveShiftPreferRun(String storeId, int? days) async => _preferRun = days;
+  int? _offPerDay = shiftOffPerDayDefault;
+  int? _offMonthMax = shiftOffMonthMaxDefault;
+  @override
+  Future<void> saveShiftOffLimits(String storeId, int? perDay, int? monthMax) async {
+    _offPerDay = perDay;
+    _offMonthMax = monthMax;
+  }
   @override
   Future<String> remindShiftRequests(String storeId, DateTime month) async => '（示範）${month.month} 月班表要開始排了';
 
@@ -1216,7 +1265,7 @@ class DemoRepository implements Repository {
   Future<ReservationSettings?> reservationSettings(String storeId) async => ReservationSettings.fromRow({
         'store_id': storeId, 'slug': 'demo', 'enabled': true, 'display_name': '示範店', 'first_slot': '19:00',
         'last_slot': '23:00', 'slot_minutes': 30, 'max_guests_per_slot': 20, 'max_party': 6, 'days_ahead': 7,
-        'same_day_cutoff': '17:00',
+        'same_day_cutoff': '17:00', 'web_burst_limit': 30,
         ...?_demoResSettings[storeId],
       });
   @override
@@ -1371,6 +1420,54 @@ class DemoRepository implements Repository {
       e.value[i] = AssistRecord(id: r.id, appliedAt: r.appliedAt, request: r.request, changes: r.changes, undoneAt: DateTime.now());
       return;
     }
+  }
+  // 許願單（示範）：先放兩則平台已經回覆過的，新寫的狀態是「平台收到了」
+  final Map<String, List<PlatformWish>> _demoWishes = {};
+  List<PlatformWish> _wishesOf(String storeId) => _demoWishes.putIfAbsent(storeId, () {
+        final now = DateTime.now();
+        return [
+          PlatformWish(
+            id: 'pw-2',
+            title: '訂位頁可以讓客人選座位區',
+            body: '客人常問能不能坐吧台，希望訂位時就能選「吧台／沙發區」。\n\n為什麼需要：現在都要打電話來問，很花時間。',
+            authorName: '示範老闆',
+            status: PlatformWishStatus.planned,
+            reply: '收到，很多店也有一樣的需求，排進下個月的待辦。做好會再通知你。',
+            createdAt: now.subtract(const Duration(days: 3)),
+            repliedAt: now.subtract(const Duration(days: 1)),
+          ),
+          PlatformWish(
+            id: 'pw-1',
+            title: '盤點可以掃條碼',
+            body: '盤點時用手機掃酒瓶上的條碼，直接跳到那個品項。',
+            authorName: '示範店長',
+            status: PlatformWishStatus.done,
+            reply: '已經做好了：盤點畫面右上角多一個掃描按鈕。',
+            createdAt: now.subtract(const Duration(days: 20)),
+            repliedAt: now.subtract(const Duration(days: 6)),
+          ),
+        ];
+      });
+  @override
+  Future<List<PlatformWish>> platformWishes(String storeId) async => [..._wishesOf(storeId)];
+  @override
+  Future<String> createPlatformWish(String storeId, String title, String body) async {
+    final list = _wishesOf(storeId);
+    final err = validateWish(title, body, '');
+    if (err != null) throw Exception('message: $err,');
+    if (wishesThisMonth(list, toTaipei(DateTime.now())) >= platformWishMonthlyLimit) {
+      throw Exception('message: 這個月的許願單已經寫滿 $platformWishMonthlyLimit 則，下個月再寫,');
+    }
+    final id = 'pw-${++_seq}';
+    list.insert(0, PlatformWish(
+      id: id,
+      title: title.trim(),
+      body: body.trim(),
+      authorName: '示範老闆',
+      status: PlatformWishStatus.received,
+      createdAt: DateTime.now(),
+    ));
+    return id;
   }
   @override
   Future<String> uploadBookingAsset(String storeId, String kind, Uint8List bytes, String contentType) async {
