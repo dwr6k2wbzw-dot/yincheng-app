@@ -395,7 +395,8 @@ class _BookingPageScreenState extends State<BookingPageScreen> {
     );
   }
 
-  /// 訂位頁最上面那一塊的樣子（封面照＋logo＋大標＋介紹），照目前填的內容即時顯示
+  /// 訂位頁最上面那一塊的樣子（封面照＋logo＋大標），照目前填的內容即時顯示。
+  /// 介紹不在這裡：訂位頁本身不顯示，只出現在另一家店的姊妹店卡片上（Codex P2）
   Widget _preview() {
     final hero = _image(_newHero, _hero, _removeHero);
     final logo = _image(_newLogo, _logo, _removeLogo);
@@ -405,7 +406,6 @@ class _BookingPageScreenState extends State<BookingPageScreen> {
         : (_fields['zh']!.title.text.trim().isNotEmpty
             ? _fields['zh']!.title.text.trim()
             : widget.settings.displayName);
-    final intro = f.intro.text.trim();
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
       child: AspectRatio(
@@ -457,17 +457,6 @@ class _BookingPageScreenState extends State<BookingPageScreen> {
                           fontSize: AppType.heading,
                           fontWeight: FontWeight.w700,
                           height: 1.25)),
-                  if (intro.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text(intro,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                              color: Color(0xE6FFFFFF),
-                              fontSize: AppType.small,
-                              height: 1.4)),
-                    ),
                 ]),
           ),
           Positioned(
@@ -608,8 +597,9 @@ class _BookingPageScreenState extends State<BookingPageScreen> {
       TextField(
           controller: f.intro,
           maxLength: 80,
-          onChanged: touch,
-          decoration: const InputDecoration(labelText: '一句話介紹')),
+          decoration: const InputDecoration(
+              labelText: '一句話介紹（姊妹店卡片上用）',
+              helperText: '顯示在另一家店訂位頁的「姊妹店」卡片上，這家店自己的訂位頁不顯示')),
       if (!zh) ...[
         TextField(
             controller: f.address,

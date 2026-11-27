@@ -57,22 +57,24 @@ Future<void> _save(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('讀出原本的內容，預覽顯示大標和介紹', (tester) async {
+  testWidgets('讀出原本的內容：預覽顯示大標；介紹只在欄位裡（訂位頁本身不顯示介紹）', (tester) async {
     await _open(tester);
     expect(find.text('示範酒吧'), findsWidgets);
-    expect(find.text('老宅二樓的小酒吧'), findsWidgets);
+    expect(find.descendant(of: find.byType(AspectRatio), matching: find.text('老宅二樓的小酒吧')), findsNothing);
     expect(find.text('預覽'), findsOneWidget);
     expect(find.text('English'), findsWidgets);
+    await _show(tester, find.text('一句話介紹（姊妹店卡片上用）'));
+    expect(find.text('老宅二樓的小酒吧'), findsOneWidget);
   });
 
-  testWidgets('改介紹，預覽馬上跟著變；切到英文看英文', (tester) async {
+  testWidgets('改大標，預覽馬上跟著變；切到英文看英文', (tester) async {
     await _open(tester);
-    await _show(tester, find.text('一句話介紹'));
-    await tester.enterText(_field('一句話介紹'), '大稻埕的夜晚');
+    await _show(tester, find.text('大標'));
+    await tester.enterText(_field('大標'), '大稻埕的夜晚');
     await tester.pump();
     await tester.scrollUntilVisible(find.text('預覽'), -300, scrollable: find.byType(Scrollable).first);
     await tester.pumpAndSettle();
-    expect(find.text('大稻埕的夜晚'), findsWidgets); // 預覽
+    expect(find.descendant(of: find.byType(AspectRatio), matching: find.text('大稻埕的夜晚')), findsOneWidget); // 預覽
     await _show(tester, find.byType(SegmentedButton<String>));
     await tester.tap(find.descendant(of: find.byType(SegmentedButton<String>), matching: find.text('English')));
     await tester.pumpAndSettle();
