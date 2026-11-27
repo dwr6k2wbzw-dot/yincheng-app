@@ -129,6 +129,7 @@ class Reservation {
   final DateTime? clearedAt;
   final bool walkIn;
   final DateTime? hiddenAt; // 0064 已取消的訂位被滑掉隱藏（大家都看不到，資料還在）
+  final String? importBatchId; // 0148 從舊系統匯入的是哪一批（只有匯出時讀）
   const Reservation({
     required this.id,
     required this.date,
@@ -151,6 +152,7 @@ class Reservation {
     this.clearedAt,
     this.walkIn = false,
     this.hiddenAt,
+    this.importBatchId,
   });
   factory Reservation.fromRow(Map<String, dynamic> r) => Reservation(
         id: r['id'] as String,
@@ -174,6 +176,7 @@ class Reservation {
         clearedAt: r['cleared_at'] == null ? null : DateTime.parse(r['cleared_at'] as String).toLocal(),
         walkIn: r['walk_in'] as bool? ?? false,
         hiddenAt: r['hidden_at'] == null ? null : DateTime.parse(r['hidden_at'] as String).toLocal(),
+        importBatchId: r['import_batch_id'] as String?,
       );
 
   /// 0091 來源顯示名稱（網路訂位才有；null＝不知道從哪裡來）
@@ -196,6 +199,7 @@ class Reservation {
         lang: lang, tableIds: tableIds ?? this.tableIds, seatedAt: clearSeated ? null : (seatedAt ?? this.seatedAt),
         clearedAt: clearCleared ? null : (clearedAt ?? this.clearedAt), walkIn: walkIn,
         hiddenAt: clearHidden ? null : (hiddenAt ?? this.hiddenAt),
+        importBatchId: importBatchId,
       );
   bool get partyPending => partyRequestStatus == 'pending' && requestedParty != null && status == 'confirmed';
   bool get active => status == 'confirmed' || status == 'arrived';

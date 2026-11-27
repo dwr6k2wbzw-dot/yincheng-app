@@ -15,6 +15,7 @@ import '../theme.dart';
 import '../widgets/auto_refresh.dart';
 import '../widgets/common.dart';
 import 'booking_assistant_screen.dart';
+import 'booking_import_screen.dart';
 import 'booking_page_screen.dart';
 import 'reservation_floor.dart';
 import 'reservation_timeline.dart';
@@ -200,6 +201,18 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
                     onPressed: () async {
                       final changed = await Navigator.of(context).push<bool>(MaterialPageRoute(
                         builder: (_) => ReservationTablesScreen(storeId: _store, storeName: widget.membership.storeName, day: _day),
+                      ));
+                      if (changed == true) _reload();
+                    },
+                  ),
+                // 公版階段 2 第 6 步（ops 0148）：從舊系統匯入未來訂位、匯出全部訂位（老闆、店長）
+                if (settings != null && widget.membership.isManager)
+                  IconButton(
+                    tooltip: '匯入、匯出訂位',
+                    icon: const Icon(Icons.import_export),
+                    onPressed: () async {
+                      final changed = await Navigator.of(context).push<bool>(MaterialPageRoute(
+                        builder: (_) => BookingImportScreen(membership: widget.membership),
                       ));
                       if (changed == true) _reload();
                     },

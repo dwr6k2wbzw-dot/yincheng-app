@@ -66,8 +66,9 @@ ImportTable readImportTable(List<List<String>> cells) {
       final h = _norm(cells[i][c]);
       if (h.isEmpty) continue;
       for (final e in _headerAliases.entries) {
-        if (!found.containsKey(e.key) && e.value.any((a) => _norm(a) == h))
+        if (!found.containsKey(e.key) && e.value.any((a) => _norm(a) == h)) {
           found[e.key] = c;
+        }
       }
     }
     if (found.containsKey('date') && found.containsKey('name')) {
@@ -84,8 +85,9 @@ ImportTable readImportTable(List<List<String>> cells) {
     for (final k in ['time', 'party'])
       if (!col.containsKey(k)) k == 'time' ? '時間' : '人數'
   ];
-  if (missing.isNotEmpty)
+  if (missing.isNotEmpty) {
     return ImportTable(const [], '找不到「${missing.join('」「')}」這一欄');
+  }
 
   String at(List<String> r, String k) {
     final c = col[k];
