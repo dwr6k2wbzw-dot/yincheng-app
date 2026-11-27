@@ -322,6 +322,11 @@ abstract class Repository {
   Future<List<AssistRecord>> bookingAssistHistory(String storeId);
   /// 整筆改回去（之後又被改過的不能改回去）
   Future<void> undoBookingAssist(String id);
+  // 排班的 AI 設定助理（ops 0154；老闆、店長；只有公版有入口）：同上，改的是每日人力、排班設定、個人排班條件
+  Future<AssistReply> askShiftAssistant(String storeId, String message, List<AssistTurn> history);
+  Future<void> applyShiftAssist(String storeId, String request, List<AssistChange> changes);
+  Future<List<AssistRecord>> shiftAssistHistory(String storeId);
+  Future<void> undoShiftAssist(String id);
   // 訂位搬家（ops 0148；老闆、店長）：先預覽（資料庫檢查每一列、不寫入），沒問題再匯入；每一批可以整批復原
   Future<ImportResult> previewReservationImport(String storeId, List<ImportRow> rows);
   /// [requestId]：同一個檔案按兩次只匯一次
@@ -473,7 +478,7 @@ String friendlyError(Object e) {
   final s = e.toString();
   final m = RegExp(r'message: ([^,]+)').firstMatch(s);
   // 0113：資料庫擋下來的訊息前面有代碼（給 App 判斷用），顯示時拿掉
-  final msg = (m?.group(1) ?? s).replaceFirst(RegExp(r'^(SHIFT_BLOCKED|SHIFT_CODE_USED|SHIFT_UNDO_CONFLICT|SIGNUP_[A-Z]+|BOOKING_ASSIST_STALE)：'), '');
+  final msg = (m?.group(1) ?? s).replaceFirst(RegExp(r'^(SHIFT_BLOCKED|SHIFT_CODE_USED|SHIFT_UNDO_CONFLICT|SIGNUP_[A-Z]+|BOOKING_ASSIST_STALE|SHIFT_ASSIST_STALE)：'), '');
   if (msg.contains('duplicate key') && msg.contains('client_request')) return '這筆已經送出過了，不會重複新增。';
   if (msg.contains('row-level security')) return '沒有權限執行這個動作。';
   if (msg.contains('function public.payroll_')) return '資料庫還沒更新到薪資版本，請等老闆核准上線。';

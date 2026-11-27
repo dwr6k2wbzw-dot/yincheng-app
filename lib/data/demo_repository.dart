@@ -1500,6 +1500,170 @@ class DemoRepository implements Repository {
       return;
     }
   }
+  // 排班的 AI 設定助理（示範，ops 0154）：不連 AI，只認得幾種說法，照真的流程走（建議 → 確認套用 → 可以改回去）
+  final Map<String, List<AssistRecord>> _demoShiftAssist = {};
+  static const _demoAssistPeople = [('f0', '阿明'), ('f1', '小安'), ('f2', '阿哲'), ('p0', '小魚'), ('p1', '阿凱'), ('p2', '芳芳'), ('p3', '小白'), ('p4', '阿樂')];
+  static const _wdNames = '一二三四五六日';
+  @override
+  Future<AssistReply> askShiftAssistant(String storeId, String message, List<AssistTurn> history) async {
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+    final changes = <Map<String, dynamic>>[];
+    final parts = <String>[];
+    Map<String, int>? staffRow(int w) {
+      final s = _staffing[w];
+      return s == null ? null : {'need': s.need, 'min_full': s.minFull};
+    }
+
+    final need = RegExp(r'要\s*([0-9]{1,2})\s*[個位]?人').firstMatch(message);
+    final days = RegExp(r'週([一二三四五六日])').allMatches(message).map((m) => _wdNames.indexOf(m.group(1)!) + 1).toSet();
+    if (need != null && days.isNotEmpty) {
+      final n = int.parse(need.group(1)!);
+      for (final w in days.toList()..sort()) {
+        final b = staffRow(w);
+        final full = b?['min_full'] ?? 0;
+        if (b?['need'] == n) continue;
+        changes.add({'op': 'staffing', 'weekday': w, 'before': b, 'after': {'need': n, 'min_full': full > n ? n : full}});
+      }
+      parts.add('${days.map((w) => '週${_wdNames[w - 1]}').join('、')}改成每天 $n 人');
+    } else if (need != null && RegExp(r'聖誕|跨年|([0-9]{1,2})/([0-9]{1,2})').hasMatch(message)) {
+      final now = DateTime.now();
+      final md = RegExp(r'([0-9]{1,2})/([0-9]{1,2})').firstMatch(message);
+      var d = message.contains('跨年')
+          ? DateTime(now.year, 12, 31)
+          : message.contains('聖誕')
+              ? DateTime(now.year, 12, 25)
+              : DateTime(now.year, int.parse(md!.group(1)!), int.parse(md.group(2)!));
+      if (d.isBefore(DateTime(now.year, now.month, now.day))) d = DateTime(d.year + 1, d.month, d.day);
+      final iso = d.toIso8601String().substring(0, 10);
+      final cur = _staffDays[d.day];
+      changes.add({'op': 'staffing_day', 'date': iso, 'before': cur == null ? null : {'need': cur}, 'after': {'need': int.parse(need.group(1)!)}});
+      parts.add('${AssistChange.dayLabel(iso)}要 ${need.group(1)} 人');
+    }
+    final perDay = RegExp(r'同一天最多\s*([0-9]{1,2})\s*[個位]').firstMatch(message);
+    if (perDay != null && int.parse(perDay.group(1)!) != _offPerDay) {
+      changes.add({'op': 'setting', 'field': 'off_per_day', 'before': _offPerDay, 'after': int.parse(perDay.group(1)!)});
+      parts.add('同一天最多 ${perDay.group(1)} 位正職指休');
+    }
+    final deadline = RegExp(r'([0-9]{1,2})\s*號前').firstMatch(message);
+    if (deadline != null) {
+      final v = int.parse(deadline.group(1)!);
+      if (v >= 1 && v <= 28 && v != _deadline) {
+        changes.add({'op': 'setting', 'field': 'request_deadline', 'before': _deadline, 'after': v});
+        parts.add('每月 $v 號前填好下個月的班');
+      }
+    }
+    final maxDays = RegExp(r'最多上\s*([0-9]{1,2})\s*天').firstMatch(message);
+    if (maxDays != null) {
+      for (final (id, nick) in _demoAssistPeople) {
+        final full = _demoFullNames[nick];
+        if (!message.contains(nick) && (full == null || !message.contains(full))) continue;
+        final v = int.parse(maxDays.group(1)!);
+        changes.add({'op': 'rule', 'person_id': id, 'person_name': full ?? nick, 'field': 'max_shifts', 'before': _shiftRules[id]?.maxShifts, 'after': v});
+        parts.add('${full ?? nick}每月最多上 $v 天');
+        break;
+      }
+    }
+    if (changes.isEmpty) {
+      return const AssistReply(
+          reply: '示範版只認得幾種說法，例如「週五週六要 5 個人」「聖誕節那天要 6 個人」「同一天最多 2 位指休」「每月 25 號前填好班」「阿凱每月最多上 12 天」。正式版可以用自己的話說。');
+    }
+    return AssistReply(reply: '好，我打算：${parts.join('；')}。請看下面確認。', changes: [for (final c in changes) AssistChange(c)]);
+  }
+
+  void _demoShiftAssistExec(List<Map<String, dynamic>> changes) {
+    Object? current(Map<String, dynamic> c) => switch (c['op']) {
+          'staffing' => _staffing[c['weekday']] == null
+              ? null
+              : {'need': _staffing[c['weekday']]!.need, 'min_full': _staffing[c['weekday']]!.minFull},
+          'staffing_day' => _staffDays[DateTime.parse(c['date'] as String).day] == null
+              ? null
+              : {'need': _staffDays[DateTime.parse(c['date'] as String).day]},
+          'setting' => switch (c['field']) {
+              'request_deadline' => _deadline,
+              'prefer_run' => _preferRun,
+              'off_per_day' => _offPerDay,
+              _ => _offMonthMax,
+            },
+          'rule' => switch (c['field']) {
+              'max_shifts' => _shiftRules[c['person_id']]?.maxShifts,
+              _ => null,
+            },
+          _ => null,
+        };
+    // 跟正式版一樣：先全部檢查「改前」跟現在一樣，一項不對整筆不動
+    for (final c in changes) {
+      if (jsonEncode(current(c)) != jsonEncode(c['before'])) {
+        throw Exception('message: SHIFT_ASSIST_STALE：設定在你按確認之前被改過了，這次沒有套用，請重新問一次,');
+      }
+    }
+    for (final c in changes) {
+      final a = c['after'];
+      switch (c['op']) {
+        case 'staffing':
+          final w = c['weekday'] as int;
+          a == null ? _staffing.remove(w) : _staffing = {..._staffing, w: StaffingNeed((a as Map)['need'] as int, a['min_full'] as int? ?? 0)};
+        case 'staffing_day':
+          final d = DateTime.parse(c['date'] as String).day;
+          a == null ? _staffDays.remove(d) : _staffDays[d] = (a as Map)['need'] as int;
+        case 'setting':
+          switch (c['field']) {
+            case 'request_deadline':
+              _deadline = a as int;
+            case 'prefer_run':
+              _preferRun = a as int?;
+            case 'off_per_day':
+              _offPerDay = a as int?;
+            default:
+              _offMonthMax = a as int?;
+          }
+        case 'rule':
+          final id = c['person_id'] as String;
+          final r = _shiftRules[id] ?? ShiftRule(personId: id);
+          _shiftRules[id] = ShiftRule(
+              personId: id,
+              planAsPart: r.planAsPart,
+              monthOff: r.monthOff,
+              minShifts: r.minShifts,
+              maxShifts: a as int?,
+              maxConsecutive: r.maxConsecutive,
+              noWeekdays: r.noWeekdays,
+              marks: r.marks,
+              weekdayMarks: r.weekdayMarks,
+              note: r.note);
+      }
+    }
+  }
+
+  @override
+  Future<void> applyShiftAssist(String storeId, String request, List<AssistChange> changes) async {
+    _demoShiftAssistExec([for (final c in changes) c.raw]);
+    (_demoShiftAssist[storeId] ??= []).insert(
+        0,
+        AssistRecord(
+            id: 'demo-s-${DateTime.now().microsecondsSinceEpoch}', appliedAt: DateTime.now(), request: request, changes: changes));
+  }
+
+  @override
+  Future<List<AssistRecord>> shiftAssistHistory(String storeId) async => [...?_demoShiftAssist[storeId]];
+
+  @override
+  Future<void> undoShiftAssist(String id) async {
+    for (final e in _demoShiftAssist.entries) {
+      final i = e.value.indexWhere((r) => r.id == id);
+      if (i < 0) continue;
+      final r = e.value[i];
+      if (r.undoneAt != null) throw Exception('message: 這筆修改已經改回去了,');
+      try {
+        _demoShiftAssistExec([
+          for (final c in r.changes.reversed) {...c.raw, 'before': c.raw['after'], 'after': c.raw['before']},
+        ]);
+      } catch (_) {
+        throw Exception('message: SHIFT_ASSIST_STALE：這筆修改之後又被改過，不能直接改回去，請到排班條件手動調整,');
+      }
+      e.value[i] = AssistRecord(id: r.id, appliedAt: r.appliedAt, request: r.request, changes: r.changes, undoneAt: DateTime.now());
+      return;
+    }
+  }
   // 許願單（示範）：先放兩則平台已經回覆過的，新寫的狀態是「平台收到了」
   final Map<String, List<PlatformWish>> _demoWishes = {};
   List<PlatformWish> _wishesOf(String storeId) => _demoWishes.putIfAbsent(storeId, () {
