@@ -10,7 +10,7 @@ import '../widgets/common.dart';
 
 /// AI 設定（ops 0157，公版；只有老闆）：接上自己的 Claude／OpenAI／Gemini。
 /// 金鑰先實際測過才存，存進加密保管庫；之後畫面上只看得到末 4 碼。
-/// 接了之後，訂位 AI 助理、送貨單辨識等 AI 功能都改用店家的 AI，不受平台每天次數限制。
+/// 接了之後，訂位助理、排班助理、送貨單辨識、班表照片辨識都改用店家的 AI，不受平台每天次數限制。
 class StoreAiScreen extends StatefulWidget {
   const StoreAiScreen({super.key, required this.membership});
   final Membership membership;
@@ -221,6 +221,7 @@ class _StoreAiScreenState extends State<StoreAiScreen> {
           ),
           const SizedBox(height: 6),
           Text(
+            '接上之後，訂位助理、排班助理、送貨單辨識、班表照片辨識都改用你的 AI，'
             '費用算在你自己的 AI 帳上；沒設定就用平台內建的 AI（有每天次數）。',
             style: TextStyle(
               color: AppColors.muted,
