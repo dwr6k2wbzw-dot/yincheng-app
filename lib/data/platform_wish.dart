@@ -80,3 +80,49 @@ String? validateWish(String title, String what, String why) {
   }
   return null;
 }
+
+/// 資料庫的狀態代碼（new／planned／declined／done）
+String platformWishStatusCode(PlatformWishStatus s) => switch (s) {
+  PlatformWishStatus.received => 'new',
+  PlatformWishStatus.planned => 'planned',
+  PlatformWishStatus.declined => 'declined',
+  PlatformWishStatus.done => 'done',
+};
+
+/// 平台管理者看的狀態名稱（ops 0159）：分頁、回覆時選狀態用
+String platformAdminStatusLabel(PlatformWishStatus s) => switch (s) {
+  PlatformWishStatus.received => '新的',
+  PlatformWishStatus.planned => '規劃中',
+  PlatformWishStatus.declined => '不做',
+  PlatformWishStatus.done => '完成',
+};
+
+/// 平台管理者看到的一則許願（ops 0159）：多帶店名；回覆時要把看到的狀態、回覆時間原樣送回去比對
+class PlatformAdminWish {
+  final PlatformWish wish;
+  final String storeId;
+  final String storeName;
+  /// 資料庫給的回覆時間原字串（不經過 DateTime 轉換，送回去比對才不會差到微秒）
+  final String? repliedAtRaw;
+  const PlatformAdminWish({required this.wish, required this.storeId, required this.storeName, this.repliedAtRaw});
+
+  factory PlatformAdminWish.fromRow(Map<String, dynamic> r) => PlatformAdminWish(
+    wish: PlatformWish.fromRow(r),
+    storeId: r['store_id'] as String,
+    storeName: (r['store_name'] as String?) ?? '',
+    repliedAtRaw: r['replied_at'] as String?,
+  );
+}
+
+/// 各狀態有幾則（分頁上的數字）；沒有的狀態算 0
+Map<PlatformWishStatus, int> platformWishCountsOf(Iterable<MapEntry<String, int>> rows) => {
+  for (final s in PlatformWishStatus.values) s: 0,
+  for (final e in rows) platformWishStatusOf(e.key): e.value,
+};
+
+/// 回覆前檢查：回覆最多 1000 字（資料庫同一個數字）；沒問題回 null
+String? validateAdminReply(String reply) =>
+    reply.trim().length > platformWishBodyMax ? '回覆最多 $platformWishBodyMax 個字' : null;
+
+/// 資料庫說「別人剛回覆過」（ops 0159，40001 WISH_STALE）
+bool isWishStale(Object e) => e.toString().contains('WISH_STALE');
