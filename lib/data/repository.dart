@@ -356,6 +356,15 @@ abstract class Repository {
   Future<List<PlatformWish>> platformWishes(String storeId);
   /// 寫一則（每家店每個月最多 20 則），回傳 id
   Future<String> createPlatformWish(String storeId, String title, String body);
+  // 平台回覆許願單（ops 0159，公版；只有平台管理者，後台在 app.platform_admins 加的人）
+  /// 我是不是平台管理者（不是、或資料庫還沒更新都回 false）
+  Future<bool> platformAdminMe();
+  /// 所有店的許願（新的在前，最多 500 則）
+  Future<List<PlatformAdminWish>> platformAdminWishes();
+  /// 各狀態有幾則
+  Future<Map<PlatformWishStatus, int>> platformAdminWishCounts();
+  /// 改狀態、寫回覆（回覆空白＝拿掉回覆）。畫面上看到的跟現在不同 → 丟 WISH_STALE
+  Future<void> platformAdminReply(PlatformAdminWish w, PlatformWishStatus status, String reply);
   // 店家接自己的 AI（ops 0157，公版；只有老闆）：金鑰存進加密保管庫，App 只拿得到末 4 碼
   /// 這家店目前的設定；null＝用平台內建的 AI
   Future<StoreAiSetting?> storeAiSetting(String storeId);
@@ -502,7 +511,7 @@ String friendlyError(Object e) {
   final s = e.toString();
   final m = RegExp(r'message: ([^,]+)').firstMatch(s);
   // 0113：資料庫擋下來的訊息前面有代碼（給 App 判斷用），顯示時拿掉
-  final msg = (m?.group(1) ?? s).replaceFirst(RegExp(r'^(SHIFT_BLOCKED|SHIFT_CODE_USED|SHIFT_UNDO_CONFLICT|SIGNUP_[A-Z]+|BOOKING_ASSIST_STALE|SHIFT_ASSIST_STALE|ONBOARD_[A-Z_]+)：'), '');
+  final msg = (m?.group(1) ?? s).replaceFirst(RegExp(r'^(SHIFT_BLOCKED|SHIFT_CODE_USED|SHIFT_UNDO_CONFLICT|SIGNUP_[A-Z]+|BOOKING_ASSIST_STALE|SHIFT_ASSIST_STALE|WISH_STALE|ONBOARD_[A-Z_]+)：'), '');
   if (msg.contains('duplicate key') && msg.contains('client_request')) return '這筆已經送出過了，不會重複新增。';
   if (msg.contains('row-level security')) return '沒有權限執行這個動作。';
   if (msg.contains('function public.payroll_')) return '資料庫還沒更新到薪資版本，請等老闆核准上線。';

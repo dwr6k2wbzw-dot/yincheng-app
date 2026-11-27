@@ -3051,6 +3051,93 @@ class DemoRepository implements Repository {
     return id;
   }
 
+  // 平台回覆許願單（ops 0159，示範）：帳號含 platform＝平台管理者。資料是虛構的幾家店，
+  // 再加上這次示範在自己店寫的許願（回覆後自己店的許願單也看得到）
+  bool get _isPlatformAdmin => _email.contains('platform');
+  List<PlatformAdminWish>? _adminDemo;
+  List<PlatformAdminWish> get _adminOthers => _adminDemo ??= () {
+    final now = DateTime.now();
+    PlatformAdminWish w(String id, String store, String name, String title, String body, String author,
+        PlatformWishStatus st, int daysAgo, {String? reply, int? repliedDaysAgo}) {
+      final replied = repliedDaysAgo == null ? null : now.subtract(Duration(days: repliedDaysAgo));
+      return PlatformAdminWish(
+        storeId: store,
+        storeName: name,
+        repliedAtRaw: replied?.toUtc().toIso8601String(),
+        wish: PlatformWish(
+          id: id, title: title, body: body, authorName: author, status: st, reply: reply,
+          createdAt: now.subtract(Duration(days: daysAgo, hours: 2)), repliedAt: replied,
+        ),
+      );
+    }
+    return [
+      w('pa-1', 's-morning', '晨光咖啡', '會員集點換飲料', '客人消費一次蓋一點，滿十點送一杯。\n\n為什麼需要：常客一直問有沒有集點卡。', '林老闆', PlatformWishStatus.received, 0),
+      w('pa-2', 's-alley', '巷口小館', '訂位時可以先付訂金', '週末大桌常常放鴿子，希望訂 6 位以上要先付訂金。', '陳店長', PlatformWishStatus.received, 1),
+      w('pa-3', 's-noodle', '老街麵屋', '班表可以匯出成圖片傳 LINE', '每個月排好班要截圖好幾張，希望一鍵存成一張圖。', '王老闆', PlatformWishStatus.received, 2),
+      w('pa-4', 's-morning', '晨光咖啡', '進貨可以掃發票 QR code', '電子發票上的 QR code 掃一下就帶入品項和金額。', '林老闆', PlatformWishStatus.planned, 6,
+          reply: '很多店都想要，排進下個月的待辦。', repliedDaysAgo: 4),
+      w('pa-5', 's-bar', '月台酒吧', '營收頁加上天氣', '想看下雨天生意差多少。', '吳老闆', PlatformWishStatus.declined, 12,
+          reply: '天氣資料要另外付費，先不做；之後有免費的來源再評估。', repliedDaysAgo: 9),
+      w('pa-6', 's-alley', '巷口小館', '盤點可以掃條碼', '盤點時用手機掃酒瓶上的條碼，直接跳到那個品項。', '陳店長', PlatformWishStatus.done, 25,
+          reply: '已經做好了：盤點畫面右上角多一個掃描按鈕。', repliedDaysAgo: 8),
+    ];
+  }();
+  static const _demoStoreNames = {'yc': '隱城', 'xc': '小城外'};
+  List<PlatformAdminWish> _adminAll() => [
+    ..._adminOthers,
+    for (final e in _demoWishes.entries)
+      for (final w in e.value)
+        PlatformAdminWish(wish: w, storeId: e.key, storeName: _demoStoreNames[e.key] ?? '示範店',
+            repliedAtRaw: w.repliedAt?.toUtc().toIso8601String()),
+  ]..sort((a, b) => b.wish.createdAt.compareTo(a.wish.createdAt));
+
+  @override
+  Future<bool> platformAdminMe() async => _isPlatformAdmin;
+
+  @override
+  Future<List<PlatformAdminWish>> platformAdminWishes() async {
+    if (!_isPlatformAdmin) throw Exception('message: 只有平台管理者能看所有店的許願單,');
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    return _adminAll();
+  }
+
+  @override
+  Future<Map<PlatformWishStatus, int>> platformAdminWishCounts() async {
+    if (!_isPlatformAdmin) throw Exception('message: 只有平台管理者能看所有店的許願單,');
+    final all = _adminAll();
+    return {for (final s in PlatformWishStatus.values) s: all.where((w) => w.wish.status == s).length};
+  }
+
+  @override
+  Future<void> platformAdminReply(PlatformAdminWish w, PlatformWishStatus status, String reply) async {
+    if (!_isPlatformAdmin) throw Exception('message: 只有平台管理者能回覆許願單,');
+    final err = validateAdminReply(reply);
+    if (err != null) throw Exception('message: $err,');
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    final cur = _adminAll().where((x) => x.wish.id == w.wish.id).firstOrNull;
+    if (cur == null) throw Exception('message: 找不到這則許願單,');
+    if (cur.wish.status != w.wish.status || cur.repliedAtRaw != w.repliedAtRaw) {
+      throw Exception('message: WISH_STALE：別人剛回覆過這則許願單，請重新整理,');
+    }
+    final r = reply.trim().isEmpty ? null : reply.trim();
+    final changed = r != cur.wish.reply;
+    final now = DateTime.now();
+    final next = PlatformWish(
+      id: cur.wish.id, title: cur.wish.title, body: cur.wish.body, authorName: cur.wish.authorName,
+      status: status, reply: r, createdAt: cur.wish.createdAt,
+      repliedAt: changed ? now : cur.wish.repliedAt,
+    );
+    final i = _adminOthers.indexWhere((x) => x.wish.id == cur.wish.id);
+    if (i >= 0) {
+      _adminOthers[i] = PlatformAdminWish(wish: next, storeId: cur.storeId, storeName: cur.storeName,
+          repliedAtRaw: next.repliedAt?.toUtc().toIso8601String());
+      return;
+    }
+    final list = _demoWishes[cur.storeId];
+    final j = list?.indexWhere((x) => x.id == cur.wish.id) ?? -1;
+    if (j >= 0) list![j] = next;
+  }
+
   @override
   Future<String> uploadBookingAsset(
     String storeId,

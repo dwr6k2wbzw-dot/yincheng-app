@@ -2130,6 +2130,40 @@ class SupabaseRepository implements Repository {
       await _db.rpc('platform_wish_create', params: {'p_store': storeId, 'p_title': title, 'p_body': body}) as String;
 
   @override
+  Future<bool> platformAdminMe() async {
+    try {
+      return await _db.rpc('platform_admin_me') == true;
+    } catch (_) {
+      return false; // 資料庫還沒有 0159：當作不是
+    }
+  }
+
+  @override
+  Future<List<PlatformAdminWish>> platformAdminWishes() async {
+    final rows = await _db.rpc('platform_admin_wishes') as List;
+    return [for (final r in rows) PlatformAdminWish.fromRow(Map<String, dynamic>.from(r as Map))];
+  }
+
+  @override
+  Future<Map<PlatformWishStatus, int>> platformAdminWishCounts() async {
+    final rows = await _db.rpc('platform_admin_wish_counts') as List;
+    return platformWishCountsOf([
+      for (final r in rows) MapEntry((r as Map)['status'] as String, (r['n'] as num).toInt()),
+    ]);
+  }
+
+  @override
+  Future<void> platformAdminReply(PlatformAdminWish w, PlatformWishStatus status, String reply) async {
+    await _db.rpc('platform_admin_reply', params: {
+      'p_id': w.wish.id,
+      'p_status': platformWishStatusCode(status),
+      'p_reply': reply.trim(),
+      'p_expected_status': platformWishStatusCode(w.wish.status),
+      'p_expected_replied_at': w.repliedAtRaw,
+    });
+  }
+
+  @override
   Future<StoreAiSetting?> storeAiSetting(String storeId) async {
     final row = await _db
         .from('store_ai_settings')

@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'config.dart';
 import 'data/models.dart';
 import 'data/repository.dart';
 import 'services/load_timing.dart';
@@ -40,8 +41,28 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 平台管理者（ops 0159）：只有公版那一份才問；是的話 ⋯ 選單多「客戶許願（平台）」
+  bool platformAdmin = false;
+  int _adminSeq = 0;
+
+  Future<void> _loadPlatformAdmin() async {
+    if (!AppConfig.selfSignup) return;
+    final seq = ++_adminSeq;
+    final uid = repo.currentUserId;
+    bool v;
+    try {
+      v = await repo.platformAdminMe();
+    } catch (_) {
+      return;
+    }
+    if (seq != _adminSeq || uid == null || repo.currentUserId != uid || v == platformAdmin) return;
+    platformAdmin = v;
+    notifyListeners();
+  }
+
   Future<void> loadMemberships() async {
     _loadKiosk();
+    _loadPlatformAdmin();
     // 先用手機裡存的上次店家清單直接進主畫面，背景再向資料庫確認（老闆 2026-10-16：打開太慢）
     final cached = repo.peekMemberships();
     if (cached != null && cached.isNotEmpty && memberships.isEmpty) {
@@ -126,6 +147,8 @@ class AppState extends ChangeNotifier {
     current = null;
     kiosk = null;
     _kioskSeq++;
+    platformAdmin = false;
+    _adminSeq++;
     notifyListeners();
   }
 }
