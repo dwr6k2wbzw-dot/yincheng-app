@@ -1,5 +1,6 @@
 import 'shift_off_rules.dart';
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'booking_profile.dart';
@@ -1305,13 +1306,26 @@ class DemoRepository implements Repository {
   void _demoAssistExec(String storeId, BookingProfile p, List<Map<String, dynamic>> changes) {
     final row = _profileRow(p);
     final days = _demoSpecial[storeId] ??= {};
+    String norm(Object? v) => jsonEncode(v is List ? ([...v.map((e) => '$e')]..sort()) : v);
+    Object? current(Map<String, dynamic> c) => switch (c['op']) {
+          'text' => ((row[c['field']] as Map<String, String>)[c['lang']] ?? '').isEmpty
+              ? null
+              : (row[c['field']] as Map<String, String>)[c['lang']],
+          'min_spend' => row['min_spend'],
+          'langs' => row['langs'],
+          'day' => days[c['date']] == null ? null : {'closed': true, 'note': days[c['date']]!.note},
+          _ => null,
+        };
+    // 跟正式版一樣：先全部檢查「改前」跟現在一樣，一項不對整筆不動（Codex P2）
+    for (final c in changes) {
+      if (norm(current(c)) != norm(c['before'])) {
+        throw Exception('message: BOOKING_ASSIST_STALE：設定在你按確認之前被改過了，這次沒有套用，請重新問一次,');
+      }
+    }
     for (final c in changes) {
       switch (c['op']) {
         case 'text':
           final m = row[c['field']] as Map<String, String>;
-          if ((m[c['lang']] ?? '').isEmpty ? c['before'] != null : m[c['lang']] != c['before']) {
-            throw Exception('message: BOOKING_ASSIST_STALE：設定在你按確認之前被改過了，這次沒有套用，請重新問一次,');
-          }
           final a = c['after'] as String?;
           a == null || a.isEmpty ? m.remove(c['lang']) : m[c['lang'] as String] = a;
         case 'min_spend':
@@ -1320,11 +1334,11 @@ class DemoRepository implements Repository {
           row['langs'] = [for (final l in c['after'] as List) '$l'];
         case 'day':
           final a = c['after'];
-          final d = DateTime.parse(c['date'] as String);
           if (a == null) {
             days.remove(c['date']);
           } else {
-            days[c['date'] as String] = ReservationSpecialDay(day: d, closed: true, note: (a as Map)['note'] as String?);
+            days[c['date'] as String] =
+                ReservationSpecialDay(day: DateTime.parse(c['date'] as String), closed: true, note: (a as Map)['note'] as String?);
           }
       }
     }

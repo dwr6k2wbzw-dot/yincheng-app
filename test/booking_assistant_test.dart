@@ -131,6 +131,22 @@ void main() {
     expect(days, isEmpty);
   });
 
+  test('改回去時之後又被改過：整筆不動（Codex P2）', () async {
+    final repo = _Repo();
+    Future<void> ask(String m) async {
+      final r = await repo.askBookingAssistant('yc', m, const []);
+      await repo.applyBookingAssist('yc', m, r.changes);
+    }
+
+    await ask('低消改成每人 700');
+    await ask('低消改 900');
+    final history = await repo.bookingAssistHistory('yc');
+    await expectLater(repo.undoBookingAssist(history.last.id), throwsA(predicate((e) => '$e'.contains('BOOKING_ASSIST_STALE'))));
+    expect((await repo.bookingProfile('yc'))!.minSpend, 900);
+    await repo.undoBookingAssist(history.first.id); // 最新那筆可以改回去
+    expect((await repo.bookingProfile('yc'))!.minSpend, 700);
+  });
+
   testWidgets('示範版聽不懂時只回說明、沒有建議', (tester) async {
     await _open(tester);
     await _say(tester, '幫我把時段改成 18:00 開始');
