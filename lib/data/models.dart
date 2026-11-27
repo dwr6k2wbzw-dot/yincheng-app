@@ -826,6 +826,7 @@ class ShiftPerson {
   final String? roleCode; // 班別（例 B／R）
   final String? userId; // 對應的 App 帳號（0125：由老闆、店長指定）
   final bool userVerified; // 對應已經生效（老闆指定、店長替別人指定）；0125 之前自己選的要重新指定一次才算
+  final String? linkId; // 0098：兩家店是同一個人（同一個 link_id）；連結只有老闆能做（shift_link_people）
   ShiftPerson(
       {required this.id,
       required this.name,
@@ -836,7 +837,8 @@ class ShiftPerson {
       this.active = true,
       this.roleCode,
       this.userId,
-      this.userVerified = false}) {
+      this.userVerified = false,
+      this.linkId}) {
     if (id.isNotEmpty) {
       rememberPersonLabel(id, label);
       rememberPersonFullName(id, shortLabel);
@@ -860,6 +862,7 @@ class ShiftPerson {
         roleCode: r['role_code'] as String?,
         userId: r['user_id'] as String?,
         userVerified: r['user_verified_at'] != null,
+        linkId: r['link_id'] as String?,
       );
 }
 

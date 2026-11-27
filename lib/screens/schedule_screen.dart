@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../app_state.dart';
+import '../config.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
 import '../data/schedule_health.dart';
 import '../data/shift_off_rules.dart';
+import '../data/shift_links.dart';
 import '../data/shift_marks.dart';
 import '../services/slip_scan.dart';
 import '../theme.dart';
@@ -1088,6 +1090,7 @@ class _PeopleScreen extends StatefulWidget {
 class _PeopleScreenState extends State<_PeopleScreen> {
   late List<ShiftPerson> _people = [...widget.people];
   List<ShiftAccountCandidate> _accounts = const [];
+  List<ShiftLinkStore> _linkStores = const []; // 0098：我也是老闆的其他店（兩家店同一個人）
   bool _started = false;
 
   @override
@@ -1096,6 +1099,121 @@ class _PeopleScreenState extends State<_PeopleScreen> {
     if (!_started) {
       _started = true;
       _loadAccounts();
+      _loadLinks();
+    }
+  }
+
+  Future<void> _loadLinks() async {
+    // 只在公版顯示（老闆 2026-11-27：隱城／小城外這一份畫面完全不變；兩店的連結照舊由後台處理）
+    if (!AppConfig.selfSignup || !widget.isOwner) return;
+    try {
+      final l = await AppScope.of(context).repo.shiftLinkStores(widget.storeId);
+      if (mounted) setState(() => _linkStores = l);
+    } catch (_) {
+      // 讀不到：不顯示連結
+    }
+  }
+
+  /// 連到另一家店的同一個人：選店（只有一家就直接跳過）→ 選人 → 確認
+  Future<void> _link(ShiftPerson p) async {
+    final stores = linkableStores(p, _linkStores);
+    if (stores.isEmpty) return;
+    ShiftLinkStore? store = stores.length == 1 ? stores.first : null;
+    store ??= await showModalBottomSheet<ShiftLinkStore>(
+      context: context,
+      backgroundColor: AppColors.card,
+      builder: (c) => SafeArea(
+        child: ListView(shrinkWrap: true, padding: const EdgeInsets.all(16), children: [
+          Text('「${p.label}」也在哪一家店上班？', style: const TextStyle(fontSize: AppType.title, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          for (final st in stores)
+            ListTile(contentPadding: EdgeInsets.zero, title: Text(st.storeName), trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.pop(c, st)),
+        ]),
+      ),
+    );
+    if (store == null || !mounted) return;
+    final st = store;
+    final picked = await showModalBottomSheet<ShiftPerson>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.card,
+      builder: (c) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(c).size.height * 0.8),
+          child: ListView(shrinkWrap: true, padding: const EdgeInsets.all(16), children: [
+            Text('「${p.label}」在${st.storeName}的班表上是誰？', style: const TextStyle(fontSize: AppType.title, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 4),
+            Text('連結後，兩家店不能同一天排這個人。', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+            const SizedBox(height: 8),
+            if (st.people.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Text('${st.storeName}的班表上還沒有人', style: TextStyle(color: AppColors.muted)),
+              ),
+            for (final q in linkCandidates(st))
+              Builder(builder: (_) {
+                final block = linkBlockReason(q, _people);
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  enabled: block == null,
+                  title: Text(q.label),
+                  subtitle: Text([
+                    q.isFull ? '正職' : '兼職',
+                    if (!q.active) '已隱藏',
+                    if (block != null) block,
+                  ].join('・'), style: const TextStyle(fontSize: AppType.small)),
+                  onTap: () => Navigator.pop(c, q),
+                );
+              }),
+          ]),
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text('「${p.label}」就是${st.storeName}的「${picked.label}」？'),
+        content: const Text('連結後，兩家店不能同一天排這個人（手動排、自動排班、照片套用都會擋）。之後可以解除。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('連結')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await AppScope.of(context).repo.linkShiftPeople(p.id, picked.id);
+      if (!mounted) return;
+      showMessage(context, '連結好了：「${p.label}」也在${st.storeName}上班');
+      await _reloadPeople();
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+    }
+  }
+
+  Future<void> _unlink(ShiftPerson p, ShiftLinkPeer peer) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text('解除「${p.label}」和${peer.storeName}「${peer.person.label}」的連結？'),
+        content: const Text('解除後兩家店會當成不同的人，可能同一天都排到他。已經排好的班不會變。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('解除')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      // 解除另一家店那一邊：這家店的人如果同時連到第三家店，那邊的連結不受影響
+      await AppScope.of(context).repo.unlinkShiftPerson(peer.person.id);
+      if (!mounted) return;
+      showMessage(context, '已解除連結');
+      await _reloadPeople();
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
     }
   }
 
@@ -1121,7 +1239,7 @@ class _PeopleScreenState extends State<_PeopleScreen> {
   Future<void> _reloadPeople() async {
     final d = await AppScope.of(context).repo.shiftMonth(widget.storeId, DateTime.now());
     if (mounted) setState(() => _people = d.people);
-    await _loadAccounts();
+    await Future.wait([_loadAccounts(), _loadLinks()]);
   }
 
   /// 替這個人指定 App 帳號。老闆指定、店長替別人指定都直接生效；已經對應好的要改只有老闆（0125）
@@ -1204,6 +1322,42 @@ class _PeopleScreenState extends State<_PeopleScreen> {
     }
   }
 
+  /// 修改人員的對話框裡：「也在 ○○ 上班：某某」＋解除；還能連的店有「另一家店也是這個人」
+  List<Widget> _linkSection(BuildContext dialog, ShiftPerson p) {
+    final peers = linkedPeers(p, _linkStores);
+    final canLink = linkableStores(p, _linkStores).isNotEmpty;
+    return [
+      for (final peer in peers)
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Row(children: [
+            Icon(Icons.link, size: 18, color: AppColors.muted),
+            const SizedBox(width: 8),
+            Expanded(child: Text('也在${peer.storeName}上班：${peer.person.label}', style: const TextStyle(fontSize: AppType.small))),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialog, false);
+                _unlink(p, peer);
+              },
+              child: const Text('解除連結'),
+            ),
+          ]),
+        ),
+      if (canLink)
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            icon: const Icon(Icons.add_link, size: 18),
+            label: Text(peers.isEmpty ? '另一家店也是這個人' : '還有別家店也是這個人'),
+            onPressed: () {
+              Navigator.pop(dialog, false);
+              _link(p);
+            },
+          ),
+        ),
+    ];
+  }
+
   Future<void> _edit(ShiftPerson? p) async {
     final name = TextEditingController(text: p?.name ?? '');
     final full = TextEditingController(text: p?.fullName ?? '');
@@ -1256,6 +1410,7 @@ class _PeopleScreenState extends State<_PeopleScreen> {
                     },
                   ),
                 ),
+              if (p != null && widget.isOwner && _linkStores.isNotEmpty) ..._linkSection(c, p),
               if (locked)
                 Align(
                   alignment: Alignment.centerLeft,
@@ -1339,6 +1494,7 @@ class _PeopleScreenState extends State<_PeopleScreen> {
                   if (p.roleCode != null) p.roleCode!,
                   '排序 ${p.sortOrder}',
                   if (!p.active) '已隱藏',
+                  if (linkSummary(p, _linkStores) case final l?) l,
                   if (p.fullName == null) '沒填全名',
                   p.userId == null
                       ? '還沒對應 App 帳號'
