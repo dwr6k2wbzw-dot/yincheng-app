@@ -54,7 +54,10 @@ abstract class Repository {
   /// 用邀請碼加入店家。回傳加入的店家數；-1＝邀請碼無效、已用過或已過期
   Future<int> claimInvite(String code);
   /// 自助註冊（ops 0119，只有公版環境開放）：建立「組織＋第一家店」，自己是老闆。回傳店的 id
-  Future<String> signupCreateStore(String storeName, String displayName);
+  /// [kind]：店的類型（ops 0152 排班範本 bar／cafe／restaurant／other），給了就照範本帶入排班的起手設定
+  Future<String> signupCreateStore(String storeName, String displayName, {String? kind});
+  /// 排班的業態範本（ops 0152，只有老闆、只有全新的店）：帶入每天要幾人、班別／時段、排班設定
+  Future<void> applyShiftTemplate(String storeId, String kind);
   Future<String> createInvite(List<String> storeIds, Role role, String name);
   Future<List<MemberInfo>> storeMembers(String storeId);
   Future<List<MemberInvite>> openInvites(String storeId);

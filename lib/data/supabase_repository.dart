@@ -111,8 +111,19 @@ class SupabaseRepository implements Repository {
   Future<int> claimInvite(String code) async =>
       (await _db.rpc('claim_invite', params: {'p_code': code}) as num).toInt();
   @override
-  Future<String> signupCreateStore(String storeName, String displayName) async =>
-      await _db.rpc('signup_create_store', params: {'p_store_name': storeName, 'p_display_name': displayName}) as String;
+  Future<String> signupCreateStore(String storeName, String displayName, {String? kind}) async {
+    final params = {'p_store_name': storeName, 'p_display_name': displayName};
+    try {
+      return await _db.rpc('signup_create_store', params: {...params, if (kind != null) 'p_kind': kind}) as String;
+    } on PostgrestException catch (e) {
+      // 資料庫還沒有 0152（沒有 p_kind 這個參數）：照原本的方式建店，排班之後再設
+      if (kind == null || e.code != 'PGRST202') rethrow;
+      return await _db.rpc('signup_create_store', params: params) as String;
+    }
+  }
+  @override
+  Future<void> applyShiftTemplate(String storeId, String kind) async =>
+      await _db.rpc('shift_apply_template', params: {'p_store': storeId, 'p_kind': kind});
   @override
   Future<String> createInvite(List<String> storeIds, Role role, String name) async =>
       await _db.rpc('create_invite', params: {'p_stores': storeIds, 'p_role': role.name, 'p_name': name}) as String;
