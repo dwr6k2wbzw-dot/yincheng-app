@@ -33,6 +33,20 @@ window.YC = {
       return r.ok;
     } catch (e) { return false; }
   },
+  // 機器人驗證（ops 0146）：拿 Turnstile 的 token 換一張訂位通行證；換不到就丟錯（訊息由訂位頁照語言顯示）
+  async captcha(slug, token) {
+    let r;
+    try {
+      r = await fetch(this.url + '/functions/v1/booking-captcha', {
+        method: 'POST',
+        headers: { apikey: this.key, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug, token }),
+      });
+    } catch (_) { throw new Error('連線失敗，請稍後再試'); }
+    const body = await r.json().catch(() => null);
+    if (!r.ok || !body || !body.pass) throw new Error('CAPTCHA_REQUIRED');
+    return body.pass;
+  },
   week: ['日', '一', '二', '三', '四', '五', '六'],
   dateLabel(iso) {
     const d = new Date(iso + 'T00:00:00');
