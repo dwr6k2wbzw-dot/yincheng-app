@@ -61,8 +61,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   ShiftPlanSetup? _setup; // 每天要幾人、指休等（讀不到就是 null，不影響看班表）
   Map<String, SpecialLeave>? _leave; // 特休自動算（ops 0138；null＝資料庫還沒更新，照舊手動填）
   bool _started = false;
+  // 班表照片辨識的方式（ops 0153）：api＝公版的店，上傳完直接請後臺辨識；subscription＝每小時同步（隱城、小城外，畫面照舊）
+  String _photoAi = 'subscription';
+  bool _photoAiLoaded = false;
+  bool _reading = false;
 
   bool get _canEdit => widget.membership.isManager;
+  bool get _photoApi => _photoAi == 'api';
   Repository get _repo => AppScope.of(context).repo;
   String get _store => widget.membership.storeId;
   String get _storeName => widget.membership.storeName;
@@ -94,7 +99,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       // 排班設定只拿來判斷「排好了沒」和標出缺人的日子；讀不到不擋班表（2026-11-16 健檢）
       _repo.shiftPlanSetup(_store, m).then<ShiftPlanSetup?>((v) => v, onError: (_) => null),
       _repo.specialLeaveStatus(_store, m).then<Map<String, SpecialLeave>?>((v) => v, onError: (_) => null),
+      // 只有老闆、店長需要知道（員工、兼職看不到照片辨識）；讀一次就好
+      if (_canEdit && !_photoAiLoaded) _repo.shiftPhotoAiMode(_store).then<String?>((v) => v, onError: (_) => null),
     ]);
+    if (r.length > 3) {
+      _photoAi = (r[3] as String?) ?? 'subscription';
+      _photoAiLoaded = true;
+    }
     final d = r[0] as ShiftMonth;
     if (m == _month) {
       _data = d;
@@ -427,10 +438,38 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     if (photo == null) return;
     try {
       await _repo.uploadShiftPhoto(_store, _month, dataUrlBytes(photo));
+      if (_photoApi) {
+        // 公版（ops 0153）：上傳完直接辨識，不用等每小時同步
+        if (mounted) showMessage(context, '已新增 ${_month.month} 月班表照片，開始辨識');
+        await _readPhotos();
+        return;
+      }
       if (mounted) showMessage(context, '已新增 ${_month.month} 月班表照片，會自動辨識成草稿（1 小時內）');
       _reload();
     } catch (e) {
       if (mounted) showMessage(context, friendlyError(e), error: true);
+    }
+  }
+
+  /// api 模式：請後臺立刻辨識這個月的照片（讀完草稿卡片變成「辨識好了」）
+  Future<void> _readPhotos() async {
+    if (_reading) return;
+    setState(() {
+      _reading = true;
+      _future = _load();
+    });
+    final month = _month;
+    try {
+      final cells = await _repo.readShiftPhotos(_store, month);
+      if (!mounted) return;
+      showMessage(context, cells == null ? '照片在辨識途中有變動，請再按一次「開始辨識」' : '${month.month} 月班表照片辨識好了（讀到 $cells 格），請確認草稿');
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+    } finally {
+      if (mounted) {
+        setState(() => _reading = false);
+        _reload();
+      }
     }
   }
 
@@ -477,17 +516,28 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           )
         : dr.isFailed
             ? (Icons.error_outline, AppColors.warn, '照片辨識失敗', '${dr.message ?? ''}　可以刪掉照片重傳，或直接點格子排班')
-            : (
-                Icons.hourglass_top_outlined,
-                AppColors.muted,
-                '照片辨識中…',
-                dr.message ?? '每小時處理一次，通常 1 小時內好，好了小鈴鐺會通知'
-              );
+            : _photoApi
+                // 公版（ops 0153）：上傳完直接辨識；沒辨識成功的可以再按一次
+                ? (_reading
+                    ? (Icons.hourglass_top_outlined, AppColors.muted, '照片辨識中…', '通常不到一分鐘，請先不要離開這一頁')
+                    : (
+                        Icons.document_scanner_outlined,
+                        AppColors.primary,
+                        '照片還沒辨識',
+                        (dr.message?.isNotEmpty ?? false) ? '${dr.message}　點這裡再試一次' : '點這裡開始辨識'
+                      ))
+                : (
+                    Icons.hourglass_top_outlined,
+                    AppColors.muted,
+                    '照片辨識中…',
+                    dr.message ?? '每小時處理一次，通常 1 小時內好，好了小鈴鐺會通知'
+                  );
+    final canRead = _photoApi && dr.isPending && !_reading;
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: SectionCard(
         child: InkWell(
-          onTap: dr.isReady ? () => _openDraft(d, dr) : null,
+          onTap: dr.isReady ? () => _openDraft(d, dr) : (canRead ? _readPhotos : null),
           child: Row(children: [
             Icon(icon, color: color),
             const SizedBox(width: 12),
@@ -499,6 +549,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               ]),
             ),
             if (dr.isReady) const Icon(Icons.chevron_right),
+            if (_photoApi && dr.isPending && _reading)
+              const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+            if (canRead) TextButton(onPressed: _readPhotos, child: const Text('開始辨識')),
           ]),
         ),
       ),

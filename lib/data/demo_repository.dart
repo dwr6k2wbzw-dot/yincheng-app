@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import '../config.dart';
 import 'booking_import.dart';
 import 'booking_profile.dart';
 import 'models.dart';
@@ -188,8 +189,8 @@ class DemoRepository implements Repository {
         if (!future || _demoOff.containsKey(key))
           for (final (i, _) in fulls.indexed) 'f$i': ShiftStats(shouldOff: _demoOff[key]?['f$i'] ?? 9, prevUnused: 3),
       },
-      const [],
-      null,
+      [...?_demoPhotos[key]],
+      _demoDrafts[key],
       ShiftOptions([..._markOpts]),
     );
   }
@@ -299,14 +300,56 @@ class DemoRepository implements Repository {
   Future<void> saveShiftStats(String storeId, String personId, DateTime month, ShiftStats s) async {
     if (s.shouldOff != null) _demoOff.putIfAbsent('${month.year}-${month.month}', () => {})[personId] = s.shouldOff!;
   }
+  // 示範：上傳的班表照片與辨識草稿（只存在記憶體）。公版那一份（SELF_SIGNUP）示範 api 模式：上傳完直接辨識
+  final _demoPhotos = <String, List<ShiftPhoto>>{};
+  final _demoDrafts = <String, ShiftDraft>{};
   @override
-  Future<void> uploadShiftPhoto(String storeId, DateTime month, Uint8List jpeg) async {}
+  Future<void> uploadShiftPhoto(String storeId, DateTime month, Uint8List jpeg) async {
+    final key = '${month.year}-${month.month}';
+    final list = _demoPhotos.putIfAbsent(key, () => []);
+    list.add(ShiftPhoto('ph${list.length + 1}', 'demo/schedules/$key-${list.length + 1}.jpg', DateTime.now()));
+    _demoDrafts[key] = ShiftDraft(id: 'dr-$key-${list.length}', status: 'pending', createdAt: DateTime.now(),
+        message: AppConfig.selfSignup ? '' : null);
+  }
   @override
-  Future<void> deleteShiftPhoto(String photoId) async {}
+  Future<String> shiftPhotoAiMode(String storeId) async => AppConfig.selfSignup ? 'api' : 'subscription';
   @override
-  Future<int> applyShiftDraft(ShiftDraft d) async => 0;
+  Future<int?> readShiftPhotos(String storeId, DateTime month) async {
+    final key = '${month.year}-${month.month}';
+    final old = _demoDrafts[key];
+    if (old == null || !old.isPending) throw Exception('message: 這個月沒有待辨識的照片,');
+    await Future<void>.delayed(const Duration(milliseconds: 2500));
+    final days = DateTime(month.year, month.month + 1, 0).day;
+    final entries = <String, Map<int, String>>{
+      '阿明': {for (var d = 1; d <= days; d++) d: d % 7 < 2 ? '休' : 'V'},
+      '小安': {for (var d = 1; d <= days; d++) d: (d + 3) % 7 < 2 ? '休' : 'V'},
+      '小魚': {for (var d = 1; d <= days; d++) if (d % 3 == 0) d: 'V'},
+    };
+    _demoDrafts[key] = ShiftDraft(
+      id: old.id,
+      status: 'ready',
+      createdAt: old.createdAt,
+      processedAtRaw: DateTime.now().toUtc().toIso8601String(),
+      photoCount: _demoPhotos[key]?.length ?? 1,
+      people: const [ShiftDraftPerson('阿明', 'full'), ShiftDraftPerson('小安', 'full'), ShiftDraftPerson('小魚', 'part')],
+      entries: entries,
+      warnings: const ['小魚 12 號看不清楚'],
+    );
+    return entries.values.fold<int>(0, (a, e) => a + e.length);
+  }
   @override
-  Future<void> dismissShiftDraft(String draftId) async {}
+  Future<void> deleteShiftPhoto(String photoId) async {
+    for (final e in _demoPhotos.entries) {
+      e.value.removeWhere((p) => p.id == photoId);
+    }
+  }
+  @override
+  Future<int> applyShiftDraft(ShiftDraft d) async {
+    _demoDrafts.removeWhere((_, v) => v.id == d.id);
+    return d.cellCount;
+  }
+  @override
+  Future<void> dismissShiftDraft(String draftId) async => _demoDrafts.removeWhere((_, v) => v.id == draftId);
   @override
   Future<String> shiftPhotoUrl(String path) async => '';
 
@@ -982,7 +1025,7 @@ class DemoRepository implements Repository {
   @override
   Future<SlipReading> readSlip(String storeId, String image) async {
     // 示範：假裝讀到一張酒商送貨單（第二行對不到庫存品項、第三行沒把握）
-    await Future<void>.delayed(const Duration(milliseconds: 1200));
+    await Future<void>.delayed(const Duration(milliseconds: 2500));
     final first = _products.where((p) => !_inactive.contains(p.id)).firstOrNull;
     return SlipReading(
       vendor: '大倉捷',

@@ -769,6 +769,37 @@ class SupabaseRepository implements Repository {
   }
 
   @override
+  Future<String> shiftPhotoAiMode(String storeId) async {
+    try {
+      final r = await _db.rpc('shift_photo_ai_status', params: {'p_store': storeId});
+      return r is Map && r['mode'] == 'api' ? 'api' : 'subscription';
+    } catch (_) {
+      return 'subscription';
+    }
+  }
+
+  @override
+  Future<int?> readShiftPhotos(String storeId, DateTime month) async {
+    try {
+      final r = await _db.functions.invoke('shift-photo-read',
+          body: {'store_id': storeId, 'month': _day.format(DateTime(month.year, month.month, 1))});
+      final data = r.data;
+      if (data is Map && data['ok'] == true) {
+        return data['status'] == 'ready' ? (data['cells'] as num?)?.toInt() ?? 0 : null;
+      }
+      throw Exception('message: ${data is Map && data['error'] is String ? data['error'] : '班表照片辨識暫時沒有回應，請稍後再試'},');
+    } on FunctionException catch (e) {
+      final d = e.details;
+      final msg = d is Map && d['error'] is String
+          ? d['error'] as String
+          : e.status == 404
+              ? '班表照片辨識還沒開通，請直接點格子排班'
+              : '班表照片辨識暫時沒有回應，請稍後再試';
+      throw Exception('message: $msg,');
+    }
+  }
+
+  @override
   Future<void> deleteShiftPhoto(String photoId) async {
     final rows = await _db.from('shift_month_files').delete().eq('id', photoId).select('id');
     if (rows.isEmpty) throw Exception('message: 沒有權限刪除這張照片（只有老闆、店長可以刪）,');
