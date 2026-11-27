@@ -437,6 +437,13 @@ class DemoRepository implements Repository {
   }
   @override
   Future<void> unlinkLineOwner() async => _lineLinks = 0;
+  // 0156：示範版——小城外假裝已經綁好群組，其他店還沒綁
+  @override
+  Future<bool> lineGroupBound(String storeId) async => storeId == 'xc';
+  @override
+  Future<LineBindCode> createLineGroupBindCode(String storeId) async =>
+      LineBindCode((DateTime.now().millisecondsSinceEpoch % 100000000).toString().padLeft(8, '0'),
+          DateTime.now().add(const Duration(minutes: 10)));
   @override
   Future<bool> lineNotifyEnabled(String storeId) async => _lineOn[storeId] ?? true;
   @override
