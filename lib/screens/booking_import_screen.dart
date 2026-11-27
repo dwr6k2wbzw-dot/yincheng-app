@@ -94,7 +94,12 @@ class _BookingImportScreenState extends State<BookingImportScreen> {
       if (lower.endsWith('.csv') || lower.endsWith('.txt')) {
         cells = parseCsv(utf8.decode(f.bytes, allowMalformed: true));
       } else if (lower.endsWith('.xlsx')) {
-        cells = readXlsxCells(f.bytes);
+        final x = readXlsxCells(f.bytes);
+        if (x.problem != null) {
+          setState(() => _fileProblem = x.problem);
+          return;
+        }
+        cells = x.cells;
       } else {
         throw const FormatException(
             '只看得懂 Excel（.xlsx）或 CSV 檔；舊的 .xls 請先另存成 .xlsx');

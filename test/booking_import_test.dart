@@ -1,4 +1,8 @@
 import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:archive/archive.dart';
+import 'package:excel/excel.dart';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yincheng_ops/data/booking_import.dart';
@@ -14,6 +18,19 @@ void main() {
       expect(normDate('2026年12月24日'), '2026-12-24');
       expect(normDate('2026-12-24 19:30'), '2026-12-24');
       expect(normDate('12/24'), '12/24', reason: '看不懂的照原樣交給資料庫');
+      expect(normDate('2026-12-24T19:30:00'), '2026-12-24');
+    });
+    test('日之後多了字不能被截掉（照原樣交給資料庫）', () {
+      expect(normDate('2026-12-240'), '2026-12-240');
+      expect(normDate('2026/12/24號'), '2026/12/24號');
+      expect(normDate('2026-12-24 備註'), '2026-12-24 備註');
+      expect(normDate('2026-12-2419:30'), '2026-12-2419:30');
+    });
+    test('Excel 的日期序號、時間小數（公式格存的計算結果）', () {
+      expect(normDate('46010'), '2025-12-19');
+      expect(normDate('12345'), '12345', reason: '不像日期的數字照原樣');
+      expect(normTime('0.8125'), '19:30');
+      expect(normTime('.5'), '12:00');
     });
     test('時間各種寫法都換成 HH:mm', () {
       expect(normTime('19:30'), '19:30');
@@ -154,7 +171,7 @@ void main() {
   group('Excel', () {
     test('範本讀回來：表頭、兩列範例都看得懂', () {
       final t = readImportTable(
-          readXlsxCells(buildImportTemplate(today: DateTime(2026, 11, 27))));
+          readXlsxCells(buildImportTemplate(today: DateTime(2026, 11, 27))).cells);
       expect(t.problem, isNull);
       expect(t.rows.length, 2);
       expect([t.rows[0].date, t.rows[0].time, t.rows[0].party, t.rows[0].lang],
@@ -183,13 +200,54 @@ void main() {
         r('a', DateTime(2026, 12, 1), '20:00', status: 'cancelled', batch: 'x'),
         r('c', DateTime(2026, 12, 1), '18:00', status: 'no_show'),
       ]);
-      final cells = readXlsxCells(bytes);
+      final cells = readXlsxCells(bytes).cells;
       expect(cells.first.take(3), ['日期', '時間', '人數']);
       expect([for (final row in cells.skip(1)) row[3]], ['c', 'a', 'b']);
       expect(cells[1][7], '未到');
       expect(cells[2].sublist(7, 9), ['已取消', '匯入']);
       expect(cells[3][8], '網路');
       expect(cells[1][8], '電話');
+    });
+    test('公式格：有存計算結果就用結果；沒有就說是哪一格，不默默變空白', () {
+      Uint8List build() {
+        final e = Excel.createExcel();
+        final sh = e['Sheet1'];
+        for (final (i, h) in ['日期', '時間', '人數', '姓名'].indexed) {
+          sh.updateCell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0), TextCellValue(h));
+        }
+        sh.updateCell(CellIndex.indexByString('A2'), const FormulaCellValue('TODAY()+7'));
+        sh.updateCell(CellIndex.indexByString('B2'), const FormulaCellValue('"19:"&"30"'));
+        sh.updateCell(CellIndex.indexByString('C2'), const FormulaCellValue('1+1'));
+        sh.updateCell(CellIndex.indexByString('D2'), TextCellValue('王'));
+        return Uint8List.fromList(e.save()!);
+      }
+
+      // 套件存檔時公式格沒有結果（<v></v>）＝像沒算過的檔案
+      final noCache = readXlsxCells(build());
+      expect(noCache.problem, '第 2 列 A 欄是公式，請先複製後「貼上值」再匯入');
+
+      // 模擬 Excel 存過的檔案：每一格都有存結果（日期是序號、文字公式 t="str"）
+      final zip = ZipDecoder().decodeBytes(build());
+      final out = Archive();
+      for (final f in zip.files) {
+        var bytes = f.content as List<int>;
+        if (f.name.startsWith('xl/worksheets/')) {
+          var x = utf8.decode(bytes);
+          x = x
+              .replaceAll('<f>TODAY()+7</f><v></v>', '<f>TODAY()+7</f><v>46010</v>')
+              .replaceAllMapped(RegExp(r'<c r="B2"([^>]*)><f>([^<]*)</f><v></v>'), (m) => '<c r="B2"${m[1]} t="str"><f>${m[2]}</f><v>19:30</v>')
+              .replaceAll('<f>1+1</f><v></v>', '<f>1+1</f><v>2</v>');
+          bytes = utf8.encode(x);
+        }
+        out.addFile(ArchiveFile(f.name, bytes.length, bytes));
+      }
+      final cached = readXlsxCells(Uint8List.fromList(ZipEncoder().encode(out)!));
+      expect(cached.problem, isNull);
+      final t = readImportTable(cached.cells);
+      expect([t.rows.single.date, t.rows.single.time, t.rows.single.party, t.rows.single.name], ['2025-12-19', '19:30', '2', '王']);
+    });
+    test('欄位代號', () {
+      expect([columnLetter(0), columnLetter(25), columnLetter(26), columnLetter(27)], ['A', 'Z', 'AA', 'AB']);
     });
     test('匯出檔名', () {
       expect(reservationsXlsxName('隱城', now: DateTime(2026, 11, 27)),

@@ -205,8 +205,9 @@ class _ReservationsScreenState extends State<ReservationsScreen> with WidgetsBin
                       if (changed == true) _reload();
                     },
                   ),
-                // 公版階段 2 第 6 步（ops 0148）：從舊系統匯入未來訂位、匯出全部訂位（老闆、店長）
-                if (settings != null && widget.membership.isManager)
+                // 公版階段 2 第 6 步（ops 0148）：從舊系統匯入未來訂位、匯出全部訂位（老闆、店長）。
+                // 老闆 2026-11-27：只給公版（自助註冊那一份），隱城／小城外這一份畫面不變
+                if (settings != null && widget.membership.isManager && AppConfig.selfSignup)
                   IconButton(
                     tooltip: '匯入、匯出訂位',
                     icon: const Icon(Icons.import_export),

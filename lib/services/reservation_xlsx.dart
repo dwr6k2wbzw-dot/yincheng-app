@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:archive/archive.dart';
 import 'package:excel/excel.dart';
 import 'package:intl/intl.dart';
 
@@ -73,38 +75,133 @@ Uint8List buildImportTemplate({DateTime? today}) {
   return Uint8List.fromList(excel.save()!);
 }
 
-/// 一格的文字：日期格 → 2026-12-24、時間格 → 19:30、數字去掉 .0
+/// 一格的文字：日期格 → 2026-12-24、時間格 → 19:30、數字去掉 .0。
+/// 公式格不在這裡處理（讀檔時另外查 Excel 存下來的計算結果，見 [readXlsxCells]）
 String cellText(CellValue? v) => switch (v) {
       null => '',
       TextCellValue() => v.value.toString().trim(),
       IntCellValue() => '${v.value}',
-      DoubleCellValue() => v.value == v.value.roundToDouble()
-          ? '${v.value.round()}'
-          : '${v.value}',
+      DoubleCellValue() => _num(v.value),
       DateCellValue() => '${v.year}-${_two(v.month)}-${_two(v.day)}',
       DateTimeCellValue() => (v.hour == 0 && v.minute == 0 && v.second == 0)
           ? '${v.year}-${_two(v.month)}-${_two(v.day)}'
-          : (v.year <= 1900
-              ? '${_two(v.hour)}:${_two(v.minute)}'
-              : '${v.year}-${_two(v.month)}-${_two(v.day)} ${_two(v.hour)}:${_two(v.minute)}'),
+          : (v.year <= 1900 ? '${_two(v.hour)}:${_two(v.minute)}' : '${v.year}-${_two(v.month)}-${_two(v.day)} ${_two(v.hour)}:${_two(v.minute)}'),
       TimeCellValue() => '${_two(v.hour)}:${_two(v.minute)}',
       BoolCellValue() => '${v.value}',
       FormulaCellValue() => '',
     };
 
-/// 讀 .xlsx：有「日期」那一欄的第一個工作表（範本是「訂位」）；沒有就讀第一個
-List<List<String>> readXlsxCells(Uint8List bytes) {
-  final excel = Excel.decodeBytes(bytes);
-  List<List<String>> cellsOf(Sheet s) => [
-        for (final row in s.rows) [for (final c in row) cellText(c?.value)]
-      ];
-  List<List<String>>? first;
-  for (final name in excel.tables.keys) {
-    final cells = cellsOf(excel.tables[name]!);
-    first ??= cells;
-    if (readImportTable(cells).problem == null) return cells;
+String _num(double d) => d == d.roundToDouble() ? '${d.round()}' : '$d';
+
+/// 欄位代號：0 → A、25 → Z、26 → AA
+String columnLetter(int c) {
+  var n = c + 1, out = '';
+  while (n > 0) {
+    final r = (n - 1) % 26;
+    out = String.fromCharCode(65 + r) + out;
+    n = (n - 1) ~/ 26;
   }
-  return first ?? const [];
+  return out;
+}
+
+/// 讀 .xlsx 的結果：每一格的文字；有看不懂的公式格時 problem 說是哪一格
+class XlsxCells {
+  final List<List<String>> cells;
+  final String? problem;
+  const XlsxCells(this.cells, [this.problem]);
+}
+
+String _unescape(String s) => s
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>')
+    .replaceAll('&quot;', '"')
+    .replaceAll('&apos;', "'")
+    .replaceAll('&amp;', '&');
+
+/// 公式格在檔案裡存的計算結果（Excel、Google 試算表存檔時都會存）：工作表名稱 → {A1 → 結果}。
+/// 試算表套件讀公式格時只給公式、丟掉結果，所以直接看檔案內容。讀不到就回空的（那些格會被當成問題）。
+Map<String, Map<String, String>> _formulaCache(Uint8List bytes) {
+  final out = <String, Map<String, String>>{};
+  try {
+    final zip = ZipDecoder().decodeBytes(bytes);
+    String? text(String name) {
+      final f = zip.findFile(name);
+      return f == null ? null : utf8.decode(f.content as List<int>, allowMalformed: true);
+    }
+
+    final wb = text('xl/workbook.xml'), rels = text('xl/_rels/workbook.xml.rels');
+    if (wb == null || rels == null) return out;
+    final target = <String, String>{
+      for (final m in RegExp(r'<Relationship\b[^>]*>').allMatches(rels))
+        if (RegExp(r'Id="([^"]+)"').firstMatch(m[0]!) case final id?)
+          if (RegExp(r'Target="([^"]+)"').firstMatch(m[0]!) case final t?) id[1]!: t[1]!,
+    };
+    for (final m in RegExp(r'<sheet\b[^>]*>').allMatches(wb)) {
+      final name = RegExp(r'name="([^"]*)"').firstMatch(m[0]!)?[1];
+      final rid = RegExp(r'r:id="([^"]+)"').firstMatch(m[0]!)?[1];
+      var path = target[rid];
+      if (name == null || path == null) continue;
+      path = path.startsWith('/') ? path.substring(1) : 'xl/$path';
+      final xml = text(path);
+      if (xml == null) continue;
+      final cache = <String, String>{};
+      for (final c in RegExp(r'<c\b([^>]*?)(?:/>|>(.*?)</c>)', dotAll: true).allMatches(xml)) {
+        final body = c[2] ?? '';
+        if (!body.contains('<f')) continue;
+        final ref = RegExp(r'r="([A-Z]+\d+)"').firstMatch(c[1]!)?[1];
+        final v = RegExp(r'<v>(.*?)</v>', dotAll: true).firstMatch(body)?[1];
+        final type = RegExp(r't="([a-z]+)"').firstMatch(c[1]!)?[1];
+        // 沒有結果、結果是錯誤（#REF! 之類）、或數字格存了空的結果（沒算過）＝沒有結果
+        if (ref == null || v == null || type == 'e' || (v.isEmpty && type != 'str' && type != 'inlineStr')) continue;
+        final raw = _unescape(v);
+        cache[ref] = switch (type) {
+          'str' || 'inlineStr' => raw.trim(),
+          'b' => raw == '1' ? 'true' : 'false',
+          _ => double.tryParse(raw) == null ? raw.trim() : _num(double.parse(raw)),
+        };
+      }
+      out[_unescape(name)] = cache;
+    }
+  } catch (_) {
+    // 檔案結構跟預期不同：當作沒有結果
+  }
+  return out;
+}
+
+/// 讀 .xlsx：有「日期」那一欄的第一個工作表（範本是「訂位」）；沒有就讀第一個。
+/// 公式格用檔案裡存的計算結果；沒有結果的公式格不默默當成空白，回 problem 請人先「貼上值」。
+XlsxCells readXlsxCells(Uint8List bytes) {
+  final excel = Excel.decodeBytes(bytes);
+  Map<String, Map<String, String>>? cache;
+  XlsxCells read(String name) {
+    final rows = <List<String>>[];
+    String? problem;
+    final sheetRows = excel.tables[name]!.rows;
+    for (var r = 0; r < sheetRows.length; r++) {
+      final out = <String>[];
+      for (var c = 0; c < sheetRows[r].length; c++) {
+        final v = sheetRows[r][c]?.value;
+        if (v is FormulaCellValue) {
+          cache ??= _formulaCache(bytes);
+          final hit = cache![name]?['${columnLetter(c)}${r + 1}'];
+          if (hit == null) problem ??= '第 ${r + 1} 列 ${columnLetter(c)} 欄是公式，請先複製後「貼上值」再匯入';
+          out.add(hit ?? '');
+        } else {
+          out.add(cellText(v));
+        }
+      }
+      rows.add(out);
+    }
+    return XlsxCells(rows, problem);
+  }
+
+  XlsxCells? first;
+  for (final name in excel.tables.keys) {
+    final x = read(name);
+    first ??= x;
+    if (readImportTable(x.cells).problem == null) return x;
+  }
+  return first ?? const XlsxCells([]);
 }
 
 String _status(String s) => switch (s) {

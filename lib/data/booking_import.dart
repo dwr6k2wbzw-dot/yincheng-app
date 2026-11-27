@@ -118,15 +118,27 @@ String _two(int n) => n.toString().padLeft(2, '0');
 
 /// 2026/12/24、2026-12-24、2026.12.24、2026年12月24日、2026-12-24 19:30 → 2026-12-24；看不懂的照原樣交給資料庫（會回「日期看不懂」）
 String normDate(String s) {
-  final m = RegExp(r'^(\d{4})\s*[/\-.年]\s*(\d{1,2})\s*[/\-.月]\s*(\d{1,2})\s*日?')
-      .firstMatch(s.trim());
-  if (m == null) return s.trim();
-  return '${m[1]}-${_two(int.parse(m[2]!))}-${_two(int.parse(m[3]!))}';
+  final v = s.trim();
+  // 日之後只能是結尾，或空白／T 加時間（2026-12-240 不能變成 2026-12-24，照原樣交給資料庫說看不懂）
+  final m = RegExp(r'^(\d{4})\s*[/\-.年]\s*(\d{1,2})\s*[/\-.月]\s*(\d{1,2})\s*日?(?:[\sT]+\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?)?$')
+      .firstMatch(v);
+  if (m != null) return '${m[1]}-${_two(int.parse(m[2]!))}-${_two(int.parse(m[3]!))}';
+  // Excel 的日期序號（公式算出來的日期格，檔案裡存的是天數，例 46010）
+  final serial = RegExp(r'^\d{5}(?:\.\d+)?$').hasMatch(v) ? double.parse(v) : null;
+  if (serial != null && serial >= 36526 && serial < 73051) {
+    final d = DateTime.utc(1899, 12, 30).add(Duration(days: serial.floor()));
+    return '${d.year}-${_two(d.month)}-${_two(d.day)}';
+  }
+  return v;
 }
 
-/// 19:30、19:30:00、19：30、7:30 PM、晚上 7:30、1930 → 19:30；看不懂的照原樣
+/// 19:30、19:30:00、19：30、7:30 PM、晚上 7:30、1930、Excel 的時間（一天的幾分之幾，例 0.8125）→ 19:30；看不懂的照原樣
 String normTime(String s) {
   var t = s.trim().replaceAll('：', ':');
+  if (RegExp(r'^0?\.\d+$').hasMatch(t)) {
+    final mins = (double.parse(t) * 24 * 60).round();
+    if (mins < 24 * 60) return '${_two(mins ~/ 60)}:${_two(mins % 60)}';
+  }
   final pm = RegExp(r'(pm|下午|晚上)', caseSensitive: false).hasMatch(t);
   final am = RegExp(r'(am|上午|早上)', caseSensitive: false).hasMatch(t);
   t = t
