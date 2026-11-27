@@ -1378,6 +1378,54 @@ class DemoRepository implements Repository {
       return;
     }
   }
+  // 許願單（示範）：先放兩則平台已經回覆過的，新寫的狀態是「平台收到了」
+  final Map<String, List<PlatformWish>> _demoWishes = {};
+  List<PlatformWish> _wishesOf(String storeId) => _demoWishes.putIfAbsent(storeId, () {
+        final now = DateTime.now();
+        return [
+          PlatformWish(
+            id: 'pw-2',
+            title: '訂位頁可以讓客人選座位區',
+            body: '客人常問能不能坐吧台，希望訂位時就能選「吧台／沙發區」。\n\n為什麼需要：現在都要打電話來問，很花時間。',
+            authorName: '示範老闆',
+            status: PlatformWishStatus.planned,
+            reply: '收到，很多店也有一樣的需求，排進下個月的待辦。做好會再通知你。',
+            createdAt: now.subtract(const Duration(days: 3)),
+            repliedAt: now.subtract(const Duration(days: 1)),
+          ),
+          PlatformWish(
+            id: 'pw-1',
+            title: '盤點可以掃條碼',
+            body: '盤點時用手機掃酒瓶上的條碼，直接跳到那個品項。',
+            authorName: '示範店長',
+            status: PlatformWishStatus.done,
+            reply: '已經做好了：盤點畫面右上角多一個掃描按鈕。',
+            createdAt: now.subtract(const Duration(days: 20)),
+            repliedAt: now.subtract(const Duration(days: 6)),
+          ),
+        ];
+      });
+  @override
+  Future<List<PlatformWish>> platformWishes(String storeId) async => [..._wishesOf(storeId)];
+  @override
+  Future<String> createPlatformWish(String storeId, String title, String body) async {
+    final list = _wishesOf(storeId);
+    final err = validateWish(title, body, '');
+    if (err != null) throw Exception('message: $err,');
+    if (wishesThisMonth(list, toTaipei(DateTime.now())) >= platformWishMonthlyLimit) {
+      throw Exception('message: 這個月的許願單已經寫滿 $platformWishMonthlyLimit 則，下個月再寫,');
+    }
+    final id = 'pw-${++_seq}';
+    list.insert(0, PlatformWish(
+      id: id,
+      title: title.trim(),
+      body: body.trim(),
+      authorName: '示範老闆',
+      status: PlatformWishStatus.received,
+      createdAt: DateTime.now(),
+    ));
+    return id;
+  }
   @override
   Future<String> uploadBookingAsset(String storeId, String kind, Uint8List bytes, String contentType) async {
     final path = newBookingAssetPath(storeId.length == 36 ? storeId : '00000000-0000-4000-8000-000000000000', kind,

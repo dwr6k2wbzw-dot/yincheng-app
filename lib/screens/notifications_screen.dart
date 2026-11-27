@@ -10,6 +10,7 @@ import '../services/app_update.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'change_requests_screen.dart';
+import 'platform_wishes_screen.dart';
 import 'handover_screen.dart';
 import 'reservations_screen.dart';
 
@@ -143,6 +144,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         Navigator.of(context).push(MaterialPageRoute(
           builder: (_) => ChangeRequestsScreen(membership: widget.membership),
         ));
+      case 'platform_wish':
+        // 許願單（ops 0149）：平台回覆了
+        Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => PlatformWishesScreen(membership: widget.membership),
+        ));
     }
   }
 
@@ -152,6 +158,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         'schedule' => Icons.calendar_month_outlined,
         'reservation' => Icons.event_seat_outlined,
         'change_request' => Icons.auto_awesome,
+        'platform_wish' => Icons.lightbulb_outline,
         _ => Icons.notifications_outlined,
       };
 
