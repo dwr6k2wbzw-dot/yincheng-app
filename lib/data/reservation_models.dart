@@ -109,6 +109,10 @@ class ReservationSettings {
   }
 }
 
+/// 訂位設定要不要顯示「10 分鐘內最多幾筆網路訂位」（ops 0151）：只在公版（自助註冊那一份 App）顯示，
+/// 而且資料庫要已經有這一欄。不顯示時存檔也不送這個欄位。
+bool showBurstLimitField(ReservationSettings s, {required bool selfSignup}) => selfSignup && s.webBurstLimit != null;
+
 class Reservation {
   final String id;
   final DateTime date;

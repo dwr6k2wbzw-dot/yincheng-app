@@ -1314,6 +1314,8 @@ class _ReservationSettingsScreenState extends State<ReservationSettingsScreen> {
   late final _largeMax = TextEditingController(text: widget.settings.maxLargePerDay?.toString() ?? '');
   late final _noshow = TextEditingController(text: '${widget.settings.noshowBlockCount}');
   late final _burst = TextEditingController(text: '${widget.settings.webBurstLimit ?? 30}');
+  // 只在公版顯示（老闆 2026-11-27：隱城／小城外這一份畫面完全不變；沒顯示時存檔不送，資料庫維持 30）
+  bool get _showBurst => showBurstLimitField(widget.settings, selfSignup: AppConfig.selfSignup);
   late final Set<int> _closedDays = {...widget.settings.closedWeekdays};
   late final _party = TextEditingController(text: '${widget.settings.maxParty}');
   late final _days = TextEditingController(text: '${widget.settings.daysAhead}');
@@ -1414,7 +1416,7 @@ class _ReservationSettingsScreenState extends State<ReservationSettingsScreen> {
       return;
     }
     final burst = int.tryParse(_burst.text.trim());
-    if (widget.settings.webBurstLimit != null && (burst == null || burst < 5 || burst > 300)) {
+    if (_showBurst && (burst == null || burst < 5 || burst > 300)) {
       showMessage(context, '10 分鐘內最多幾筆網路訂位請填 5～300', error: true);
       return;
     }
@@ -1451,7 +1453,7 @@ class _ReservationSettingsScreenState extends State<ReservationSettingsScreen> {
         'max_large_groups_per_day': opt(_largeMax),
         'closed_weekdays': (_closedDays.toList()..sort()),
         'noshow_block_count': noshow,
-        if (widget.settings.webBurstLimit != null) 'web_burst_limit': burst,
+        if (_showBurst) 'web_burst_limit': burst,
         'max_party': party,
         'days_ahead': days,
         'contact_note': _contact.text.trim().isEmpty ? null : _contact.text.trim(),
@@ -1601,7 +1603,7 @@ class _ReservationSettingsScreenState extends State<ReservationSettingsScreen> {
               controller: _noshow,
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(labelText: '同一支電話未到幾次就不能線上訂位（0＝不擋）')),
-          if (widget.settings.webBurstLimit != null) ...[
+          if (_showBurst) ...[
             const SizedBox(height: 12),
             // ops 0151：每家店自己的流量上限（原本寫死 30）
             TextField(

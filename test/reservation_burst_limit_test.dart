@@ -15,4 +15,11 @@ void main() {
   test('資料庫還沒有這一欄（還沒套用 0151）：是 null，畫面不顯示、存檔不送', () {
     expect(ReservationSettings.fromRow(row()).webBurstLimit, isNull);
   });
+
+  test('只在公版顯示：隱城／小城外這一份（沒有自助註冊）不顯示', () {
+    final s = ReservationSettings.fromRow(row({'web_burst_limit': 30}));
+    expect(showBurstLimitField(s, selfSignup: false), isFalse);
+    expect(showBurstLimitField(s, selfSignup: true), isTrue);
+    expect(showBurstLimitField(ReservationSettings.fromRow(row()), selfSignup: true), isFalse);
+  });
 }
