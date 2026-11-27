@@ -102,6 +102,16 @@ class StaffingNeed {
   const StaffingNeed(this.need, [this.minFull = 0]);
 }
 
+/// 排班條件頁的每日人力：剛讀到的已存設定為主，[edited] 那幾天（還沒存的修改）保留 [local] 的值。
+/// 從 AI 助理回來時用：AI 改過、但本地沒動的那幾天要換成新的，不然按儲存會把 AI 的修改蓋回去（Codex P2）。
+Map<int, StaffingNeed> mergeStaffing(
+    Map<int, StaffingNeed> saved, Map<int, StaffingNeed> local, Set<int> edited) {
+  return {
+    for (var w = 1; w <= 7; w++)
+      w: (edited.contains(w) ? local[w] : null) ?? saved[w] ?? const StaffingNeed(3, 1)
+  };
+}
+
 /// 一個月的排班設定：條件、人力、員工填的想休／可上
 class ShiftPlanSetup {
   final Map<int, StaffingNeed> staffing; // 星期（1～7）→ 人力

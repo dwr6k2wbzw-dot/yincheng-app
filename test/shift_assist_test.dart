@@ -2,6 +2,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yincheng_ops/data/booking_assist.dart';
 import 'package:yincheng_ops/data/demo_repository.dart';
+import 'package:yincheng_ops/data/shift_planner.dart';
 
 void main() {
   group('AssistChange 顯示（排班）', () {
@@ -85,6 +86,22 @@ void main() {
       final r = await DemoRepository().askShiftAssistant('yc', '幫我把阿凱的時薪調高', const []);
       expect(r.changes, isEmpty);
       expect(r.reply, contains('示範版只認得幾種說法'));
+    });
+  });
+
+  group('從 AI 助理回來時合併每日人力（Codex P2）', () {
+    test('本地改過的天保留、其他天換成已存的（AI 剛改的那天不會被蓋回去）', () {
+      const saved = {1: StaffingNeed(3, 1), 5: StaffingNeed(6, 2)}; // AI 把週五改成 6
+      const local = {1: StaffingNeed(4, 1), 5: StaffingNeed(4, 1)}; // 本地只改了週一
+      final m = mergeStaffing(saved, local, {1});
+      expect(m[1]!.need, 4, reason: '週一還沒存的修改保留');
+      expect(m[5]!.need, 6, reason: '週五換成 AI 存好的值');
+      expect(m[5]!.minFull, 2);
+      expect(m[3]!.need, 3, reason: '沒設定的天用預設');
+    });
+    test('沒有本地修改：全部照已存的', () {
+      final m = mergeStaffing(const {2: StaffingNeed(5, 0)}, const {2: StaffingNeed(9, 0)}, {});
+      expect(m[2]!.need, 5);
     });
   });
 }

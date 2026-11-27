@@ -567,7 +567,8 @@ class ShiftRulesScreen extends StatefulWidget {
 class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
   ShiftPlanSetup? _setup;
   Map<int, StaffingNeed> _staff = {};
-  bool _staffDirty = false;
+  final Set<int> _staffEdited = {}; // 還沒存的每日人力修改是哪幾天（星期）
+  bool get _staffDirty => _staffEdited.isNotEmpty;
   Object? _error;
 
   Repository get _repo => AppScope.of(context).repo;
@@ -580,16 +581,14 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
     if (_setup == null && _error == null) _load();
   }
 
-  Future<void> _load() async {
+  /// keepEdits：保留這幾天還沒存的人力修改，其他天換成剛讀到的（從 AI 助理回來時用，Codex P2）
+  Future<void> _load({bool keepEdits = false}) async {
     try {
       final s = await _repo.shiftPlanSetup(_store, widget.month);
       setState(() {
         _setup = s;
-        _staff = {
-          for (var w = 1; w <= 7; w++)
-            w: s.staffing[w] ?? const StaffingNeed(3, 1)
-        };
-        _staffDirty = false;
+        if (!keepEdits) _staffEdited.clear();
+        _staff = mergeStaffing(s.staffing, _staff, _staffEdited);
         _error = null;
       });
     } catch (e) {
@@ -1074,8 +1073,8 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
             onPressed: () async {
               await Navigator.of(context).push(MaterialPageRoute(
                   builder: (_) => ShiftAssistantScreen(membership: widget.membership)));
-              // 回來後重新讀設定（還沒存的每日人力修改先留著，不蓋掉）
-              if (mounted && !_staffDirty) _load();
+              // 回來後重新讀已存的設定；還沒存的每日人力只保留改過的那幾天（不然按儲存會把 AI 改的蓋回去）
+              if (mounted) _load(keepEdits: true);
             },
           ),
       ]),
@@ -1113,7 +1112,7 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
                                                   _staff[w]!
                                                       .minFull
                                                       .clamp(0, x));
-                                              _staffDirty = true;
+                                              _staffEdited.add(w);
                                             })),
                                   ),
                                   Expanded(
@@ -1125,7 +1124,7 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
                                         onChanged: (x) => setState(() {
                                               _staff[w] = StaffingNeed(
                                                   _staff[w]!.need, x);
-                                              _staffDirty = true;
+                                              _staffEdited.add(w);
                                             })),
                                   ),
                                 ]),
