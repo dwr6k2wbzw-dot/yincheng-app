@@ -92,26 +92,30 @@ class _StoreAiScreenState extends State<StoreAiScreen> {
       _busy = true;
       _formError = null;
     });
-    final r = await _repo.saveStoreAi(
-      _store,
-      _provider,
-      _model.text,
-      _key.text,
-    );
-    if (!mounted) return;
-    if (!r.ok) {
+    // 斷線等例外也要放開按鈕、把原因顯示在表單上（Codex P2：原本會一直卡在處理中）
+    try {
+      final r = await _repo.saveStoreAi(
+        _store,
+        _provider,
+        _model.text,
+        _key.text,
+      );
+      if (!mounted) return;
+      if (!r.ok) {
+        setState(() => _formError = r.error);
+        return;
+      }
+      _key.clear();
       setState(() {
-        _busy = false;
-        _formError = r.error;
+        _showKey = false;
+        _testNote = null;
       });
+    } catch (e) {
+      if (mounted) setState(() => _formError = friendlyError(e));
       return;
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
-    _key.clear();
-    setState(() {
-      _busy = false;
-      _showKey = false;
-      _testNote = null;
-    });
     await _load();
     if (mounted) {
       showMessage(context, '測試成功，已經改用你自己的 ${storeAiInfo(_provider).label}');
@@ -123,14 +127,20 @@ class _StoreAiScreenState extends State<StoreAiScreen> {
       _busy = true;
       _testNote = null;
     });
-    final r = await _repo.testStoreAi(_store);
-    if (!mounted) return;
-    setState(() {
-      _busy = false;
-      _testNote = r.ok ? null : r.error;
-    });
+    var ok = false;
+    try {
+      final r = await _repo.testStoreAi(_store);
+      if (!mounted) return;
+      ok = r.ok;
+      setState(() => _testNote = r.ok ? null : r.error);
+    } catch (e) {
+      if (mounted) setState(() => _testNote = friendlyError(e));
+      return;
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
     await _load();
-    if (mounted && r.ok) showMessage(context, '連線正常');
+    if (mounted && ok) showMessage(context, '連線正常');
   }
 
   Future<void> _clear() async {
@@ -156,17 +166,18 @@ class _StoreAiScreenState extends State<StoreAiScreen> {
     try {
       await _repo.clearStoreAi(_store);
       if (!mounted) return;
-      setState(() {
-        _busy = false;
-        _testNote = null;
-      });
-      await _load();
-      if (mounted) showMessage(context, '已經改回平台內建的 AI');
+      setState(() => _testNote = null);
     } catch (e) {
-      if (!mounted) return;
-      setState(() => _busy = false);
-      showMessage(context, friendlyError(e), error: true);
+      if (mounted) {
+        setState(() => _testNote = friendlyError(e));
+        showMessage(context, friendlyError(e), error: true);
+      }
+      return;
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
+    await _load();
+    if (mounted) showMessage(context, '已經改回平台內建的 AI');
   }
 
   @override
