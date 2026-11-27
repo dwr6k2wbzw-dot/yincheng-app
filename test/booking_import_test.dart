@@ -189,6 +189,13 @@ void main() {
           throwsA(isA<FormatException>().having((e) => e.message, 'message', contains('不是 UTF-8 編碼（可能是 Big5）'))));
       expect(decodeCsvBytes(Uint8List.fromList(utf8.encode('日期,姓名'))), '日期,姓名');
     });
+    test('引號開了沒收尾：不能把後面的列吞掉，說大約在第幾列', () {
+      expect(
+          () => parseCsv('日期,時間,人數,姓名,備註\n2026-12-24,19:00,2,王,ok\n2026-12-25,19:00,2,李,"靠窗\n2026-12-26,19:00,2,陳,\n2026-12-27,19:00,2,林,\n'),
+          throwsA(isA<FormatException>().having((e) => e.message, 'message', 'CSV 有一格的引號沒有收尾（大約在第 3 列），請檢查後再選一次')));
+      // 有收尾的多行格照常
+      expect(parseCsv('a,b\n"x\ny",z\n').length, 2);
+    });
     test('分號分隔', () {
       expect(parseCsv('日期;姓名\n2026-12-24;王')[1], ['2026-12-24', '王']);
     });

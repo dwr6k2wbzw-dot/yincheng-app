@@ -213,7 +213,7 @@ String normLang(String s) {
   return s.trim();
 }
 
-/// CSV（Excel 存的、Google 試算表下載的）：處理引號、BOM、\r\n
+/// CSV（Excel 存的、Google 試算表下載的）：處理引號、BOM、\r\n；引號沒收尾丟 FormatException（中文訊息）
 List<List<String>> parseCsv(String text) {
   var s = text.startsWith('﻿') ? text.substring(1) : text;
   // Excel 存成「CSV（分號分隔）」的檔案：第一列沒有逗號、有分號就用分號
@@ -223,6 +223,7 @@ List<List<String>> parseCsv(String text) {
   var row = <String>[];
   final cell = StringBuffer();
   var quoted = false;
+  var quoteRow = 0; // 引號開始的那一列（給人看的列號）
   for (var i = 0; i < s.length; i++) {
     final ch = s[i];
     if (quoted) {
@@ -238,6 +239,7 @@ List<List<String>> parseCsv(String text) {
       }
     } else if (ch == '"' && cell.isEmpty) {
       quoted = true;
+      quoteRow = rows.length + 1;
     } else if (ch == sep) {
       row.add(cell.toString());
       cell.clear();
@@ -250,6 +252,10 @@ List<List<String>> parseCsv(String text) {
     } else {
       cell.write(ch);
     }
+  }
+  // 引號開了沒收尾：後面所有列都會被吞進同一格、少掉訂位，不能默默匯入（Codex P2）
+  if (quoted) {
+    throw FormatException('CSV 有一格的引號沒有收尾（大約在第 $quoteRow 列），請檢查後再選一次');
   }
   if (cell.isNotEmpty || row.isNotEmpty) {
     row.add(cell.toString());
