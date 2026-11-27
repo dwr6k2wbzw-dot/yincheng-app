@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import '../config.dart';
 import 'booking_import.dart';
 import 'booking_profile.dart';
 import 'models.dart';
@@ -12,6 +13,8 @@ import 'person_names.dart';
 import 'purchase_items_math.dart';
 import 'repository.dart';
 import 'shift_links.dart';
+import 'shift_templates.dart';
+import 'store_features.dart';
 import '../services/clock.dart';
 
 /// 示範資料：不連線，數字全部是虛構的示範值（不是真實營收），只用來看畫面與操作流程。
@@ -474,8 +477,8 @@ class DemoRepository implements Repository {
               prevUnused: 3,
             ),
       },
-      const [],
-      null,
+      [...?_demoPhotos[key]],
+      _demoDrafts[key],
       ShiftOptions([..._markOpts]),
     );
   }
@@ -674,19 +677,56 @@ class DemoRepository implements Repository {
       _demoOff.putIfAbsent('${month.year}-${month.month}', () => {})[personId] =
           s.shouldOff!;
   }
-
+  // 示範：上傳的班表照片與辨識草稿（只存在記憶體）。公版那一份（SELF_SIGNUP）示範 api 模式：上傳完直接辨識
+  final _demoPhotos = <String, List<ShiftPhoto>>{};
+  final _demoDrafts = <String, ShiftDraft>{};
   @override
-  Future<void> uploadShiftPhoto(
-    String storeId,
-    DateTime month,
-    Uint8List jpeg,
-  ) async {}
+  Future<void> uploadShiftPhoto(String storeId, DateTime month, Uint8List jpeg) async {
+    final key = '${month.year}-${month.month}';
+    final list = _demoPhotos.putIfAbsent(key, () => []);
+    list.add(ShiftPhoto('ph${list.length + 1}', 'demo/schedules/$key-${list.length + 1}.jpg', DateTime.now()));
+    _demoDrafts[key] = ShiftDraft(id: 'dr-$key-${list.length}', status: 'pending', createdAt: DateTime.now(),
+        message: AppConfig.selfSignup ? '' : null);
+  }
   @override
-  Future<void> deleteShiftPhoto(String photoId) async {}
+  Future<String> shiftPhotoAiMode(String storeId) async => AppConfig.selfSignup ? 'api' : 'subscription';
   @override
-  Future<int> applyShiftDraft(ShiftDraft d) async => 0;
+  Future<int?> readShiftPhotos(String storeId, DateTime month) async {
+    final key = '${month.year}-${month.month}';
+    final old = _demoDrafts[key];
+    if (old == null || !old.isPending) throw Exception('message: 這個月沒有待辨識的照片,');
+    await Future<void>.delayed(const Duration(milliseconds: 2500));
+    final days = DateTime(month.year, month.month + 1, 0).day;
+    final entries = <String, Map<int, String>>{
+      '阿明': {for (var d = 1; d <= days; d++) d: d % 7 < 2 ? '休' : 'V'},
+      '小安': {for (var d = 1; d <= days; d++) d: (d + 3) % 7 < 2 ? '休' : 'V'},
+      '小魚': {for (var d = 1; d <= days; d++) if (d % 3 == 0) d: 'V'},
+    };
+    _demoDrafts[key] = ShiftDraft(
+      id: old.id,
+      status: 'ready',
+      createdAt: old.createdAt,
+      processedAtRaw: DateTime.now().toUtc().toIso8601String(),
+      photoCount: _demoPhotos[key]?.length ?? 1,
+      people: const [ShiftDraftPerson('阿明', 'full'), ShiftDraftPerson('小安', 'full'), ShiftDraftPerson('小魚', 'part')],
+      entries: entries,
+      warnings: const ['小魚 12 號看不清楚'],
+    );
+    return entries.values.fold<int>(0, (a, e) => a + e.length);
+  }
   @override
-  Future<void> dismissShiftDraft(String draftId) async {}
+  Future<void> deleteShiftPhoto(String photoId) async {
+    for (final e in _demoPhotos.entries) {
+      e.value.removeWhere((p) => p.id == photoId);
+    }
+  }
+  @override
+  Future<int> applyShiftDraft(ShiftDraft d) async {
+    _demoDrafts.removeWhere((_, v) => v.id == d.id);
+    return d.cellCount;
+  }
+  @override
+  Future<void> dismissShiftDraft(String draftId) async => _demoDrafts.removeWhere((_, v) => v.id == draftId);
   @override
   Future<String> shiftPhotoUrl(String path) async => '';
 
@@ -955,6 +995,13 @@ class DemoRepository implements Repository {
 
   @override
   Future<void> unlinkLineOwner() async => _lineLinks = 0;
+  // 0156：示範版——小城外假裝已經綁好群組，其他店還沒綁
+  @override
+  Future<bool> lineGroupBound(String storeId) async => storeId == 'xc';
+  @override
+  Future<LineBindCode> createLineGroupBindCode(String storeId) async =>
+      LineBindCode((DateTime.now().millisecondsSinceEpoch % 100000000).toString().padLeft(8, '0'),
+          DateTime.now().add(const Duration(minutes: 10)));
   @override
   Future<bool> lineNotifyEnabled(String storeId) async =>
       _lineOn[storeId] ?? true;
@@ -1154,37 +1201,47 @@ class DemoRepository implements Repository {
   bool get _isNew => _email.contains('new');
   Membership? _newStore;
   @override
-  Future<String> signupCreateStore(String storeName, String displayName) async {
+  Future<String> signupCreateStore(String storeName, String displayName, {String? kind}) async {
     await Future<void>.delayed(const Duration(milliseconds: 400));
     if (const ['隱城', '小城外'].contains(storeName.trim())) {
       throw Exception('message: SIGNUP_TAKEN：這個店名已經有人用了，請換一個（例如加上地區或分店名）');
     }
-    _newStore = Membership(
-      storeId: 'demo-new',
-      storeName: storeName.trim(),
-      role: Role.owner,
-      displayName: displayName.trim(),
-    );
+    _newStore = Membership(storeId: 'demo-new', storeName: storeName.trim(), role: Role.owner, displayName: displayName.trim());
+    if (kind != null) {
+      // 示範：新店照範本帶入（同資料庫 0152：人力、班別／時段、設定，打開班表分頁）
+      _staffing = {};
+      _markOpts.clear();
+      await applyShiftTemplate('demo-new', kind);
+    }
     return 'demo-new';
   }
 
   @override
-  Future<String> createInvite(
-    List<String> storeIds,
-    Role role,
-    String name,
-  ) async {
+  Future<void> applyShiftTemplate(String storeId, String kind) async {
+    final t = shiftTemplates.where((x) => x.kind == kind).firstOrNull;
+    if (t == null) throw Exception('message: SHIFT_TEMPLATE_KIND：不認得這種店的類型');
+    if (_staffing.isNotEmpty || _markOpts.isNotEmpty) {
+      throw Exception('message: SHIFT_TEMPLATE_USED：這家店已經有班表或排班設定了，範本只能套在全新的店（請直接在排班條件裡改）');
+    }
+    _staffing = {for (var w = 1; w <= 7; w++) w: StaffingNeed(t.staffing[w - 1].$1, t.staffing[w - 1].$2)};
+    var n = 0;
+    for (final c in t.codes) {
+      n++;
+      _markOpts.add(ShiftMarkOption(id: 'tpl$n', kind: 'code', mark: c.$1, timeRange: c.$2, sortOrder: n));
+    }
+    for (final r in t.ranges) {
+      n++;
+      _markOpts.add(ShiftMarkOption(id: 'tpl$n', kind: 'range', mark: r, sortOrder: n));
+    }
+    _preferRun = kind == 'other' ? null : 5;
+    final name = _newStore?.storeId == storeId ? _newStore!.storeName : null;
+    if (name != null) StoreFeatures.remember(name, StoreFeatures(schedule: true, shiftCodes: t.codes.isNotEmpty));
+  }
+  @override
+  Future<String> createInvite(List<String> storeIds, Role role, String name) async {
     _onboardInvites++;
-    _demoInvites.insert(
-      0,
-      MemberInvite(
-        id: 'i${_demoInvites.length}',
-        displayName: name,
-        role: role,
-        createdAt: DateTime.now(),
-        expiresAt: DateTime.now().add(const Duration(days: 14)),
-      ),
-    );
+    _demoInvites.insert(0, MemberInvite(id: 'i${_demoInvites.length}', displayName: name, role: role,
+        createdAt: DateTime.now(), expiresAt: DateTime.now().add(const Duration(days: 14))));
     return 'DEMO2-CODE9';
   }
 
@@ -1910,7 +1967,7 @@ class DemoRepository implements Repository {
   @override
   Future<SlipReading> readSlip(String storeId, String image) async {
     // 示範：假裝讀到一張酒商送貨單（第二行對不到庫存品項、第三行沒把握）
-    await Future<void>.delayed(const Duration(milliseconds: 1200));
+    await Future<void>.delayed(const Duration(milliseconds: 2500));
     final first = _products.where((p) => !_inactive.contains(p.id)).firstOrNull;
     return SlipReading(
       vendor: '大倉捷',
@@ -2735,7 +2792,170 @@ class DemoRepository implements Repository {
       return;
     }
   }
+  // 排班的 AI 設定助理（示範，ops 0154）：不連 AI，只認得幾種說法，照真的流程走（建議 → 確認套用 → 可以改回去）
+  final Map<String, List<AssistRecord>> _demoShiftAssist = {};
+  static const _demoAssistPeople = [('f0', '阿明'), ('f1', '小安'), ('f2', '阿哲'), ('p0', '小魚'), ('p1', '阿凱'), ('p2', '芳芳'), ('p3', '小白'), ('p4', '阿樂')];
+  static const _wdNames = '一二三四五六日';
+  @override
+  Future<AssistReply> askShiftAssistant(String storeId, String message, List<AssistTurn> history) async {
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+    final changes = <Map<String, dynamic>>[];
+    final parts = <String>[];
+    Map<String, int>? staffRow(int w) {
+      final s = _staffing[w];
+      return s == null ? null : {'need': s.need, 'min_full': s.minFull};
+    }
 
+    final need = RegExp(r'要\s*([0-9]{1,2})\s*[個位]?人').firstMatch(message);
+    final days = RegExp(r'週([一二三四五六日])').allMatches(message).map((m) => _wdNames.indexOf(m.group(1)!) + 1).toSet();
+    if (need != null && days.isNotEmpty) {
+      final n = int.parse(need.group(1)!);
+      for (final w in days.toList()..sort()) {
+        final b = staffRow(w);
+        final full = b?['min_full'] ?? 0;
+        if (b?['need'] == n) continue;
+        changes.add({'op': 'staffing', 'weekday': w, 'before': b, 'after': {'need': n, 'min_full': full > n ? n : full}});
+      }
+      parts.add('${days.map((w) => '週${_wdNames[w - 1]}').join('、')}改成每天 $n 人');
+    } else if (need != null && RegExp(r'聖誕|跨年|([0-9]{1,2})/([0-9]{1,2})').hasMatch(message)) {
+      final now = DateTime.now();
+      final md = RegExp(r'([0-9]{1,2})/([0-9]{1,2})').firstMatch(message);
+      var d = message.contains('跨年')
+          ? DateTime(now.year, 12, 31)
+          : message.contains('聖誕')
+              ? DateTime(now.year, 12, 25)
+              : DateTime(now.year, int.parse(md!.group(1)!), int.parse(md.group(2)!));
+      if (d.isBefore(DateTime(now.year, now.month, now.day))) d = DateTime(d.year + 1, d.month, d.day);
+      final iso = d.toIso8601String().substring(0, 10);
+      final cur = _staffDays[d.day];
+      changes.add({'op': 'staffing_day', 'date': iso, 'before': cur == null ? null : {'need': cur}, 'after': {'need': int.parse(need.group(1)!)}});
+      parts.add('${AssistChange.dayLabel(iso)}要 ${need.group(1)} 人');
+    }
+    final perDay = RegExp(r'同一天最多\s*([0-9]{1,2})\s*[個位]').firstMatch(message);
+    if (perDay != null && int.parse(perDay.group(1)!) != _offPerDay) {
+      changes.add({'op': 'setting', 'field': 'off_per_day', 'before': _offPerDay, 'after': int.parse(perDay.group(1)!)});
+      parts.add('同一天最多 ${perDay.group(1)} 位正職指休');
+    }
+    final deadline = RegExp(r'([0-9]{1,2})\s*號前').firstMatch(message);
+    if (deadline != null) {
+      final v = int.parse(deadline.group(1)!);
+      if (v >= 1 && v <= 28 && v != _deadline) {
+        changes.add({'op': 'setting', 'field': 'request_deadline', 'before': _deadline, 'after': v});
+        parts.add('每月 $v 號前填好下個月的班');
+      }
+    }
+    final maxDays = RegExp(r'最多上\s*([0-9]{1,2})\s*天').firstMatch(message);
+    if (maxDays != null) {
+      for (final (id, nick) in _demoAssistPeople) {
+        final full = _demoFullNames[nick];
+        if (!message.contains(nick) && (full == null || !message.contains(full))) continue;
+        final v = int.parse(maxDays.group(1)!);
+        changes.add({'op': 'rule', 'person_id': id, 'person_name': full ?? nick, 'field': 'max_shifts', 'before': _shiftRules[id]?.maxShifts, 'after': v});
+        parts.add('${full ?? nick}每月最多上 $v 天');
+        break;
+      }
+    }
+    if (changes.isEmpty) {
+      return const AssistReply(
+          reply: '示範版只認得幾種說法，例如「週五週六要 5 個人」「聖誕節那天要 6 個人」「同一天最多 2 位指休」「每月 25 號前填好班」「阿凱每月最多上 12 天」。正式版可以用自己的話說。');
+    }
+    return AssistReply(reply: '好，我打算：${parts.join('；')}。請看下面確認。', changes: [for (final c in changes) AssistChange(c)]);
+  }
+
+  void _demoShiftAssistExec(List<Map<String, dynamic>> changes) {
+    Object? current(Map<String, dynamic> c) => switch (c['op']) {
+          'staffing' => _staffing[c['weekday']] == null
+              ? null
+              : {'need': _staffing[c['weekday']]!.need, 'min_full': _staffing[c['weekday']]!.minFull},
+          'staffing_day' => _staffDays[DateTime.parse(c['date'] as String).day] == null
+              ? null
+              : {'need': _staffDays[DateTime.parse(c['date'] as String).day]},
+          'setting' => switch (c['field']) {
+              'request_deadline' => _deadline,
+              'prefer_run' => _preferRun,
+              'off_per_day' => _offPerDay,
+              _ => _offMonthMax,
+            },
+          'rule' => switch (c['field']) {
+              'max_shifts' => _shiftRules[c['person_id']]?.maxShifts,
+              _ => null,
+            },
+          _ => null,
+        };
+    // 跟正式版一樣：先全部檢查「改前」跟現在一樣，一項不對整筆不動
+    for (final c in changes) {
+      if (jsonEncode(current(c)) != jsonEncode(c['before'])) {
+        throw Exception('message: SHIFT_ASSIST_STALE：設定在你按確認之前被改過了，這次沒有套用，請重新問一次,');
+      }
+    }
+    for (final c in changes) {
+      final a = c['after'];
+      switch (c['op']) {
+        case 'staffing':
+          final w = c['weekday'] as int;
+          a == null ? _staffing.remove(w) : _staffing = {..._staffing, w: StaffingNeed((a as Map)['need'] as int, a['min_full'] as int? ?? 0)};
+        case 'staffing_day':
+          final d = DateTime.parse(c['date'] as String).day;
+          a == null ? _staffDays.remove(d) : _staffDays[d] = (a as Map)['need'] as int;
+        case 'setting':
+          switch (c['field']) {
+            case 'request_deadline':
+              _deadline = a as int;
+            case 'prefer_run':
+              _preferRun = a as int?;
+            case 'off_per_day':
+              _offPerDay = a as int?;
+            default:
+              _offMonthMax = a as int?;
+          }
+        case 'rule':
+          final id = c['person_id'] as String;
+          final r = _shiftRules[id] ?? ShiftRule(personId: id);
+          _shiftRules[id] = ShiftRule(
+              personId: id,
+              planAsPart: r.planAsPart,
+              monthOff: r.monthOff,
+              minShifts: r.minShifts,
+              maxShifts: a as int?,
+              maxConsecutive: r.maxConsecutive,
+              noWeekdays: r.noWeekdays,
+              marks: r.marks,
+              weekdayMarks: r.weekdayMarks,
+              note: r.note);
+      }
+    }
+  }
+
+  @override
+  Future<void> applyShiftAssist(String storeId, String request, List<AssistChange> changes) async {
+    _demoShiftAssistExec([for (final c in changes) c.raw]);
+    (_demoShiftAssist[storeId] ??= []).insert(
+        0,
+        AssistRecord(
+            id: 'demo-s-${DateTime.now().microsecondsSinceEpoch}', appliedAt: DateTime.now(), request: request, changes: changes));
+  }
+
+  @override
+  Future<List<AssistRecord>> shiftAssistHistory(String storeId) async => [...?_demoShiftAssist[storeId]];
+
+  @override
+  Future<void> undoShiftAssist(String id) async {
+    for (final e in _demoShiftAssist.entries) {
+      final i = e.value.indexWhere((r) => r.id == id);
+      if (i < 0) continue;
+      final r = e.value[i];
+      if (r.undoneAt != null) throw Exception('message: 這筆修改已經改回去了,');
+      try {
+        _demoShiftAssistExec([
+          for (final c in r.changes.reversed) {...c.raw, 'before': c.raw['after'], 'after': c.raw['before']},
+        ]);
+      } catch (_) {
+        throw Exception('message: SHIFT_ASSIST_STALE：這筆修改之後又被改過，不能直接改回去，請到排班條件手動調整,');
+      }
+      e.value[i] = AssistRecord(id: r.id, appliedAt: r.appliedAt, request: r.request, changes: r.changes, undoneAt: DateTime.now());
+      return;
+    }
+  }
   // 許願單（示範）：先放兩則平台已經回覆過的，新寫的狀態是「平台收到了」
   final Map<String, List<PlatformWish>> _demoWishes = {};
   List<PlatformWish> _wishesOf(String storeId) =>

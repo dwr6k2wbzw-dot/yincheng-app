@@ -8,8 +8,12 @@ import '../data/repository.dart';
 import '../data/schedule_health.dart';
 import '../data/shift_off_rules.dart';
 import '../data/shift_marks.dart';
+import '../data/shift_templates.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'shift_assistant_screen.dart';
+
+import 'shift_template_picker.dart';
 
 part 'shift_auto_plan_screen.dart';
 
@@ -565,8 +569,11 @@ class ShiftRulesScreen extends StatefulWidget {
 
 class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
   ShiftPlanSetup? _setup;
+  // 班別／時段清單：一開始用班表頁傳進來的，套用業態範本之後重讀（Codex P2）
+  late ShiftOptions? _options = widget.options;
   Map<int, StaffingNeed> _staff = {};
-  bool _staffDirty = false;
+  final Set<int> _staffEdited = {}; // 還沒存的每日人力修改是哪幾天（星期）
+  bool get _staffDirty => _staffEdited.isNotEmpty;
   Object? _error;
 
   Repository get _repo => AppScope.of(context).repo;
@@ -579,21 +586,72 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
     if (_setup == null && _error == null) _load();
   }
 
-  Future<void> _load() async {
+  /// keepEdits：保留這幾天還沒存的人力修改，其他天換成剛讀到的（從 AI 助理回來時用，Codex P2）
+  Future<void> _load({bool keepEdits = false}) async {
     try {
       final s = await _repo.shiftPlanSetup(_store, widget.month);
       setState(() {
         _setup = s;
-        _staff = {
-          for (var w = 1; w <= 7; w++)
-            w: s.staffing[w] ?? const StaffingNeed(3, 1)
-        };
-        _staffDirty = false;
+        if (!keepEdits) _staffEdited.clear();
+        _staff = mergeStaffing(s.staffing, _staff, _staffEdited);
         _error = null;
       });
     } catch (e) {
       setState(() => _error = e);
     }
+  }
+
+  Future<void> _applyTemplate() async {
+    var kind = defaultShiftTemplate;
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (c) => StatefulBuilder(
+        builder: (c, set) => SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              const Text('套用業態範本', style: TextStyle(fontSize: AppType.heading, fontWeight: AppFont.heading)),
+              const SizedBox(height: 4),
+              Text('帶入這類店常見的每天人數、班別和時段，套完可以再改。只能套一次。',
+                  style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+              const SizedBox(height: 12),
+              ShiftTemplatePicker(selected: kind, onChanged: (k) => set(() => kind = k)),
+              const SizedBox(height: 8),
+              FilledButton(
+                onPressed: () => Navigator.pop(c, true),
+                style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+                child: const Text('套用'),
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await _repo.applyShiftTemplate(_store, kind);
+      await _refreshAfterTemplate();
+      if (mounted) {
+        showMessage(context, '已套用「${shiftTemplates.firstWhere((t) => t.kind == kind).label}」範本，班別／時段也一起帶入了');
+      }
+      _load();
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+    }
+  }
+
+  /// 套用範本會新增班別、打開班別代碼的開關：重讀班別清單和成員資格（成員資格會一起記下功能開關），
+  /// 不然點人設排班條件時還是空的班別、預設記號也還是 V（Codex P2）。讀不到就留原本的，畫面照常。
+  Future<void> _refreshAfterTemplate() async {
+    try {
+      await _repo.myMemberships();
+    } catch (_) {}
+    try {
+      final m = await _repo.shiftMonth(_store, widget.month);
+      if (mounted) setState(() => _options = m.options);
+    } catch (_) {}
   }
 
   Future<void> _saveStaff() async {
@@ -689,7 +747,7 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
             storeName: _storeName,
             storeId: _store,
             repo: _repo,
-            options: widget.options)));
+            options: _options)));
     if (saved == true) _load();
   }
 
@@ -1064,7 +1122,20 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('排班條件')),
+      appBar: AppBar(title: const Text('排班條件'), actions: [
+        // ops 0154：用講的改排班設定，只在公版出現（隱城／小城外這一份畫面不變）
+        if (shiftAssistantVisible && widget.membership.isManager)
+          IconButton(
+            tooltip: '用講的改排班設定（AI）',
+            icon: const Icon(Icons.auto_awesome_outlined),
+            onPressed: () async {
+              await Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => ShiftAssistantScreen(membership: widget.membership)));
+              // 回來後重新讀已存的設定；還沒存的每日人力只保留改過的那幾天（不然按儲存會把 AI 改的蓋回去）
+              if (mounted) _load(keepEdits: true);
+            },
+          ),
+      ]),
       body: _error != null
           ? ErrorView(message: friendlyError(_error!), onRetry: _load)
           : _setup == null
@@ -1072,6 +1143,14 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
               : ListView(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
                   children: [
+                      // ops 0152：全新的店（還沒有人力、也沒有班別）可以一鍵帶入業態範本；只有公版、只有老闆
+                      if (showApplyTemplate(
+                          isOwner: widget.membership.role == Role.owner,
+                          staffingEmpty: _setup!.staffing.isEmpty,
+                          optionsEmpty: _options?.items.isEmpty ?? true)) ...[
+                        _ApplyTemplateCard(onTap: _applyTemplate),
+                        const SizedBox(height: 10),
+                      ],
                       SectionCard(
                         child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1099,7 +1178,7 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
                                                   _staff[w]!
                                                       .minFull
                                                       .clamp(0, x));
-                                              _staffDirty = true;
+                                              _staffEdited.add(w);
                                             })),
                                   ),
                                   Expanded(
@@ -1111,7 +1190,7 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
                                         onChanged: (x) => setState(() {
                                               _staff[w] = StaffingNeed(
                                                   _staff[w]!.need, x);
-                                              _staffDirty = true;
+                                              _staffEdited.add(w);
                                             })),
                                   ),
                                 ]),
@@ -1790,6 +1869,36 @@ class _ShiftMarkOptionsScreenState extends State<ShiftMarkOptionsScreen> {
                               ],
                               code: false),
                         ]),
+    );
+  }
+}
+
+/// 排班條件頁最上面：全新的店一鍵帶入業態範本（ops 0152，只有公版）
+class _ApplyTemplateCard extends StatelessWidget {
+  const _ApplyTemplateCard({required this.onTap});
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) {
+    return SectionCard(
+      child: InkWell(
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 56),
+          child: Row(children: [
+            Icon(Icons.auto_awesome_outlined, color: AppColors.primary),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('還沒設排班？先套用業態範本', style: TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Text('酒吧、咖啡廳、餐廳的常見人數和班別，一次帶入',
+                    style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+              ]),
+            ),
+            const Icon(Icons.chevron_right),
+          ]),
+        ),
+      ),
     );
   }
 }
