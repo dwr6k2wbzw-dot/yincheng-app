@@ -11,6 +11,7 @@ import 'models.dart';
 import 'purchase_items_math.dart';
 import 'row_cache.dart';
 import 'repository.dart';
+import 'shift_links.dart';
 
 /// 透過 Supabase（PostgREST）讀寫。所有權限由資料庫的 RLS 與觸發器把關，App 端不做權限判斷以外的假設。
 class SupabaseRepository implements Repository {
@@ -1209,6 +1210,42 @@ class SupabaseRepository implements Repository {
     final rows = await _db.rpc('shift_account_candidates', params: {'p_store': storeId}) as List;
     return [for (final r in rows) ShiftAccountCandidate.fromRow(r as Map<String, dynamic>)];
   }
+
+  @override
+  Future<List<ShiftLinkStore>> shiftLinkStores(String storeId) async {
+    final mine = await myMemberships();
+    if (!mine.any((m) => m.storeId == storeId && m.role == Role.owner)) return const [];
+    var others = [for (final m in mine) if (m.role == Role.owner && m.storeId != storeId) m];
+    if (others.isEmpty) return const [];
+    // 只列同一個組織的店（資料庫也會擋）；讀不到組織就不篩，交給資料庫
+    try {
+      final rows = await _db.from('stores').select('id, org_id').inFilter('id', [storeId, ...others.map((m) => m.storeId)]);
+      final org = {for (final r in rows) r['id'] as String: r['org_id'] as String?};
+      if (org[storeId] != null) others = [for (final m in others) if (org[m.storeId] == org[storeId]) m];
+    } catch (_) {}
+    if (others.isEmpty) return const [];
+    final people = await _db
+        .from('shift_people')
+        .select()
+        .inFilter('store_id', others.map((m) => m.storeId).toList())
+        .order('sort_order')
+        .order('name');
+    return [
+      for (final m in others)
+        ShiftLinkStore(
+          storeId: m.storeId,
+          storeName: m.storeName,
+          people: [for (final r in people) if (r['store_id'] == m.storeId) ShiftPerson.fromRow(r)],
+        ),
+    ];
+  }
+
+  @override
+  Future<void> linkShiftPeople(String personId, String otherPersonId) =>
+      _db.rpc('shift_link_people', params: {'p_a': personId, 'p_b': otherPersonId});
+
+  @override
+  Future<void> unlinkShiftPerson(String personId) => _db.rpc('shift_unlink_person', params: {'p_person': personId});
 
   @override
   Future<String> shiftPhotoUrl(String path) => _db.storage.from('receipts').createSignedUrl(path, 3600);

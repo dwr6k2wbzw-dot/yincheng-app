@@ -9,6 +9,7 @@ import 'models.dart';
 import 'payroll.dart';
 import 'purchase_items_math.dart';
 import 'reservation_models.dart';
+import 'shift_links.dart';
 import 'shift_planner.dart';
 export 'attendance_models.dart';
 export 'booking_assist.dart';
@@ -184,6 +185,12 @@ abstract class Repository {
   /// 0113：老闆直接替班表人員指定 App 帳號（＝確認）；userId null＝解除
   Future<void> assignShiftAccount(String personId, String? userId);
   Future<List<ShiftAccountCandidate>> shiftAccountCandidates(String storeId);
+  /// 兩家店同一個人（0098）：我也是老闆、同一個組織的其他店，和那幾家店班表上的人（不是這家店的老闆＝空的）
+  Future<List<ShiftLinkStore>> shiftLinkStores(String storeId);
+  /// 連結兩家店的兩個人（shift_link_people；只有兩家都是老闆的人）
+  Future<void> linkShiftPeople(String personId, String otherPersonId);
+  /// 解除這個人的連結（shift_unlink_person；只剩一個人的連結資料庫會一起清掉）
+  Future<void> unlinkShiftPerson(String personId);
 
   // 自動排班（0073）
   /// 這個月的排班設定：每日人力、特別日子、截止日、排班條件（員工只讀得到自己的）、大家填的想休／可上
