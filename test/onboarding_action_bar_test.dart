@@ -53,7 +53,7 @@ void main() {
     expect(t.getRect(find.byType(FilledButton)).right, lessThanOrEqualTo(320));
   });
 
-  for (final w in [375.0, 390.0])
+  for (final w in [375.0, 390.0]) {
   testWidgets('一般手機寬度（${w.toInt()}）排成一列、不擠出畫面', (t) async {
     await pump(t, width: w);
     expect(t.takeException(), isNull);
@@ -62,4 +62,5 @@ void main() {
     expect((primary.center.dy - back.center.dy).abs(), lessThan(4));
     expect(primary.right, lessThanOrEqualTo(w));
   });
+  }
 }
