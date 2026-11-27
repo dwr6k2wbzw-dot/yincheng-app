@@ -14,6 +14,7 @@ import '../services/open_external.dart';
 import '../theme.dart';
 import '../widgets/auto_refresh.dart';
 import '../widgets/common.dart';
+import 'booking_assistant_screen.dart';
 import 'booking_page_screen.dart';
 import 'reservation_floor.dart';
 import 'reservation_timeline.dart';
@@ -1579,6 +1580,14 @@ class _ReservationSettingsScreenState extends State<ReservationSettingsScreen> {
                     ))),
             icon: const Icon(Icons.palette_outlined),
             label: const Text('訂位頁的樣子（logo、封面照、介紹、低消）'),
+          ),
+          const SizedBox(height: 8),
+          // 公版階段 2 第 7 步（ops 0147）：用講的改訂位設定；AI 只提出建議，老闆確認才改
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => BookingAssistantScreen(membership: widget.membership))),
+            icon: const Icon(Icons.auto_awesome_outlined),
+            label: const Text('用講的改訂位設定（AI）'),
           ),
           const SizedBox(height: 16),
           TextField(

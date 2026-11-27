@@ -1841,6 +1841,56 @@ class SupabaseRepository implements Repository {
   }
 
   @override
+  Future<AssistReply> askBookingAssistant(String storeId, String message, List<AssistTurn> history) async {
+    try {
+      final r = await _db.functions.invoke('booking-assistant', body: {
+        'store_id': storeId,
+        'message': message,
+        'history': [
+          for (final t in history.length > 6 ? history.sublist(history.length - 6) : history)
+            {'role': t.fromUser ? 'user' : 'assistant', 'text': t.text},
+        ],
+      });
+      final data = r.data;
+      if (data is Map && data['ok'] == true) return AssistReply.fromJson(Map<String, dynamic>.from(data));
+      throw Exception('message: ${data is Map && data['error'] is String ? data['error'] : 'AI 助理暫時沒有回應，請稍後再試'},');
+    } on FunctionException catch (e) {
+      final d = e.details;
+      final msg = d is Map && d['error'] is String
+          ? d['error'] as String
+          : e.status == 404
+              ? 'AI 助理還沒開通，請直接在訂位設定裡改'
+              : 'AI 助理暫時沒有回應，請稍後再試';
+      throw Exception('message: $msg,');
+    }
+  }
+
+  @override
+  Future<void> applyBookingAssist(String storeId, String request, List<AssistChange> changes) async {
+    await _db.rpc('booking_assist_apply', params: {
+      'p_store': storeId,
+      'p_request': request,
+      'p_changes': [for (final c in changes) c.raw],
+    });
+  }
+
+  @override
+  Future<List<AssistRecord>> bookingAssistHistory(String storeId) async {
+    final rows = await _db
+        .from('booking_assist_changes')
+        .select('id, applied_at, request, changes, undone_at')
+        .eq('store_id', storeId)
+        .order('applied_at', ascending: false)
+        .limit(20);
+    return [for (final r in rows) AssistRecord.fromRow(r)];
+  }
+
+  @override
+  Future<void> undoBookingAssist(String id) async {
+    await _db.rpc('booking_assist_undo', params: {'p_id': id});
+  }
+
+  @override
   Future<String> uploadBookingAsset(String storeId, String kind, Uint8List bytes, String contentType) async {
     final ext = switch (contentType) { 'image/png' => 'png', 'image/webp' => 'webp', _ => 'jpg' };
     final path = newBookingAssetPath(storeId, kind, ext);

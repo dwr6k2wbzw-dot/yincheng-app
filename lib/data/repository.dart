@@ -4,12 +4,14 @@ import 'dart:typed_data';
 import 'attendance_models.dart';
 import 'change_request_models.dart';
 import 'booking_profile.dart';
+import 'booking_assist.dart';
 import 'models.dart';
 import 'payroll.dart';
 import 'purchase_items_math.dart';
 import 'reservation_models.dart';
 import 'shift_planner.dart';
 export 'attendance_models.dart';
+export 'booking_assist.dart';
 export 'change_request_models.dart';
 export 'payroll.dart';
 export 'reservation_models.dart';
@@ -287,6 +289,15 @@ abstract class Repository {
   Future<String> uploadBookingAsset(String storeId, String kind, Uint8List bytes, String contentType);
   /// 刪掉沒在用的舊圖（失敗不影響畫面；訂位頁正在用的資料庫會擋）
   Future<void> deleteBookingAsset(String path);
+  // 訂位的 AI 設定助理（ops 0147；只有老闆）：AI 只提出建議，老闆按確認才套用、可以整筆改回去
+  /// 問 AI（Edge Function booking-assistant）；[history] 是前面幾則對話（最多 6 則）
+  Future<AssistReply> askBookingAssistant(String storeId, String message, List<AssistTurn> history);
+  /// 套用 AI 的建議（老闆自己的身分；問完之後設定被改過會整筆不套用）
+  Future<void> applyBookingAssist(String storeId, String request, List<AssistChange> changes);
+  /// 最近用 AI 改過的紀錄
+  Future<List<AssistRecord>> bookingAssistHistory(String storeId);
+  /// 整筆改回去（之後又被改過的不能改回去）
+  Future<void> undoBookingAssist(String id);
   Future<List<Reservation>> reservations(String storeId, DateTime from, DateTime to);
   Future<void> addReservation(String storeId,
       {required DateTime date, required String time, required int party, required String name, required String phone, String? email, String? note, List<String> tableIds = const []});
@@ -424,7 +435,7 @@ String friendlyError(Object e) {
   final s = e.toString();
   final m = RegExp(r'message: ([^,]+)').firstMatch(s);
   // 0113：資料庫擋下來的訊息前面有代碼（給 App 判斷用），顯示時拿掉
-  final msg = (m?.group(1) ?? s).replaceFirst(RegExp(r'^(SHIFT_BLOCKED|SHIFT_CODE_USED|SHIFT_UNDO_CONFLICT|SIGNUP_[A-Z]+)：'), '');
+  final msg = (m?.group(1) ?? s).replaceFirst(RegExp(r'^(SHIFT_BLOCKED|SHIFT_CODE_USED|SHIFT_UNDO_CONFLICT|SIGNUP_[A-Z]+|BOOKING_ASSIST_STALE)：'), '');
   if (msg.contains('duplicate key') && msg.contains('client_request')) return '這筆已經送出過了，不會重複新增。';
   if (msg.contains('row-level security')) return '沒有權限執行這個動作。';
   if (msg.contains('function public.payroll_')) return '資料庫還沒更新到薪資版本，請等老闆核准上線。';
