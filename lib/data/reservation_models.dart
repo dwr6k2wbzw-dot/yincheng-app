@@ -318,9 +318,14 @@ int minutesOf(String hhmm) {
   return int.parse(p[0]) * 60 + int.parse(p[1]);
 }
 
-/// 公開訂位頁網址
-// 各店專屬網址（分享到 LINE／IG 會出現店家照片的預覽卡；老闆 2026-10-18）；舊的 ?s= 網址照樣能用
-String reservationPageUrl(String slug) => 'https://dwr6k2wbzw-dot.github.io/yincheng-app/book/$slug/';
+/// 部署時有專屬資料夾（book/<代號>/，分享到 LINE／IG 會出現店家照片的預覽卡；老闆 2026-10-18）的店。
+/// 新店（公版）沒有專屬資料夾，連到 book/<代號>/ 會是不存在的頁面（Codex P2），一律用 book/?s=<代號>。
+const reservationDedicatedSlugs = {'yincheng', 'xcw'};
+
+/// 公開訂位頁網址（訂位管理的分享連結、開店精靈共用這一個）
+String reservationPageUrl(String slug) => reservationDedicatedSlugs.contains(slug)
+    ? 'https://dwr6k2wbzw-dot.github.io/yincheng-app/book/$slug/'
+    : 'https://dwr6k2wbzw-dot.github.io/yincheng-app/book/?s=${Uri.encodeQueryComponent(slug)}';
 
 
 /// 某一天的線上訂位上限（0052）

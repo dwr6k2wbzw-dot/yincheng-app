@@ -8,6 +8,7 @@ import 'booking_assist.dart';
 import 'booking_import.dart';
 import 'line_bind.dart';
 import 'models.dart';
+import 'onboarding.dart';
 import 'payroll.dart';
 import 'platform_wish.dart';
 import 'purchase_items_math.dart';
@@ -307,6 +308,18 @@ abstract class Repository {
   // 訂位頁的樣子（ops 0135／0145；只有老闆能改）
   /// 這家店的訂位頁資料；還沒建立過＝null
   Future<BookingProfile?> bookingProfile(String storeId);
+  // 開店精靈（ops 0155，公版）：新店建第一份訂位設定、看開店設定做到哪
+  Future<OnboardingStatus> onboardingStatus(String storeId);
+  /// 建好回訂位網址代號；這家店已經有訂位設定、代號有人用了、格式不對都會丟錯（訊息開頭 ONBOARD_…）
+  Future<String> setupOnlineBooking(String storeId,
+      {required String slug,
+      required String displayName,
+      String? address,
+      String? phone,
+      required List<String> slotTimes,
+      List<int> closedWeekdays = const [],
+      int? maxGroups,
+      int? maxGuests});
   /// 新增或更新（老闆）
   Future<void> saveBookingProfile(String storeId, BookingProfile p);
   /// 上傳 logo／封面照到公開檔案區，回傳路徑（{店的 id}/{kind}-xxxx.{ext}）。kind＝logo／hero
@@ -478,7 +491,7 @@ String friendlyError(Object e) {
   final s = e.toString();
   final m = RegExp(r'message: ([^,]+)').firstMatch(s);
   // 0113：資料庫擋下來的訊息前面有代碼（給 App 判斷用），顯示時拿掉
-  final msg = (m?.group(1) ?? s).replaceFirst(RegExp(r'^(SHIFT_BLOCKED|SHIFT_CODE_USED|SHIFT_UNDO_CONFLICT|SIGNUP_[A-Z]+|BOOKING_ASSIST_STALE|SHIFT_ASSIST_STALE)：'), '');
+  final msg = (m?.group(1) ?? s).replaceFirst(RegExp(r'^(SHIFT_BLOCKED|SHIFT_CODE_USED|SHIFT_UNDO_CONFLICT|SIGNUP_[A-Z]+|BOOKING_ASSIST_STALE|SHIFT_ASSIST_STALE|ONBOARD_[A-Z_]+)：'), '');
   if (msg.contains('duplicate key') && msg.contains('client_request')) return '這筆已經送出過了，不會重複新增。';
   if (msg.contains('row-level security')) return '沒有權限執行這個動作。';
   if (msg.contains('function public.payroll_')) return '資料庫還沒更新到薪資版本，請等老闆核准上線。';

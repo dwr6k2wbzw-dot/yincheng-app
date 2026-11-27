@@ -9,6 +9,7 @@ import '../config.dart';
 import 'booking_import.dart';
 import 'booking_profile.dart';
 import 'models.dart';
+import 'onboarding.dart';
 import 'purchase_items_math.dart';
 import 'row_cache.dart';
 import 'repository.dart';
@@ -1929,6 +1930,36 @@ class SupabaseRepository implements Repository {
   Future<BookingProfile?> bookingProfile(String storeId) async {
     final r = await _db.from('booking_profiles').select().eq('store_id', storeId).maybeSingle();
     return r == null ? null : BookingProfile.fromRow(r);
+  }
+
+  @override
+  Future<OnboardingStatus> onboardingStatus(String storeId) async {
+    final r = await _db.rpc('onboarding_status', params: {'p_store': storeId});
+    return OnboardingStatus.fromJson(Map<String, dynamic>.from(r as Map));
+  }
+
+  @override
+  Future<String> setupOnlineBooking(String storeId,
+      {required String slug,
+      required String displayName,
+      String? address,
+      String? phone,
+      required List<String> slotTimes,
+      List<int> closedWeekdays = const [],
+      int? maxGroups,
+      int? maxGuests}) async {
+    final r = await _db.rpc('onboarding_booking_setup', params: {
+      'p_store': storeId,
+      'p_slug': slug,
+      'p_display_name': displayName,
+      'p_address': address,
+      'p_phone': phone,
+      'p_slot_times': slotTimes,
+      'p_closed_weekdays': closedWeekdays,
+      'p_max_groups': maxGroups,
+      'p_max_guests': maxGuests,
+    });
+    return (r as Map)['slug'] as String;
   }
 
   @override

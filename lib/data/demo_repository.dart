@@ -1,4 +1,5 @@
 import 'shift_off_rules.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -7,6 +8,7 @@ import '../config.dart';
 import 'booking_import.dart';
 import 'booking_profile.dart';
 import 'models.dart';
+import 'onboarding.dart';
 import 'person_names.dart';
 import 'purchase_items_math.dart';
 import 'repository.dart';
@@ -27,16 +29,90 @@ class DemoRepository implements Repository {
 
   final _categories = [
     // 0048：可選只有 酒水／餐食／雜項；舊類別停用、顯示併入（與正式資料庫相同）
-    CostCategory.full('yc_drink', '酒水', null, costGroup: 'drink', inMiscRate: false),
-    CostCategory.full('yc_food', '餐食', null, costGroup: 'food', inMiscRate: false),
-    CostCategory.full('yc_misc', '雜項', null, costGroup: 'other', inMiscRate: true),
-    CostCategory.full('liquor_monthly', '月結酒商', null, costGroup: 'drink', inMiscRate: false, selectable: false, displayAs: 'yc_drink'),
-    CostCategory.full('liquor_cash', '現結酒商', null, costGroup: 'drink', inMiscRate: false, selectable: false, displayAs: 'yc_drink'),
-    CostCategory.full('fruit', '酒水副材料-德哥', null, costGroup: 'drink', inMiscRate: false, selectable: false, displayAs: 'yc_drink'),
-    CostCategory.full('ice', '酒水副材料-冰塊', null, costGroup: 'drink', inMiscRate: false, selectable: false, displayAs: 'yc_drink'),
-    CostCategory.full('bar_misc', '酒水副材料-雜項', null, costGroup: 'drink', inMiscRate: true, selectable: false, displayAs: 'yc_misc'),
-    CostCategory.full('food', '餐食進貨', null, costGroup: 'food', inMiscRate: false, selectable: false, displayAs: 'yc_food'),
-    CostCategory.full('petty_misc', '零用金-其他雜支', null, costGroup: 'other', inMiscRate: true, selectable: false, displayAs: 'yc_misc'),
+    CostCategory.full(
+      'yc_drink',
+      '酒水',
+      null,
+      costGroup: 'drink',
+      inMiscRate: false,
+    ),
+    CostCategory.full(
+      'yc_food',
+      '餐食',
+      null,
+      costGroup: 'food',
+      inMiscRate: false,
+    ),
+    CostCategory.full(
+      'yc_misc',
+      '雜項',
+      null,
+      costGroup: 'other',
+      inMiscRate: true,
+    ),
+    CostCategory.full(
+      'liquor_monthly',
+      '月結酒商',
+      null,
+      costGroup: 'drink',
+      inMiscRate: false,
+      selectable: false,
+      displayAs: 'yc_drink',
+    ),
+    CostCategory.full(
+      'liquor_cash',
+      '現結酒商',
+      null,
+      costGroup: 'drink',
+      inMiscRate: false,
+      selectable: false,
+      displayAs: 'yc_drink',
+    ),
+    CostCategory.full(
+      'fruit',
+      '酒水副材料-德哥',
+      null,
+      costGroup: 'drink',
+      inMiscRate: false,
+      selectable: false,
+      displayAs: 'yc_drink',
+    ),
+    CostCategory.full(
+      'ice',
+      '酒水副材料-冰塊',
+      null,
+      costGroup: 'drink',
+      inMiscRate: false,
+      selectable: false,
+      displayAs: 'yc_drink',
+    ),
+    CostCategory.full(
+      'bar_misc',
+      '酒水副材料-雜項',
+      null,
+      costGroup: 'drink',
+      inMiscRate: true,
+      selectable: false,
+      displayAs: 'yc_misc',
+    ),
+    CostCategory.full(
+      'food',
+      '餐食進貨',
+      null,
+      costGroup: 'food',
+      inMiscRate: false,
+      selectable: false,
+      displayAs: 'yc_food',
+    ),
+    CostCategory.full(
+      'petty_misc',
+      '零用金-其他雜支',
+      null,
+      costGroup: 'other',
+      inMiscRate: true,
+      selectable: false,
+      displayAs: 'yc_misc',
+    ),
   ];
   final _suppliers = [
     Supplier('s1', '示範酒商A', 'liquor_monthly'),
@@ -46,7 +122,14 @@ class DemoRepository implements Repository {
     Supplier('s5', '示範食材行', 'food'),
   ];
   final _products = [
-    Product('p1', "Hendrick's Gin", '酒水', '瓶', parLevel: 2, countCycle: 'daily'),
+    Product(
+      'p1',
+      "Hendrick's Gin",
+      '酒水',
+      '瓶',
+      parLevel: 2,
+      countCycle: 'daily',
+    ),
     Product('p2', 'Bombay Sapphire', '酒水', '瓶', countCycle: 'weekly'),
     Product('p3', 'Campari', '酒水', '瓶', parLevel: 1),
     Product('p4', 'Chartreuse', '酒水', '瓶'),
@@ -55,38 +138,184 @@ class DemoRepository implements Repository {
   ];
   // 示範：之前盤過的（幾天前、誰盤的）
   late final Map<String, LastCount> _demoLast = {
-    'p1': LastCount(1.4, _daysAgo(1), at: DateTime.now().subtract(const Duration(days: 1)), by: '示範正職'),
-    'p2': LastCount(3, _daysAgo(9), at: DateTime.now().subtract(const Duration(days: 9)), by: '示範店長'),
-    'p3': LastCount(0.6, _daysAgo(3), at: DateTime.now().subtract(const Duration(days: 3)), by: '示範正職'),
-    'p5': LastCount(34, _daysAgo(0), at: DateTime.now().subtract(const Duration(hours: 2)), by: '示範兼職'),
+    'p1': LastCount(
+      1.4,
+      _daysAgo(1),
+      at: DateTime.now().subtract(const Duration(days: 1)),
+      by: '示範正職',
+    ),
+    'p2': LastCount(
+      3,
+      _daysAgo(9),
+      at: DateTime.now().subtract(const Duration(days: 9)),
+      by: '示範店長',
+    ),
+    'p3': LastCount(
+      0.6,
+      _daysAgo(3),
+      at: DateTime.now().subtract(const Duration(days: 3)),
+      by: '示範正職',
+    ),
+    'p5': LastCount(
+      34,
+      _daysAgo(0),
+      at: DateTime.now().subtract(const Duration(hours: 2)),
+      by: '示範兼職',
+    ),
   };
   static DateTime _daysAgo(int n) {
     final t = DateTime.now().subtract(Duration(hours: 6, days: n));
     return DateTime(t.year, t.month, t.day);
   }
+
   late final List<Purchase> _purchases = [
-    Purchase(id: 'x1', purchaseDate: DateTime(2026, 9, 25), categoryCode: 'liquor_monthly', supplierName: '示範酒商', amount: 2000, paidBy: 'vendor', reconciled: true, source: 'import'),
-    Purchase(id: 'x2', purchaseDate: DateTime(2026, 9, 24), categoryCode: 'food', supplierName: null, memo: '示範食材', amount: 3000, paidBy: 'vendor', reconciled: true, source: 'import'),
-    Purchase(id: 'x3', purchaseDate: DateTime(2026, 9, 30), categoryCode: 'petty_misc', memo: '運費', amount: 300, paidBy: 'petty_cash', reconciled: false, source: 'import'),
+    Purchase(
+      id: 'x1',
+      purchaseDate: DateTime(2026, 9, 25),
+      categoryCode: 'liquor_monthly',
+      supplierName: '示範酒商',
+      amount: 2000,
+      paidBy: 'vendor',
+      reconciled: true,
+      source: 'import',
+    ),
+    Purchase(
+      id: 'x2',
+      purchaseDate: DateTime(2026, 9, 24),
+      categoryCode: 'food',
+      supplierName: null,
+      memo: '示範食材',
+      amount: 3000,
+      paidBy: 'vendor',
+      reconciled: true,
+      source: 'import',
+    ),
+    Purchase(
+      id: 'x3',
+      purchaseDate: DateTime(2026, 9, 30),
+      categoryCode: 'petty_misc',
+      memo: '運費',
+      amount: 300,
+      paidBy: 'petty_cash',
+      reconciled: false,
+      source: 'import',
+    ),
     // 月結廠商區塊的示範（同一類別多家廠商、同一家多筆）
-    Purchase(id: 'x4', purchaseDate: DateTime(2026, 9, 12), categoryCode: 'food', supplierName: '示範水果行', amount: 1200, paidBy: 'vendor', reconciled: true, source: 'import'),
-    Purchase(id: 'x5', purchaseDate: DateTime(2026, 9, 26), categoryCode: 'food', supplierName: '示範水果行', amount: 800, paidBy: 'vendor', reconciled: false, source: 'import'),
-    Purchase(id: 'x6', purchaseDate: DateTime(2026, 9, 18), categoryCode: 'liquor_monthly', supplierName: '示範酒商', amount: 5400, paidBy: 'vendor', reconciled: false, source: 'import'),
-    Purchase(id: 'x8', purchaseDate: DateTime(2026, 9, 20), categoryCode: 'liquor_monthly', supplierName: '示範酒商(退酒)', amount: -580, paidBy: 'vendor', reconciled: true, source: 'import'),
-    Purchase(id: 'x7', purchaseDate: DateTime(2026, 9, 20), categoryCode: 'food', supplierName: '示範肉品行', amount: 4600, paidBy: 'vendor', reconciled: false, source: 'import'),
+    Purchase(
+      id: 'x4',
+      purchaseDate: DateTime(2026, 9, 12),
+      categoryCode: 'food',
+      supplierName: '示範水果行',
+      amount: 1200,
+      paidBy: 'vendor',
+      reconciled: true,
+      source: 'import',
+    ),
+    Purchase(
+      id: 'x5',
+      purchaseDate: DateTime(2026, 9, 26),
+      categoryCode: 'food',
+      supplierName: '示範水果行',
+      amount: 800,
+      paidBy: 'vendor',
+      reconciled: false,
+      source: 'import',
+    ),
+    Purchase(
+      id: 'x6',
+      purchaseDate: DateTime(2026, 9, 18),
+      categoryCode: 'liquor_monthly',
+      supplierName: '示範酒商',
+      amount: 5400,
+      paidBy: 'vendor',
+      reconciled: false,
+      source: 'import',
+    ),
+    Purchase(
+      id: 'x8',
+      purchaseDate: DateTime(2026, 9, 20),
+      categoryCode: 'liquor_monthly',
+      supplierName: '示範酒商(退酒)',
+      amount: -580,
+      paidBy: 'vendor',
+      reconciled: true,
+      source: 'import',
+    ),
+    Purchase(
+      id: 'x7',
+      purchaseDate: DateTime(2026, 9, 20),
+      categoryCode: 'food',
+      supplierName: '示範肉品行',
+      amount: 4600,
+      paidBy: 'vendor',
+      reconciled: false,
+      source: 'import',
+    ),
     // 這個月的示範（依日期看每一筆、待確認用）
-    Purchase(id: 'y1', purchaseDate: _daysAgo(1), categoryCode: 'yc_drink', supplierName: '示範酒商A', memo: '示範正職', amount: 6300, paidBy: 'vendor', reconciled: false, source: 'app'),
-    Purchase(id: 'y2', purchaseDate: _daysAgo(1), categoryCode: 'yc_food', supplierName: '全聯 檸檬', memo: '示範正職', amount: 186, paidBy: 'petty_cash', reconciled: false, source: 'app', noReceipt: true),
-    Purchase(id: 'y3', purchaseDate: _daysAgo(4), categoryCode: 'yc_drink', supplierName: '示範酒商B', amount: 4200, paidBy: 'vendor', reconciled: true, source: 'import'),
-    Purchase(id: 'y4', purchaseDate: _daysAgo(5), categoryCode: 'yc_food', supplierName: '示範水果行', amount: 1260, paidBy: 'vendor', reconciled: false, source: 'import'),
-    Purchase(id: 'y5', purchaseDate: _daysAgo(9), categoryCode: 'yc_misc', supplierName: '衛生廚房用品', memo: '示範正職', amount: 628, paidBy: 'petty_cash', reconciled: false, source: 'app', excelCovered: true),
+    Purchase(
+      id: 'y1',
+      purchaseDate: _daysAgo(1),
+      categoryCode: 'yc_drink',
+      supplierName: '示範酒商A',
+      memo: '示範正職',
+      amount: 6300,
+      paidBy: 'vendor',
+      reconciled: false,
+      source: 'app',
+    ),
+    Purchase(
+      id: 'y2',
+      purchaseDate: _daysAgo(1),
+      categoryCode: 'yc_food',
+      supplierName: '全聯 檸檬',
+      memo: '示範正職',
+      amount: 186,
+      paidBy: 'petty_cash',
+      reconciled: false,
+      source: 'app',
+      noReceipt: true,
+    ),
+    Purchase(
+      id: 'y3',
+      purchaseDate: _daysAgo(4),
+      categoryCode: 'yc_drink',
+      supplierName: '示範酒商B',
+      amount: 4200,
+      paidBy: 'vendor',
+      reconciled: true,
+      source: 'import',
+    ),
+    Purchase(
+      id: 'y4',
+      purchaseDate: _daysAgo(5),
+      categoryCode: 'yc_food',
+      supplierName: '示範水果行',
+      amount: 1260,
+      paidBy: 'vendor',
+      reconciled: false,
+      source: 'import',
+    ),
+    Purchase(
+      id: 'y5',
+      purchaseDate: _daysAgo(9),
+      categoryCode: 'yc_misc',
+      supplierName: '衛生廚房用品',
+      memo: '示範正職',
+      amount: 628,
+      paidBy: 'petty_cash',
+      reconciled: false,
+      source: 'app',
+      excelCovered: true,
+    ),
   ];
   final _counts = <StockCount>[];
   final _lines = <String, Map<String, double>>{};
 
   bool get _isStaff => _email.contains('staff');
-  bool get _isManager => !_isStaff && _email.contains('manager'); // 示範店長：看不到自己那列（薪資第一列假裝是他）
-  bool get _isKiosk => _email.contains('kiosk'); // 示範打卡用帳號（兼職權限）：帳號含 kiosk（含 xc＝小城外）
+  bool get _isManager =>
+      !_isStaff && _email.contains('manager'); // 示範店長：看不到自己那列（薪資第一列假裝是他）
+  bool get _isKiosk =>
+      _email.contains('kiosk'); // 示範打卡用帳號（兼職權限）：帳號含 kiosk（含 xc＝小城外）
   bool get _kioskXc => _isKiosk && _email.contains('xc');
 
   @override
@@ -94,7 +323,8 @@ class DemoRepository implements Repository {
   @override
   bool get isSignedIn => _signedIn;
   @override
-  String? get currentUserId => _signedIn ? (_isKiosk ? 'demo-kiosk' : 'demo-user') : null;
+  String? get currentUserId =>
+      _signedIn ? (_isKiosk ? 'demo-kiosk' : 'demo-user') : null;
   @override
   String? get currentUserEmail => _email;
 
@@ -107,18 +337,40 @@ class DemoRepository implements Repository {
   }
 
   @override
-  Future<List<VendorSlip>> vendorSlips(String storeId, DateTime month) async => [
-        VendorSlip('v1', '示範酒商', 'D-001', DateTime(month.year, month.month, 1), 1300, null, [
-          VendorSlipLine(1, 'A01', '示範琴酒 700ML', 1, '瓶', 900, 900),
-          VendorSlipLine(2, 'A02', '示範蘇打水 24入', 1, '箱', 400, 400),
-        ])
+  Future<List<VendorSlip>> vendorSlips(String storeId, DateTime month) async =>
+      [
+        VendorSlip(
+            'v1',
+            '示範酒商',
+            'D-001',
+            DateTime(month.year, month.month, 1),
+            1300,
+            null,
+            [
+              VendorSlipLine(1, 'A01', '示範琴酒 700ML', 1, '瓶', 900, 900),
+              VendorSlipLine(2, 'A02', '示範蘇打水 24入', 1, '箱', 400, 400),
+            ],
+          )
           ..categoryCode = 'liquor_monthly'
           ..filer = 'Eason',
-        VendorSlip('v2', '示範食材行', 'F-002', DateTime(month.year, month.month, 2), 850, null, [
-          VendorSlipLine(1, null, '示範牛肉片', 2, '包', 425, 850),
-        ])
-          ..categoryCode = 'food',
-        VendorSlip('v3', '示範雜貨', 'M-003', DateTime(month.year, month.month, 3), 320, null, [])
+        VendorSlip(
+          'v2',
+          '示範食材行',
+          'F-002',
+          DateTime(month.year, month.month, 2),
+          850,
+          null,
+          [VendorSlipLine(1, null, '示範牛肉片', 2, '包', 425, 850)],
+        )..categoryCode = 'food',
+        VendorSlip(
+            'v3',
+            '示範雜貨',
+            'M-003',
+            DateTime(month.year, month.month, 3),
+            320,
+            null,
+            [],
+          )
           ..categoryCode = 'petty_misc'
           ..paidBy = 'petty_cash'
           ..filer = '小郭',
@@ -126,19 +378,32 @@ class DemoRepository implements Repository {
   @override
   Future<List<String>> failedSlipFiles(String storeId) async => [];
   @override
-  Future<String> saveVendorSlip(String storeId, VendorSlip slip) async => slip.id.isEmpty ? 'v-new' : slip.id;
+  Future<String> saveVendorSlip(String storeId, VendorSlip slip) async =>
+      slip.id.isEmpty ? 'v-new' : slip.id;
   @override
   Future<void> deleteVendorSlip(String slipId) async {}
 
   @override
-  Future<List<String>> excelVendorNames(String storeId) async => ['示範酒商A', '示範酒商B', '示範水果行'];
+  Future<List<String>> excelVendorNames(String storeId) async => [
+    '示範酒商A',
+    '示範酒商B',
+    '示範水果行',
+  ];
   @override
-  Future<List<String>> memberNames(String storeId) async => ['示範老闆', '示範店長', '示範正職'];
+  Future<List<String>> memberNames(String storeId) async => [
+    '示範老闆',
+    '示範店長',
+    '示範正職',
+  ];
   @override
   Future<VendorHints> vendorHints(String storeId) async => (
-        vendor: {'yc_drink': ['示範酒商A', '示範酒商B']},
-        petty: {'yc_misc': ['示範五金行']},
-      );
+    vendor: {
+      'yc_drink': ['示範酒商A', '示範酒商B'],
+    },
+    petty: {
+      'yc_misc': ['示範五金行'],
+    },
+  );
 
   @override
   Future<ShiftMonth> shiftMonth(String storeId, DateTime month) async {
@@ -149,16 +414,31 @@ class DemoRepository implements Repository {
     final days = DateTime(m.year, m.month + 1, 0).day;
     final key = '${m.year}-${m.month}';
     const fulls = ['阿明', '小安', '阿哲'];
-    const parts = {'小魚': {5, 6}, '阿凱': {6, 7}, '芳芳': {3, 4}, '小白': {5, 6, 7}, '阿樂': {1, 2, 4}};
+    const parts = {
+      '小魚': {5, 6},
+      '阿凱': {6, 7},
+      '芳芳': {3, 4},
+      '小白': {5, 6, 7},
+      '阿樂': {1, 2, 4},
+    };
     final marks = <String, Map<int, String>>{};
     if (_demoShifts.containsKey(key)) {
-      marks.addAll({for (final e in _demoShifts[key]!.entries) e.key: {...e.value}});
+      marks.addAll({
+        for (final e in _demoShifts[key]!.entries) e.key: {...e.value},
+      });
     } else if (!future) {
       for (final (i, _) in fulls.indexed) {
-        marks['f$i'] = {for (var d = 1; d <= days; d++) d: ((d + i * 2) % 7) < 2 ? '休' : 'V'};
+        marks['f$i'] = {
+          for (var d = 1; d <= days; d++) d: ((d + i * 2) % 7) < 2 ? '休' : 'V',
+        };
       }
       for (final (i, wds) in parts.values.indexed) {
-        marks['p$i'] = {for (var d = 1; d <= days; d++) if (wds.contains(DateTime(m.year, m.month, d).weekday) && (d + i) % 3 != 0) d: 'V'};
+        marks['p$i'] = {
+          for (var d = 1; d <= days; d++)
+            if (wds.contains(DateTime(m.year, m.month, d).weekday) &&
+                (d + i) % 3 != 0)
+              d: 'V',
+        };
       }
     }
     return ShiftMonth(
@@ -167,29 +447,35 @@ class DemoRepository implements Repository {
         // 示範全名（虛構）；小白、阿樂故意沒填，示範「沒填全名」的樣子。阿明＝登入的示範帳號，阿凱已經對應好
         for (final (i, n) in fulls.indexed)
           ShiftPerson(
-              id: 'f$i',
-              name: n,
-              fullName: _demoFullNames[n],
-              sortOrder: i,
-              userId: i == 0 && !_isKiosk ? 'demo-user' : null,
-              userVerified: i == 0 && !_isKiosk,
-              linkId: _demoLinks['f$i']),
+            id: 'f$i',
+            name: n,
+            fullName: _demoFullNames[n],
+            sortOrder: i,
+            userId: i == 0 && !_isKiosk ? 'demo-user' : null,
+            userVerified: i == 0 && !_isKiosk,
+            linkId: _demoLinks['f$i'],
+          ),
         for (final (i, n) in parts.keys.indexed)
           ShiftPerson(
-              id: 'p$i',
-              name: n,
-              fullName: _demoFullNames[n],
-              kind: 'part',
-              sortOrder: 10 + i,
-              userId: i == 1 ? 'u2' : null,
-              userVerified: i == 1,
-              linkId: _demoLinks['p$i']),
+            id: 'p$i',
+            name: n,
+            fullName: _demoFullNames[n],
+            kind: 'part',
+            sortOrder: 10 + i,
+            userId: i == 1 ? 'u2' : null,
+            userVerified: i == 1,
+            linkId: _demoLinks['p$i'],
+          ),
       ],
       marks,
       future ? const {} : const {3: '月會日'},
       {
         if (!future || _demoOff.containsKey(key))
-          for (final (i, _) in fulls.indexed) 'f$i': ShiftStats(shouldOff: _demoOff[key]?['f$i'] ?? 9, prevUnused: 3),
+          for (final (i, _) in fulls.indexed)
+            'f$i': ShiftStats(
+              shouldOff: _demoOff[key]?['f$i'] ?? 9,
+              prevUnused: 3,
+            ),
       },
       [...?_demoPhotos[key]],
       _demoDrafts[key],
@@ -197,7 +483,8 @@ class DemoRepository implements Repository {
     );
   }
 
-  final _demoShifts = <String, Map<String, Map<int, String>>>{}; // 示範：公布過的班表（只存在記憶體）
+  final _demoShifts =
+      <String, Map<String, Map<int, String>>>{}; // 示範：公布過的班表（只存在記憶體）
   final _demoOff = <String, Map<String, double>>{};
   final _markOpts = <ShiftMarkOption>[
     const ShiftMarkOption(id: 'r1', kind: 'range', mark: '18:00-00:30'),
@@ -206,32 +493,66 @@ class DemoRepository implements Repository {
   @override
   Future<void> saveShiftMarkOption(String storeId, ShiftMarkOption o) async {
     _markOpts.removeWhere((x) => x.id == o.id && o.id.isNotEmpty);
-    _markOpts.add(ShiftMarkOption(
-        id: o.id.isEmpty ? '${DateTime.now().microsecondsSinceEpoch}' : o.id, kind: o.kind, mark: o.mark, timeRange: o.timeRange));
+    _markOpts.add(
+      ShiftMarkOption(
+        id: o.id.isEmpty ? '${DateTime.now().microsecondsSinceEpoch}' : o.id,
+        kind: o.kind,
+        mark: o.mark,
+        timeRange: o.timeRange,
+      ),
+    );
   }
+
   @override
-  Future<void> deleteShiftMarkOption(String id) async => _markOpts.removeWhere((x) => x.id == id);
+  Future<void> deleteShiftMarkOption(String id) async =>
+      _markOpts.removeWhere((x) => x.id == id);
   @override
   Future<void> setShiftMarkOptionHidden(String id, bool hidden) async {
     final i = _markOpts.indexWhere((x) => x.id == id);
     if (i < 0) return;
     final o = _markOpts[i];
-    _markOpts[i] =
-        ShiftMarkOption(id: o.id, kind: o.kind, mark: o.mark, timeRange: o.timeRange, sortOrder: o.sortOrder, hidden: hidden);
+    _markOpts[i] = ShiftMarkOption(
+      id: o.id,
+      kind: o.kind,
+      mark: o.mark,
+      timeRange: o.timeRange,
+      sortOrder: o.sortOrder,
+      hidden: hidden,
+    );
   }
 
   // 0113 示範：修改紀錄、還原、指定帳號
   @override
-  Future<List<ShiftChange>> shiftChangeHistory(String storeId, DateTime month) async {
+  Future<List<ShiftChange>> shiftChangeHistory(
+    String storeId,
+    DateTime month,
+  ) async {
     final at = DateTime(month.year, month.month, 1, 13, 12);
     return [
-      ShiftChange(changeId: 'c2', at: at.add(const Duration(days: 6, hours: 3)), actorName: '示範店長', source: 'manual',
-          personId: 'f1', workDate: DateTime(month.year, month.month, 19), before: 'V', after: '休'),
+      ShiftChange(
+        changeId: 'c2',
+        at: at.add(const Duration(days: 6, hours: 3)),
+        actorName: '示範店長',
+        source: 'manual',
+        personId: 'f1',
+        workDate: DateTime(month.year, month.month, 19),
+        before: 'V',
+        after: '休',
+      ),
       for (var d = 1; d <= 3; d++)
-        ShiftChange(changeId: 'c1', at: at, actorName: '示範老闆', source: 'photo', personId: 'f0',
-            workDate: DateTime(month.year, month.month, d), before: null, after: 'V'),
+        ShiftChange(
+          changeId: 'c1',
+          at: at,
+          actorName: '示範老闆',
+          source: 'photo',
+          personId: 'f0',
+          workDate: DateTime(month.year, month.month, d),
+          before: null,
+          after: 'V',
+        ),
     ];
   }
+
   @override
   Future<int> undoShiftChange(String storeId, String changeId) async => 1;
   @override
@@ -248,12 +569,24 @@ class DemoRepository implements Repository {
   @override
   Future<List<ShiftLinkStore>> shiftLinkStores(String storeId) async {
     // 只有兩家店都是老闆的人看得到（示範：隱城老闆身分；正職、店長、打卡帳號、新開的店都沒有）
-    if (storeId != 'yc' || _isStaff || _isManager || _isKiosk || _isNew) return const [];
+    if (storeId != 'yc' || _isStaff || _isManager || _isKiosk || _isNew)
+      return const [];
     return [
-      ShiftLinkStore(storeId: 'xc', storeName: '小城外', people: [
-        for (final (i, (id, nick, full, kind)) in _demoXcPeople.indexed)
-          ShiftPerson(id: id, name: nick, fullName: full, kind: kind, sortOrder: i, linkId: _demoLinks[id]),
-      ]),
+      ShiftLinkStore(
+        storeId: 'xc',
+        storeName: '小城外',
+        people: [
+          for (final (i, (id, nick, full, kind)) in _demoXcPeople.indexed)
+            ShiftPerson(
+              id: id,
+              name: nick,
+              fullName: full,
+              kind: kind,
+              sortOrder: i,
+              linkId: _demoLinks[id],
+            ),
+        ],
+      ),
     ];
   }
 
@@ -261,7 +594,8 @@ class DemoRepository implements Repository {
   Future<void> linkShiftPeople(String personId, String otherPersonId) async {
     if (_isStaff || _isManager) throw Exception('message: 只有兩家店的老闆能連結,');
     final a = _demoLinks[personId], b = _demoLinks[otherPersonId];
-    if (a != null && b != null && a != b) throw Exception('message: 同一家店已經有另一個人連到這個人了，請先解除,');
+    if (a != null && b != null && a != b)
+      throw Exception('message: 同一家店已經有另一個人連到這個人了，請先解除,');
     final v = a ?? b ?? 'L${DateTime.now().microsecondsSinceEpoch}';
     _demoLinks[personId] = v;
     _demoLinks[otherPersonId] = v;
@@ -272,35 +606,76 @@ class DemoRepository implements Repository {
     if (_isStaff || _isManager) throw Exception('message: 只有老闆能解除連結,');
     final v = _demoLinks.remove(personId);
     if (v == null) return;
-    final rest = [for (final e in _demoLinks.entries) if (e.value == v) e.key];
+    final rest = [
+      for (final e in _demoLinks.entries)
+        if (e.value == v) e.key,
+    ];
     if (rest.length < 2) rest.forEach(_demoLinks.remove);
   }
+
   /// 示範資料裡寫死的暱稱 → 顯示用的名字（全名），跟正式版從資料庫讀回來後的換法一樣
   String _dn(String id, String nick) => personLabel(nick, _demoFullNames[nick]);
-  static const _demoFullNames = {'阿明': '林志明', '小安': '陳怡安', '阿哲': '張哲瑋', '小魚': '余曉雯', '阿凱': '王凱文', '芳芳': '李芳芳'};
+  static const _demoFullNames = {
+    '阿明': '林志明',
+    '小安': '陳怡安',
+    '阿哲': '張哲瑋',
+    '小魚': '余曉雯',
+    '阿凱': '王凱文',
+    '芳芳': '李芳芳',
+  };
   @override
-  Future<List<ShiftAccountCandidate>> shiftAccountCandidates(String storeId) async => [
-        ShiftAccountCandidate(
-            userId: 'demo-user',
-            name: _isManager ? '示範店長' : '示範帳號',
-            role: _isManager ? 'manager' : 'owner',
-            personId: 'f0',
-            personName: '阿明',
-            verified: true),
-        const ShiftAccountCandidate(userId: 'u3', name: '小安的帳號', role: 'staff'),
-        const ShiftAccountCandidate(userId: 'u4', name: '阿哲的帳號', role: 'staff'),
-        const ShiftAccountCandidate(userId: 'u2', name: '阿凱的帳號', role: 'parttime', personId: 'p1', personName: '阿凱', verified: true),
-        const ShiftAccountCandidate(userId: 'u5', name: '小魚的帳號', role: 'parttime'),
-      ];
+  Future<List<ShiftAccountCandidate>> shiftAccountCandidates(
+    String storeId,
+  ) async => [
+    ShiftAccountCandidate(
+      userId: 'demo-user',
+      name: _isManager ? '示範店長' : '示範帳號',
+      role: _isManager ? 'manager' : 'owner',
+      personId: 'f0',
+      personName: '阿明',
+      verified: true,
+    ),
+    const ShiftAccountCandidate(userId: 'u3', name: '小安的帳號', role: 'staff'),
+    const ShiftAccountCandidate(userId: 'u4', name: '阿哲的帳號', role: 'staff'),
+    const ShiftAccountCandidate(
+      userId: 'u2',
+      name: '阿凱的帳號',
+      role: 'parttime',
+      personId: 'p1',
+      personName: '阿凱',
+      verified: true,
+    ),
+    const ShiftAccountCandidate(userId: 'u5', name: '小魚的帳號', role: 'parttime'),
+  ];
   @override
-  Future<void> setShift(String storeId, String personId, DateTime date, String? mark) async {}
+  Future<void> setShift(
+    String storeId,
+    String personId,
+    DateTime date,
+    String? mark,
+  ) async {}
   @override
-  Future<void> setShiftNote(String storeId, DateTime date, String? note) async {}
+  Future<void> setShiftNote(
+    String storeId,
+    DateTime date,
+    String? note,
+  ) async {}
   @override
-  Future<void> saveShiftPerson(String storeId, ShiftPerson p, {bool isNew = false}) async {}
+  Future<void> saveShiftPerson(
+    String storeId,
+    ShiftPerson p, {
+    bool isNew = false,
+  }) async {}
   @override
-  Future<void> saveShiftStats(String storeId, String personId, DateTime month, ShiftStats s) async {
-    if (s.shouldOff != null) _demoOff.putIfAbsent('${month.year}-${month.month}', () => {})[personId] = s.shouldOff!;
+  Future<void> saveShiftStats(
+    String storeId,
+    String personId,
+    DateTime month,
+    ShiftStats s,
+  ) async {
+    if (s.shouldOff != null)
+      _demoOff.putIfAbsent('${month.year}-${month.month}', () => {})[personId] =
+          s.shouldOff!;
   }
   // 示範：上傳的班表照片與辨識草稿（只存在記憶體）。公版那一份（SELF_SIGNUP）示範 api 模式：上傳完直接辨識
   final _demoPhotos = <String, List<ShiftPhoto>>{};
@@ -358,24 +733,53 @@ class DemoRepository implements Repository {
   // 自動排班（示範：只存在記憶體）
   final _shiftReq = <String, Map<int, String>>{};
   final _shiftRules = <String, ShiftRule>{};
-  var _staffing = <int, StaffingNeed>{for (var w = 1; w <= 7; w++) w: StaffingNeed(w >= 5 && w <= 6 ? 4 : 3, 1)};
+  var _staffing = <int, StaffingNeed>{
+    for (var w = 1; w <= 7; w++) w: StaffingNeed(w >= 5 && w <= 6 ? 4 : 3, 1),
+  };
   final _staffDays = <int, int>{};
   var _deadline = 20;
   @override
-  Future<ShiftPlanSetup> shiftPlanSetup(String storeId, DateTime month) async => ShiftPlanSetup(
-      staffing: _staffing, specialDays: _staffDays, deadline: _deadline, rules: _shiftRules, requests: _shiftReq, pairRules: [..._pairRules],
-      preferRun: _preferRun, offPerDay: _offPerDay, offMonthMax: _offMonthMax);
+  Future<ShiftPlanSetup> shiftPlanSetup(String storeId, DateTime month) async =>
+      ShiftPlanSetup(
+        staffing: _staffing,
+        specialDays: _staffDays,
+        deadline: _deadline,
+        rules: _shiftRules,
+        requests: _shiftReq,
+        pairRules: [..._pairRules],
+        preferRun: _preferRun,
+        offPerDay: _offPerDay,
+        offMonthMax: _offMonthMax,
+      );
   final _pairRules = <PairRule>[];
   @override
-  Future<void> addShiftPairRule(String storeId, String a, String b, String kind) async =>
-      _pairRules.add(PairRule(id: '${DateTime.now().microsecondsSinceEpoch}', a: a, b: b, kind: kind));
+  Future<void> addShiftPairRule(
+    String storeId,
+    String a,
+    String b,
+    String kind,
+  ) async => _pairRules.add(
+    PairRule(
+      id: '${DateTime.now().microsecondsSinceEpoch}',
+      a: a,
+      b: b,
+      kind: kind,
+    ),
+  );
   @override
-  Future<void> deleteShiftPairRule(String id) async => _pairRules.removeWhere((r) => r.id == id);
+  Future<void> deleteShiftPairRule(String id) async =>
+      _pairRules.removeWhere((r) => r.id == id);
   @override
-  Future<Map<int, Set<String>>?> shiftOffTaken(String storeId, DateTime month) async => null; // App 自己算
+  Future<Map<int, Set<String>>?> shiftOffTaken(
+    String storeId,
+    DateTime month,
+  ) async => null; // App 自己算
   final Map<String, double> _leaveAdj = {};
   @override
-  Future<Map<String, SpecialLeave>?> specialLeaveStatus(String storeId, DateTime month) async {
+  Future<Map<String, SpecialLeave>?> specialLeaveStatus(
+    String storeId,
+    DateTime month,
+  ) async {
     final d = await shiftMonth(storeId, month);
     final now = DateTime.now();
     return {
@@ -386,19 +790,36 @@ class DemoRepository implements Repository {
           usedInMonth: d.leaveDays(p.id),
           nextGrantDate: p.hireDate == null
               ? null
-              : lsaSpecialGrants(p.hireDate!).map((g) => g.$1).where((x) => x.isAfter(now)).firstOrNull,
+              : lsaSpecialGrants(p.hireDate!)
+                    .map((g) => g.$1)
+                    .where((x) => x.isAfter(now))
+                    .firstOrNull,
           nextGrantDays: p.hireDate == null
               ? null
-              : lsaSpecialGrants(p.hireDate!).where((g) => g.$1.isAfter(now)).firstOrNull?.$2.toDouble(),
+              : lsaSpecialGrants(p.hireDate!)
+                    .where((g) => g.$1.isAfter(now))
+                    .firstOrNull
+                    ?.$2
+                    .toDouble(),
         ),
     };
   }
+
   @override
   Future<bool> payrollAccess(String storeId) async => true;
   @override
-  Future<void> setSpecialLeave(String personId, double balance, {String? note}) async => _leaveAdj[personId] = balance;
+  Future<void> setSpecialLeave(
+    String personId,
+    double balance, {
+    String? note,
+  }) async => _leaveAdj[personId] = balance;
   @override
-  Future<void> setShiftRequest(String storeId, String personId, DateTime date, String? kind) async {
+  Future<void> setShiftRequest(
+    String storeId,
+    String personId,
+    DateTime date,
+    String? kind,
+  ) async {
     final m = _shiftReq.putIfAbsent(personId, () => {});
     if (kind == null) {
       m.remove(date.day);
@@ -406,24 +827,42 @@ class DemoRepository implements Repository {
       m[date.day] = kind;
     }
   }
+
   @override
-  Future<void> saveShiftRule(String storeId, ShiftRule r) async => _shiftRules[r.personId] = r;
+  Future<void> saveShiftRule(String storeId, ShiftRule r) async =>
+      _shiftRules[r.personId] = r;
   @override
-  Future<void> saveShiftStaffing(String storeId, Map<int, StaffingNeed> staffing) async => _staffing = {...staffing};
+  Future<void> saveShiftStaffing(
+    String storeId,
+    Map<int, StaffingNeed> staffing,
+  ) async => _staffing = {...staffing};
   @override
-  Future<void> setShiftStaffingDay(String storeId, DateTime day, int? need) async {
+  Future<void> setShiftStaffingDay(
+    String storeId,
+    DateTime day,
+    int? need,
+  ) async {
     if (need == null) {
       _staffDays.remove(day.day);
     } else {
       _staffDays[day.day] = need;
     }
   }
+
   @override
-  Future<void> saveShiftDeadline(String storeId, int day) async => _deadline = day;
+  Future<void> saveShiftDeadline(String storeId, int day) async =>
+      _deadline = day;
   @override
-  Future<int> applyShiftPlan(String storeId, DateTime month, Map<String, Map<int, String>> plan, {String? expected}) async {
+  Future<int> applyShiftPlan(
+    String storeId,
+    DateTime month,
+    Map<String, Map<int, String>> plan, {
+    String? expected,
+  }) async {
     _planDrafts.remove('$storeId|${month.year}-${month.month}');
-    _demoShifts['${month.year}-${month.month}'] = {for (final e in plan.entries) e.key: {...e.value}};
+    _demoShifts['${month.year}-${month.month}'] = {
+      for (final e in plan.entries) e.key: {...e.value},
+    };
     return plan.values.fold<int>(0, (a, m) => a + m.length);
   }
 
@@ -432,54 +871,128 @@ class DemoRepository implements Repository {
   @override
   Future<String> shiftMonthVersion(String storeId, DateTime month) async => '';
   @override
-  Future<ShiftPlanDraft?> shiftPlanDraft(String storeId, DateTime month) async => _planDrafts['$storeId|${month.year}-${month.month}'];
+  Future<ShiftPlanDraft?> shiftPlanDraft(
+    String storeId,
+    DateTime month,
+  ) async => _planDrafts['$storeId|${month.year}-${month.month}'];
   @override
-  Future<void> saveShiftPlanDraft(String storeId, DateTime month, Map<String, Map<int, String>> plan, Map<String, Set<int>> locked) async =>
+  Future<void> saveShiftPlanDraft(
+    String storeId,
+    DateTime month,
+    Map<String, Map<int, String>> plan,
+    Map<String, Set<int>> locked,
+  ) async =>
       _planDrafts['$storeId|${month.year}-${month.month}'] = ShiftPlanDraft(
-          {for (final e in plan.entries) e.key: {...e.value}}, {for (final e in locked.entries) e.key: {...e.value}}, '示範老闆', DateTime.now());
+        {
+          for (final e in plan.entries) e.key: {...e.value},
+        },
+        {
+          for (final e in locked.entries) e.key: {...e.value},
+        },
+        '示範老闆',
+        DateTime.now(),
+      );
   @override
-  Future<void> deleteShiftPlanDraft(String storeId, DateTime month) async => _planDrafts.remove('$storeId|${month.year}-${month.month}');
+  Future<void> deleteShiftPlanDraft(String storeId, DateTime month) async =>
+      _planDrafts.remove('$storeId|${month.year}-${month.month}');
   @override
-  Future<void> saveShiftPreferRun(String storeId, int? days) async => _preferRun = days;
+  Future<void> saveShiftPreferRun(String storeId, int? days) async =>
+      _preferRun = days;
   int? _offPerDay = shiftOffPerDayDefault;
   int? _offMonthMax = shiftOffMonthMaxDefault;
   @override
-  Future<void> saveShiftOffLimits(String storeId, int? perDay, int? monthMax) async {
+  Future<void> saveShiftOffLimits(
+    String storeId,
+    int? perDay,
+    int? monthMax,
+  ) async {
     _offPerDay = perDay;
     _offMonthMax = monthMax;
   }
+
   @override
-  Future<String> remindShiftRequests(String storeId, DateTime month) async => '（示範）${month.month} 月班表要開始排了';
+  Future<String> remindShiftRequests(String storeId, DateTime month) async =>
+      '（示範）${month.month} 月班表要開始排了';
 
   // 交接・提醒（示範：只存在記憶體）
   final _notes = <HandoverNote>[];
   final _reminders = <WorkReminder>[];
   final _done = <String, ReminderDone>{};
   @override
-  Future<HandoverBoard> handoverBoard(String storeId, {bool withSchedule = false}) async {
+  Future<HandoverBoard> handoverBoard(
+    String storeId, {
+    bool withSchedule = false,
+  }) async {
     final sm = withSchedule ? await shiftMonth(storeId, bizToday()) : null;
-    return HandoverBoard([..._notes.reversed], [..._reminders], {..._done}, sm?.people ?? const [],
-        {for (final p in sm?.people ?? const <ShiftPerson>[]) p.id: sm!.mark(p.id, bizToday().day)});
+    return HandoverBoard(
+      [..._notes.reversed],
+      [..._reminders],
+      {..._done},
+      sm?.people ?? const [],
+      {
+        for (final p in sm?.people ?? const <ShiftPerson>[])
+          p.id: sm!.mark(p.id, bizToday().day),
+      },
+    );
   }
-  HandoverNote _copyNote(HandoverNote n, {String? body, List<HandoverItem>? items, DateTime? resolvedAt, bool setResolved = false, bool edited = false, bool? important}) =>
-      HandoverNote(
-          id: n.id, body: body ?? n.body, photoPath: n.photoPath, authorId: n.authorId, authorName: n.authorName,
-          createdAt: n.createdAt, resolvedAt: setResolved ? resolvedAt : n.resolvedAt,
-          resolvedName: setResolved ? (resolvedAt == null ? null : '示範老闆') : n.resolvedName, readers: n.readers,
-          editedAt: edited ? DateTime.now() : n.editedAt, editedName: edited ? '示範老闆' : n.editedName, items: items ?? n.items, important: important ?? n.important);
+
+  HandoverNote _copyNote(
+    HandoverNote n, {
+    String? body,
+    List<HandoverItem>? items,
+    DateTime? resolvedAt,
+    bool setResolved = false,
+    bool edited = false,
+    bool? important,
+  }) => HandoverNote(
+    id: n.id,
+    body: body ?? n.body,
+    photoPath: n.photoPath,
+    authorId: n.authorId,
+    authorName: n.authorName,
+    createdAt: n.createdAt,
+    resolvedAt: setResolved ? resolvedAt : n.resolvedAt,
+    resolvedName: setResolved
+        ? (resolvedAt == null ? null : '示範老闆')
+        : n.resolvedName,
+    readers: n.readers,
+    editedAt: edited ? DateTime.now() : n.editedAt,
+    editedName: edited ? '示範老闆' : n.editedName,
+    items: items ?? n.items,
+    important: important ?? n.important,
+  );
   @override
-  Future<void> addHandover(String storeId, String body, List<String> items, Uint8List? jpeg, {bool important = false}) async => _notes.add(HandoverNote(
-      id: 'n${_seq++}', body: body, authorId: 'demo-user', authorName: '示範老闆', createdAt: DateTime.now(), important: important,
-      items: [for (var i = 0; i < items.length; i++) HandoverItem(id: 'i${_seq++}', position: i + 1, body: items[i])]));
+  Future<void> addHandover(
+    String storeId,
+    String body,
+    List<String> items,
+    Uint8List? jpeg, {
+    bool important = false,
+  }) async => _notes.add(
+    HandoverNote(
+      id: 'n${_seq++}',
+      body: body,
+      authorId: 'demo-user',
+      authorName: '示範老闆',
+      createdAt: DateTime.now(),
+      important: important,
+      items: [
+        for (var i = 0; i < items.length; i++)
+          HandoverItem(id: 'i${_seq++}', position: i + 1, body: items[i]),
+      ],
+    ),
+  );
   final _lineOn = <String, bool>{};
   var _lineLinks = 0;
   @override
   Future<int> lineOwnerLinks() async => _lineLinks;
   @override
   Future<void> linkLineOwner(String code) async {
-    if (code.trim().length != 6) throw Exception('message: 代碼不對或已過期，請在 LINE 私訊機器人重新打「綁定」,');
+    if (code.trim().length != 6)
+      throw Exception('message: 代碼不對或已過期，請在 LINE 私訊機器人重新打「綁定」,');
     _lineLinks = 1;
   }
+
   @override
   Future<void> unlinkLineOwner() async => _lineLinks = 0;
   // 0156：示範版——小城外假裝已經綁好群組，其他店還沒綁
@@ -490,11 +1003,18 @@ class DemoRepository implements Repository {
       LineBindCode((DateTime.now().millisecondsSinceEpoch % 100000000).toString().padLeft(8, '0'),
           DateTime.now().add(const Duration(minutes: 10)));
   @override
-  Future<bool> lineNotifyEnabled(String storeId) async => _lineOn[storeId] ?? true;
+  Future<bool> lineNotifyEnabled(String storeId) async =>
+      _lineOn[storeId] ?? true;
   @override
-  Future<void> saveLineNotifyEnabled(String storeId, bool on) async => _lineOn[storeId] = on;
+  Future<void> saveLineNotifyEnabled(String storeId, bool on) async =>
+      _lineOn[storeId] = on;
   @override
-  Future<void> updateHandover(String noteId, String body, List<String> items, {bool? important}) async {
+  Future<void> updateHandover(
+    String noteId,
+    String body,
+    List<String> items, {
+    bool? important,
+  }) async {
     final i = _notes.indexWhere((n) => n.id == noteId);
     final n = _notes[i];
     final left = [...n.items];
@@ -502,65 +1022,144 @@ class DemoRepository implements Repository {
     for (var k = 0; k < items.length; k++) {
       final j = left.indexWhere((x) => x.body == items[k]);
       final old = j < 0 ? null : left.removeAt(j);
-      next.add(HandoverItem(id: old?.id ?? 'i${_seq++}', position: k + 1, body: items[k], doneAt: old?.doneAt, doneName: old?.doneName));
+      next.add(
+        HandoverItem(
+          id: old?.id ?? 'i${_seq++}',
+          position: k + 1,
+          body: items[k],
+          doneAt: old?.doneAt,
+          doneName: old?.doneName,
+        ),
+      );
     }
-    _notes[i] = _copyNote(n, body: body, items: next, edited: body != n.body, important: important);
+    _notes[i] = _copyNote(
+      n,
+      body: body,
+      items: next,
+      edited: body != n.body,
+      important: important,
+    );
   }
+
   @override
   Future<void> setHandoverItemDone(String itemId, bool done) async {
     final i = _notes.indexWhere((n) => n.items.any((x) => x.id == itemId));
     final n = _notes[i];
     if (n.resolved) throw Exception('message: 這則交接已處理，要改清單請先按「改回未處理」,');
-    _notes[i] = _copyNote(n, items: [
-      for (final x in n.items)
-        x.id == itemId
-            ? HandoverItem(id: x.id, position: x.position, body: x.body, doneAt: done ? DateTime.now() : null, doneName: done ? '示範老闆' : null)
-            : x
-    ]);
+    _notes[i] = _copyNote(
+      n,
+      items: [
+        for (final x in n.items)
+          x.id == itemId
+              ? HandoverItem(
+                  id: x.id,
+                  position: x.position,
+                  body: x.body,
+                  doneAt: done ? DateTime.now() : null,
+                  doneName: done ? '示範老闆' : null,
+                )
+              : x,
+      ],
+    );
   }
+
   @override
   Future<void> setHandoverResolved(String noteId, bool resolved) async {
     final i = _notes.indexWhere((n) => n.id == noteId);
     final n = _notes[i];
-    if (resolved && n.itemsLeft > 0) throw Exception('message: 清單還有 ${n.itemsLeft} 項沒打勾，全部完成才能按已處理,');
-    _notes[i] = _copyNote(n, resolvedAt: resolved ? DateTime.now() : null, setResolved: true);
+    if (resolved && n.itemsLeft > 0)
+      throw Exception('message: 清單還有 ${n.itemsLeft} 項沒打勾，全部完成才能按已處理,');
+    _notes[i] = _copyNote(
+      n,
+      resolvedAt: resolved ? DateTime.now() : null,
+      setResolved: true,
+    );
   }
+
   @override
   Future<void> markHandoverRead(String storeId, List<String> noteIds) async {}
   @override
-  Future<void> deleteHandover(String noteId) async => _notes.removeWhere((n) => n.id == noteId);
+  Future<void> deleteHandover(String noteId) async =>
+      _notes.removeWhere((n) => n.id == noteId);
   DateTime? _notifSeen;
   @override
   Future<NotificationFeed> notifications(String storeId) async {
     final now = DateTime.now();
     return NotificationFeed([
-      AppNotification(id: 3, kind: 'schedule', title: '班表更新', body: '${now.month} 月班表有 3 處修改',
-          refMonth: DateTime(now.year, now.month), actorName: '示範店長', createdAt: now.subtract(const Duration(minutes: 20))),
-      AppNotification(id: 2, kind: 'reminder', title: '新提醒', body: '跟大倉捷叫貨', actorName: '示範正職',
-          createdAt: now.subtract(const Duration(hours: 3))),
-      AppNotification(id: 1, kind: 'handover', title: '新交接', body: '冰塊機漏水，已叫修', actorName: '示範正職',
-          createdAt: now.subtract(const Duration(days: 1))),
+      AppNotification(
+        id: 3,
+        kind: 'schedule',
+        title: '班表更新',
+        body: '${now.month} 月班表有 3 處修改',
+        refMonth: DateTime(now.year, now.month),
+        actorName: '示範店長',
+        createdAt: now.subtract(const Duration(minutes: 20)),
+      ),
+      AppNotification(
+        id: 2,
+        kind: 'reminder',
+        title: '新提醒',
+        body: '跟大倉捷叫貨',
+        actorName: '示範正職',
+        createdAt: now.subtract(const Duration(hours: 3)),
+      ),
+      AppNotification(
+        id: 1,
+        kind: 'handover',
+        title: '新交接',
+        body: '冰塊機漏水，已叫修',
+        actorName: '示範正職',
+        createdAt: now.subtract(const Duration(days: 1)),
+      ),
     ], _notifSeen);
   }
+
   @override
-  Future<void> markNotificationsSeen(String storeId) async => _notifSeen = DateTime.now();
+  Future<void> markNotificationsSeen(String storeId) async =>
+      _notifSeen = DateTime.now();
   @override
-  Future<void> saveReminder(String storeId, WorkReminder r, {bool isNew = false}) async {
+  Future<void> saveReminder(
+    String storeId,
+    WorkReminder r, {
+    bool isNew = false,
+  }) async {
     final x = WorkReminder(
-        id: isNew ? 'r${_seq++}' : r.id, title: r.title, detail: r.detail, repeat: r.repeat, dueDate: r.dueDate,
-        weekday: r.weekday, monthDay: r.monthDay, startDate: isNew ? bizToday() : r.startDate,
-        assignPersonId: r.assignPersonId, assignOnShift: r.assignOnShift, active: r.active,
-        createdBy: isNew ? currentUserId : r.createdBy);
+      id: isNew ? 'r${_seq++}' : r.id,
+      title: r.title,
+      detail: r.detail,
+      repeat: r.repeat,
+      dueDate: r.dueDate,
+      weekday: r.weekday,
+      monthDay: r.monthDay,
+      startDate: isNew ? bizToday() : r.startDate,
+      assignPersonId: r.assignPersonId,
+      assignOnShift: r.assignOnShift,
+      active: r.active,
+      createdBy: isNew ? currentUserId : r.createdBy,
+    );
     _reminders.removeWhere((e) => e.id == x.id);
     _reminders.add(x);
   }
+
   @override
-  Future<void> deleteReminder(String reminderId) async => _reminders.removeWhere((e) => e.id == reminderId);
+  Future<void> deleteReminder(String reminderId) async =>
+      _reminders.removeWhere((e) => e.id == reminderId);
   @override
-  Future<void> setReminderDone(String storeId, String reminderId, DateTime occurrence, bool done) async {
+  Future<void> setReminderDone(
+    String storeId,
+    String reminderId,
+    DateTime occurrence,
+    bool done,
+  ) async {
     final k = ReminderDone.keyOf(reminderId, occurrence);
     if (done) {
-      _done[k] = ReminderDone(reminderId, occurrence, 'demo-user', '示範老闆', DateTime.now());
+      _done[k] = ReminderDone(
+        reminderId,
+        occurrence,
+        'demo-user',
+        '示範老闆',
+        DateTime.now(),
+      );
     } else {
       _done.remove(k);
     }
@@ -573,9 +1172,27 @@ class DemoRepository implements Repository {
   }
 
   final _demoMembers = [
-    MemberInfo(userId: 'demo-user', displayName: '示範老闆', role: Role.owner, active: true, email: 'owner@demo'),
-    MemberInfo(userId: 'u2', displayName: '示範店長', role: Role.manager, active: true, email: 'manager@demo'),
-    MemberInfo(userId: 'u3', displayName: '示範員工', role: Role.staff, active: true, email: 'staff@demo'),
+    MemberInfo(
+      userId: 'demo-user',
+      displayName: '示範老闆',
+      role: Role.owner,
+      active: true,
+      email: 'owner@demo',
+    ),
+    MemberInfo(
+      userId: 'u2',
+      displayName: '示範店長',
+      role: Role.manager,
+      active: true,
+      email: 'manager@demo',
+    ),
+    MemberInfo(
+      userId: 'u3',
+      displayName: '示範員工',
+      role: Role.staff,
+      active: true,
+      email: 'staff@demo',
+    ),
   ];
   final _demoInvites = <MemberInvite>[];
   @override
@@ -598,6 +1215,7 @@ class DemoRepository implements Repository {
     }
     return 'demo-new';
   }
+
   @override
   Future<void> applyShiftTemplate(String storeId, String kind) async {
     final t = shiftTemplates.where((x) => x.kind == kind).firstOrNull;
@@ -621,22 +1239,37 @@ class DemoRepository implements Repository {
   }
   @override
   Future<String> createInvite(List<String> storeIds, Role role, String name) async {
+    _onboardInvites++;
     _demoInvites.insert(0, MemberInvite(id: 'i${_demoInvites.length}', displayName: name, role: role,
         createdAt: DateTime.now(), expiresAt: DateTime.now().add(const Duration(days: 14))));
     return 'DEMO2-CODE9';
   }
+
   @override
-  Future<List<MemberInfo>> storeMembers(String storeId) async => List.of(_demoMembers);
+  Future<List<MemberInfo>> storeMembers(String storeId) async =>
+      List.of(_demoMembers);
   @override
-  Future<List<MemberInvite>> openInvites(String storeId) async => List.of(_demoInvites);
+  Future<List<MemberInvite>> openInvites(String storeId) async =>
+      List.of(_demoInvites);
   @override
-  Future<void> revokeInvite(String inviteId) async => _demoInvites.removeWhere((i) => i.id == inviteId);
+  Future<void> revokeInvite(String inviteId) async =>
+      _demoInvites.removeWhere((i) => i.id == inviteId);
   @override
-  Future<void> updateMember(String storeId, String userId, {Role? role, bool? active}) async {
+  Future<void> updateMember(
+    String storeId,
+    String userId, {
+    Role? role,
+    bool? active,
+  }) async {
     final i = _demoMembers.indexWhere((m) => m.userId == userId);
     final m = _demoMembers[i];
-    _demoMembers[i] = MemberInfo(userId: m.userId, displayName: m.displayName, role: role ?? m.role,
-        active: active ?? m.active, email: m.email);
+    _demoMembers[i] = MemberInfo(
+      userId: m.userId,
+      displayName: m.displayName,
+      role: role ?? m.role,
+      active: active ?? m.active,
+      email: m.email,
+    );
   }
 
   @override
@@ -652,7 +1285,11 @@ class DemoRepository implements Repository {
   @override
   MonthlySummary? peekMonthlySummary(String storeId, DateTime month) => null;
   @override
-  List<DailyRevenue>? peekDailyRevenueBetween(String storeId, DateTime from, DateTime to) => null;
+  List<DailyRevenue>? peekDailyRevenueBetween(
+    String storeId,
+    DateTime from,
+    DateTime to,
+  ) => null;
   @override
   FixedCosts? peekFixedCosts(String storeId, DateTime month) => null;
   @override
@@ -670,60 +1307,123 @@ class DemoRepository implements Repository {
       : _isKiosk
       ? [
           _kioskXc
-              ? Membership(storeId: 'xc', storeName: '小城外', role: Role.parttime, displayName: '示範公用帳號')
-              : Membership(storeId: 'yc', storeName: '隱城', role: Role.parttime, displayName: '示範公用帳號'),
+              ? Membership(
+                  storeId: 'xc',
+                  storeName: '小城外',
+                  role: Role.parttime,
+                  displayName: '示範公用帳號',
+                )
+              : Membership(
+                  storeId: 'yc',
+                  storeName: '隱城',
+                  role: Role.parttime,
+                  displayName: '示範公用帳號',
+                ),
         ]
       : [
-        Membership(
+          Membership(
             storeId: 'yc',
             storeName: '隱城',
-            role: _isStaff ? Role.staff : (_isManager ? Role.manager : Role.owner),
-            displayName: '示範'),
-        Membership(storeId: 'xc', storeName: '小城外', role: Role.staff, displayName: '示範'),
-      ];
+            role: _isStaff
+                ? Role.staff
+                : (_isManager ? Role.manager : Role.owner),
+            displayName: '示範',
+          ),
+          Membership(
+            storeId: 'xc',
+            storeName: '小城外',
+            role: Role.staff,
+            displayName: '示範',
+          ),
+        ];
 
   // 依店別分開存（示範用）：yc 有兩筆 Excel 匯入；xc 一開始沒有
   final _revenue = <String, List<RevenueEntry>>{
     'yc': [
       ..._recent,
-      RevenueEntry(id: 'r1', bizDate: DateTime(2026, 9, 30), cash: 8000, creditCard: 20000, guests: 28, drinks: 24000, food: 4000, source: 'import'),
-      RevenueEntry(id: 'r2', bizDate: DateTime(2026, 9, 29), cash: 5000, creditCard: 16000, amex: 1000, guests: 21, drinks: 18000, food: 4000, source: 'import'),
+      RevenueEntry(
+        id: 'r1',
+        bizDate: DateTime(2026, 9, 30),
+        cash: 8000,
+        creditCard: 20000,
+        guests: 28,
+        drinks: 24000,
+        food: 4000,
+        source: 'import',
+      ),
+      RevenueEntry(
+        id: 'r2',
+        bizDate: DateTime(2026, 9, 29),
+        cash: 5000,
+        creditCard: 16000,
+        amex: 1000,
+        guests: 21,
+        drinks: 18000,
+        food: 4000,
+        source: 'import',
+      ),
     ],
     'xc': [],
   };
   // 當月示範（2026-11-13，讓「當月銷售品項累計」有東西看）：昨天往回 5 天，前 4 天有 iCHEF、最早那天沒有（顯示「未計入」）
   static final _recent = [
     for (final (i, cash, card, guests, drinks, food) in const [
-      (1, 3655.0, 11402.0, 17, 13746.0, 1311.0), (2, 4200.0, 15800.0, 22, 17300.0, 2700.0),
-      (3, 3100.0, 12900.0, 18, 13900.0, 2100.0), (4, 2800.0, 9200.0, 13, 10400.0, 1600.0),
+      (1, 3655.0, 11402.0, 17, 13746.0, 1311.0),
+      (2, 4200.0, 15800.0, 22, 17300.0, 2700.0),
+      (3, 3100.0, 12900.0, 18, 13900.0, 2100.0),
+      (4, 2800.0, 9200.0, 13, 10400.0, 1600.0),
       (5, 3000.0, 10000.0, 15, 11500.0, 1500.0),
     ])
-      RevenueEntry(id: 'rc$i', bizDate: bizToday().subtract(Duration(days: i)), cash: cash, creditCard: card,
-          guests: guests, drinks: drinks, food: food, source: 'import'),
+      RevenueEntry(
+        id: 'rc$i',
+        bizDate: bizToday().subtract(Duration(days: i)),
+        cash: cash,
+        creditCard: card,
+        guests: guests,
+        drinks: drinks,
+        food: food,
+        source: 'import',
+      ),
   ];
   static final _noIchef = {'rc5'};
   List<RevenueEntry> _revList(String storeId) => _revenue[storeId] ??= [];
 
   @override
-  Future<List<RevenueEntry>> revenueEntries(String storeId, {int limit = 60}) async {
+  Future<List<RevenueEntry>> revenueEntries(
+    String storeId, {
+    int limit = 60,
+  }) async {
     // 0020：正職也看得到營收
-    return List.of(_revList(storeId))..sort((a, b) => b.bizDate.compareTo(a.bizDate));
+    return List.of(_revList(storeId))
+      ..sort((a, b) => b.bizDate.compareTo(a.bizDate));
   }
 
   @override
-  Future<List<RevenueEntry>> revenueEntriesBetween(String storeId, DateTime from, DateTime to) async => [
-        for (final e in await revenueEntries(storeId))
-          if (!e.bizDate.isBefore(from) && !e.bizDate.isAfter(to)) e
-      ];
+  Future<List<RevenueEntry>> revenueEntriesBetween(
+    String storeId,
+    DateTime from,
+    DateTime to,
+  ) async => [
+    for (final e in await revenueEntries(storeId))
+      if (!e.bizDate.isBefore(from) && !e.bizDate.isAfter(to)) e,
+  ];
 
   @override
   Future<DateTime?> firstRevenueDate(String storeId) async =>
-      (await revenueEntries(storeId)).map((e) => e.bizDate).fold<DateTime?>(null, (a, d) => a == null || d.isBefore(a) ? d : a);
+      (await revenueEntries(storeId))
+          .map((e) => e.bizDate)
+          .fold<DateTime?>(null, (a, d) => a == null || d.isBefore(a) ? d : a);
 
   @override
-  Future<RevenueEntry?> revenueEntryFor(String storeId, DateTime bizDate) async {
+  Future<RevenueEntry?> revenueEntryFor(
+    String storeId,
+    DateTime bizDate,
+  ) async {
     for (final e in _revList(storeId)) {
-      if (e.bizDate.year == bizDate.year && e.bizDate.month == bizDate.month && e.bizDate.day == bizDate.day) return e;
+      if (e.bizDate.year == bizDate.year &&
+          e.bizDate.month == bizDate.month &&
+          e.bizDate.day == bizDate.day)
+        return e;
     }
     return null;
   }
@@ -732,11 +1432,23 @@ class DemoRepository implements Repository {
   Future<void> saveRevenueEntry(String storeId, RevenueEntry e) async {
     await Future.delayed(const Duration(milliseconds: 300));
     // 0038：正職只能動自己手動登記的（source=app），不能改 Excel 匯入的那筆
-    if (_isStaff && e.source == 'import') throw Exception('message: 沒有權限執行這個動作。,');
+    if (_isStaff && e.source == 'import')
+      throw Exception('message: 沒有權限執行這個動作。,');
     final saved = RevenueEntry(
-      id: e.id ?? 'rev${++_seq}', bizDate: e.bizDate, cash: e.cash, creditCard: e.creditCard, amex: e.amex,
-      deposit: e.deposit, guests: e.guests, drinks: e.drinks, food: e.food, project: e.project,
-      coffee: e.coffee, ramen: e.ramen, note: e.note, source: e.source,
+      id: e.id ?? 'rev${++_seq}',
+      bizDate: e.bizDate,
+      cash: e.cash,
+      creditCard: e.creditCard,
+      amex: e.amex,
+      deposit: e.deposit,
+      guests: e.guests,
+      drinks: e.drinks,
+      food: e.food,
+      project: e.project,
+      coffee: e.coffee,
+      ramen: e.ramen,
+      note: e.note,
+      source: e.source,
     );
     final list = _revList(storeId);
     list.removeWhere((x) => x.id == saved.id);
@@ -745,12 +1457,19 @@ class DemoRepository implements Repository {
 
   // 示範：最近 7 筆營收有 iCHEF 品項（假資料）
   @override
-  Future<Set<DateTime>> ichefDays(String storeId, {int limit = 120, DateTime? from, DateTime? to}) async {
-    final list = List.of(_revList(storeId))..sort((a, b) => b.bizDate.compareTo(a.bizDate));
+  Future<Set<DateTime>> ichefDays(
+    String storeId, {
+    int limit = 120,
+    DateTime? from,
+    DateTime? to,
+  }) async {
+    final list = List.of(_revList(storeId))
+      ..sort((a, b) => b.bizDate.compareTo(a.bizDate));
     return {
       for (final e in list.where((e) => !_noIchef.contains(e.id)).take(7))
-        if ((from == null || !e.bizDate.isBefore(from)) && (to == null || !e.bizDate.isAfter(to)))
-          DateTime(e.bizDate.year, e.bizDate.month, e.bizDate.day)
+        if ((from == null || !e.bizDate.isBefore(from)) &&
+            (to == null || !e.bizDate.isAfter(to)))
+          DateTime(e.bizDate.year, e.bizDate.month, e.bizDate.day),
     };
   }
 
@@ -760,16 +1479,25 @@ class DemoRepository implements Repository {
     final day = DateTime(bizDate.year, bizDate.month, bizDate.day);
     if (!(await ichefDays(storeId)).contains(day)) return null;
     final e = await revenueEntryFor(storeId, day);
-    return e == null ? null : (e.cash - e.coffee - e.ramen).clamp(0, double.infinity).toDouble();
+    return e == null
+        ? null
+        : (e.cash - e.coffee - e.ramen).clamp(0, double.infinity).toDouble();
   }
 
   @override
   Future<List<ItemSale>> itemSales(String storeId, DateTime bizDate) async {
     const base = [
-      ('Long Island Iced Tea', '調酒', true, 450.0), ('first contact', '調酒', true, 400.0),
-      ('茶徑', '調酒', true, 365.0), ("Bee's Knees", '調酒', true, 390.0), ('lychee vesper', '調酒', true, 406.0),
-      ('鴨油薯條', '小郭餐點', false, 238.0), ('煙波', '調酒', true, 380.0), ('梅園', '調酒', true, 420.0),
-      ('Gin Fizz', '調酒', true, 385.0), ('關東煮', '小郭餐點', false, 280.0), ('Negroni', '調酒', true, 400.0),
+      ('Long Island Iced Tea', '調酒', true, 450.0),
+      ('first contact', '調酒', true, 400.0),
+      ('茶徑', '調酒', true, 365.0),
+      ("Bee's Knees", '調酒', true, 390.0),
+      ('lychee vesper', '調酒', true, 406.0),
+      ('鴨油薯條', '小郭餐點', false, 238.0),
+      ('煙波', '調酒', true, 380.0),
+      ('梅園', '調酒', true, 420.0),
+      ('Gin Fizz', '調酒', true, 385.0),
+      ('關東煮', '小郭餐點', false, 280.0),
+      ('Negroni', '調酒', true, 400.0),
       ('瑞士修道院起司', '起司', false, 280.0),
     ];
     final raw = [
@@ -778,24 +1506,45 @@ class DemoRepository implements Repository {
     ];
     // 同正式資料庫 0101：含服務費金額依原價比例分，同區加總＝那天的酒水／餐食（最大餘數法）
     final day = DateTime(bizDate.year, bizDate.month, bizDate.day);
-    final e = _revList(storeId).where((x) => DateTime(x.bizDate.year, x.bizDate.month, x.bizDate.day) == day).firstOrNull;
+    final e = _revList(storeId)
+        .where(
+          (x) =>
+              DateTime(x.bizDate.year, x.bizDate.month, x.bizDate.day) == day,
+        )
+        .firstOrNull;
     final list = <ItemSale>[];
     for (final drink in [true, false]) {
-      final g = [for (final r in raw) if (r.$1.$3 == drink) r];
+      final g = [
+        for (final r in raw)
+          if (r.$1.$3 == drink) r,
+      ];
       final listSum = g.fold<double>(0, (a, r) => a + r.$1.$4 * r.$2);
-      final target = e == null ? listSum : (drink ? e.drinks : e.food).roundToDouble();
-      final exact = [for (final r in g) listSum == 0 ? 0.0 : target * r.$1.$4 * r.$2 / listSum];
+      final target = e == null
+          ? listSum
+          : (drink ? e.drinks : e.food).roundToDouble();
+      final exact = [
+        for (final r in g)
+          listSum == 0 ? 0.0 : target * r.$1.$4 * r.$2 / listSum,
+      ];
       final net = [for (final v in exact) v.floorToDouble()];
-      final order = List.generate(g.length, (i) => i)..sort((a, b) => (exact[b] - net[b]).compareTo(exact[a] - net[a]));
+      final order = List.generate(g.length, (i) => i)
+        ..sort((a, b) => (exact[b] - net[b]).compareTo(exact[a] - net[a]));
       var rem = (target - net.fold<double>(0, (a, v) => a + v)).round();
       for (final i in order) {
         if (rem-- <= 0) break;
         net[i] += 1;
       }
       for (var i = 0; i < g.length; i++) {
-        list.add(ItemSale(
-            name: g[i].$1.$1, category: g[i].$1.$2, isDrink: drink, qty: g[i].$2,
-            amount: net[i], listAmount: g[i].$1.$4 * g[i].$2));
+        list.add(
+          ItemSale(
+            name: g[i].$1.$1,
+            category: g[i].$1.$2,
+            isDrink: drink,
+            qty: g[i].$2,
+            amount: net[i],
+            listAmount: g[i].$1.$4 * g[i].$2,
+          ),
+        );
       }
     }
     return list..sort((a, b) => b.amount.compareTo(a.amount));
@@ -809,17 +1558,24 @@ class DemoRepository implements Repository {
       for (final x in await itemSales(storeId, d)) {
         final o = sums[x.name];
         sums[x.name] = ItemSale(
-            name: x.name, category: x.category, isDrink: x.isDrink,
-            qty: x.qty + (o?.qty ?? 0), amount: x.amount + (o?.amount ?? 0),
-            listAmount: x.listAmount + (o?.listAmount ?? 0), days: 1 + (o?.days ?? 0), net: x.net && (o?.net ?? true));
+          name: x.name,
+          category: x.category,
+          isDrink: x.isDrink,
+          qty: x.qty + (o?.qty ?? 0),
+          amount: x.amount + (o?.amount ?? 0),
+          listAmount: x.listAmount + (o?.listAmount ?? 0),
+          days: 1 + (o?.days ?? 0),
+          net: x.net && (o?.net ?? true),
+        );
       }
     }
     return sums.values.toList()..sort((a, b) => b.amount.compareTo(a.amount));
   }
 
   @override
-  Future<DateTime?> lastExcelSync(String storeId) async =>
-      storeId == 'yc' ? DateTime.now().subtract(const Duration(minutes: 25)) : null;
+  Future<DateTime?> lastExcelSync(String storeId) async => storeId == 'yc'
+      ? DateTime.now().subtract(const Duration(minutes: 25))
+      : null;
 
   final _fixed = <String, double>{};
 
@@ -831,27 +1587,59 @@ class DemoRepository implements Repository {
   }
 
   @override
-  Future<void> saveFixedCost(String storeId, DateTime month, String category, double amount) async {
+  Future<void> saveFixedCost(
+    String storeId,
+    DateTime month,
+    String category,
+    double amount,
+  ) async {
     if (_isStaff) throw Exception('message: 沒有權限執行這個動作。,');
     _fixed['$storeId-${month.year}-${month.month}-$category'] = amount;
   }
 
   @override
-  Future<void> clearFixedCost(String storeId, DateTime month, String category) async {
+  Future<void> clearFixedCost(
+    String storeId,
+    DateTime month,
+    String category,
+  ) async {
     if (_isStaff) throw Exception('message: 沒有權限執行這個動作。,');
     _fixed.remove('$storeId-${month.year}-${month.month}-$category');
   }
 
-  final _expItems = <String, List<ExpenseItem>>{};  // 店家-年月 → 明細
+  final _expItems = <String, List<ExpenseItem>>{}; // 店家-年月 → 明細
   String _ek(String s, DateTime m) => '$s-${m.year}-${m.month}';
   // 0076 廠商資料（示範資料，只有老闆、店長看得到）
   final _vendors = <String, List<VendorContact>>{
     'yc': [
-      const VendorContact(id: 'v1', kind: 'monthly', name: '示範酒商', items: '琴酒、伏特加、蘭姆酒',
-          contact: '02-0000-0000 業務 王先生', bank: '示範銀行 000', account: '000-000-000000', note: '週三送貨', billingDay: '每月 25 日'),
-      const VendorContact(id: 'v2', kind: 'monthly', name: '示範水果行', items: '檸檬、萊姆、柳橙',
-          contact: 'LINE：demo-fruit', bank: '示範銀行 000', account: '000-000-111111', billingDay: '月底'),
-      const VendorContact(id: 'v3', kind: 'other', name: '示範冰塊', items: '方冰、碎冰', contact: '0900-000-000'),
+      const VendorContact(
+        id: 'v1',
+        kind: 'monthly',
+        name: '示範酒商',
+        items: '琴酒、伏特加、蘭姆酒',
+        contact: '02-0000-0000 業務 王先生',
+        bank: '示範銀行 000',
+        account: '000-000-000000',
+        note: '週三送貨',
+        billingDay: '每月 25 日',
+      ),
+      const VendorContact(
+        id: 'v2',
+        kind: 'monthly',
+        name: '示範水果行',
+        items: '檸檬、萊姆、柳橙',
+        contact: 'LINE：demo-fruit',
+        bank: '示範銀行 000',
+        account: '000-000-111111',
+        billingDay: '月底',
+      ),
+      const VendorContact(
+        id: 'v3',
+        kind: 'other',
+        name: '示範冰塊',
+        items: '方冰、碎冰',
+        contact: '0900-000-000',
+      ),
     ],
   };
 
@@ -865,10 +1653,18 @@ class DemoRepository implements Repository {
   Future<void> saveVendorContact(String storeId, VendorContact v) async {
     if (_isStaff) throw Exception('message: 沒有權限修改（只有老闆、店長可以）,');
     final list = _vendors[storeId] ??= [];
-    if (list.any((x) => x.name == v.name.trim() && x.id != v.id)) throw Exception('message: 已經有同名的廠商,');
+    if (list.any((x) => x.name == v.name.trim() && x.id != v.id))
+      throw Exception('message: 已經有同名的廠商,');
     final saved = VendorContact(
-      id: v.id ?? 'v${++_seq}', kind: v.kind, name: v.name.trim(), items: v.items, contact: v.contact,
-      bank: v.bank, account: v.account, note: v.note, billingDay: v.billingDay,
+      id: v.id ?? 'v${++_seq}',
+      kind: v.kind,
+      name: v.name.trim(),
+      items: v.items,
+      contact: v.contact,
+      bank: v.bank,
+      account: v.account,
+      note: v.note,
+      billingDay: v.billingDay,
     );
     list.removeWhere((x) => x.id == saved.id);
     list.add(saved);
@@ -883,21 +1679,32 @@ class DemoRepository implements Repository {
   }
 
   @override
-  Future<List<ExpenseItem>> expenseItems(String storeId, DateTime month) async =>
-      _isStaff ? [] : [...?_expItems[_ek(storeId, month)]];
+  Future<List<ExpenseItem>> expenseItems(
+    String storeId,
+    DateTime month,
+  ) async => _isStaff ? [] : [...?_expItems[_ek(storeId, month)]];
   @override
-  Future<void> saveExpenseItem(String storeId, DateTime month, ExpenseItem item, {bool isNew = false}) async {
+  Future<void> saveExpenseItem(
+    String storeId,
+    DateTime month,
+    ExpenseItem item, {
+    bool isNew = false,
+  }) async {
     if (_isStaff) throw Exception('message: 沒有權限,');
     final list = _expItems.putIfAbsent(_ek(storeId, month), () => []);
     list.removeWhere((e) => e.id == item.id);
-    list.add(ExpenseItem(
+    list.add(
+      ExpenseItem(
         id: isNew ? 'e${_seq++}' : item.id,
         name: item.name,
         category: item.category,
         amount: item.amount,
         accountId: item.accountId,
-        note: item.note));
+        note: item.note,
+      ),
+    );
   }
+
   @override
   Future<void> deleteExpenseItem(String itemId) async {
     for (final l in _expItems.values) {
@@ -909,60 +1716,105 @@ class DemoRepository implements Repository {
   final _cardFeeRate = <String, double>{};
   final _recurring = <String, List<RecurringExpenseItem>>{};
   @override
-  Future<double> cardFeeRate(String storeId) async => _cardFeeRate[storeId] ?? 0.02;
+  Future<double> cardFeeRate(String storeId) async =>
+      _cardFeeRate[storeId] ?? 0.02;
   // ops 0142 示範：隱城的科目（照老闆的損益表）
   @override
   Future<List<PlAccount>> plAccounts(String storeId) async {
     if (_isStaff) return const [];
     const names = [
-      ('薪資支出', 'payroll', 'payroll_base'), ('保險費-勞健保+退休金', 'payroll', null), ('租金支出-房屋', 'rent', 'rent_base'),
-      ('租金支出-租賃稅', 'rent', null), ('租金支出-租賃補充保費', 'rent', null), ('水電瓦斯費', 'misc', null),
-      ('租金支出-ICHEF', 'rent', null), ('其他費用-垃圾清運費', 'misc', null), ('其他費用-雜項', 'misc', 'purchase_misc'),
-      ('職工福利', 'payroll', null), ('廣告費', 'misc', null), ('郵電費', 'misc', null), ('修繕費', 'misc', null),
-      ('保險費', 'misc', null), ('手續費', 'misc', 'card_fee'), ('會計師', 'misc', null), ('內帳記帳費', 'misc', null),
+      ('薪資支出', 'payroll', 'payroll_base'),
+      ('保險費-勞健保+退休金', 'payroll', null),
+      ('租金支出-房屋', 'rent', 'rent_base'),
+      ('租金支出-租賃稅', 'rent', null),
+      ('租金支出-租賃補充保費', 'rent', null),
+      ('水電瓦斯費', 'misc', null),
+      ('租金支出-ICHEF', 'rent', null),
+      ('其他費用-垃圾清運費', 'misc', null),
+      ('其他費用-雜項', 'misc', 'purchase_misc'),
+      ('職工福利', 'payroll', null),
+      ('廣告費', 'misc', null),
+      ('郵電費', 'misc', null),
+      ('修繕費', 'misc', null),
+      ('保險費', 'misc', null),
+      ('手續費', 'misc', 'card_fee'),
+      ('會計師', 'misc', null),
+      ('內帳記帳費', 'misc', null),
     ];
     return [
       for (final (i, n) in names.indexed)
-        PlAccount(id: 'acc$i', name: n.$1, category: n.$2, autoKind: n.$3, sortOrder: i + 1),
+        PlAccount(
+          id: 'acc$i',
+          name: n.$1,
+          category: n.$2,
+          autoKind: n.$3,
+          sortOrder: i + 1,
+        ),
     ];
   }
+
   @override
-  Future<String?> plTitle(String storeId) async => storeId == 'yc' ? '隱城(二店)' : null;
+  Future<String?> plTitle(String storeId) async =>
+      storeId == 'yc' ? '隱城(二店)' : null;
   @override
   Future<void> saveCardFeeRate(String storeId, double rate) async {
     if (_isStaff) throw Exception('message: 沒有權限,');
     _cardFeeRate[storeId] = rate;
   }
+
   @override
-  Future<List<RecurringExpenseItem>> recurringExpenseItems(String storeId) async =>
-      _isStaff ? [] : [...?_recurring[storeId]];
+  Future<List<RecurringExpenseItem>> recurringExpenseItems(
+    String storeId,
+  ) async => _isStaff ? [] : [...?_recurring[storeId]];
   @override
-  Future<void> saveRecurringExpenseItem(String storeId, RecurringExpenseItem item, {bool isNew = false}) async {
+  Future<void> saveRecurringExpenseItem(
+    String storeId,
+    RecurringExpenseItem item, {
+    bool isNew = false,
+  }) async {
     if (_isStaff) throw Exception('message: 沒有權限,');
     final list = _recurring.putIfAbsent(storeId, () => []);
     final old = list.where((e) => e.id == item.id).firstOrNull;
     list.removeWhere((e) => e.id == item.id);
-    list.add(RecurringExpenseItem(
+    list.add(
+      RecurringExpenseItem(
         id: isNew ? 'rc${_seq++}' : item.id,
         name: item.name,
         category: item.category,
         amount: item.amount,
         amountsFrom: old?.amountsFrom ?? const {},
         accountId: item.accountId,
-        note: item.note));
+        note: item.note,
+      ),
+    );
   }
+
   @override
-  Future<void> setRecurringAmountFrom(String itemId, DateTime month, double amount) async {
+  Future<void> setRecurringAmountFrom(
+    String itemId,
+    DateTime month,
+    double amount,
+  ) async {
     if (_isStaff) throw Exception('message: 沒有權限,');
     for (final l in _recurring.values) {
       final i = l.indexWhere((e) => e.id == itemId);
       if (i < 0) continue;
       final e = l[i];
       l[i] = RecurringExpenseItem(
-          id: e.id, name: e.name, category: e.category, amount: e.amount, accountId: e.accountId, note: e.note,
-          amountsFrom: {...e.amountsFrom, DateTime(month.year, month.month): amount});
+        id: e.id,
+        name: e.name,
+        category: e.category,
+        amount: e.amount,
+        accountId: e.accountId,
+        note: e.note,
+        amountsFrom: {
+          ...e.amountsFrom,
+          DateTime(month.year, month.month): amount,
+        },
+      );
     }
   }
+
   @override
   Future<void> deleteRecurringExpenseItem(String itemId) async {
     for (final l in _recurring.values) {
@@ -973,7 +1825,13 @@ class DemoRepository implements Repository {
   @override
   Future<MonthlySummary> monthlySummary(String storeId, DateTime month) async {
     if (_isStaff || storeId != 'yc') {
-      return MonthlySummary(month: month, revenue: 0, guests: 0, drinksRevenue: 0, foodRevenue: 0);
+      return MonthlySummary(
+        month: month,
+        revenue: 0,
+        guests: 0,
+        drinksRevenue: 0,
+        foodRevenue: 0,
+      );
     }
     // 示範：每個月來客、客單略有不同，總覽「上個月／近 3 個月平均」才看得出差異
     final now = DateTime.now();
@@ -1002,20 +1860,55 @@ class DemoRepository implements Repository {
   }
 
   @override
-  Future<List<DailyRevenue>> recentDailyRevenue(String storeId, int days) async {
+  Future<List<DailyRevenue>> recentDailyRevenue(
+    String storeId,
+    int days,
+  ) async {
     if (_isStaff || storeId != 'yc') return [];
-    const v = [20000, 10000, 25000, 40000, 50000, 20000, 15000, 22000, 24000, 45000, 38000, 42000, 21000, 30000];
-    return [for (var i = 0; i < v.length; i++) DailyRevenue(DateTime(2026, 9, 17).add(Duration(days: i)), v[i].toDouble(), 20 + i)];
+    const v = [
+      20000,
+      10000,
+      25000,
+      40000,
+      50000,
+      20000,
+      15000,
+      22000,
+      24000,
+      45000,
+      38000,
+      42000,
+      21000,
+      30000,
+    ];
+    return [
+      for (var i = 0; i < v.length; i++)
+        DailyRevenue(
+          DateTime(2026, 9, 17).add(Duration(days: i)),
+          v[i].toDouble(),
+          20 + i,
+        ),
+    ];
   }
 
   @override
-  Future<List<DailyRevenue>> dailyRevenueBetween(String storeId, DateTime from, DateTime to) async {
+  Future<List<DailyRevenue>> dailyRevenueBetween(
+    String storeId,
+    DateTime from,
+    DateTime to,
+  ) async {
     if (_isStaff) return [];
     // 示範資料：每天 1.2～2.8 萬
     final out = <DailyRevenue>[];
     final today = DateTime.now();
-    for (var d = from; !d.isAfter(to) && !d.isAfter(today); d = d.add(const Duration(days: 1))) {
-      out.add(DailyRevenue(d, 12000.0 + (d.day * 3700 % 16000), 20 + d.day % 15));
+    for (
+      var d = from;
+      !d.isAfter(to) && !d.isAfter(today);
+      d = d.add(const Duration(days: 1))
+    ) {
+      out.add(
+        DailyRevenue(d, 12000.0 + (d.day * 3700 % 16000), 20 + d.day % 15),
+      );
     }
     return out;
   }
@@ -1030,7 +1923,8 @@ class DemoRepository implements Repository {
   }
 
   @override
-  Future<double?> pettyCashBalance(String storeId) async => storeId == 'yc' ? 5000 : null;
+  Future<double?> pettyCashBalance(String storeId) async =>
+      storeId == 'yc' ? 5000 : null;
 
   @override
   Future<DateTime> businessDate(String storeId) async {
@@ -1044,16 +1938,28 @@ class DemoRepository implements Repository {
   @override
   Future<List<Supplier>> suppliers(String storeId) async => _suppliers;
   @override
-  Future<List<Purchase>> recentPurchases(String storeId, {int limit = 30}) async =>
-      (List.of(_purchases)..sort((a, b) => b.purchaseDate.compareTo(a.purchaseDate))).take(limit).toList();
+  Future<List<Purchase>> recentPurchases(
+    String storeId, {
+    int limit = 30,
+  }) async =>
+      (List.of(_purchases)
+            ..sort((a, b) => b.purchaseDate.compareTo(a.purchaseDate)))
+          .take(limit)
+          .toList();
 
   @override
-  Future<List<Purchase>> monthPurchases(String storeId, DateTime month) async => _purchases
-      .where((p) => p.purchaseDate.year == month.year && p.purchaseDate.month == month.month)
-      .toList()
-    ..sort((a, b) => b.purchaseDate.compareTo(a.purchaseDate));
+  Future<List<Purchase>> monthPurchases(String storeId, DateTime month) async =>
+      _purchases
+          .where(
+            (p) =>
+                p.purchaseDate.year == month.year &&
+                p.purchaseDate.month == month.month,
+          )
+          .toList()
+        ..sort((a, b) => b.purchaseDate.compareTo(a.purchaseDate));
 
-  final _requestIds = <String, String>{}; // clientRequestId → 已建立的進貨 id（新增重送時接續用同一筆，0089 修復）
+  final _requestIds =
+      <String, String>{}; // clientRequestId → 已建立的進貨 id（新增重送時接續用同一筆，0089 修復）
   final _purchaseMeta = <String, (DateTime, DateTime)>{}; // 進貨日、登記時間（算庫存用）
   final _items = <String, List<PurchaseItem>>{};
   final _itemNegate = <String, bool>{};
@@ -1070,18 +1976,52 @@ class DemoRepository implements Repository {
       category: '酒水',
       notes: '第三行數量有點模糊，請核對',
       items: [
-        PurchaseItem(name: first?.name ?? '琴酒 700ml', qty: 6, unit: first?.unit ?? '瓶', unitPrice: 650,
-            productId: first?.id, stockQty: first == null ? null : 6, source: 'ai'),
-        PurchaseItem(name: '通寧水 200ml', qty: 2, unit: '箱', unitPrice: 720, source: 'ai'),
-        PurchaseItem(name: '檸檬', qty: 3, unit: '斤', unitPrice: 120, source: 'ai', sure: false),
+        PurchaseItem(
+          name: first?.name ?? '琴酒 700ml',
+          qty: 6,
+          unit: first?.unit ?? '瓶',
+          unitPrice: 650,
+          productId: first?.id,
+          stockQty: first == null ? null : 6,
+          source: 'ai',
+        ),
+        PurchaseItem(
+          name: '通寧水 200ml',
+          qty: 2,
+          unit: '箱',
+          unitPrice: 720,
+          source: 'ai',
+        ),
+        PurchaseItem(
+          name: '檸檬',
+          qty: 3,
+          unit: '斤',
+          unitPrice: 120,
+          source: 'ai',
+          sure: false,
+        ),
       ],
     );
   }
 
   @override
   Future<List<QuoteLine>> purchaseQuoteLines(String storeId) async {
-    QuoteLine q(String n, String? u, double price, int daysAgo, String v, String cat) => QuoteLine(
-        name: n, unit: u, unitPrice: price, qty: 1, date: _daysAgo(daysAgo), vendor: v, categoryCode: cat);
+    QuoteLine q(
+      String n,
+      String? u,
+      double price,
+      int daysAgo,
+      String v,
+      String cat,
+    ) => QuoteLine(
+      name: n,
+      unit: u,
+      unitPrice: price,
+      qty: 1,
+      date: _daysAgo(daysAgo),
+      vendor: v,
+      categoryCode: cat,
+    );
     return [
       q("Hendrick's Gin 700ml", '瓶', 1050, 20, '示範酒商A', 'yc_drink'),
       q("Hendrick's Gin 700ml", '瓶', 1080, 3, '示範酒商A', 'yc_drink'),
@@ -1097,15 +2037,30 @@ class DemoRepository implements Repository {
       for (final e in _items.entries)
         if (_purchaseMeta[e.key] case final m?)
           for (final it in e.value)
-            QuoteLine(name: it.name, unit: it.unit, unitPrice: it.unitPrice, qty: _itemNegate[e.key] == true ? -it.qty : it.qty,
-                date: m.$1, vendor: _purchases.where((p) => p.id == e.key).firstOrNull?.supplierName,
-                categoryCode: _purchases.where((p) => p.id == e.key).firstOrNull?.categoryCode ?? 'yc_misc'),
+            QuoteLine(
+              name: it.name,
+              unit: it.unit,
+              unitPrice: it.unitPrice,
+              qty: _itemNegate[e.key] == true ? -it.qty : it.qty,
+              date: m.$1,
+              vendor: _purchases
+                  .where((p) => p.id == e.key)
+                  .firstOrNull
+                  ?.supplierName,
+              categoryCode:
+                  _purchases
+                      .where((p) => p.id == e.key)
+                      .firstOrNull
+                      ?.categoryCode ??
+                  'yc_misc',
+            ),
     ];
   }
 
   final _quoteEdits = <String, QuoteEdit>{};
   @override
-  Future<List<QuoteEdit>> purchaseQuoteEdits(String storeId) async => _quoteEdits.values.toList();
+  Future<List<QuoteEdit>> purchaseQuoteEdits(String storeId) async =>
+      _quoteEdits.values.toList();
   @override
   Future<void> savePurchaseQuoteEdit(String storeId, QuoteEdit edit) async {
     if (_isStaff) throw Exception('message: 只有老闆或店長可以修改進貨報價,');
@@ -1113,14 +2068,22 @@ class DemoRepository implements Repository {
   }
 
   @override
-  Future<void> deletePurchaseQuoteEdit(String storeId, String key) async => _quoteEdits.remove(key);
+  Future<void> deletePurchaseQuoteEdit(String storeId, String key) async =>
+      _quoteEdits.remove(key);
 
   @override
   Future<List<PurchaseItem>> purchaseItems(String purchaseId) async => [
-        for (final it in _items[purchaseId] ?? const <PurchaseItem>[])
-          PurchaseItem(name: it.name, qty: it.qty, unit: it.unit, unitPrice: it.unitPrice,
-              productId: it.productId, stockQty: it.stockQty, source: it.source)
-      ];
+    for (final it in _items[purchaseId] ?? const <PurchaseItem>[])
+      PurchaseItem(
+        name: it.name,
+        qty: it.qty,
+        unit: it.unit,
+        unitPrice: it.unitPrice,
+        productId: it.productId,
+        stockQty: it.stockQty,
+        source: it.source,
+      ),
+  ];
 
   // 主檔＋品項一次存完，全部成功才算（0089 修復：原本分兩次存，中途斷線會變成帳改了、庫存沒改）；
   // 新增時同一個 clientRequestId 重送會接續用原來那筆的 id，不會重複新增、也不會被擋住（0089 修復）
@@ -1137,9 +2100,17 @@ class DemoRepository implements Repository {
       final i = _purchases.indexWhere((x) => x.id == purchaseId);
       final o = _purchases[i];
       _purchases[i] = Purchase(
-          id: o.id, purchaseDate: p.purchaseDate, categoryCode: p.categoryCode,
-          supplierName: p.vendorName ?? o.supplierName, memo: p.memo, amount: p.amount, paidBy: p.paidBy,
-          reconciled: o.reconciled, source: o.source, createdBy: o.createdBy);
+        id: o.id,
+        purchaseDate: p.purchaseDate,
+        categoryCode: p.categoryCode,
+        supplierName: p.vendorName ?? o.supplierName,
+        memo: p.memo,
+        amount: p.amount,
+        paidBy: p.paidBy,
+        reconciled: o.reconciled,
+        source: o.source,
+        createdBy: o.createdBy,
+      );
       id = purchaseId;
     } else {
       final existing = _requestIds[p.clientRequestId];
@@ -1149,25 +2120,37 @@ class DemoRepository implements Repository {
         if (p.amount == 0) throw Exception('message: 金額不能為 0,');
         id = 'n${_seq++}';
         _purchaseMeta[id] = (p.purchaseDate, DateTime.now());
-        _purchases.add(Purchase(
-          id: id,
-          purchaseDate: p.purchaseDate,
-          categoryCode: p.categoryCode,
-          supplierName: _suppliers.where((s) => s.id == p.supplierId).map((s) => s.name).firstOrNull,
-          memo: p.memo,
-          amount: p.amount,
-          paidBy: p.paidBy,
-          reconciled: false,
-          source: 'app',
-        ));
+        _purchases.add(
+          Purchase(
+            id: id,
+            purchaseDate: p.purchaseDate,
+            categoryCode: p.categoryCode,
+            supplierName: _suppliers
+                .where((s) => s.id == p.supplierId)
+                .map((s) => s.name)
+                .firstOrNull,
+            memo: p.memo,
+            amount: p.amount,
+            paidBy: p.paidBy,
+            reconciled: false,
+            source: 'app',
+          ),
+        );
         _requestIds[p.clientRequestId] = id;
       }
     }
     if (items != null) {
       _items[id] = [
         for (final it in items)
-          PurchaseItem(name: it.name, qty: it.qty, unit: it.unit, unitPrice: it.unitPrice,
-              productId: it.productId, stockQty: it.stockQty, source: it.source)
+          PurchaseItem(
+            name: it.name,
+            qty: it.qty,
+            unit: it.unit,
+            unitPrice: it.unitPrice,
+            productId: it.productId,
+            stockQty: it.stockQty,
+            source: it.source,
+          ),
       ];
       _itemNegate[id] = negate;
     }
@@ -1175,34 +2158,84 @@ class DemoRepository implements Repository {
   }
 
   @override
-  Future<void> deletePurchase(String purchaseId) async => _purchases.removeWhere((x) => x.id == purchaseId);
+  Future<void> deletePurchase(String purchaseId) async =>
+      _purchases.removeWhere((x) => x.id == purchaseId);
 
   // 進貨待確認（示範）
   late final List<PurchaseMatch> _matches = [
-    PurchaseMatch(kind: 'pair', appId: 'm1', appDate: _daysAgo(3), amount: 290, paidBy: 'petty_cash', appName: '小北 3M手套',
-        appCategory: '雜項', createdName: '示範正職', importId: 'i1', importDate: _daysAgo(8), importName: '豆芽菜.蒜仁',
-        importCategory: '餐食', reasons: const ['日期不同', '名稱對不上', '類別不同']),
-    PurchaseMatch(kind: 'pair', appId: 'm2', appDate: _daysAgo(5), amount: 1260, paidBy: 'vendor', appName: '示範水果行',
-        appCategory: '餐食', createdName: '示範店長', importId: 'i2', importDate: _daysAgo(4), importName: '示範水果行',
-        importCategory: '餐食', reasons: const ['日期不同']),
-    PurchaseMatch(kind: 'unmatched', appId: 'm3', appDate: _daysAgo(9), amount: 628, paidBy: 'petty_cash', appName: '衛生廚房用品',
-        appCategory: '雜項', createdName: '示範正職', reasons: const ['日報表沒有這一筆']),
+    PurchaseMatch(
+      kind: 'pair',
+      appId: 'm1',
+      appDate: _daysAgo(3),
+      amount: 290,
+      paidBy: 'petty_cash',
+      appName: '小北 3M手套',
+      appCategory: '雜項',
+      createdName: '示範正職',
+      importId: 'i1',
+      importDate: _daysAgo(8),
+      importName: '豆芽菜.蒜仁',
+      importCategory: '餐食',
+      reasons: const ['日期不同', '名稱對不上', '類別不同'],
+    ),
+    PurchaseMatch(
+      kind: 'pair',
+      appId: 'm2',
+      appDate: _daysAgo(5),
+      amount: 1260,
+      paidBy: 'vendor',
+      appName: '示範水果行',
+      appCategory: '餐食',
+      createdName: '示範店長',
+      importId: 'i2',
+      importDate: _daysAgo(4),
+      importName: '示範水果行',
+      importCategory: '餐食',
+      reasons: const ['日期不同'],
+    ),
+    PurchaseMatch(
+      kind: 'unmatched',
+      appId: 'm3',
+      appDate: _daysAgo(9),
+      amount: 628,
+      paidBy: 'petty_cash',
+      appName: '衛生廚房用品',
+      appCategory: '雜項',
+      createdName: '示範正職',
+      reasons: const ['日報表沒有這一筆'],
+    ),
   ];
   @override
-  Future<List<PurchaseMatch>> purchaseMatchQueue(String storeId) async => _isStaff ? const [] : List.of(_matches);
+  Future<List<PurchaseMatch>> purchaseMatchQueue(String storeId) async =>
+      _isStaff ? const [] : List.of(_matches);
   @override
-  Future<void> confirmPurchaseMatches(List<String> appIds) async => _matches.removeWhere((m) => appIds.contains(m.appId));
+  Future<void> confirmPurchaseMatches(List<String> appIds) async =>
+      _matches.removeWhere((m) => appIds.contains(m.appId));
   @override
   Future<void> rejectPurchaseMatch(String appId) async {
     final i = _matches.indexWhere((m) => m.appId == appId);
     final m = _matches[i];
-    _matches[i] = PurchaseMatch(kind: m.kind, appId: m.appId, appDate: m.appDate, amount: m.amount, paidBy: m.paidBy,
-        appName: m.appName, appCategory: m.appCategory, createdName: m.createdName, importId: m.importId,
-        importDate: m.importDate, importName: m.importName, importCategory: m.importCategory, reasons: m.reasons, waiting: true);
+    _matches[i] = PurchaseMatch(
+      kind: m.kind,
+      appId: m.appId,
+      appDate: m.appDate,
+      amount: m.amount,
+      paidBy: m.paidBy,
+      appName: m.appName,
+      appCategory: m.appCategory,
+      createdName: m.createdName,
+      importId: m.importId,
+      importDate: m.importDate,
+      importName: m.importName,
+      importCategory: m.importCategory,
+      reasons: m.reasons,
+      waiting: true,
+    );
   }
 
   @override
-  Future<void> dismissUnmatchedPurchase(String appId) async => _matches.removeWhere((m) => m.appId == appId);
+  Future<void> dismissUnmatchedPurchase(String appId) async =>
+      _matches.removeWhere((m) => m.appId == appId);
 
   @override
   Future<void> setReconciled(String purchaseId, bool reconciled) async {
@@ -1210,24 +2243,38 @@ class DemoRepository implements Repository {
     final i = _purchases.indexWhere((p) => p.id == purchaseId);
     final p = _purchases[i];
     _purchases[i] = Purchase(
-        id: p.id, purchaseDate: p.purchaseDate, categoryCode: p.categoryCode, supplierName: p.supplierName,
-        memo: p.memo, amount: p.amount, paidBy: p.paidBy, reconciled: reconciled, source: p.source);
+      id: p.id,
+      purchaseDate: p.purchaseDate,
+      categoryCode: p.categoryCode,
+      supplierName: p.supplierName,
+      memo: p.memo,
+      amount: p.amount,
+      paidBy: p.paidBy,
+      reconciled: reconciled,
+      source: p.source,
+    );
   }
 
   @override
-  Future<List<Product>> products(String storeId) async => _products.where((p) => !_inactive.contains(p.id)).toList();
+  Future<List<Product>> products(String storeId) async =>
+      _products.where((p) => !_inactive.contains(p.id)).toList();
   final _inactive = <String>{}; // 停用的品項（歷史盤點照常顯示名稱）
 
   @override
-  Future<List<StockCount>> stockCounts(String storeId) async => List.of(_counts.reversed);
+  Future<List<StockCount>> stockCounts(String storeId) async =>
+      List.of(_counts.reversed);
 
   @override
   Future<Map<String, StockLevel>> latestStock(String storeId) async {
     final counted = <String, (double, DateTime, DateTime)>{};
     for (final c in _counts.reversed) {
-      if (c.status != CountStatus.submitted && c.status != CountStatus.approved) continue;
+      if (c.status != CountStatus.submitted && c.status != CountStatus.approved)
+        continue;
       for (final e in (_lines[c.id] ?? {}).entries) {
-        counted.putIfAbsent(e.key, () => (e.value, c.bizDate, _countedAt[c.id] ?? DateTime(2000)));
+        counted.putIfAbsent(
+          e.key,
+          () => (e.value, c.bizDate, _countedAt[c.id] ?? DateTime(2000)),
+        );
       }
     }
     // 盤點之後的進貨明細（同資料庫 stock_levels）
@@ -1237,24 +2284,41 @@ class DemoRepository implements Repository {
       if (meta == null) continue;
       for (final it in e.value.where((x) => x.toStock)) {
         final c = counted[it.productId];
-        final after = c == null || meta.$1.isAfter(c.$2) || (meta.$1 == c.$2 && meta.$2.isAfter(c.$3));
-        if (after) inflow[it.productId!] = (inflow[it.productId!] ?? 0) + (_itemNegate[e.key] == true ? -it.stockQty! : it.stockQty!);
+        final after =
+            c == null ||
+            meta.$1.isAfter(c.$2) ||
+            (meta.$1 == c.$2 && meta.$2.isAfter(c.$3));
+        if (after)
+          inflow[it.productId!] =
+              (inflow[it.productId!] ?? 0) +
+              (_itemNegate[e.key] == true ? -it.stockQty! : it.stockQty!);
       }
     }
     return {
       for (final id in {...counted.keys, ...inflow.keys})
-        id: StockLevel((counted[id]?.$1 ?? 0) + (inflow[id] ?? 0), counted[id]?.$2, purchased: inflow[id] ?? 0),
+        id: StockLevel(
+          (counted[id]?.$1 ?? 0) + (inflow[id] ?? 0),
+          counted[id]?.$2,
+          purchased: inflow[id] ?? 0,
+        ),
     };
   }
+
   final _countedAt = <String, DateTime>{};
 
   @override
   Future<Map<String, LastCount>> stockLastCounts(String storeId) async {
     final out = Map.of(_demoLast);
     for (final c in _counts) {
-      if (c.status != CountStatus.submitted && c.status != CountStatus.approved) continue;
+      if (c.status != CountStatus.submitted && c.status != CountStatus.approved)
+        continue;
       for (final e in (_lines[c.id] ?? {}).entries) {
-        out[e.key] = LastCount(e.value, c.bizDate, at: _countedAt[c.id], by: '示範使用者');
+        out[e.key] = LastCount(
+          e.value,
+          c.bizDate,
+          at: _countedAt[c.id],
+          by: '示範使用者',
+        );
       }
     }
     return out;
@@ -1262,9 +2326,14 @@ class DemoRepository implements Repository {
 
   final _stockRequests = <String>{};
   @override
-  Future<StockSubmitResult> submitStockCount(String storeId, Map<String, double> lines,
-      {required String requestId, DateTime? seenAt}) async {
-    if (!_stockRequests.add(requestId)) return StockSubmitResult(lines.length, repeat: true);
+  Future<StockSubmitResult> submitStockCount(
+    String storeId,
+    Map<String, double> lines, {
+    required String requestId,
+    DateTime? seenAt,
+  }) async {
+    if (!_stockRequests.add(requestId))
+      return StockSubmitResult(lines.length, repeat: true);
     final id = await createStockCount(storeId, null);
     _lines[id]!.addAll(lines);
     await setCountStatus(id, CountStatus.submitted);
@@ -1272,16 +2341,37 @@ class DemoRepository implements Repository {
   }
 
   @override
-  Future<String> saveProduct(String storeId, Product p, {bool setCycle = false}) async {
+  Future<String> saveProduct(
+    String storeId,
+    Product p, {
+    bool setCycle = false,
+  }) async {
     // 同名的停用品項：恢復那一個（與正式資料庫一致）
-    final old = p.id.isEmpty ? _products.where((x) => x.name == p.name.trim() && _inactive.contains(x.id)).firstOrNull : null;
+    final old = p.id.isEmpty
+        ? _products
+              .where((x) => x.name == p.name.trim() && _inactive.contains(x.id))
+              .firstOrNull
+        : null;
     if (old != null) {
       _inactive.remove(old.id);
-      p = Product(old.id, p.name, p.category, p.unit, parLevel: p.parLevel, countCycle: p.countCycle);
+      p = Product(
+        old.id,
+        p.name,
+        p.category,
+        p.unit,
+        parLevel: p.parLevel,
+        countCycle: p.countCycle,
+      );
     }
     final i = _products.indexWhere((x) => x.id == p.id);
-    final np = Product(p.id.isEmpty ? 'p${_seq++}' : p.id, p.name, p.category, p.unit,
-        parLevel: p.parLevel, countCycle: setCycle || i < 0 ? p.countCycle : _products[i].countCycle);
+    final np = Product(
+      p.id.isEmpty ? 'p${_seq++}' : p.id,
+      p.name,
+      p.category,
+      p.unit,
+      parLevel: p.parLevel,
+      countCycle: setCycle || i < 0 ? p.countCycle : _products[i].countCycle,
+    );
     if (i < 0) {
       _products.add(np);
     } else {
@@ -1298,23 +2388,35 @@ class DemoRepository implements Repository {
   @override
   Future<String> createStockCount(String storeId, String? note) async {
     final id = 'c${_seq++}';
-    _counts.add(StockCount(id: id, bizDate: await businessDate(storeId), countedBy: 'demo-user',
-        status: CountStatus.draft, note: note, lineCount: 0));
+    _counts.add(
+      StockCount(
+        id: id,
+        bizDate: await businessDate(storeId),
+        countedBy: 'demo-user',
+        status: CountStatus.draft,
+        note: note,
+        lineCount: 0,
+      ),
+    );
     _lines[id] = {};
     return id;
   }
 
   @override
   Future<List<CountLine>> countLines(String countId) async => [
-        for (final e in (_lines[countId] ?? {}).entries)
-          () {
-            final p = _products.firstWhere((p) => p.id == e.key);
-            return CountLine(p.id, p.name, p.unit, e.value);
-          }()
-      ];
+    for (final e in (_lines[countId] ?? {}).entries)
+      () {
+        final p = _products.firstWhere((p) => p.id == e.key);
+        return CountLine(p.id, p.name, p.unit, e.value);
+      }(),
+  ];
 
   @override
-  Future<void> upsertCountLine(String countId, String productId, double qty) async {
+  Future<void> upsertCountLine(
+    String countId,
+    String productId,
+    double qty,
+  ) async {
     final c = _counts.firstWhere((c) => c.id == countId);
     if (c.status != CountStatus.draft && c.status != CountStatus.rejected) {
       throw Exception('message: 盤點已送出或已核准，明細不能修改,');
@@ -1324,71 +2426,189 @@ class DemoRepository implements Repository {
   }
 
   @override
-  Future<void> setCountStatus(String countId, CountStatus status, {String? voidReason}) async {
+  Future<void> setCountStatus(
+    String countId,
+    CountStatus status, {
+    String? voidReason,
+  }) async {
     final c = _counts.firstWhere((c) => c.id == countId);
-    if (status == CountStatus.approved && _isStaff) throw Exception('message: 員工不能核准盤點,');
+    if (status == CountStatus.approved && _isStaff)
+      throw Exception('message: 員工不能核准盤點,');
     if (status == CountStatus.submitted) _countedAt[c.id] = DateTime.now();
     _replace(c, status);
   }
 
   void _replace(StockCount c, CountStatus s) {
     final i = _counts.indexOf(c);
-    _counts[i] = StockCount(id: c.id, bizDate: c.bizDate, countedBy: c.countedBy, status: s, note: c.note,
-        lineCount: _lines[c.id]?.length ?? 0);
+    _counts[i] = StockCount(
+      id: c.id,
+      bizDate: c.bizDate,
+      countedBy: c.countedBy,
+      status: s,
+      note: c.note,
+      lineCount: _lines[c.id]?.length ?? 0,
+    );
   }
 
   // ---------------- 訂位（示範） ----------------
   final Map<String, List<Reservation>> _demoRes = {}; // 依店家分開
   final Map<String, Map<String, dynamic>> _demoResSettings = {};
   @override
-  Future<ReservationSettings?> reservationSettings(String storeId) async => ReservationSettings.fromRow({
-        'store_id': storeId, 'slug': 'demo', 'enabled': true, 'display_name': '示範店', 'first_slot': '19:00',
-        'last_slot': '23:00', 'slot_minutes': 30, 'max_guests_per_slot': 20, 'max_party': 6, 'days_ahead': 7,
-        'same_day_cutoff': '17:00', 'web_burst_limit': 30,
-        ...?_demoResSettings[storeId],
-      });
+  Future<ReservationSettings?> reservationSettings(String storeId) async =>
+      // 公版新店（示範）：開店精靈建好之前沒有訂位設定
+      storeId == _demoNewStoreId && !_demoResSettings.containsKey(storeId)
+      ? null
+      : ReservationSettings.fromRow({
+          'store_id': storeId,
+          'slug': 'demo',
+          'enabled': true,
+          'display_name': '示範店',
+          'first_slot': '19:00',
+          'last_slot': '23:00',
+          'slot_minutes': 30,
+          'max_guests_per_slot': 20,
+          'max_party': 6,
+          'days_ahead': 7,
+          'same_day_cutoff': '17:00',
+          'web_burst_limit': 30,
+          ...?_demoResSettings[storeId],
+        });
   @override
-  Future<void> saveReservationSettings(String storeId, Map<String, dynamic> values) async {
+  Future<void> saveReservationSettings(
+    String storeId,
+    Map<String, dynamic> values,
+  ) async {
     _demoResSettings.putIfAbsent(storeId, () => {}).addAll(values);
   }
+
   // 訂位頁的樣子（示範）：上傳的圖只留在這支手機的記憶體
   final Map<String, BookingProfile> _demoProfiles = {};
   final Map<String, Uint8List> demoBookingAssets = {};
   @override
-  Future<BookingProfile?> bookingProfile(String storeId) async => _demoProfiles[storeId] ??
-      const BookingProfile(
-        langs: ['zh', 'en'],
-        title: {'zh': '示範酒吧', 'en': 'Demo Bar'},
-        intro: {'zh': '老宅二樓的小酒吧', 'en': 'A small bar upstairs in an old house'},
-        address: {'en': '2F, No. 15, Demo Rd., Taipei'},
-        minSpend: 600,
-        minSpendText: {'zh': '每人一杯飲品\n{amount}', 'en': 'One drink per person.\n{amount}'},
-        infoRows: [BookingInfoRow(label: {'zh': '營業時間', 'en': 'Hours'}, text: {'zh': '每天 19:00～01:00', 'en': 'Daily 19:00–01:00'})],
-        logoUrl: 'logo-xcw.png',
-        heroUrl: 'hero-xcw.jpg',
-        heroPos: '22% 45%',
-      );
+  Future<BookingProfile?> bookingProfile(String storeId) async =>
+      _demoProfiles[storeId] ??
+      (storeId == _demoNewStoreId ? null : _demoDefaultProfile);
+  static const _demoDefaultProfile = BookingProfile(
+    langs: ['zh', 'en'],
+    title: {'zh': '示範酒吧', 'en': 'Demo Bar'},
+    intro: {'zh': '老宅二樓的小酒吧', 'en': 'A small bar upstairs in an old house'},
+    address: {'en': '2F, No. 15, Demo Rd., Taipei'},
+    minSpend: 600,
+    minSpendText: {
+      'zh': '每人一杯飲品\n{amount}',
+      'en': 'One drink per person.\n{amount}',
+    },
+    infoRows: [
+      BookingInfoRow(
+        label: {'zh': '營業時間', 'en': 'Hours'},
+        text: {'zh': '每天 19:00～01:00', 'en': 'Daily 19:00–01:00'},
+      ),
+    ],
+    logoUrl: 'logo-xcw.png',
+    heroUrl: 'hero-xcw.jpg',
+    heroPos: '22% 45%',
+  );
   @override
-  Future<void> saveBookingProfile(String storeId, BookingProfile p) async => _demoProfiles[storeId] = p;
+  Future<void> saveBookingProfile(String storeId, BookingProfile p) async =>
+      _demoProfiles[storeId] = p;
+  // 開店精靈（示範）：照資料庫的規則走（只能建一次、代號格式、保留字、有人用了）
+  static const _demoNewStoreId = 'demo-new';
+  static const _demoTakenSlugs = {'lane-bar', 'xiaocheng'};
+  int _onboardInvites = 0;
+  @override
+  Future<OnboardingStatus> onboardingStatus(String storeId) async {
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    final s = await reservationSettings(storeId);
+    final p = await bookingProfile(storeId);
+    final isNew = storeId == _demoNewStoreId;
+    return OnboardingStatus(
+      booking: s != null,
+      slug: s?.slug,
+      page:
+          p != null &&
+          (p.logoUrl != null ||
+              p.heroUrl != null ||
+              (p.intro['zh'] ?? '').isNotEmpty),
+      members: !isNew || _onboardInvites > 0,
+      staffing: !isNew,
+    );
+  }
+
+  @override
+  Future<String> setupOnlineBooking(
+    String storeId, {
+    required String slug,
+    required String displayName,
+    String? address,
+    String? phone,
+    required List<String> slotTimes,
+    List<int> closedWeekdays = const [],
+    int? maxGroups,
+    int? maxGuests,
+  }) async {
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    final v = slug.trim().toLowerCase();
+    if (await reservationSettings(storeId) != null) {
+      throw Exception('message: ONBOARD_EXISTS：這家店已經設定過線上訂位了，請到「訂位設定」修改,');
+    }
+    final err = slugError(v);
+    if (err != null) {
+      final code = reservedBookingSlugs.contains(v)
+          ? 'ONBOARD_SLUG_RESERVED'
+          : 'ONBOARD_SLUG_FORMAT';
+      throw Exception('message: $code：$err,');
+    }
+    if (_demoTakenSlugs.contains(v))
+      throw Exception('message: ONBOARD_SLUG_TAKEN：這個訂位網址代號有人用了，請換一個,');
+    if (displayName.trim().isEmpty)
+      throw Exception('message: ONBOARD_NAME：訂位頁顯示的店名請填 1 到 40 個字,');
+    final slots = normalizeSlots(slotTimes);
+    if (slots.isEmpty) throw Exception('message: ONBOARD_SLOTS：至少要有一個訂位時段,');
+    _demoResSettings[storeId] = {
+      'slug': v,
+      'display_name': displayName.trim(),
+      'address': address,
+      'phone': phone,
+      'slot_times': slots,
+      'first_slot': slots.first,
+      'last_slot': slots.last,
+      'closed_weekdays': ([...closedWeekdays]..sort()),
+      'max_groups_per_day': maxGroups,
+      'max_guests_per_day': maxGuests,
+      'days_ahead': 14,
+    };
+    _demoProfiles.putIfAbsent(
+      storeId,
+      () => BookingProfile(title: {'zh': displayName.trim()}),
+    );
+    return v;
+  }
+
   // 訂位的 AI 設定助理（示範）：不連 AI，只認得幾種說法，照真的流程走（建議 → 確認套用 → 可以改回去）
   final Map<String, List<AssistRecord>> _demoAssist = {};
   Map<String, dynamic> _profileRow(BookingProfile p) => {
-        'langs': [...p.langs],
-        'title': {...p.title},
-        'short_name': {...p.shortName},
-        'intro': {...p.intro},
-        'address_i18n': {...p.address},
-        'directions_i18n': {...p.directions},
-        'min_spend': p.minSpend,
-        'min_spend_text': {...p.minSpendText},
-        'info_rows': [for (final r in p.infoRows) {'label': r.label, 'text': r.text}],
-        'logo_url': p.logoUrl,
-        'hero_url': p.heroUrl,
-        'hero_pos': p.heroPos,
-        'sister_store_id': p.sisterStoreId,
-      };
+    'langs': [...p.langs],
+    'title': {...p.title},
+    'short_name': {...p.shortName},
+    'intro': {...p.intro},
+    'address_i18n': {...p.address},
+    'directions_i18n': {...p.directions},
+    'min_spend': p.minSpend,
+    'min_spend_text': {...p.minSpendText},
+    'info_rows': [
+      for (final r in p.infoRows) {'label': r.label, 'text': r.text},
+    ],
+    'logo_url': p.logoUrl,
+    'hero_url': p.heroUrl,
+    'hero_pos': p.heroPos,
+    'sister_store_id': p.sisterStoreId,
+  };
   @override
-  Future<AssistReply> askBookingAssistant(String storeId, String message, List<AssistTurn> history) async {
+  Future<AssistReply> askBookingAssistant(
+    String storeId,
+    String message,
+    List<AssistTurn> history,
+  ) async {
     await Future<void>.delayed(const Duration(milliseconds: 600));
     final p = (await bookingProfile(storeId))!;
     final now = DateTime.now();
@@ -1397,7 +2617,11 @@ class DemoRepository implements Repository {
     final changes = <Map<String, dynamic>>[];
     final parts = <String>[];
     if (RegExp(r'包場|不開放|公休|休息').hasMatch(message)) {
-      final want = message.contains('日') && !message.contains('六') ? 7 : message.contains('五') ? 5 : 6;
+      final want = message.contains('日') && !message.contains('六')
+          ? 7
+          : message.contains('五')
+          ? 5
+          : 6;
       var d = today.add(const Duration(days: 1));
       while (d.weekday != want) {
         d = d.add(const Duration(days: 1));
@@ -1405,50 +2629,93 @@ class DemoRepository implements Repository {
       final cur = _demoSpecial[storeId]?[iso(d)];
       final note = message.contains('包場') ? '包場' : null;
       changes.add({
-        'op': 'day', 'date': iso(d),
-        'before': cur != null && cur.closed ? {'closed': true, 'note': cur.note} : null,
+        'op': 'day',
+        'date': iso(d),
+        'before': cur != null && cur.closed
+            ? {'closed': true, 'note': cur.note}
+            : null,
         'after': {'closed': true, 'note': note},
       });
-      parts.add('${AssistChange.dayLabel(iso(d))}改成整天不開放線上訂位${note == null ? '' : '，說明寫「$note」'}');
+      parts.add(
+        '${AssistChange.dayLabel(iso(d))}改成整天不開放線上訂位${note == null ? '' : '，說明寫「$note」'}',
+      );
     }
     final amount = RegExp(r'低消[^0-9]*([0-9]{2,6})').firstMatch(message);
     if (amount != null) {
-      changes.add({'op': 'min_spend', 'before': p.minSpend, 'after': int.parse(amount.group(1)!)});
+      changes.add({
+        'op': 'min_spend',
+        'before': p.minSpend,
+        'after': int.parse(amount.group(1)!),
+      });
       parts.add('每人低消改成 ${amount.group(1)} 元');
     }
     if (message.contains('日文') && !p.langs.contains('ja')) {
-      changes.add({'op': 'langs', 'before': [...p.langs], 'after': [for (final l in BookingProfile.langsAll) if (p.langs.contains(l) || l == 'ja') l]});
-      changes.add({'op': 'text', 'field': 'intro', 'lang': 'ja', 'before': p.intro['ja'], 'after': '古い家の二階にある小さなバー'});
+      changes.add({
+        'op': 'langs',
+        'before': [...p.langs],
+        'after': [
+          for (final l in BookingProfile.langsAll)
+            if (p.langs.contains(l) || l == 'ja') l,
+        ],
+      });
+      changes.add({
+        'op': 'text',
+        'field': 'intro',
+        'lang': 'ja',
+        'before': p.intro['ja'],
+        'after': '古い家の二階にある小さなバー',
+      });
       parts.add('訂位頁加開日文，也幫你寫好日文介紹');
     }
     if (message.contains('英文') && message.contains('介紹')) {
-      changes.add({'op': 'text', 'field': 'intro', 'lang': 'en', 'before': p.intro['en'], 'after': 'A quiet little bar upstairs in an old Taipei house'});
+      changes.add({
+        'op': 'text',
+        'field': 'intro',
+        'lang': 'en',
+        'before': p.intro['en'],
+        'after': 'A quiet little bar upstairs in an old Taipei house',
+      });
       parts.add('英文介紹改寫得更有畫面一點');
     }
     if (changes.isEmpty) {
       return const AssistReply(
-          reply: '示範版只認得幾種說法，例如「這週六包場不開放」「低消改 700」「加開日文」「英文介紹改一下」。正式版可以用自己的話說。');
+        reply: '示範版只認得幾種說法，例如「這週六包場不開放」「低消改 700」「加開日文」「英文介紹改一下」。正式版可以用自己的話說。',
+      );
     }
-    return AssistReply(reply: '好，我打算：${parts.join('；')}。請看下面確認。', changes: [for (final c in changes) AssistChange(c)]);
+    return AssistReply(
+      reply: '好，我打算：${parts.join('；')}。請看下面確認。',
+      changes: [for (final c in changes) AssistChange(c)],
+    );
   }
 
-  void _demoAssistExec(String storeId, BookingProfile p, List<Map<String, dynamic>> changes) {
+  void _demoAssistExec(
+    String storeId,
+    BookingProfile p,
+    List<Map<String, dynamic>> changes,
+  ) {
     final row = _profileRow(p);
     final days = _demoSpecial[storeId] ??= {};
-    String norm(Object? v) => jsonEncode(v is List ? ([...v.map((e) => '$e')]..sort()) : v);
+    String norm(Object? v) =>
+        jsonEncode(v is List ? ([...v.map((e) => '$e')]..sort()) : v);
     Object? current(Map<String, dynamic> c) => switch (c['op']) {
-          'text' => ((row[c['field']] as Map<String, String>)[c['lang']] ?? '').isEmpty
-              ? null
-              : (row[c['field']] as Map<String, String>)[c['lang']],
-          'min_spend' => row['min_spend'],
-          'langs' => row['langs'],
-          'day' => days[c['date']] == null ? null : {'closed': true, 'note': days[c['date']]!.note},
-          _ => null,
-        };
+      'text' =>
+        ((row[c['field']] as Map<String, String>)[c['lang']] ?? '').isEmpty
+            ? null
+            : (row[c['field']] as Map<String, String>)[c['lang']],
+      'min_spend' => row['min_spend'],
+      'langs' => row['langs'],
+      'day' =>
+        days[c['date']] == null
+            ? null
+            : {'closed': true, 'note': days[c['date']]!.note},
+      _ => null,
+    };
     // 跟正式版一樣：先全部檢查「改前」跟現在一樣，一項不對整筆不動（Codex P2）
     for (final c in changes) {
       if (norm(current(c)) != norm(c['before'])) {
-        throw Exception('message: BOOKING_ASSIST_STALE：設定在你按確認之前被改過了，這次沒有套用，請重新問一次,');
+        throw Exception(
+          'message: BOOKING_ASSIST_STALE：設定在你按確認之前被改過了，這次沒有套用，請重新問一次,',
+        );
       }
     }
     for (final c in changes) {
@@ -1456,7 +2723,9 @@ class DemoRepository implements Repository {
         case 'text':
           final m = row[c['field']] as Map<String, String>;
           final a = c['after'] as String?;
-          a == null || a.isEmpty ? m.remove(c['lang']) : m[c['lang'] as String] = a;
+          a == null || a.isEmpty
+              ? m.remove(c['lang'])
+              : m[c['lang'] as String] = a;
         case 'min_spend':
           row['min_spend'] = c['after'];
         case 'langs':
@@ -1466,8 +2735,11 @@ class DemoRepository implements Repository {
           if (a == null) {
             days.remove(c['date']);
           } else {
-            days[c['date'] as String] =
-                ReservationSpecialDay(day: DateTime.parse(c['date'] as String), closed: true, note: (a as Map)['note'] as String?);
+            days[c['date'] as String] = ReservationSpecialDay(
+              day: DateTime.parse(c['date'] as String),
+              closed: true,
+              note: (a as Map)['note'] as String?,
+            );
           }
       }
     }
@@ -1475,16 +2747,29 @@ class DemoRepository implements Repository {
   }
 
   @override
-  Future<void> applyBookingAssist(String storeId, String request, List<AssistChange> changes) async {
-    _demoAssistExec(storeId, (await bookingProfile(storeId))!, [for (final c in changes) c.raw]);
+  Future<void> applyBookingAssist(
+    String storeId,
+    String request,
+    List<AssistChange> changes,
+  ) async {
+    _demoAssistExec(storeId, (await bookingProfile(storeId))!, [
+      for (final c in changes) c.raw,
+    ]);
     (_demoAssist[storeId] ??= []).insert(
-        0,
-        AssistRecord(
-            id: 'demo-${DateTime.now().microsecondsSinceEpoch}', appliedAt: DateTime.now(), request: request, changes: changes));
+      0,
+      AssistRecord(
+        id: 'demo-${DateTime.now().microsecondsSinceEpoch}',
+        appliedAt: DateTime.now(),
+        request: request,
+        changes: changes,
+      ),
+    );
   }
 
   @override
-  Future<List<AssistRecord>> bookingAssistHistory(String storeId) async => [...?_demoAssist[storeId]];
+  Future<List<AssistRecord>> bookingAssistHistory(String storeId) async => [
+    ...?_demoAssist[storeId],
+  ];
 
   @override
   Future<void> undoBookingAssist(String id) async {
@@ -1494,9 +2779,16 @@ class DemoRepository implements Repository {
       final r = e.value[i];
       if (r.undoneAt != null) throw Exception('message: 這筆修改已經改回去了,');
       _demoAssistExec(e.key, (await bookingProfile(e.key))!, [
-        for (final c in r.changes.reversed) {...c.raw, 'before': c.raw['after'], 'after': c.raw['before']},
+        for (final c in r.changes.reversed)
+          {...c.raw, 'before': c.raw['after'], 'after': c.raw['before']},
       ]);
-      e.value[i] = AssistRecord(id: r.id, appliedAt: r.appliedAt, request: r.request, changes: r.changes, undoneAt: DateTime.now());
+      e.value[i] = AssistRecord(
+        id: r.id,
+        appliedAt: r.appliedAt,
+        request: r.request,
+        changes: r.changes,
+        undoneAt: DateTime.now(),
+      );
       return;
     }
   }
@@ -1666,7 +2958,8 @@ class DemoRepository implements Repository {
   }
   // 許願單（示範）：先放兩則平台已經回覆過的，新寫的狀態是「平台收到了」
   final Map<String, List<PlatformWish>> _demoWishes = {};
-  List<PlatformWish> _wishesOf(String storeId) => _demoWishes.putIfAbsent(storeId, () {
+  List<PlatformWish> _wishesOf(String storeId) =>
+      _demoWishes.putIfAbsent(storeId, () {
         final now = DateTime.now();
         return [
           PlatformWish(
@@ -1692,43 +2985,76 @@ class DemoRepository implements Repository {
         ];
       });
   @override
-  Future<List<PlatformWish>> platformWishes(String storeId) async => [..._wishesOf(storeId)];
+  Future<List<PlatformWish>> platformWishes(String storeId) async => [
+    ..._wishesOf(storeId),
+  ];
   @override
-  Future<String> createPlatformWish(String storeId, String title, String body) async {
+  Future<String> createPlatformWish(
+    String storeId,
+    String title,
+    String body,
+  ) async {
     final list = _wishesOf(storeId);
     final err = validateWish(title, body, '');
     if (err != null) throw Exception('message: $err,');
-    if (wishesThisMonth(list, toTaipei(DateTime.now())) >= platformWishMonthlyLimit) {
-      throw Exception('message: 這個月的許願單已經寫滿 $platformWishMonthlyLimit 則，下個月再寫,');
+    if (wishesThisMonth(list, toTaipei(DateTime.now())) >=
+        platformWishMonthlyLimit) {
+      throw Exception(
+        'message: 這個月的許願單已經寫滿 $platformWishMonthlyLimit 則，下個月再寫,',
+      );
     }
     final id = 'pw-${++_seq}';
-    list.insert(0, PlatformWish(
-      id: id,
-      title: title.trim(),
-      body: body.trim(),
-      authorName: '示範老闆',
-      status: PlatformWishStatus.received,
-      createdAt: DateTime.now(),
-    ));
+    list.insert(
+      0,
+      PlatformWish(
+        id: id,
+        title: title.trim(),
+        body: body.trim(),
+        authorName: '示範老闆',
+        status: PlatformWishStatus.received,
+        createdAt: DateTime.now(),
+      ),
+    );
     return id;
   }
+
   @override
-  Future<String> uploadBookingAsset(String storeId, String kind, Uint8List bytes, String contentType) async {
-    final path = newBookingAssetPath(storeId.length == 36 ? storeId : '00000000-0000-4000-8000-000000000000', kind,
-        contentType == 'image/png' ? 'png' : contentType == 'image/webp' ? 'webp' : 'jpg');
+  Future<String> uploadBookingAsset(
+    String storeId,
+    String kind,
+    Uint8List bytes,
+    String contentType,
+  ) async {
+    final path = newBookingAssetPath(
+      storeId.length == 36 ? storeId : '00000000-0000-4000-8000-000000000000',
+      kind,
+      contentType == 'image/png'
+          ? 'png'
+          : contentType == 'image/webp'
+          ? 'webp'
+          : 'jpg',
+    );
     demoBookingAssets[path] = bytes;
     return path;
   }
+
   @override
-  Future<void> deleteBookingAsset(String path) async => demoBookingAssets.remove(path);
+  Future<void> deleteBookingAsset(String path) async =>
+      demoBookingAssets.remove(path);
   // 訂位搬家（ops 0148）：照資料庫的規則簡單模擬
   final _demoImports = <String, List<ImportBatch>>{};
   final _demoImportReq = <String, String>{};
 
-  ImportResult _demoImportCheck(String storeId, List<ImportRow> rows, {String? batchId}) {
+  ImportResult _demoImportCheck(
+    String storeId,
+    List<ImportRow> rows, {
+    String? batchId,
+  }) {
     final n = DateTime.now().subtract(const Duration(hours: 6));
     final today = DateTime(n.year, n.month, n.day);
-    final errors = <Map<String, dynamic>>[], skipped = <Map<String, dynamic>>[], ok = <(ImportRow, DateTime)>[];
+    final errors = <Map<String, dynamic>>[],
+        skipped = <Map<String, dynamic>>[],
+        ok = <(ImportRow, DateTime)>[];
     final seen = <String>{};
     final existing = _demoRes[storeId] ??= _seedReservations(storeId);
     String nameKey(String v) => v.replaceAll(RegExp(r'\s+'), '').toLowerCase();
@@ -1738,7 +3064,8 @@ class DemoRepository implements Repository {
       final d = DateTime.tryParse(r.date);
       if (r.date.isEmpty) {
         msg = '沒有日期';
-      } else if (d == null || !RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(r.date)) {
+      } else if (d == null ||
+          !RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(r.date)) {
         msg = '日期看不懂（請寫成 2026-12-24）';
       } else if (d.isBefore(today)) {
         msg = '日期已經過了（只能匯入今天以後的訂位）';
@@ -1748,15 +3075,18 @@ class DemoRepository implements Repository {
         msg = '沒有時間';
       } else if (!RegExp(r'^([01]\d|2[0-3]):[0-5]\d$').hasMatch(r.time)) {
         msg = '時間看不懂（請寫成 19:30）';
-      } else if ((int.tryParse(r.party) ?? 0) < 1 || int.parse(r.party) > 9999) {
+      } else if ((int.tryParse(r.party) ?? 0) < 1 ||
+          int.parse(r.party) > 9999) {
         msg = '人數要是 1～9999 的整數';
       } else if (r.name.trim().isEmpty) {
         msg = '沒有姓名';
       } else if (r.name.trim().length > 40) {
         msg = '姓名超過 40 個字';
-      } else if (r.phone.isNotEmpty && !RegExp(r'^[0-9+() -]{8,20}$').hasMatch(r.phone)) {
+      } else if (r.phone.isNotEmpty &&
+          !RegExp(r'^[0-9+() -]{8,20}$').hasMatch(r.phone)) {
         msg = '電話格式不對（8～20 個數字，可以有 + ( ) - 空白）';
-      } else if (r.email.isNotEmpty && !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(r.email)) {
+      } else if (r.email.isNotEmpty &&
+          !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(r.email)) {
         msg = 'Email 格式不對';
       } else if (r.note.length > 200) {
         msg = '備註超過 200 個字';
@@ -1768,14 +3098,21 @@ class DemoRepository implements Repository {
         continue;
       }
       final digits = phoneDigitsOf(r.phone);
-      final key = '${r.date} ${r.time} ${digits.isNotEmpty ? 'p:$digits' : 'n:${nameKey(r.name)}'}';
+      final key =
+          '${r.date} ${r.time} ${digits.isNotEmpty ? 'p:$digits' : 'n:${nameKey(r.name)}'}';
       if (!seen.add(key)) {
         skipped.add({'row': i + 1, 'reason': '檔案裡前面已經有同一筆'});
         continue;
       }
-      final dup = existing.any((x) =>
-          x.date == d && x.time == r.time && (x.status == 'confirmed' || x.status == 'arrived') &&
-          (digits.isNotEmpty ? phoneDigitsOf(x.phone) == digits : x.phone.isEmpty && nameKey(x.name) == nameKey(r.name)));
+      final dup = existing.any(
+        (x) =>
+            x.date == d &&
+            x.time == r.time &&
+            (x.status == 'confirmed' || x.status == 'arrived') &&
+            (digits.isNotEmpty
+                ? phoneDigitsOf(x.phone) == digits
+                : x.phone.isEmpty && nameKey(x.name) == nameKey(r.name)),
+      );
       if (dup) {
         skipped.add({'row': i + 1, 'reason': '這個時間已經有這位客人的訂位'});
         continue;
@@ -1783,27 +3120,56 @@ class DemoRepository implements Repository {
       ok.add((r, d!));
     }
     if (batchId == null || errors.isNotEmpty || ok.isEmpty) {
-      return ImportResult.fromJson({'ready': ok.length, 'errors': errors, 'skipped': skipped}, rows);
+      return ImportResult.fromJson({
+        'ready': ok.length,
+        'errors': errors,
+        'skipped': skipped,
+      }, rows);
     }
     for (final (r, d) in ok) {
-      existing.add(Reservation(
-        id: '$storeId-imp${existing.length}', date: d, time: r.time, party: int.parse(r.party), name: r.name.trim(),
-        phone: r.phone, email: r.email.isEmpty ? null : r.email, note: r.note.isEmpty ? null : r.note,
-        status: 'confirmed', source: 'app', createdAt: DateTime.now(), lang: r.lang.isEmpty ? 'zh' : r.lang, importBatchId: batchId,
-      ));
+      existing.add(
+        Reservation(
+          id: '$storeId-imp${existing.length}',
+          date: d,
+          time: r.time,
+          party: int.parse(r.party),
+          name: r.name.trim(),
+          phone: r.phone,
+          email: r.email.isEmpty ? null : r.email,
+          note: r.note.isEmpty ? null : r.note,
+          status: 'confirmed',
+          source: 'app',
+          createdAt: DateTime.now(),
+          lang: r.lang.isEmpty ? 'zh' : r.lang,
+          importBatchId: batchId,
+        ),
+      );
     }
-    return ImportResult.fromJson({'batch': batchId, 'inserted': ok.length, 'errors': errors, 'skipped': skipped}, rows);
+    return ImportResult.fromJson({
+      'batch': batchId,
+      'inserted': ok.length,
+      'errors': errors,
+      'skipped': skipped,
+    }, rows);
   }
 
   @override
-  Future<ImportResult> previewReservationImport(String storeId, List<ImportRow> rows) async {
+  Future<ImportResult> previewReservationImport(
+    String storeId,
+    List<ImportRow> rows,
+  ) async {
     await Future<void>.delayed(const Duration(milliseconds: 300));
     if (rows.length > 2000) throw Exception('一次最多匯入 2000 筆，請分成幾個檔案');
     return _demoImportCheck(storeId, rows);
   }
 
   @override
-  Future<ImportResult> importReservations(String storeId, List<ImportRow> rows, String? fileName, String requestId) async {
+  Future<ImportResult> importReservations(
+    String storeId,
+    List<ImportRow> rows,
+    String? fileName,
+    String requestId,
+  ) async {
     await Future<void>.delayed(const Duration(milliseconds: 400));
     final prev = _demoImportReq[requestId];
     if (prev != null) {
@@ -1814,13 +3180,24 @@ class DemoRepository implements Repository {
     final res = _demoImportCheck(storeId, rows, batchId: id);
     if (res.batchId == null) return res;
     _demoImportReq[requestId] = id;
-    (_demoImports[storeId] ??= []).insert(0, ImportBatch(
-      id: id, createdAt: DateTime.now(), fileName: fileName, total: rows.length, inserted: res.inserted, skipped: res.skipped.length));
+    (_demoImports[storeId] ??= []).insert(
+      0,
+      ImportBatch(
+        id: id,
+        createdAt: DateTime.now(),
+        fileName: fileName,
+        total: rows.length,
+        inserted: res.inserted,
+        skipped: res.skipped.length,
+      ),
+    );
     return res;
   }
 
   @override
-  Future<List<ImportBatch>> reservationImports(String storeId) async => [...?_demoImports[storeId]];
+  Future<List<ImportBatch>> reservationImports(String storeId) async => [
+    ...?_demoImports[storeId],
+  ];
 
   @override
   Future<int> undoReservationImport(String batchId) async {
@@ -1835,102 +3212,213 @@ class DemoRepository implements Repository {
       final list = _demoRes[e.key] ?? [];
       for (var k = 0; k < list.length; k++) {
         final r = list[k];
-        if (r.importBatchId == batchId && r.status == 'confirmed' && !r.date.isBefore(today)) {
+        if (r.importBatchId == batchId &&
+            r.status == 'confirmed' &&
+            !r.date.isBefore(today)) {
           list[k] = r.copyWith(status: 'cancelled', hiddenAt: DateTime.now());
           count++;
         }
       }
-      e.value[i] = ImportBatch(id: b.id, createdAt: b.createdAt, fileName: b.fileName, total: b.total, inserted: b.inserted,
-          skipped: b.skipped, undoneAt: DateTime.now(), undoneCount: count);
+      e.value[i] = ImportBatch(
+        id: b.id,
+        createdAt: b.createdAt,
+        fileName: b.fileName,
+        total: b.total,
+        inserted: b.inserted,
+        skipped: b.skipped,
+        undoneAt: DateTime.now(),
+        undoneCount: count,
+      );
       return count;
     }
     throw Exception('找不到這一批匯入，或你沒有權限');
   }
 
   @override
-  Future<List<Reservation>> allReservations(String storeId) async => [...(_demoRes[storeId] ??= _seedReservations(storeId))];
+  Future<List<Reservation>> allReservations(String storeId) async => [
+    ...(_demoRes[storeId] ??= _seedReservations(storeId)),
+  ];
 
   @override
-  Future<List<Reservation>> reservations(String storeId, DateTime from, DateTime to) async =>
-      (_demoRes[storeId] ??= _seedReservations(storeId)).where((r) => !r.date.isBefore(from) && !r.date.isAfter(to)).toList();
+  Future<List<Reservation>> reservations(
+    String storeId,
+    DateTime from,
+    DateTime to,
+  ) async => (_demoRes[storeId] ??= _seedReservations(
+    storeId,
+  )).where((r) => !r.date.isBefore(from) && !r.date.isAfter(to)).toList();
 
   /// 示範用的今天訂位（時間軸、座位圖看得到東西；2026-11-01）
   List<Reservation> _seedReservations(String storeId) {
     final n = DateTime.now().subtract(const Duration(hours: 6));
     final day = DateTime(n.year, n.month, n.day);
     final now = DateTime.now();
-    Reservation mk(int i, String time, int party, String name, List<String> tables, {DateTime? seated, bool walkIn = false, String? note, String? ref}) =>
-        Reservation(
-          id: '$storeId-seed$i', date: day, time: time, party: party, name: name, phone: '0912-000-00$i',
-          status: seated != null ? 'arrived' : 'confirmed', source: walkIn ? 'app' : 'web', createdAt: now,
-          tableIds: tables, seatedAt: seated, walkIn: walkIn, note: note, ref: ref,
-        );
+    Reservation mk(
+      int i,
+      String time,
+      int party,
+      String name,
+      List<String> tables, {
+      DateTime? seated,
+      bool walkIn = false,
+      String? note,
+      String? ref,
+    }) => Reservation(
+      id: '$storeId-seed$i',
+      date: day,
+      time: time,
+      party: party,
+      name: name,
+      phone: '0912-000-00$i',
+      status: seated != null ? 'arrived' : 'confirmed',
+      source: walkIn ? 'app' : 'web',
+      createdAt: now,
+      tableIds: tables,
+      seatedAt: seated,
+      walkIn: walkIn,
+      note: note,
+      ref: ref,
+    );
     return [
-      mk(1, '19:00', 2, '林小姐', ['A1', 'A2'], seated: now.subtract(const Duration(minutes: 40)), ref: 'google'),
-      mk(2, '19:30', 4, '陳先生', ['S1'], seated: now.subtract(const Duration(minutes: 15)), note: '慶生，要蛋糕盤', ref: 'ig'),
+      mk(
+        1,
+        '19:00',
+        2,
+        '林小姐',
+        ['A1', 'A2'],
+        seated: now.subtract(const Duration(minutes: 40)),
+        ref: 'google',
+      ),
+      mk(
+        2,
+        '19:30',
+        4,
+        '陳先生',
+        ['S1'],
+        seated: now.subtract(const Duration(minutes: 15)),
+        note: '慶生，要蛋糕盤',
+        ref: 'ig',
+      ),
       mk(3, '20:00', 2, '王先生', ['A5'], ref: 'google'),
       mk(4, '20:30', 3, 'Kenji', ['S3']),
       mk(5, '21:00', 1, '現場', ['A8'], walkIn: true),
       mk(6, '21:30', 2, '張小姐', const []),
     ];
   }
+
   @override
-  Future<void> addReservation(String storeId,
-      {required DateTime date, required String time, required int party, required String name, required String phone, String? email, String? note, List<String> tableIds = const []}) async {
+  Future<void> addReservation(
+    String storeId, {
+    required DateTime date,
+    required String time,
+    required int party,
+    required String name,
+    required String phone,
+    String? email,
+    String? note,
+    List<String> tableIds = const [],
+  }) async {
     final list = _demoRes.putIfAbsent(storeId, () => []);
-    list.add(Reservation(
-        id: '$storeId-${list.length}', date: date, time: time, party: party, name: name, phone: phone, email: email, note: note,
-        status: 'confirmed', source: 'app', createdAt: DateTime.now(), tableIds: tableIds));
+    list.add(
+      Reservation(
+        id: '$storeId-${list.length}',
+        date: date,
+        time: time,
+        party: party,
+        name: name,
+        phone: phone,
+        email: email,
+        note: note,
+        status: 'confirmed',
+        source: 'app',
+        createdAt: DateTime.now(),
+        tableIds: tableIds,
+      ),
+    );
   }
+
   final _demoSpecial = <String, Map<String, ReservationSpecialDay>>{};
   final _demoGuests = <String, Map<String, GuestProfile>>{};
   @override
-  Future<List<ReservationSpecialDay>> specialDays(String storeId, DateTime from, DateTime to) async =>
+  Future<List<ReservationSpecialDay>> specialDays(
+    String storeId,
+    DateTime from,
+    DateTime to,
+  ) async =>
       (_demoSpecial[storeId]?.values ?? const <ReservationSpecialDay>[])
           .where((d) => !d.day.isBefore(from) && !d.day.isAfter(to))
           .toList()
         ..sort((a, b) => a.day.compareTo(b.day));
   @override
   Future<void> saveSpecialDay(String storeId, ReservationSpecialDay d) async =>
-      (_demoSpecial[storeId] ??= {})[d.day.toIso8601String().substring(0, 10)] = d;
+      (_demoSpecial[storeId] ??= {})[d.day.toIso8601String().substring(0, 10)] =
+          d;
   @override
   Future<void> deleteSpecialDay(String storeId, DateTime day) async =>
       _demoSpecial[storeId]?.remove(day.toIso8601String().substring(0, 10));
   @override
-  Future<Map<String, GuestStats>> guestStats(String storeId, Set<String> phoneDigits) async {
+  Future<Map<String, GuestStats>> guestStats(
+    String storeId,
+    Set<String> phoneDigits,
+  ) async {
     final all = _demoRes[storeId] ?? const <Reservation>[];
     final out = <String, GuestStats>{};
     for (final p in phoneDigits) {
       final prof = _demoGuests[storeId]?[p];
       final reset = prof?.noshowResetAt;
-      final resetDay = reset == null ? null : DateTime(reset.year, reset.month, reset.day);
+      final resetDay = reset == null
+          ? null
+          : DateTime(reset.year, reset.month, reset.day);
       out[p] = GuestStats(
-        all.where((r) => phoneDigitsOf(r.phone) == p && r.status == 'arrived').length,
-        all.where((r) => phoneDigitsOf(r.phone) == p && r.status == 'no_show' && (resetDay == null || r.date.isAfter(resetDay))).length,
+        all
+            .where((r) => phoneDigitsOf(r.phone) == p && r.status == 'arrived')
+            .length,
+        all
+            .where(
+              (r) =>
+                  phoneDigitsOf(r.phone) == p &&
+                  r.status == 'no_show' &&
+                  (resetDay == null || r.date.isAfter(resetDay)),
+            )
+            .length,
         prof,
       );
     }
     return out;
   }
+
   @override
-  Future<void> saveGuestProfile(String storeId, GuestProfile g, {bool resetNoshow = false}) async {
+  Future<void> saveGuestProfile(
+    String storeId,
+    GuestProfile g, {
+    bool resetNoshow = false,
+  }) async {
     final m = _demoGuests[storeId] ??= {};
     // 和正式資料庫一樣：解除時記下現在時間，之後只算那天以後的未到；沒解除就保留原本的解除時間（Codex 審查）
     m[g.phoneDigits] = GuestProfile(
       phoneDigits: g.phoneDigits,
       tags: g.tags,
       note: g.note,
-      noshowResetAt: resetNoshow ? DateTime.now() : m[g.phoneDigits]?.noshowResetAt,
+      noshowResetAt: resetNoshow
+          ? DateTime.now()
+          : m[g.phoneDigits]?.noshowResetAt,
     );
   }
 
   @override
-  Future<void> decidePartyRequest(String id, bool approve, int expectedParty) async {
+  Future<void> decidePartyRequest(
+    String id,
+    bool approve,
+    int expectedParty,
+  ) async {
     for (final list in _demoRes.values) {
       final i = list.indexWhere((r) => r.id == id);
       if (i < 0) continue;
       final r = list[i];
-      list[i] = r.copyWith(party: approve ? (r.requestedParty ?? r.party) : r.party, partyRequestStatus: approve ? 'approved' : 'rejected');
+      list[i] = r.copyWith(
+        party: approve ? (r.requestedParty ?? r.party) : r.party,
+        partyRequestStatus: approve ? 'approved' : 'rejected',
+      );
       return;
     }
   }
@@ -1947,13 +3435,26 @@ class DemoRepository implements Repository {
         status: status,
         note: values['note'] as String?,
         clearNote: values.containsKey('note') && values['note'] == null,
-        tableIds: values.containsKey('table_ids') ? [for (final x in values['table_ids'] as List) x as String] : null,
+        tableIds: values.containsKey('table_ids')
+            ? [for (final x in values['table_ids'] as List) x as String]
+            : null,
         seatedAt: seated && r.seatedAt == null ? DateTime.now() : null,
         clearSeated: !seated,
-        clearedAt: values['cleared_at'] != null && r.clearedAt == null ? DateTime.now() : null,
-        clearCleared: !seated || (values.containsKey('cleared_at') && values['cleared_at'] == null),
-        hiddenAt: status == 'cancelled' && values['hidden_at'] != null && r.hiddenAt == null ? DateTime.now() : null,
-        clearHidden: status != 'cancelled' || (values.containsKey('hidden_at') && values['hidden_at'] == null),
+        clearedAt: values['cleared_at'] != null && r.clearedAt == null
+            ? DateTime.now()
+            : null,
+        clearCleared:
+            !seated ||
+            (values.containsKey('cleared_at') && values['cleared_at'] == null),
+        hiddenAt:
+            status == 'cancelled' &&
+                values['hidden_at'] != null &&
+                r.hiddenAt == null
+            ? DateTime.now()
+            : null,
+        clearHidden:
+            status != 'cancelled' ||
+            (values.containsKey('hidden_at') && values['hidden_at'] == null),
       );
       return;
     }
@@ -1961,58 +3462,279 @@ class DemoRepository implements Repository {
 
   final Map<String, List<ReservationTable>> _demoTables = {};
   @override
-  Future<List<ReservationTable>> reservationTables(String storeId) async => [
+  Future<List<ReservationTable>> reservationTables(String storeId) async =>
+      [
         ...(_demoTables[storeId] ??= [
           // 照隱城 iCHEF 座位表的樣子排（2026-11-01）：吧台 A1～A8 一排、A9～A12 方桌一直排、B／C／D／E 小圓桌
-          for (var i = 1; i <= 8; i++) ReservationTable(id: 'A$i', name: 'A$i', seats: 1, combinable: true, sort: i, posX: 8 - i, posY: 2, floor: '2F'),
-          for (var i = 9; i <= 12; i++) ReservationTable(id: 'A$i', name: 'A$i', seats: 2, sort: i, posX: 4, posY: i - 6, shape: 'square', floor: '2F'),
-          const ReservationTable(id: 'F1', name: 'F1', seats: 2, sort: 71, posX: 1, posY: 0, shape: 'square', floor: '2F'),
-          for (var i = 1; i <= 4; i++) ReservationTable(id: 'B$i', name: 'B$i', seats: 1, combinable: true, sort: 20 + i, posX: 5 + i, posY: 0, floor: '2F'),
-          const ReservationTable(id: 'B5', name: 'B5', seats: 1, combinable: true, sort: 25, posX: 8, posY: 1, floor: '2F'),
-          const ReservationTable(id: 'B6', name: 'B6', seats: 1, combinable: true, sort: 26, posX: 9, posY: 1, floor: '2F'),
-          const ReservationTable(id: 'C1', name: 'C1', seats: 1, combinable: true, sort: 31, posX: 8, posY: 4, floor: '2F'),
-          const ReservationTable(id: 'C2', name: 'C2', seats: 1, combinable: true, sort: 32, posX: 9, posY: 3, floor: '2F'),
-          const ReservationTable(id: 'C3', name: 'C3', seats: 1, combinable: true, sort: 33, posX: 9, posY: 4, floor: '2F'),
-          const ReservationTable(id: 'D1', name: 'D1', seats: 1, combinable: true, sort: 41, posX: 8, posY: 5, floor: '2F'),
-          const ReservationTable(id: 'D2', name: 'D2', seats: 1, combinable: true, sort: 42, posX: 9, posY: 5, floor: '2F'),
-          const ReservationTable(id: 'D3', name: 'D3', seats: 1, combinable: true, sort: 43, posX: 8, posY: 6, floor: '2F'),
-          const ReservationTable(id: 'D4', name: 'D4', seats: 1, combinable: true, sort: 44, posX: 9, posY: 6, floor: '2F'),
-          const ReservationTable(id: 'E1', name: 'E1', seats: 1, combinable: true, sort: 51, posX: 6, posY: 5, floor: '2F'),
-          const ReservationTable(id: 'E2', name: 'E2', seats: 1, combinable: true, sort: 52, posX: 6, posY: 6, floor: '2F'),
+          for (var i = 1; i <= 8; i++)
+            ReservationTable(
+              id: 'A$i',
+              name: 'A$i',
+              seats: 1,
+              combinable: true,
+              sort: i,
+              posX: 8 - i,
+              posY: 2,
+              floor: '2F',
+            ),
+          for (var i = 9; i <= 12; i++)
+            ReservationTable(
+              id: 'A$i',
+              name: 'A$i',
+              seats: 2,
+              sort: i,
+              posX: 4,
+              posY: i - 6,
+              shape: 'square',
+              floor: '2F',
+            ),
+          const ReservationTable(
+            id: 'F1',
+            name: 'F1',
+            seats: 2,
+            sort: 71,
+            posX: 1,
+            posY: 0,
+            shape: 'square',
+            floor: '2F',
+          ),
+          for (var i = 1; i <= 4; i++)
+            ReservationTable(
+              id: 'B$i',
+              name: 'B$i',
+              seats: 1,
+              combinable: true,
+              sort: 20 + i,
+              posX: 5 + i,
+              posY: 0,
+              floor: '2F',
+            ),
+          const ReservationTable(
+            id: 'B5',
+            name: 'B5',
+            seats: 1,
+            combinable: true,
+            sort: 25,
+            posX: 8,
+            posY: 1,
+            floor: '2F',
+          ),
+          const ReservationTable(
+            id: 'B6',
+            name: 'B6',
+            seats: 1,
+            combinable: true,
+            sort: 26,
+            posX: 9,
+            posY: 1,
+            floor: '2F',
+          ),
+          const ReservationTable(
+            id: 'C1',
+            name: 'C1',
+            seats: 1,
+            combinable: true,
+            sort: 31,
+            posX: 8,
+            posY: 4,
+            floor: '2F',
+          ),
+          const ReservationTable(
+            id: 'C2',
+            name: 'C2',
+            seats: 1,
+            combinable: true,
+            sort: 32,
+            posX: 9,
+            posY: 3,
+            floor: '2F',
+          ),
+          const ReservationTable(
+            id: 'C3',
+            name: 'C3',
+            seats: 1,
+            combinable: true,
+            sort: 33,
+            posX: 9,
+            posY: 4,
+            floor: '2F',
+          ),
+          const ReservationTable(
+            id: 'D1',
+            name: 'D1',
+            seats: 1,
+            combinable: true,
+            sort: 41,
+            posX: 8,
+            posY: 5,
+            floor: '2F',
+          ),
+          const ReservationTable(
+            id: 'D2',
+            name: 'D2',
+            seats: 1,
+            combinable: true,
+            sort: 42,
+            posX: 9,
+            posY: 5,
+            floor: '2F',
+          ),
+          const ReservationTable(
+            id: 'D3',
+            name: 'D3',
+            seats: 1,
+            combinable: true,
+            sort: 43,
+            posX: 8,
+            posY: 6,
+            floor: '2F',
+          ),
+          const ReservationTable(
+            id: 'D4',
+            name: 'D4',
+            seats: 1,
+            combinable: true,
+            sort: 44,
+            posX: 9,
+            posY: 6,
+            floor: '2F',
+          ),
+          const ReservationTable(
+            id: 'E1',
+            name: 'E1',
+            seats: 1,
+            combinable: true,
+            sort: 51,
+            posX: 6,
+            posY: 5,
+            floor: '2F',
+          ),
+          const ReservationTable(
+            id: 'E2',
+            name: 'E2',
+            seats: 1,
+            combinable: true,
+            sort: 52,
+            posX: 6,
+            posY: 6,
+            floor: '2F',
+          ),
           // 一樓：沙發區 S1～S4、小圓桌 S5～S7（照 iCHEF 一樓座位表）
-          const ReservationTable(id: 'S1', name: 'S1', seats: 10, combinable: true, sort: 61, posX: 3, posY: 3, floor: '1F'),
-          const ReservationTable(id: 'S2', name: 'S2', seats: 10, combinable: true, sort: 62, posX: 5, posY: 3, floor: '1F'),
-          const ReservationTable(id: 'S3', name: 'S3', seats: 10, combinable: true, sort: 63, posX: 3, posY: 5, floor: '1F'),
-          const ReservationTable(id: 'S4', name: 'S4', seats: 10, combinable: true, sort: 64, posX: 5, posY: 5, floor: '1F'),
-          for (var i = 5; i <= 7; i++) ReservationTable(id: 'S$i', name: 'S$i', seats: 1, combinable: true, sort: 60 + i, posX: i - 2, posY: 0, floor: '1F'),
+          const ReservationTable(
+            id: 'S1',
+            name: 'S1',
+            seats: 10,
+            combinable: true,
+            sort: 61,
+            posX: 3,
+            posY: 3,
+            floor: '1F',
+          ),
+          const ReservationTable(
+            id: 'S2',
+            name: 'S2',
+            seats: 10,
+            combinable: true,
+            sort: 62,
+            posX: 5,
+            posY: 3,
+            floor: '1F',
+          ),
+          const ReservationTable(
+            id: 'S3',
+            name: 'S3',
+            seats: 10,
+            combinable: true,
+            sort: 63,
+            posX: 3,
+            posY: 5,
+            floor: '1F',
+          ),
+          const ReservationTable(
+            id: 'S4',
+            name: 'S4',
+            seats: 10,
+            combinable: true,
+            sort: 64,
+            posX: 5,
+            posY: 5,
+            floor: '1F',
+          ),
+          for (var i = 5; i <= 7; i++)
+            ReservationTable(
+              id: 'S$i',
+              name: 'S$i',
+              seats: 1,
+              combinable: true,
+              sort: 60 + i,
+              posX: i - 2,
+              posY: 0,
+              floor: '1F',
+            ),
           // 只有後天加開的一張（ops 0133 示範）
-          ReservationTable(id: 'X1', name: '加開1', seats: 6, sort: 90, floor: '1F', onlyDate: _demoDay(2)),
-        ])
-      ]..sort((a, b) => a.sort != b.sort ? a.sort.compareTo(b.sort) : a.name.compareTo(b.name));
+          ReservationTable(
+            id: 'X1',
+            name: '加開1',
+            seats: 6,
+            sort: 90,
+            floor: '1F',
+            onlyDate: _demoDay(2),
+          ),
+        ]),
+      ]..sort(
+        (a, b) => a.sort != b.sort
+            ? a.sort.compareTo(b.sort)
+            : a.name.compareTo(b.name),
+      );
   @override
   Future<void> saveReservationTable(String storeId, ReservationTable t) async {
     final list = _demoTables[storeId] ??= [];
     final i = list.indexWhere((x) => x.id == t.id);
     final old = i >= 0 ? list[i] : null;
-    final v = ReservationTable(id: t.id.isEmpty ? 'T${list.length + 1}' : t.id, name: t.name, seats: t.seats,
-        combinable: t.combinable, sort: t.sort, active: t.active,
-        posX: old?.floor == t.floor ? old?.posX : null, posY: old?.floor == t.floor ? old?.posY : null,
-        w: old?.w ?? 1, h: old?.h ?? 1, shape: old?.shape ?? 'round', floor: t.floor,
-        onlyDate: old?.onlyDate ?? t.onlyDate);
+    final v = ReservationTable(
+      id: t.id.isEmpty ? 'T${list.length + 1}' : t.id,
+      name: t.name,
+      seats: t.seats,
+      combinable: t.combinable,
+      sort: t.sort,
+      active: t.active,
+      posX: old?.floor == t.floor ? old?.posX : null,
+      posY: old?.floor == t.floor ? old?.posY : null,
+      w: old?.w ?? 1,
+      h: old?.h ?? 1,
+      shape: old?.shape ?? 'round',
+      floor: t.floor,
+      onlyDate: old?.onlyDate ?? t.onlyDate,
+    );
     if (i < 0) {
       list.add(v);
     } else {
       list[i] = v;
     }
   }
+
   @override
   Future<void> deleteReservationTable(String tableId) async {
     for (final list in _demoTables.values) {
       final i = list.indexWhere((x) => x.id == tableId);
       if (i < 0) continue;
       final t = list[i];
-      list[i] = ReservationTable(id: t.id, name: t.name, seats: t.seats, combinable: t.combinable, sort: t.sort, active: false,
-          posX: t.posX, posY: t.posY, w: t.w, h: t.h, shape: t.shape, floor: t.floor, deleted: true, onlyDate: t.onlyDate);
+      list[i] = ReservationTable(
+        id: t.id,
+        name: t.name,
+        seats: t.seats,
+        combinable: t.combinable,
+        sort: t.sort,
+        active: false,
+        posX: t.posX,
+        posY: t.posY,
+        w: t.w,
+        h: t.h,
+        shape: t.shape,
+        floor: t.floor,
+        deleted: true,
+        onlyDate: t.onlyDate,
+      );
     }
   }
 
@@ -2020,14 +3742,31 @@ class DemoRepository implements Repository {
     final n = taipeiNow();
     return DateTime(n.year, n.month, n.day + plus);
   }
-  late final List<TableDayOff> _demoDaysOff = [TableDayOff('A12', _demoDay(2)), TableDayOff('A12', _demoDay(5))];
+
+  late final List<TableDayOff> _demoDaysOff = [
+    TableDayOff('A12', _demoDay(2)),
+    TableDayOff('A12', _demoDay(5)),
+  ];
   @override
-  Future<List<TableDayOff>> tableDaysOff(String storeId, DateTime from, DateTime to) async {
-    final ids = {for (final t in _demoTables[storeId] ?? const <ReservationTable>[]) t.id};
-    final f = DateTime(from.year, from.month, from.day), e = DateTime(to.year, to.month, to.day);
-    return [for (final o in _demoDaysOff) if (ids.contains(o.tableId) && !o.date.isBefore(f) && !o.date.isAfter(e)) o]
-      ..sort((a, b) => a.date.compareTo(b.date));
+  Future<List<TableDayOff>> tableDaysOff(
+    String storeId,
+    DateTime from,
+    DateTime to,
+  ) async {
+    final ids = {
+      for (final t in _demoTables[storeId] ?? const <ReservationTable>[]) t.id,
+    };
+    final f = DateTime(from.year, from.month, from.day),
+        e = DateTime(to.year, to.month, to.day);
+    return [
+      for (final o in _demoDaysOff)
+        if (ids.contains(o.tableId) &&
+            !o.date.isBefore(f) &&
+            !o.date.isAfter(e))
+          o,
+    ]..sort((a, b) => a.date.compareTo(b.date));
   }
+
   @override
   Future<void> setTableDayOff(String tableId, DateTime date, bool off) async {
     final d = DateTime(date.year, date.month, date.day);
@@ -2036,42 +3775,99 @@ class DemoRepository implements Repository {
   }
 
   @override
-  Future<void> saveTableLayout(String storeId, List<ReservationTable> tables) async {
+  Future<void> saveTableLayout(
+    String storeId,
+    List<ReservationTable> tables,
+  ) async {
     final list = _demoTables[storeId] ??= [];
     for (final t in tables) {
       final i = list.indexWhere((x) => x.id == t.id);
-      if (i >= 0) list[i] = list[i].copyWith(posX: t.posX, posY: t.posY, w: t.w, h: t.h, shape: t.shape, floor: t.floor, clearPos: !t.placed);
+      if (i >= 0)
+        list[i] = list[i].copyWith(
+          posX: t.posX,
+          posY: t.posY,
+          w: t.w,
+          h: t.h,
+          shape: t.shape,
+          floor: t.floor,
+          clearPos: !t.placed,
+        );
     }
   }
+
   @override
-  Future<void> addWalkIn(String storeId,
-      {required DateTime date, required String time, required int party, required String name, required List<String> tableIds}) async {
+  Future<void> addWalkIn(
+    String storeId, {
+    required DateTime date,
+    required String time,
+    required int party,
+    required String name,
+    required List<String> tableIds,
+  }) async {
     final list = _demoRes.putIfAbsent(storeId, () => []);
-    list.add(Reservation(
-        id: '$storeId-${list.length}', date: date, time: time, party: party, name: name, phone: '',
-        status: 'arrived', source: 'app', createdAt: DateTime.now(), tableIds: tableIds, seatedAt: DateTime.now(), walkIn: true));
+    list.add(
+      Reservation(
+        id: '$storeId-${list.length}',
+        date: date,
+        time: time,
+        party: party,
+        name: name,
+        phone: '',
+        status: 'arrived',
+        source: 'app',
+        createdAt: DateTime.now(),
+        tableIds: tableIds,
+        seatedAt: DateTime.now(),
+        walkIn: true,
+      ),
+    );
   }
+
   @override
   Future<List<AppNotification>> reservationEvents(String storeId) async => [
-        AppNotification(id: 901, kind: 'reservation', title: '新訂位', body: '王 先生・10/19 20:00・2 位', actorName: '客人',
-            createdAt: DateTime.now().subtract(const Duration(minutes: 12))),
-      ];
+    AppNotification(
+      id: 901,
+      kind: 'reservation',
+      title: '新訂位',
+      body: '王 先生・10/19 20:00・2 位',
+      actorName: '客人',
+      createdAt: DateTime.now().subtract(const Duration(minutes: 12)),
+    ),
+  ];
 
   // ---------------- 功能許願（0069）示範：送出後幾秒變成「修改好了」 ----------------
   final List<ChangeRequest> _changes = [];
   final Map<String, List<ChangeMessage>> _changeMsgs = {};
   int _changeUsed = 0;
   void _changeMsg(String id, String kind, String who, String body) =>
-      (_changeMsgs[id] ??= []).add(ChangeMessage(id: ++_seq, kind: kind, authorName: who, body: body, createdAt: DateTime.now()));
+      (_changeMsgs[id] ??= []).add(
+        ChangeMessage(
+          id: ++_seq,
+          kind: kind,
+          authorName: who,
+          body: body,
+          createdAt: DateTime.now(),
+        ),
+      );
   void _changeSet(String id, ChangeRequest Function(ChangeRequest) f) {
     final i = _changes.indexWhere((c) => c.id == id);
     if (i >= 0) _changes[i] = f(_changes[i]);
   }
 
   void _changeRun(String id) {
-    _changeSet(id, (c) => c.copyWith(status: ChangeStatus.running, runCount: c.runCount + 1));
+    _changeSet(
+      id,
+      (c) => c.copyWith(status: ChangeStatus.running, runCount: c.runCount + 1),
+    );
     Future.delayed(const Duration(seconds: 4), () {
-      _changeSet(id, (c) => c.copyWith(status: ChangeStatus.ready, previewUrl: 'https://example.com/preview/', prNumber: 1));
+      _changeSet(
+        id,
+        (c) => c.copyWith(
+          status: ChangeStatus.ready,
+          previewUrl: 'https://example.com/preview/',
+          prNumber: 1,
+        ),
+      );
       _changeMsg(id, 'claude', '後臺', '（示範）已照需求修改，請點「看預覽」確認。');
     });
   }
@@ -2080,43 +3876,67 @@ class DemoRepository implements Repository {
   Future<List<ChangeRequest>> changeRequests(String storeId) async =>
       _changes.where((c) => c.storeId == storeId).toList().reversed.toList();
   @override
-  Future<List<ChangeMessage>> changeMessages(String requestId) async => List.of(_changeMsgs[requestId] ?? const []);
+  Future<List<ChangeMessage>> changeMessages(String requestId) async =>
+      List.of(_changeMsgs[requestId] ?? const []);
   @override
-  Future<ChangeQuota> changeQuota(String storeId) async => ChangeQuota(_changeUsed, 10);
+  Future<ChangeQuota> changeQuota(String storeId) async =>
+      ChangeQuota(_changeUsed, 10);
   @override
-  Future<String> createChangeRequest(String storeId, String body, {List<String> photos = const []}) async {
+  Future<String> createChangeRequest(
+    String storeId,
+    String body, {
+    List<String> photos = const [],
+  }) async {
     final id = 'cr-${++_seq}';
     _changeUsed++;
-    _changes.add(ChangeRequest(
-        id: id, storeId: storeId, title: body.trim().split('\n').first, requestedBy: 'demo', requesterName: '示範老闆',
-        status: ChangeStatus.queued, createdAt: DateTime.now(), updatedAt: DateTime.now()));
+    _changes.add(
+      ChangeRequest(
+        id: id,
+        storeId: storeId,
+        title: body.trim().split('\n').first,
+        requestedBy: 'demo',
+        requesterName: '示範老闆',
+        status: ChangeStatus.queued,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      ),
+    );
     _changeMsg(id, 'request', '示範老闆', body.trim());
     _changeRun(id);
     return id;
   }
+
   @override
   Future<Uint8List> changePhoto(String photoId) async => Uint8List(0);
   @override
-  Future<void> followupChangeRequest(String requestId, String body, {List<String> photos = const []}) async {
+  Future<void> followupChangeRequest(
+    String requestId,
+    String body, {
+    List<String> photos = const [],
+  }) async {
     _changeUsed++;
     _changeMsg(requestId, 'followup', '示範老闆', body.trim());
     _changeRun(requestId);
   }
+
   @override
   Future<void> submitChangeRequest(String requestId) async {
     _changeSet(requestId, (c) => c.copyWith(status: ChangeStatus.review));
     _changeMsg(requestId, 'system', '示範店長', '已送審，等老闆核准上線');
   }
+
   @override
   Future<void> approveChangeRequest(String requestId) async {
     _changeSet(requestId, (c) => c.copyWith(status: ChangeStatus.merged));
     _changeMsg(requestId, 'system', '後臺', '已上線（示範）');
   }
+
   @override
   Future<void> returnChangeRequest(String requestId, String reason) async {
     _changeSet(requestId, (c) => c.copyWith(status: ChangeStatus.ready));
     _changeMsg(requestId, 'system', '示範老闆', '老闆退回：$reason');
   }
+
   @override
   Future<void> cancelChangeRequest(String requestId) async =>
       _changeSet(requestId, (c) => c.copyWith(status: ChangeStatus.cancelled));
@@ -2131,7 +3951,10 @@ class DemoRepository implements Repository {
   final _rates = <String, List<PayRate>>{};
   final _ident = <String, Map<String, String?>>{};
   // 班表名字綁定的帳號：f0＝示範帳號（老闆已確認）、f1＝小安的帳號（還沒確認）
-  final _bound = <String, ({String user, String name})>{'f0': (user: 'demo-user', name: '示範'), 'f1': (user: 'demo-f1', name: '小安')};
+  final _bound = <String, ({String user, String name})>{
+    'f0': (user: 'demo-user', name: '示範'),
+    'f1': (user: 'demo-f1', name: '小安'),
+  };
   final _verified = <String>{'f0'};
   final _reviews = <String, List<PunchHistoryEntry>>{};
   bool get _bindingPending => _email.contains('unverified');
@@ -2158,30 +3981,63 @@ class DemoRepository implements Repository {
     final now = DateTime.now();
     final last = _att.where((r) => r.isPunch).lastOrNull;
     final dup = last != null && now.difference(last.at).inMinutes < 2;
-    final type = dup ? last.punchType : (last?.punchType == 'in' ? 'out' : 'in');
+    final type = dup
+        ? last.punchType
+        : (last?.punchType == 'in' ? 'out' : 'in');
     final biz = DateTime(now.year, now.month, now.day - (now.hour < 6 ? 1 : 0));
     final r = PunchResult(
-        punchId: 'pu${_seq++}',
-        storeName: '隱城',
+      punchId: 'pu${_seq++}',
+      storeName: '隱城',
+      punchType: type,
+      punchedAt: now,
+      businessDate: biz,
+      status: dup ? 'pending' : 'ok',
+      flags: dup ? const ['duplicate'] : const [],
+    );
+    _att.add(
+      MyAttendanceRecord(
+        kind: 'punch',
+        id: r.punchId,
         punchType: type,
-        punchedAt: now,
+        at: now,
         businessDate: biz,
-        status: dup ? 'pending' : 'ok',
-        flags: dup ? const ['duplicate'] : const []);
-    _att.add(MyAttendanceRecord(
-        kind: 'punch', id: r.punchId, punchType: type, at: now, businessDate: biz, storeName: '隱城', status: r.status, flags: r.flags));
+        storeName: '隱城',
+        status: r.status,
+        flags: r.flags,
+      ),
+    );
     return r;
   }
 
   @override
-  Future<List<MyAttendanceRecord>> myAttendance(String storeId, DateTime from, DateTime to) async => _att.reversed.toList();
+  Future<List<MyAttendanceRecord>> myAttendance(
+    String storeId,
+    DateTime from,
+    DateTime to,
+  ) async => _att.reversed.toList();
 
   @override
-  Future<String> requestAmendment(String storeId, String personId, String punchType, DateTime at, String reason,
-      {bool fromSchedule = false}) async {
+  Future<String> requestAmendment(
+    String storeId,
+    String personId,
+    String punchType,
+    DateTime at,
+    String reason, {
+    bool fromSchedule = false,
+  }) async {
     if (at.isAfter(DateTime.now())) throw Exception('message: 補登時間不能在未來,');
     final id = 'am${_seq++}';
-    _att.add(MyAttendanceRecord(kind: 'amendment', id: id, punchType: punchType, at: at, storeName: '隱城', status: 'pending', note: reason));
+    _att.add(
+      MyAttendanceRecord(
+        kind: 'amendment',
+        id: id,
+        punchType: punchType,
+        at: at,
+        storeName: '隱城',
+        status: 'pending',
+        note: reason,
+      ),
+    );
     return id;
   }
 
@@ -2189,60 +4045,147 @@ class DemoRepository implements Repository {
     final i = _att.indexWhere((r) => r.id == id);
     if (i < 0) return;
     final a = _att[i];
-    _att[i] = MyAttendanceRecord(kind: a.kind, id: a.id, punchType: a.punchType, at: a.at, storeName: a.storeName, status: status, note: a.note);
+    _att[i] = MyAttendanceRecord(
+      kind: a.kind,
+      id: a.id,
+      punchType: a.punchType,
+      at: a.at,
+      storeName: a.storeName,
+      status: status,
+      note: a.note,
+    );
   }
 
   @override
-  Future<void> cancelAmendment(String id) async => _setAmendment(id, 'cancelled');
+  Future<void> cancelAmendment(String id) async =>
+      _setAmendment(id, 'cancelled');
 
   @override
-  Future<void> decideAmendment(String id, bool approve, {String? note}) async => _setAmendment(id, approve ? 'approved' : 'rejected');
+  Future<void> decideAmendment(String id, bool approve, {String? note}) async =>
+      _setAmendment(id, approve ? 'approved' : 'rejected');
 
   @override
-  Future<void> reviewPunch(String punchId, bool confirm, String reason) async => (_reviews[punchId] ??= []).add(PunchHistoryEntry(
-      at: DateTime.now(), action: 'review', decision: confirm ? 'confirmed' : 'rejected', reason: reason, actorName: '示範'));
+  Future<void> reviewPunch(String punchId, bool confirm, String reason) async =>
+      (_reviews[punchId] ??= []).add(
+        PunchHistoryEntry(
+          at: DateTime.now(),
+          action: 'review',
+          decision: confirm ? 'confirmed' : 'rejected',
+          reason: reason,
+          actorName: '示範',
+        ),
+      );
 
   String? _lastReview(String id) => _reviews[id]?.lastOrNull?.decision;
 
   @override
   Future<List<PunchHistoryEntry>> punchHistory(String punchId) async {
-    final r = (await attendanceExport('yc', _daysAgo(31), _daysAgo(0))).where((e) => e.punchId == punchId).firstOrNull;
+    final r = (await attendanceExport(
+      'yc',
+      _daysAgo(31),
+      _daysAgo(0),
+    )).where((e) => e.punchId == punchId).firstOrNull;
     return [
       if (r != null)
-        PunchHistoryEntry(at: r.punchedAt, action: r.source == 'amendment' ? 'amendment_punch' : 'punch', decision: r.status, reason: r.flags, actorName: r.personName),
+        PunchHistoryEntry(
+          at: r.punchedAt,
+          action: r.source == 'amendment' ? 'amendment_punch' : 'punch',
+          decision: r.status,
+          reason: r.flags,
+          actorName: r.personName,
+        ),
       ...?_reviews[punchId],
     ];
   }
 
   @override
-  Future<List<AttendancePerson>> attendancePeople(String storeId, DateTime from, DateTime to) async {
+  Future<List<AttendancePerson>> attendancePeople(
+    String storeId,
+    DateTime from,
+    DateTime to,
+  ) async {
     final m = await shiftMonth(storeId, DateTime.now());
     return [
       for (final p in m.people)
         if (p.active) AttendancePerson(personId: p.id, name: p.label),
-      const AttendancePerson(personId: 'xc-demo', name: '阿傑', homeStoreName: '小城外', crossStore: true),
+      const AttendancePerson(
+        personId: 'xc-demo',
+        name: '阿傑',
+        homeStoreName: '小城外',
+        crossStore: true,
+      ),
     ];
   }
 
   @override
-  Future<List<AttendanceAnomaly>> attendanceAnomalies(String storeId, DateTime from, DateTime to) async => [
-        AttendanceAnomaly(kind: 'missing_out', businessDate: _daysAgo(1), personId: 'f1', personName: _dn('f1', '小安'),
-            punchId: 'demo1', at: DateTime.now().subtract(const Duration(hours: 30)), punchType: 'in', detail: '上班後 14 小時內沒有下班'),
-        AttendanceAnomaly(kind: 'pending', businessDate: _daysAgo(0), personId: 'p0', personName: _dn('p0', '小魚'),
-            punchId: 'demo2', at: DateTime.now().subtract(const Duration(hours: 3)), punchType: 'in', detail: 'QR 碼過期'),
-        for (final a in _att.where((r) => r.kind == 'amendment' && r.status == 'pending'))
-          AttendanceAnomaly(kind: 'amendment', businessDate: a.businessDate ?? DateTime(a.at.year, a.at.month, a.at.day), personId: 'f0', personName: _dn('f0', '阿明'), amendmentId: a.id, at: a.at, punchType: a.punchType, detail: a.note),
-      ];
+  Future<List<AttendanceAnomaly>> attendanceAnomalies(
+    String storeId,
+    DateTime from,
+    DateTime to,
+  ) async => [
+    AttendanceAnomaly(
+      kind: 'missing_out',
+      businessDate: _daysAgo(1),
+      personId: 'f1',
+      personName: _dn('f1', '小安'),
+      punchId: 'demo1',
+      at: DateTime.now().subtract(const Duration(hours: 30)),
+      punchType: 'in',
+      detail: '上班後 14 小時內沒有下班',
+    ),
+    AttendanceAnomaly(
+      kind: 'pending',
+      businessDate: _daysAgo(0),
+      personId: 'p0',
+      personName: _dn('p0', '小魚'),
+      punchId: 'demo2',
+      at: DateTime.now().subtract(const Duration(hours: 3)),
+      punchType: 'in',
+      detail: 'QR 碼過期',
+    ),
+    for (final a in _att.where(
+      (r) => r.kind == 'amendment' && r.status == 'pending',
+    ))
+      AttendanceAnomaly(
+        kind: 'amendment',
+        businessDate:
+            a.businessDate ?? DateTime(a.at.year, a.at.month, a.at.day),
+        personId: 'f0',
+        personName: _dn('f0', '阿明'),
+        amendmentId: a.id,
+        at: a.at,
+        punchType: a.punchType,
+        detail: a.note,
+      ),
+  ];
 
   @override
-  Future<List<AttendanceSession>> attendanceSessions(String storeId, DateTime from, DateTime to) async {
+  Future<List<AttendanceSession>> attendanceSessions(
+    String storeId,
+    DateTime from,
+    DateTime to,
+  ) async {
     final d = _daysAgo(1);
     DateTime at(int h, int m) => DateTime(d.year, d.month, d.day, h, m);
     final demo2 = _lastReview('demo2') == 'confirmed';
     return [
-      AttendanceSession(personId: 'f0', personName: _dn('f0', '阿明'), businessDate: d, inAt: at(18, 0), outAt: at(23, 30), minutes: 330),
       AttendanceSession(
-          personId: 'p0', personName: _dn('p0', '小魚'), businessDate: d, inAt: at(19, 2), outAt: at(23, 0), minutes: 238, pending: !demo2),
+        personId: 'f0',
+        personName: _dn('f0', '阿明'),
+        businessDate: d,
+        inAt: at(18, 0),
+        outAt: at(23, 30),
+        minutes: 330,
+      ),
+      AttendanceSession(
+        personId: 'p0',
+        personName: _dn('p0', '小魚'),
+        businessDate: d,
+        inAt: at(19, 2),
+        outAt: at(23, 0),
+        minutes: 238,
+        pending: !demo2,
+      ),
     ];
   }
 
@@ -2254,17 +4197,47 @@ class DemoRepository implements Repository {
     const ShiftMarkTime(mark: 'V', weekday: 6, timeRange: '19:00-01:30'),
   ];
   late final List<OvertimeRequest> _ot = [
-    OvertimeRequest(id: 'ot1', personId: 'f1', personName: _dn('f1', '小安'), businessDate: _daysAgo(1), hours: 1.5,
-        reason: '客人留到快兩點，收店晚了', afterTheFact: true, requestedByName: '小安',
-        requestedAt: DateTime.now().subtract(const Duration(hours: 9))),
-    OvertimeRequest(id: 'ot2', personId: 'f0', personName: _dn('f0', '阿明'), businessDate: _daysAgo(3), hours: 2.5,
-        reason: '包場活動，事先排好', status: 'approved', approvedHours: 2.5, requestedByName: '示範',
-        requestedAt: DateTime.now().subtract(const Duration(days: 5)), decidedByName: '示範店長',
-        decidedAt: DateTime.now().subtract(const Duration(days: 4)), mine: true),
-    OvertimeRequest(id: 'ot3', personId: 'p0', personName: _dn('p0', '小魚'), businessDate: _daysAgo(6), hours: 1,
-        reason: '留下來盤點', afterTheFact: true, status: 'rejected', requestedByName: '小魚',
-        requestedAt: DateTime.now().subtract(const Duration(days: 6)), decidedByName: '示範店長',
-        decidedAt: DateTime.now().subtract(const Duration(days: 5)), decisionNote: '盤點排在上班時間內'),
+    OvertimeRequest(
+      id: 'ot1',
+      personId: 'f1',
+      personName: _dn('f1', '小安'),
+      businessDate: _daysAgo(1),
+      hours: 1.5,
+      reason: '客人留到快兩點，收店晚了',
+      afterTheFact: true,
+      requestedByName: '小安',
+      requestedAt: DateTime.now().subtract(const Duration(hours: 9)),
+    ),
+    OvertimeRequest(
+      id: 'ot2',
+      personId: 'f0',
+      personName: _dn('f0', '阿明'),
+      businessDate: _daysAgo(3),
+      hours: 2.5,
+      reason: '包場活動，事先排好',
+      status: 'approved',
+      approvedHours: 2.5,
+      requestedByName: '示範',
+      requestedAt: DateTime.now().subtract(const Duration(days: 5)),
+      decidedByName: '示範店長',
+      decidedAt: DateTime.now().subtract(const Duration(days: 4)),
+      mine: true,
+    ),
+    OvertimeRequest(
+      id: 'ot3',
+      personId: 'p0',
+      personName: _dn('p0', '小魚'),
+      businessDate: _daysAgo(6),
+      hours: 1,
+      reason: '留下來盤點',
+      afterTheFact: true,
+      status: 'rejected',
+      requestedByName: '小魚',
+      requestedAt: DateTime.now().subtract(const Duration(days: 6)),
+      decidedByName: '示範店長',
+      decidedAt: DateTime.now().subtract(const Duration(days: 5)),
+      decisionNote: '盤點排在上班時間內',
+    ),
   ];
 
   DateTime _at(DateTime day, String hm) {
@@ -2273,46 +4246,143 @@ class DemoRepository implements Repository {
   }
 
   @override
-  Future<List<ScheduleCheckRow>> scheduleCheck(String storeId, DateTime from, DateTime to) async {
+  Future<List<ScheduleCheckRow>> scheduleCheck(
+    String storeId,
+    DateTime from,
+    DateTime to,
+  ) async {
     if (_isStaff) throw Exception('message: 只有老闆或店長能看打卡比對,');
     double? approved(String person, DateTime d) {
-      final v = _ot.where((o) => o.personId == person && o.businessDate == d && o.status == 'approved').fold<double>(0, (a, o) => a + (o.approvedHours ?? 0));
+      final v = _ot
+          .where(
+            (o) =>
+                o.personId == person &&
+                o.businessDate == d &&
+                o.status == 'approved',
+          )
+          .fold<double>(0, (a, o) => a + (o.approvedHours ?? 0));
       return v == 0 ? null : v;
     }
-    bool pending(String person, DateTime d) => _ot.any((o) => o.personId == person && o.businessDate == d && o.pending);
-    ScheduleCheckRow row(String id, String nick, int ago, String? mark, String? plan, String? inHm, String? outHm, List<String> issues,
-        {int? ei, int? li, int? eo, int? lo}) {
+
+    bool pending(String person, DateTime d) => _ot.any(
+      (o) => o.personId == person && o.businessDate == d && o.pending,
+    );
+    ScheduleCheckRow row(
+      String id,
+      String nick,
+      int ago,
+      String? mark,
+      String? plan,
+      String? inHm,
+      String? outHm,
+      List<String> issues, {
+      int? ei,
+      int? li,
+      int? eo,
+      int? lo,
+    }) {
       final d = _daysAgo(ago);
       final p = plan?.split('-');
       return ScheduleCheckRow(
-          businessDate: d, personId: id, personName: _dn(id, nick), mark: mark,
-          planStart: p == null ? null : _at(d, p[0]), planEnd: p == null ? null : _at(d, p[1]),
-          firstIn: inHm == null ? null : _at(d, inHm), lastOut: outHm == null ? null : _at(d, outHm),
-          issues: issues, earlyInMin: ei, lateInMin: li, earlyOutMin: eo, lateOutMin: lo,
-          otApproved: approved(id, d), otPending: pending(id, d));
+        businessDate: d,
+        personId: id,
+        personName: _dn(id, nick),
+        mark: mark,
+        planStart: p == null ? null : _at(d, p[0]),
+        planEnd: p == null ? null : _at(d, p[1]),
+        firstIn: inHm == null ? null : _at(d, inHm),
+        lastOut: outHm == null ? null : _at(d, outHm),
+        issues: issues,
+        earlyInMin: ei,
+        lateInMin: li,
+        earlyOutMin: eo,
+        lateOutMin: lo,
+        otApproved: approved(id, d),
+        otPending: pending(id, d),
+      );
     }
+
     final vTime = markTimeOn(_markTimes, 'V', _daysAgo(1));
     final rows = [
-      if (vTime != null) row('f1', '小安', 1, 'V', vTime, '18:02', '02:05', ['late_out'], lo: 95),
-      if (vTime != null) row('f0', '阿明', 3, 'V', markTimeOn(_markTimes, 'V', _daysAgo(3)), '17:55', '03:00', ['late_out'], lo: 150),
-      row('p0', '小魚', 2, '19:00-00:30', '19:00-00:30', '19:45', '00:30', ['late_in'], li: 45),
-      row('f2', '阿哲', 4, 'V', vTime == null ? null : markTimeOn(_markTimes, 'V', _daysAgo(4)), null, null, ['no_punch']),
+      if (vTime != null)
+        row('f1', '小安', 1, 'V', vTime, '18:02', '02:05', ['late_out'], lo: 95),
+      if (vTime != null)
+        row(
+          'f0',
+          '阿明',
+          3,
+          'V',
+          markTimeOn(_markTimes, 'V', _daysAgo(3)),
+          '17:55',
+          '03:00',
+          ['late_out'],
+          lo: 150,
+        ),
+      row('p0', '小魚', 2, '19:00-00:30', '19:00-00:30', '19:45', '00:30', [
+        'late_in',
+      ], li: 45),
+      row(
+        'f2',
+        '阿哲',
+        4,
+        'V',
+        vTime == null ? null : markTimeOn(_markTimes, 'V', _daysAgo(4)),
+        null,
+        null,
+        ['no_punch'],
+      ),
       row('p1', '阿凱', 5, '休', null, '18:30', '23:40', ['no_schedule']),
-      if (vTime != null) row('f1', '小安', 6, 'V', markTimeOn(_markTimes, 'V', _daysAgo(6)), '17:20', '23:55', ['early_in', 'early_out'], ei: 40, eo: 35),
+      if (vTime != null)
+        row(
+          'f1',
+          '小安',
+          6,
+          'V',
+          markTimeOn(_markTimes, 'V', _daysAgo(6)),
+          '17:20',
+          '23:55',
+          ['early_in', 'early_out'],
+          ei: 40,
+          eo: 35,
+        ),
     ];
-    return [for (final r in rows) if (!r.businessDate.isBefore(from) && !r.businessDate.isAfter(to)) r];
+    return [
+      for (final r in rows)
+        if (!r.businessDate.isBefore(from) && !r.businessDate.isAfter(to)) r,
+    ];
   }
 
   @override
-  Future<List<OvertimeRequest>> overtimeList(String storeId, DateTime from, DateTime to) async => [
-        for (final o in _ot)
-          if (_isStaff ? o.personId == 'f0' : (o.pending || (!o.businessDate.isBefore(from) && !o.businessDate.isAfter(to))))
-            OvertimeRequest(
-                id: o.id, personId: o.personId, personName: o.personName, businessDate: o.businessDate, hours: o.hours, reason: o.reason,
-                afterTheFact: o.afterTheFact, status: o.status, approvedHours: o.approvedHours, requestedByName: o.requestedByName,
-                requestedAt: o.requestedAt, decidedByName: o.decidedByName, decidedAt: o.decidedAt, decisionNote: o.decisionNote,
-                mine: o.mine, canDecide: !_isStaff && o.pending && !(_isManager && o.mine)),
-      ];
+  Future<List<OvertimeRequest>> overtimeList(
+    String storeId,
+    DateTime from,
+    DateTime to,
+  ) async => [
+    for (final o in _ot)
+      if (_isStaff
+          ? o.personId == 'f0'
+          : (o.pending ||
+                (!o.businessDate.isBefore(from) &&
+                    !o.businessDate.isAfter(to))))
+        OvertimeRequest(
+          id: o.id,
+          personId: o.personId,
+          personName: o.personName,
+          businessDate: o.businessDate,
+          hours: o.hours,
+          reason: o.reason,
+          afterTheFact: o.afterTheFact,
+          status: o.status,
+          approvedHours: o.approvedHours,
+          requestedByName: o.requestedByName,
+          requestedAt: o.requestedAt,
+          decidedByName: o.decidedByName,
+          decidedAt: o.decidedAt,
+          decisionNote: o.decisionNote,
+          mine: o.mine,
+          canDecide: !_isStaff && o.pending && !(_isManager && o.mine),
+        ),
+  ];
 
   void _otSet(String id, String status, {double? approved, String? note}) {
     final i = _ot.indexWhere((o) => o.id == id);
@@ -2320,44 +4390,114 @@ class DemoRepository implements Repository {
     final o = _ot[i];
     if (!o.pending) throw Exception('message: 這筆加班申請已經處理過了,');
     _ot[i] = OvertimeRequest(
-        id: o.id, personId: o.personId, personName: o.personName, businessDate: o.businessDate, hours: o.hours, reason: o.reason,
-        afterTheFact: o.afterTheFact, status: status, approvedHours: approved, requestedByName: o.requestedByName,
-        requestedAt: o.requestedAt, decidedByName: '示範', decidedAt: DateTime.now(), decisionNote: note, mine: o.mine);
+      id: o.id,
+      personId: o.personId,
+      personName: o.personName,
+      businessDate: o.businessDate,
+      hours: o.hours,
+      reason: o.reason,
+      afterTheFact: o.afterTheFact,
+      status: status,
+      approvedHours: approved,
+      requestedByName: o.requestedByName,
+      requestedAt: o.requestedAt,
+      decidedByName: '示範',
+      decidedAt: DateTime.now(),
+      decisionNote: note,
+      mine: o.mine,
+    );
   }
 
   @override
-  Future<String> requestOvertime(String storeId, String personId, DateTime day, double hours, String reason) async {
-    if (!isHalfHour(hours) || hours <= 0 || hours > 12) throw Exception('message: 加班時數以 0.5 小時為單位，一天最多 12 小時,');
+  Future<String> requestOvertime(
+    String storeId,
+    String personId,
+    DateTime day,
+    double hours,
+    String reason,
+  ) async {
+    if (!isHalfHour(hours) || hours <= 0 || hours > 12)
+      throw Exception('message: 加班時數以 0.5 小時為單位，一天最多 12 小時,');
     if (reason.trim().length < 2) throw Exception('message: 請寫加班的原因,');
-    if (_ot.any((o) => o.personId == personId && o.businessDate == day && o.pending)) {
+    if (_ot.any(
+      (o) => o.personId == personId && o.businessDate == day && o.pending,
+    )) {
       throw Exception('message: 這天已經有一筆待審核的加班申請,');
     }
     final id = 'otn${_seq++}'; // 跟示範資料的 ot1～ot3 分開（Codex P2）
-    final names = {for (final p in (await shiftMonth(storeId, day)).people) p.id: p.label};
-    _ot.add(OvertimeRequest(
-        id: id, personId: personId, personName: names[personId] ?? _dn('f0', '阿明'), businessDate: day, hours: hours,
-        reason: reason.trim(), afterTheFact: day.isBefore(_daysAgo(0)), requestedByName: '示範', requestedAt: DateTime.now(), mine: true));
+    final names = {
+      for (final p in (await shiftMonth(storeId, day)).people) p.id: p.label,
+    };
+    _ot.add(
+      OvertimeRequest(
+        id: id,
+        personId: personId,
+        personName: names[personId] ?? _dn('f0', '阿明'),
+        businessDate: day,
+        hours: hours,
+        reason: reason.trim(),
+        afterTheFact: day.isBefore(_daysAgo(0)),
+        requestedByName: '示範',
+        requestedAt: DateTime.now(),
+        mine: true,
+      ),
+    );
     return id;
   }
 
   @override
-  Future<void> decideOvertime(String id, bool approve, {double? hours, String? note}) async {
+  Future<void> decideOvertime(
+    String id,
+    bool approve, {
+    double? hours,
+    String? note,
+  }) async {
     if (_isStaff) throw Exception('message: 只有老闆或店長能審核加班,');
     final o = _ot.firstWhere((x) => x.id == id);
     if (_isManager && o.mine) throw Exception('message: 自己的加班要請老闆或另一位店長核准,');
-    if (!approve && (note ?? '').trim().length < 2) throw Exception('message: 退回要寫原因,');
-    _otSet(id, approve ? 'approved' : 'rejected', approved: approve ? hours ?? o.hours : null, note: note);
+    if (!approve && (note ?? '').trim().length < 2)
+      throw Exception('message: 退回要寫原因,');
+    _otSet(
+      id,
+      approve ? 'approved' : 'rejected',
+      approved: approve ? hours ?? o.hours : null,
+      note: note,
+    );
     // 核准當下就帶進那個月還沒發布的薪資（月薪制、手動改過的不蓋掉）
     final month = DateTime(o.businessDate.year, o.businessDate.month);
     final k = _payKey(_otStore, month), r = _payRows[k]?[o.personId];
-    if (approve && r != null && r.payType == 'monthly' && _payStatus[k] == 'draft') {
+    if (approve &&
+        r != null &&
+        r.payType == 'monthly' &&
+        _payStatus[k] == 'draft') {
       final a = _demoOt(o.personId, month);
-      _payRows[k]![o.personId] = _payCalc(PayrollRow(
-          personId: r.personId, name: r.name, slipName: r.slipName, kind: r.kind, status: r.status, payType: r.payType,
-          baseAmount: r.baseAmount, autoDays: r.autoDays, autoHours: r.autoHours, daysOverride: r.daysOverride,
-          hoursOverride: r.hoursOverride, otHours: r.otManual ? r.otHours : a.h1, otHours2: r.otManual ? r.otHours2 : a.h2,
-          otMode: r.otMode, otRate: r.otRate, bonus: r.bonus, insurance: r.insurance, deduction: r.deduction,
-          extras: r.extras, note: r.note, autoOtHours: a.h1, autoOtHours2: a.h2, otManual: r.otManual));
+      _payRows[k]![o.personId] = _payCalc(
+        PayrollRow(
+          personId: r.personId,
+          name: r.name,
+          slipName: r.slipName,
+          kind: r.kind,
+          status: r.status,
+          payType: r.payType,
+          baseAmount: r.baseAmount,
+          autoDays: r.autoDays,
+          autoHours: r.autoHours,
+          daysOverride: r.daysOverride,
+          hoursOverride: r.hoursOverride,
+          otHours: r.otManual ? r.otHours : a.h1,
+          otHours2: r.otManual ? r.otHours2 : a.h2,
+          otMode: r.otMode,
+          otRate: r.otRate,
+          bonus: r.bonus,
+          insurance: r.insurance,
+          deduction: r.deduction,
+          extras: r.extras,
+          note: r.note,
+          autoOtHours: a.h1,
+          autoOtHours2: a.h2,
+          otManual: r.otManual,
+        ),
+      );
     }
   }
 
@@ -2367,7 +4507,8 @@ class DemoRepository implements Repository {
   Future<void> cancelOvertime(String id) async => _otSet(id, 'cancelled');
 
   @override
-  Future<List<ShiftMarkTime>> shiftMarkTimes(String storeId) async => storeId == 'yc' ? List.of(_markTimes) : const [];
+  Future<List<ShiftMarkTime>> shiftMarkTimes(String storeId) async =>
+      storeId == 'yc' ? List.of(_markTimes) : const [];
 
   @override
   Future<void> saveShiftMarkTime(String storeId, ShiftMarkTime t) async {
@@ -2378,31 +4519,64 @@ class DemoRepository implements Repository {
   }
 
   @override
-  Future<void> deleteShiftMarkTime(String storeId, String mark, int weekday) async =>
+  Future<void> deleteShiftMarkTime(
+    String storeId,
+    String mark,
+    int weekday,
+  ) async =>
       _markTimes.removeWhere((x) => x.mark == mark && x.weekday == weekday);
 
   @override
-  Future<List<AttendanceExportRow>> attendanceExport(String storeId, DateTime from, DateTime to) async {
+  Future<List<AttendanceExportRow>> attendanceExport(
+    String storeId,
+    DateTime from,
+    DateTime to,
+  ) async {
     final d = _daysAgo(1);
     final demo2 = _lastReview('demo2');
     return [
-      AttendanceExportRow(businessDate: d, personName: _dn('f0', '阿明'), punchType: 'in', punchedAt: DateTime(d.year, d.month, d.day, 18), storeName: '隱城',
-          source: 'qr', status: 'ok', flags: '', review: _lastReview('demo0'), counted: _lastReview('demo0') != 'rejected', punchId: 'demo0'),
-      AttendanceExportRow(businessDate: d, personName: _dn('p0', '小魚'), punchType: 'in', punchedAt: DateTime(d.year, d.month, d.day, 19, 2), storeName: '隱城',
-          source: 'qr', status: 'pending', flags: 'code_expired', review: demo2, counted: demo2 == 'confirmed', punchId: 'demo2'),
+      AttendanceExportRow(
+        businessDate: d,
+        personName: _dn('f0', '阿明'),
+        punchType: 'in',
+        punchedAt: DateTime(d.year, d.month, d.day, 18),
+        storeName: '隱城',
+        source: 'qr',
+        status: 'ok',
+        flags: '',
+        review: _lastReview('demo0'),
+        counted: _lastReview('demo0') != 'rejected',
+        punchId: 'demo0',
+      ),
+      AttendanceExportRow(
+        businessDate: d,
+        personName: _dn('p0', '小魚'),
+        punchType: 'in',
+        punchedAt: DateTime(d.year, d.month, d.day, 19, 2),
+        storeName: '隱城',
+        source: 'qr',
+        status: 'pending',
+        flags: 'code_expired',
+        review: demo2,
+        counted: demo2 == 'confirmed',
+        punchId: 'demo2',
+      ),
       for (final r in _att.where((r) => r.isPunch))
-          AttendanceExportRow(
-              businessDate: r.businessDate ?? r.at,
-              personName: _dn('f0', '阿明'),
-              punchType: r.punchType,
-              punchedAt: r.at,
-              storeName: '隱城',
-              source: 'qr',
-              status: r.status,
-              flags: r.flags.join(' '),
-              review: _lastReview(r.id),
-              counted: _lastReview(r.id) == 'confirmed' || (r.status == 'ok' && _lastReview(r.id) != 'rejected'),
-              punchId: r.id),
+        AttendanceExportRow(
+          businessDate: r.businessDate ?? r.at,
+          personName: _dn('f0', '阿明'),
+          punchType: r.punchType,
+          punchedAt: r.at,
+          storeName: '隱城',
+          source: 'qr',
+          status: r.status,
+          flags: r.flags.join(' '),
+          review: _lastReview(r.id),
+          counted:
+              _lastReview(r.id) == 'confirmed' ||
+              (r.status == 'ok' && _lastReview(r.id) != 'rejected'),
+          punchId: r.id,
+        ),
       ..._pinPunches,
     ];
   }
@@ -2411,9 +4585,15 @@ class DemoRepository implements Repository {
   Future<List<KioskInfo>> kiosks(String storeId) async => List.of(_kiosks);
 
   @override
-  Future<({String id, String secret})> registerKiosk(String storeId, String name) async {
-    final id = '00000000-0000-4000-8000-${(_seq++).toString().padLeft(12, '0')}';
-    _kiosks.add(KioskInfo(id: id, name: name, active: true, createdAt: DateTime.now()));
+  Future<({String id, String secret})> registerKiosk(
+    String storeId,
+    String name,
+  ) async {
+    final id =
+        '00000000-0000-4000-8000-${(_seq++).toString().padLeft(12, '0')}';
+    _kiosks.add(
+      KioskInfo(id: id, name: name, active: true, createdAt: DateTime.now()),
+    );
     return (id: id, secret: 'demo-secret');
   }
 
@@ -2423,26 +4603,51 @@ class DemoRepository implements Repository {
     final k = i < 0 ? null : _kiosks[i];
     if (k != null) {
       _kiosks[i] = KioskInfo(
-          id: kioskId, name: k.name, active: false, createdAt: k.createdAt, accountUserId: k.accountUserId, accountName: k.accountName);
+        id: kioskId,
+        name: k.name,
+        active: false,
+        createdAt: k.createdAt,
+        accountUserId: k.accountUserId,
+        accountName: k.accountName,
+      );
     }
   }
 
   @override
-  Future<List<KioskAccountCandidate>> kioskAccountCandidates(String storeId) async => [
-        KioskAccountCandidate(
-            userId: 'demo-kiosk',
-            displayName: '示範公用帳號',
-            role: 'parttime',
-            blocked: _kiosks.any((k) => k.active && k.accountUserId == 'demo-kiosk') ? '已經是打卡用帳號' : null),
-        const KioskAccountCandidate(userId: 'u3', displayName: '示範員工', role: 'staff', blocked: '已連到員工資料「示範員工」，要先解除'),
-      ];
+  Future<List<KioskAccountCandidate>> kioskAccountCandidates(
+    String storeId,
+  ) async => [
+    KioskAccountCandidate(
+      userId: 'demo-kiosk',
+      displayName: '示範公用帳號',
+      role: 'parttime',
+      blocked: _kiosks.any((k) => k.active && k.accountUserId == 'demo-kiosk')
+          ? '已經是打卡用帳號'
+          : null,
+    ),
+    const KioskAccountCandidate(
+      userId: 'u3',
+      displayName: '示範員工',
+      role: 'staff',
+      blocked: '已連到員工資料「示範員工」，要先解除',
+    ),
+  ];
 
   @override
   Future<void> setKioskAccount(String storeId, String userId) async {
     if (_kiosks.any((k) => k.active && k.accountUserId == userId)) return;
-    final id = '00000000-0000-4000-8000-${(_seq++).toString().padLeft(12, '0')}';
-    _kiosks.add(KioskInfo(
-        id: id, name: '示範公用帳號', active: true, createdAt: DateTime.now(), accountUserId: userId, accountName: '示範公用帳號'));
+    final id =
+        '00000000-0000-4000-8000-${(_seq++).toString().padLeft(12, '0')}';
+    _kiosks.add(
+      KioskInfo(
+        id: id,
+        name: '示範公用帳號',
+        active: true,
+        createdAt: DateTime.now(),
+        accountUserId: userId,
+        accountName: '示範公用帳號',
+      ),
+    );
   }
 
   // 示範打卡密碼（虛構）：阿哲 2580、小魚 3691；阿明（示範員工自己）還沒設，班表頁會請他先設定。正式資料庫只存雜湊
@@ -2456,8 +4661,19 @@ class DemoRepository implements Repository {
   Future<KioskMine?> kioskMine() async {
     if (!_isKiosk) return null;
     return _kioskXc
-        ? const KioskMine(kioskId: 'demo-kiosk-xc', storeId: 'xc', storeName: '小城外', kioskName: '示範公用帳號', error: '小城外打卡尚未開啟')
-        : const KioskMine(kioskId: 'demo-kiosk-yc', storeId: 'yc', storeName: '隱城', kioskName: '示範公用帳號');
+        ? const KioskMine(
+            kioskId: 'demo-kiosk-xc',
+            storeId: 'xc',
+            storeName: '小城外',
+            kioskName: '示範公用帳號',
+            error: '小城外打卡尚未開啟',
+          )
+        : const KioskMine(
+            kioskId: 'demo-kiosk-yc',
+            storeId: 'yc',
+            storeName: '隱城',
+            kioskName: '示範公用帳號',
+          );
   }
 
   @override
@@ -2468,29 +4684,64 @@ class DemoRepository implements Repository {
     final lock = _pinLockedUntil;
     if (lock != null && lock.isAfter(now)) {
       return PinPunchResult(
-          result: 'locked', lockedUntil: lock, message: '密碼連錯 5 次，請 ${lock.difference(now).inSeconds + 1} 秒後再試');
+        result: 'locked',
+        lockedUntil: lock,
+        message: '密碼連錯 5 次，請 ${lock.difference(now).inSeconds + 1} 秒後再試',
+      );
     }
     // ops 0131：靠密碼認人（同店不會重複）
-    final active = {for (final p in (await shiftMonth('yc', now)).people) if (p.active) p.id: p.label};
-    final personId = _pins.entries.where((e) => e.value == pin && active.containsKey(e.key)).firstOrNull?.key;
+    final active = {
+      for (final p in (await shiftMonth('yc', now)).people)
+        if (p.active) p.id: p.label,
+    };
+    final personId = _pins.entries
+        .where((e) => e.value == pin && active.containsKey(e.key))
+        .firstOrNull
+        ?.key;
     if (personId == null) {
       _pinFails++;
       if (_pinFails >= 5) {
         _pinFails = 0;
         _pinLockedUntil = now.add(const Duration(minutes: 1));
-        return PinPunchResult(result: 'locked', lockedUntil: _pinLockedUntil, message: '密碼連錯 5 次，請 1 分鐘後再試');
+        return PinPunchResult(
+          result: 'locked',
+          lockedUntil: _pinLockedUntil,
+          message: '密碼連錯 5 次，請 1 分鐘後再試',
+        );
       }
-      return PinPunchResult(result: 'wrong', remaining: 5 - _pinFails, message: '找不到這組密碼，還可以試 ${5 - _pinFails} 次。忘記密碼請找店長重設');
+      return PinPunchResult(
+        result: 'wrong',
+        remaining: 5 - _pinFails,
+        message: '找不到這組密碼，還可以試 ${5 - _pinFails} 次。忘記密碼請找店長重設',
+      );
     }
     final name = active[personId]!;
     _pinFails = 0;
     final type = _pinLast[personId] == 'in' ? 'out' : 'in';
     _pinLast[personId] = type;
     final biz = DateTime(now.year, now.month, now.day - (now.hour < 6 ? 1 : 0));
-    _pinPunches.add(AttendanceExportRow(
-        businessDate: biz, personName: name, punchType: type, punchedAt: now, storeName: '隱城',
-        source: 'pin', status: 'ok', flags: '', counted: true, punchId: 'pin${_seq++}'));
-    return PinPunchResult(result: 'ok', personName: name, punchType: type, punchedAt: now, status: 'ok', remaining: 5);
+    _pinPunches.add(
+      AttendanceExportRow(
+        businessDate: biz,
+        personName: name,
+        punchType: type,
+        punchedAt: now,
+        storeName: '隱城',
+        source: 'pin',
+        status: 'ok',
+        flags: '',
+        counted: true,
+        punchId: 'pin${_seq++}',
+      ),
+    );
+    return PinPunchResult(
+      result: 'ok',
+      personName: name,
+      punchType: type,
+      punchedAt: now,
+      status: 'ok',
+      remaining: 5,
+    );
   }
 
   @override
@@ -2501,33 +4752,48 @@ class DemoRepository implements Repository {
       for (final p in m.people)
         if (!_isStaff || p.id == 'f0')
           PinStatus(
-              personId: p.id,
-              name: p.label,
-              active: p.active,
-              hasPin: _pins.containsKey(p.id),
-              // 示範：阿明（f0）是登入的這個人；店長不能設自己的；員工本人只有還沒設的時候能自己設
-              canSet: _isStaff ? !_pins.containsKey(p.id) : !(_isManager && p.id == 'f0'),
-              mine: p.id == 'f0'),
+            personId: p.id,
+            name: p.label,
+            active: p.active,
+            hasPin: _pins.containsKey(p.id),
+            // 示範：阿明（f0）是登入的這個人；店長不能設自己的；員工本人只有還沒設的時候能自己設
+            canSet: _isStaff
+                ? !_pins.containsKey(p.id)
+                : !(_isManager && p.id == 'f0'),
+            mine: p.id == 'f0',
+          ),
     ];
   }
 
   @override
   Future<PinSetResult> pinSet(String personId, String? pin) async {
-    if (_isManager && personId == 'f0') throw Exception('message: 店長的打卡密碼請老闆設定,');
-    if (_isStaff && personId != 'f0') throw Exception('message: 沒有權限設定這個人的打卡密碼,');
-    if (pin != null && !RegExp(r'^[0-9]{4}$').hasMatch(pin)) throw Exception('message: 打卡密碼要是 4 位數字,');
+    if (_isManager && personId == 'f0')
+      throw Exception('message: 店長的打卡密碼請老闆設定,');
+    if (_isStaff && personId != 'f0')
+      throw Exception('message: 沒有權限設定這個人的打卡密碼,');
+    if (pin != null && !RegExp(r'^[0-9]{4}$').hasMatch(pin))
+      throw Exception('message: 打卡密碼要是 4 位數字,');
     // ops 0131：同店不能跟別人一樣；本人設過之後要店長重設
     if (_isStaff && _pins.containsKey(personId)) {
-      return const PinSetResult(result: 'reset_needed', message: '已經設過打卡密碼了。忘記或想換，請找店長重設');
+      return const PinSetResult(
+        result: 'reset_needed',
+        message: '已經設過打卡密碼了。忘記或想換，請找店長重設',
+      );
     }
     if (pin != null && isWeakPunchPin(pin)) {
-      return const PinSetResult(result: 'rejected', message: '這組太好猜了，請換一組（不能四個數字都一樣，也不能是連號）');
+      return const PinSetResult(
+        result: 'rejected',
+        message: '這組太好猜了，請換一組（不能四個數字都一樣，也不能是連號）',
+      );
     }
-    if (pin != null && _pins.entries.any((e) => e.key != personId && e.value == pin)) {
+    if (pin != null &&
+        _pins.entries.any((e) => e.key != personId && e.value == pin)) {
       return const PinSetResult(result: 'rejected', message: '這組密碼不能用，請換一組');
     }
     var v = pin;
-    while (v == null || isWeakPunchPin(v) || _pins.entries.any((e) => e.key != personId && e.value == v)) {
+    while (v == null ||
+        isWeakPunchPin(v) ||
+        _pins.entries.any((e) => e.key != personId && e.value == v)) {
       v = (1000 + DateTime.now().microsecond % 9000).toString();
     }
     _pins[personId] = v;
@@ -2536,7 +4802,8 @@ class DemoRepository implements Repository {
 
   @override
   Future<void> pinClear(String personId) async {
-    if (_isStaff || (_isManager && personId == 'f0')) throw Exception('message: 沒有權限,');
+    if (_isStaff || (_isManager && personId == 'f0'))
+      throw Exception('message: 沒有權限,');
     _pins.remove(personId);
   }
 
@@ -2545,19 +4812,24 @@ class DemoRepository implements Repository {
     final now = DateTime.now();
     final w = now.millisecondsSinceEpoch ~/ 30000;
     return KioskCode(
-        storeName: '隱城',
-        kioskName: '示範打卡機',
-        window: w,
-        code: w.toRadixString(16).padLeft(16, '0'),
-        serverTime: now,
-        validUntil: DateTime.fromMillisecondsSinceEpoch((w + 1) * 30000));
+      storeName: '隱城',
+      kioskName: '示範打卡機',
+      window: w,
+      code: w.toRadixString(16).padLeft(16, '0'),
+      serverTime: now,
+      validUntil: DateTime.fromMillisecondsSinceEpoch((w + 1) * 30000),
+    );
   }
 
   final Set<String> _punchExempt = {};
   @override
   Future<Set<String>> punchExemptIds(String storeId) async => {..._punchExempt};
   @override
-  Future<void> setPunchExempt(String storeId, String personId, bool exempt) async {
+  Future<void> setPunchExempt(
+    String storeId,
+    String personId,
+    bool exempt,
+  ) async {
     if (_isStaff || _isManager) throw Exception('message: 不用打卡只有老闆能設,');
     exempt ? _punchExempt.add(personId) : _punchExempt.remove(personId);
   }
@@ -2566,7 +4838,13 @@ class DemoRepository implements Repository {
   Future<List<StaffEntry>> staffDirectory(String storeId) async {
     final m = await shiftMonth(storeId, DateTime.now());
     // 示範一位已停用（離職）的人：員工資料頁只有停用或已填離職日的人才顯示離職日
-    final left = ShiftPerson(id: 'x0', name: '示範已離職', kind: 'part', sortOrder: 99, active: false);
+    final left = ShiftPerson(
+      id: 'x0',
+      name: '示範已離職',
+      kind: 'part',
+      sortOrder: 99,
+      active: false,
+    );
     return [
       for (final p in [...m.people, left])
         if (!_isStaff || p.id == 'f0')
@@ -2579,7 +4857,9 @@ class DemoRepository implements Repository {
             phone: _hr[p.id]?['phone'] as String?,
             emergencyContact: _hr[p.id]?['ec'] as String?,
             emergencyPhone: _hr[p.id]?['ep'] as String?,
-            leaveDate: _hr.containsKey(p.id) ? _hr[p.id]!['leave'] as DateTime? : (p == left ? DateTime(2026, 10, 31) : null),
+            leaveDate: _hr.containsKey(p.id)
+                ? _hr[p.id]!['leave'] as DateTime?
+                : (p == left ? DateTime(2026, 10, 31) : null),
             payType: _hr[p.id]?['pay'] as String?,
             nationalId: _ident[p.id]?['id'],
             bankCode: _ident[p.id]?['bank'],
@@ -2596,15 +4876,27 @@ class DemoRepository implements Repository {
   }
 
   @override
-  Future<void> verifyBinding(String personId, String userId, {bool verify = true}) async {
+  Future<void> verifyBinding(
+    String personId,
+    String userId, {
+    bool verify = true,
+  }) async {
     if (_isStaff) throw Exception('message: 只有老闆能確認帳號綁定,');
-    if (_bound[personId]?.user != userId) throw Exception('message: 這個名字綁定的帳號已經換了，請重新整理,');
+    if (_bound[personId]?.user != userId)
+      throw Exception('message: 這個名字綁定的帳號已經換了，請重新整理,');
     verify ? _verified.add(personId) : _verified.remove(personId);
   }
 
   @override
-  Future<void> saveStaffHr(String storeId, String personId,
-      {String? phone, String? emergencyContact, String? emergencyPhone, DateTime? leaveDate, String? payType}) async {
+  Future<void> saveStaffHr(
+    String storeId,
+    String personId, {
+    String? phone,
+    String? emergencyContact,
+    String? emergencyPhone,
+    DateTime? leaveDate,
+    String? payType,
+  }) async {
     _hr[personId] = {
       'phone': phone,
       'ec': emergencyContact,
@@ -2615,22 +4907,38 @@ class DemoRepository implements Repository {
   }
 
   @override
-  Future<void> saveHireDate(String storeId, String personId, DateTime? hireDate) async {
+  Future<void> saveHireDate(
+    String storeId,
+    String personId,
+    DateTime? hireDate,
+  ) async {
     if (_isStaff) throw Exception('message: 沒有權限修改到職日,');
     _hire[personId] = hireDate;
   }
 
   @override
-  Future<List<PayRate>> payRates(String personId) async => List.of(_rates[personId] ?? const []);
+  Future<List<PayRate>> payRates(String personId) async =>
+      List.of(_rates[personId] ?? const []);
 
   @override
   Future<void> addPayRate(String storeId, String personId, PayRate r) async {
     final list = _rates.putIfAbsent(personId, () => []);
     if (list.any((x) => x.effectiveFrom == r.effectiveFrom)) {
-      throw Exception('message: duplicate key value violates unique constraint "staff_pay_rates_person_id_effective_from_key",');
+      throw Exception(
+        'message: duplicate key value violates unique constraint "staff_pay_rates_person_id_effective_from_key",',
+      );
     }
-    list.add(PayRate(id: 'r${_seq++}', effectiveFrom: r.effectiveFrom, payType: r.payType, amount: r.amount,
-        insuredSalary: r.insuredSalary, pensionSelfRate: r.pensionSelfRate, note: r.note));
+    list.add(
+      PayRate(
+        id: 'r${_seq++}',
+        effectiveFrom: r.effectiveFrom,
+        payType: r.payType,
+        amount: r.amount,
+        insuredSalary: r.insuredSalary,
+        pensionSelfRate: r.pensionSelfRate,
+        note: r.note,
+      ),
+    );
     list.sort((a, b) => b.effectiveFrom.compareTo(a.effectiveFrom));
   }
 
@@ -2640,7 +4948,9 @@ class DemoRepository implements Repository {
       final i = list.indexWhere((x) => x.id == r.id);
       if (i < 0) continue;
       if (list.any((x) => x.id != r.id && x.effectiveFrom == r.effectiveFrom)) {
-        throw Exception('message: duplicate key value violates unique constraint "staff_pay_rates_person_id_effective_from_key",');
+        throw Exception(
+          'message: duplicate key value violates unique constraint "staff_pay_rates_person_id_effective_from_key",',
+        );
       }
       list[i] = r;
       list.sort((a, b) => b.effectiveFrom.compareTo(a.effectiveFrom));
@@ -2657,41 +4967,88 @@ class DemoRepository implements Repository {
   }
 
   @override
-  Future<void> saveStaffIdentity(String storeId, String personId, {String? nationalId, String? bankCode, String? bankAccount}) async {
-    _ident[personId] = {'id': nationalId, 'bank': bankCode, 'acct': bankAccount};
+  Future<void> saveStaffIdentity(
+    String storeId,
+    String personId, {
+    String? nationalId,
+    String? bankCode,
+    String? bankAccount,
+  }) async {
+    _ident[personId] = {
+      'id': nationalId,
+      'bank': bankCode,
+      'acct': bankAccount,
+    };
   }
 
   // ---------------- 薪資（示範：人名、金額都是虛構的） ----------------
   var _payOt = const PayrollSettings();
-  final _payRows = <String, Map<String, PayrollRow>>{}; // 'store|yyyy-mm' → 人 → 列
+  final _payRows =
+      <String, Map<String, PayrollRow>>{}; // 'store|yyyy-mm' → 人 → 列
   final _payStatus = <String, String>{};
   // 示範：一位還沒有薪率的在職人員（應計薪名單會缺他，老闆設成不計薪或補薪率後才能發布）
   static const _payNoRateId = 'demo-no-rate', _payNoRateName = '新來的（示範）';
   final _payExempt = <String>{};
-  bool _payNoRateMissing(String storeId) => storeId == 'yc' && !_payExempt.contains(_payNoRateId);
+  bool _payNoRateMissing(String storeId) =>
+      storeId == 'yc' && !_payExempt.contains(_payNoRateId);
   // 已發布的月份用發布當時的名單：之後才出現的人不算缺漏、也不列出
-  bool _payNoRateShown(String k, String storeId) => storeId == 'yc' && _payStatus[k] == 'draft';
+  bool _payNoRateShown(String k, String storeId) =>
+      storeId == 'yc' && _payStatus[k] == 'draft';
   String _payKey(String storeId, DateTime m) => '$storeId|${m.year}-${m.month}';
-  String? _paySelf(String k) => _isManager ? _payRows[k]?.keys.firstOrNull : null;
+  String? _paySelf(String k) =>
+      _isManager ? _payRows[k]?.keys.firstOrNull : null;
   void _payNeedManager() {
     if (_isStaff) throw Exception('message: 只有老闆、店長能看薪資,');
   }
 
   PayrollRow _payCalc(PayrollRow r, {String? status}) {
-    final days = r.daysOverride ?? r.autoDays, hours = r.hoursOverride ?? r.autoHours;
+    final days = r.daysOverride ?? r.autoDays,
+        hours = r.hoursOverride ?? r.autoHours;
     final g = payrollTotal(
-        payType: r.payType, base: r.baseAmount, days: days, hours: hours, otHours: r.otHours, otHours2: r.otHours2,
-        otMode: r.otMode, otRate: r.otRate, bonus: r.bonus, insurance: r.insurance, deduction: r.deduction,
-        extras: r.extras);
+      payType: r.payType,
+      base: r.baseAmount,
+      days: days,
+      hours: hours,
+      otHours: r.otHours,
+      otHours2: r.otHours2,
+      otMode: r.otMode,
+      otRate: r.otRate,
+      bonus: r.bonus,
+      insurance: r.insurance,
+      deduction: r.deduction,
+      extras: r.extras,
+    );
     return PayrollRow(
-        personId: r.personId, name: r.name, kind: r.kind, status: status ?? r.status, payType: r.payType,
-        baseAmount: r.baseAmount, autoDays: r.autoDays, autoHours: r.autoHours, daysOverride: r.daysOverride,
-        hoursOverride: r.hoursOverride, days: days, hours: hours, otHours: r.otHours, otHours2: r.otHours2,
-        otMode: r.otMode, otRate: r.otRate, bonus: r.bonus, insurance: r.insurance, deduction: r.deduction,
-        extras: r.extras, slipName: r.slipName, note: r.note,
-        autoOtHours: r.autoOtHours, autoOtHours2: r.autoOtHours2, otManual: r.otManual,
-        gross: g?.toDouble(),
-        editable: (status ?? r.status) == 'draft', missingRate: r.baseAmount == null, updatedAt: DateTime.now());
+      personId: r.personId,
+      name: r.name,
+      kind: r.kind,
+      status: status ?? r.status,
+      payType: r.payType,
+      baseAmount: r.baseAmount,
+      autoDays: r.autoDays,
+      autoHours: r.autoHours,
+      daysOverride: r.daysOverride,
+      hoursOverride: r.hoursOverride,
+      days: days,
+      hours: hours,
+      otHours: r.otHours,
+      otHours2: r.otHours2,
+      otMode: r.otMode,
+      otRate: r.otRate,
+      bonus: r.bonus,
+      insurance: r.insurance,
+      deduction: r.deduction,
+      extras: r.extras,
+      slipName: r.slipName,
+      note: r.note,
+      autoOtHours: r.autoOtHours,
+      autoOtHours2: r.autoOtHours2,
+      otManual: r.otManual,
+      gross: g?.toDouble(),
+      editable: (status ?? r.status) == 'draft',
+      missingRate: r.baseAmount == null,
+      updatedAt: DateTime.now(),
+    );
   }
 
   @override
@@ -2701,43 +5058,92 @@ class DemoRepository implements Repository {
   }
 
   @override
-  Future<void> setPayrollOvertime(String storeId, String mode, double rate) async {
+  Future<void> setPayrollOvertime(
+    String storeId,
+    String mode,
+    double rate,
+  ) async {
     _payNeedManager();
-    _payOt = PayrollSettings(otMode: mode, otRate: rate, companyName: _payOt.companyName);
+    _payOt = PayrollSettings(
+      otMode: mode,
+      otRate: rate,
+      companyName: _payOt.companyName,
+    );
   }
 
   @override
   Future<int> preparePayroll(String storeId, DateTime month) async {
     _payNeedManager();
     final k = _payKey(storeId, month);
-    if (_payStatus[k] == 'published') throw Exception('message: 這個月已經發布，要先由老闆重新開啟,');
+    if (_payStatus[k] == 'published')
+      throw Exception('message: 這個月已經發布，要先由老闆重新開啟,');
     final people = (await shiftMonth(storeId, month)).people;
     final rows = _payRows.putIfAbsent(k, () => {});
     for (final (i, p) in people.indexed) {
       final old = rows[p.id];
-      if (old == null && _payExempt.contains(p.id)) continue; // 不計薪的人不帶入（已有的列保留）
+      if (old == null && _payExempt.contains(p.id))
+        continue; // 不計薪的人不帶入（已有的列保留）
       // 示範：正職月薪、兼職時薪，第一位是日薪；隱城的時數假裝從打卡帶入
       final type = i == 0 ? 'daily' : (p.kind == 'part' ? 'hourly' : 'monthly');
-      final base = switch (type) { 'daily' => 1800.0, 'monthly' => 36000.0 + i * 1000, _ => 200.0 };
+      final base = switch (type) {
+        'daily' => 1800.0,
+        'monthly' => 36000.0 + i * 1000,
+        _ => 200.0,
+      };
       final auto = storeId == 'yc';
       // 示範：勞保、健保、眷屬健保跟正式的一樣先帶上個月的（這裡第一次帶入就給一組數字，畫面才看得到新格式）
-      final ex = old?.extras ??
+      final ex =
+          old?.extras ??
           (type == 'monthly'
-              ? PayExtras(attendanceBonus: 1000, laborIns: 916, healthIns: 568, dependentsIns: i == 1 ? 568 : 0)
-              : type == 'hourly' ? const PayExtras(laborIns: 277, healthIns: 172) : const PayExtras());
-      rows[p.id] = _payCalc(PayrollRow(
-          personId: p.id, name: p.label, slipName: p.shortLabel, kind: p.kind, payType: type, baseAmount: base, extras: ex,
-          autoDays: auto && type == 'daily' ? 10 : null, autoHours: auto && type == 'hourly' ? 60.0 + i * 4.5 : null,
-          daysOverride: old?.daysOverride, hoursOverride: old?.hoursOverride,
+              ? PayExtras(
+                  attendanceBonus: 1000,
+                  laborIns: 916,
+                  healthIns: 568,
+                  dependentsIns: i == 1 ? 568 : 0,
+                )
+              : type == 'hourly'
+              ? const PayExtras(laborIns: 277, healthIns: 172)
+              : const PayExtras());
+      rows[p.id] = _payCalc(
+        PayrollRow(
+          personId: p.id,
+          name: p.label,
+          slipName: p.shortLabel,
+          kind: p.kind,
+          payType: type,
+          baseAmount: base,
+          extras: ex,
+          autoDays: auto && type == 'daily' ? 10 : null,
+          autoHours: auto && type == 'hourly' ? 60.0 + i * 4.5 : null,
+          daysOverride: old?.daysOverride,
+          hoursOverride: old?.hoursOverride,
           // 示範：月薪制帶入核准的加班（每天前 2 小時、第 3 小時起分開；手動改過的不蓋掉）
-          autoOtHours: auto && type == 'monthly' ? _demoOt(p.id, month).h1 : null,
-          autoOtHours2: auto && type == 'monthly' ? _demoOt(p.id, month).h2 : null,
+          autoOtHours: auto && type == 'monthly'
+              ? _demoOt(p.id, month).h1
+              : null,
+          autoOtHours2: auto && type == 'monthly'
+              ? _demoOt(p.id, month).h2
+              : null,
           otManual: old?.otManual ?? false,
-          otHours: type == 'monthly' ? (auto && !(old?.otManual ?? false) ? _demoOt(p.id, month).h1 : old?.otHours ?? 0) : 0,
-          otHours2: type == 'monthly' ? (auto && !(old?.otManual ?? false) ? _demoOt(p.id, month).h2 : old?.otHours2 ?? 0) : 0,
-          otMode: _payOt.otMode, otRate: _payOt.otRate, bonus: old?.bonus ?? 0,
+          otHours: type == 'monthly'
+              ? (auto && !(old?.otManual ?? false)
+                    ? _demoOt(p.id, month).h1
+                    : old?.otHours ?? 0)
+              : 0,
+          otHours2: type == 'monthly'
+              ? (auto && !(old?.otManual ?? false)
+                    ? _demoOt(p.id, month).h2
+                    : old?.otHours2 ?? 0)
+              : 0,
+          otMode: _payOt.otMode,
+          otRate: _payOt.otRate,
+          bonus: old?.bonus ?? 0,
           insurance: type == 'daily' ? 0 : old?.insurance ?? 0,
-          deduction: old?.deduction ?? 0, note: old?.note), status: 'draft');
+          deduction: old?.deduction ?? 0,
+          note: old?.note,
+        ),
+        status: 'draft',
+      );
     }
     _payStatus[k] = 'draft';
     return rows.length;
@@ -2746,8 +5152,12 @@ class DemoRepository implements Repository {
   ({double h1, double h2}) _demoOt(String person, DateTime month) {
     final byDay = <DateTime, double>{};
     for (final o in _ot) {
-      if (o.personId == person && o.status == 'approved' && o.businessDate.year == month.year && o.businessDate.month == month.month) {
-        byDay[o.businessDate] = (byDay[o.businessDate] ?? 0) + (o.approvedHours ?? 0);
+      if (o.personId == person &&
+          o.status == 'approved' &&
+          o.businessDate.year == month.year &&
+          o.businessDate.month == month.month) {
+        byDay[o.businessDate] =
+            (byDay[o.businessDate] ?? 0) + (o.approvedHours ?? 0);
       }
     }
     var h1 = 0.0, h2 = 0.0;
@@ -2764,16 +5174,31 @@ class DemoRepository implements Repository {
     final k = _payKey(storeId, month), self = _paySelf(k);
     return [
       for (final r in _payRows[k]?.values ?? const <PayrollRow>[])
-        r.personId == self ? PayrollRow(personId: r.personId, name: r.name, payType: r.payType, hidden: true) : r,
+        r.personId == self
+            ? PayrollRow(
+                personId: r.personId,
+                name: r.name,
+                payType: r.payType,
+                hidden: true,
+              )
+            : r,
       if (_payNoRateShown(k, storeId))
         PayrollRow(
-            personId: _payNoRateId, name: _payNoRateName, payType: 'hourly',
-            missingRate: _payNoRateMissing(storeId), exempt: !_payNoRateMissing(storeId)),
+          personId: _payNoRateId,
+          name: _payNoRateName,
+          payType: 'hourly',
+          missingRate: _payNoRateMissing(storeId),
+          exempt: !_payNoRateMissing(storeId),
+        ),
     ];
   }
 
   @override
-  Future<void> setPayrollExempt(String storeId, String personId, bool exempt) async {
+  Future<void> setPayrollExempt(
+    String storeId,
+    String personId,
+    bool exempt,
+  ) async {
     if (_isStaff || _isManager) throw Exception('message: 不計薪只有老闆能設,');
     exempt ? _payExempt.add(personId) : _payExempt.remove(personId);
   }
@@ -2783,29 +5208,61 @@ class DemoRepository implements Repository {
 
   /// 示範：照班表算（月薪整月、日薪×上班天數、時薪×上班天數×8 小時；O 當作沒設時間）
   @override
-  Future<PayrollEstimate> payrollEstimate(String storeId, DateTime month) async {
+  Future<PayrollEstimate> payrollEstimate(
+    String storeId,
+    DateTime month,
+  ) async {
     _payNeedManager();
     final k = _payKey(storeId, month), sm = await shiftMonth(storeId, month);
-    final pub = _payStatus[k] == 'published', self = _isManager && sm.people.isNotEmpty ? sm.people.first.id : null;
+    final pub = _payStatus[k] == 'published',
+        self = _isManager && sm.people.isNotEmpty ? sm.people.first.id : null;
     return PayrollEstimate([
       for (final (i, p) in sm.people.indexed)
         if (!_payExempt.contains(p.id))
           () {
-            final type = i == 0 ? 'daily' : (p.kind == 'part' ? 'hourly' : 'monthly');
-            final base = switch (type) { 'daily' => 1800.0, 'monthly' => 36000.0 + i * 1000, _ => 200.0 };
-            final marks = (sm.marks[p.id] ?? const <int, String>{}).values.where(ShiftMonth.isOn).toList();
-            final untimed = marks.where((m) => m == 'O').length, days = marks.length;
+            final type = i == 0
+                ? 'daily'
+                : (p.kind == 'part' ? 'hourly' : 'monthly');
+            final base = switch (type) {
+              'daily' => 1800.0,
+              'monthly' => 36000.0 + i * 1000,
+              _ => 200.0,
+            };
+            final marks = (sm.marks[p.id] ?? const <int, String>{}).values
+                .where(ShiftMonth.isOn)
+                .toList();
+            final untimed = marks.where((m) => m == 'O').length,
+                days = marks.length;
             final hours = (days - untimed) * 8.0;
             final row = _payRows[k]?[p.id];
-            final extra = type == 'monthly' ? (row?.bonus ?? 0) + (row?.extras.attendanceBonus ?? 1000) : 0.0;
-            final est = switch (type) { 'daily' => base * days, 'hourly' => base * hours, _ => base } + extra;
+            final extra = type == 'monthly'
+                ? (row?.bonus ?? 0) + (row?.extras.attendanceBonus ?? 1000)
+                : 0.0;
+            final est =
+                switch (type) {
+                  'daily' => base * days,
+                  'hourly' => base * hours,
+                  _ => base,
+                } +
+                extra;
             final hide = p.id == self;
             return PayrollEstimateRow(
-                personId: p.id, name: p.label, payType: type, rate: hide ? null : base,
-                basis: type == 'monthly' ? 'monthly' : 'schedule',
-                days: hide || type != 'daily' ? null : days.toDouble(), hours: hide || type != 'hourly' ? null : hours,
-                schedDays: days, schedHours: hours, untimed: untimed, extra: hide ? null : extra,
-                estimate: hide ? null : est, actual: !hide && pub ? row?.gross : null, published: pub, hidden: hide);
+              personId: p.id,
+              name: p.label,
+              payType: type,
+              rate: hide ? null : base,
+              basis: type == 'monthly' ? 'monthly' : 'schedule',
+              days: hide || type != 'daily' ? null : days.toDouble(),
+              hours: hide || type != 'hourly' ? null : hours,
+              schedDays: days,
+              schedHours: hours,
+              untimed: untimed,
+              extra: hide ? null : extra,
+              estimate: hide ? null : est,
+              actual: !hide && pub ? row?.gross : null,
+              published: pub,
+              hidden: hide,
+            );
           }(),
     ]);
   }
@@ -2813,47 +5270,99 @@ class DemoRepository implements Repository {
   @override
   Future<PayrollReport> payrollReport(String storeId, DateTime month) async {
     _payNeedManager();
-    final k = _payKey(storeId, month), rows = _payRows[k]?.values.toList() ?? const <PayrollRow>[];
+    final k = _payKey(storeId, month),
+        rows = _payRows[k]?.values.toList() ?? const <PayrollRow>[];
     if (_payStatus[k] == null) return const PayrollReport();
-    final names = [for (final r in rows) if (r.gross == null) r.name, if (_payNoRateShown(k, storeId) && _payNoRateMissing(storeId)) _payNoRateName];
+    final names = [
+      for (final r in rows)
+        if (r.gross == null) r.name,
+      if (_payNoRateShown(k, storeId) && _payNoRateMissing(storeId))
+        _payNoRateName,
+    ];
     final missing = names.length, self = _paySelf(k);
     final total = rows.fold<double>(0, (a, r) => a + (r.gross ?? 0));
-    final visible = rows.fold<double>(0, (a, r) => a + (r.personId == self ? 0 : r.gross ?? 0));
+    final visible = rows.fold<double>(
+      0,
+      (a, r) => a + (r.personId == self ? 0 : r.gross ?? 0),
+    );
     const revenue = 600000.0;
     final show = missing == 0 && self == null; // 店長少了自己那一列：不給總計、成本率
     return PayrollReport(
-        status: _payStatus[k], people: rows.length, total: show ? total : null, revenue: revenue,
-        costRate: show ? (total / revenue * 10000).round() / 10000 : null, complete: true, missingRate: missing,
-        visibleTotal: visible, missingNames: names);
+      status: _payStatus[k],
+      people: rows.length,
+      total: show ? total : null,
+      revenue: revenue,
+      costRate: show ? (total / revenue * 10000).round() / 10000 : null,
+      complete: true,
+      missingRate: missing,
+      visibleTotal: visible,
+      missingNames: names,
+    );
   }
 
   @override
-  Future<double?> savePayrollEntry(String storeId, String personId, DateTime month,
-      {double? days, double? hours, double otHours = 0, double otHours2 = 0, double bonus = 0, double insurance = 0,
-      double deduction = 0, PayExtras? extras, String? note, String? reason}) async {
+  Future<double?> savePayrollEntry(
+    String storeId,
+    String personId,
+    DateTime month, {
+    double? days,
+    double? hours,
+    double otHours = 0,
+    double otHours2 = 0,
+    double bonus = 0,
+    double insurance = 0,
+    double deduction = 0,
+    PayExtras? extras,
+    String? note,
+    String? reason,
+  }) async {
     _payNeedManager();
     final k = _payKey(storeId, month), r = _payRows[k]?[personId];
     if (r == null) throw Exception('message: 這個人這個月還沒有薪資，請先帶入,');
     if (personId == _paySelf(k)) throw Exception('message: 你自己的薪資由老闆處理,');
     if (_payStatus[k] == 'published') throw Exception('message: 這個月已經發布，不能再改,');
-    if (r.payType != 'monthly' && otHours + otHours2 > 0) throw Exception('message: 只有月薪制可以填加班時數,');
-    if (r.payType == 'daily' && insurance != 0) throw Exception('message: 日薪制不扣勞健保,');
+    if (r.payType != 'monthly' && otHours + otHours2 > 0)
+      throw Exception('message: 只有月薪制可以填加班時數,');
+    if (r.payType == 'daily' && insurance != 0)
+      throw Exception('message: 日薪制不扣勞健保,');
     if ([hours, otHours, otHours2].any((v) => v != null && !isHalfHour(v))) {
       throw Exception('message: 時數只能填 0.5 小時的倍數,');
     }
     final ex = extras ?? r.extras;
-    if (r.payType == 'daily' && ex.laborIns + ex.healthIns + ex.dependentsIns != 0) throw Exception('message: 日薪制不扣勞健保,');
-    final n = _payCalc(PayrollRow(
-        personId: r.personId, name: r.name, slipName: r.slipName, kind: r.kind, status: r.status, payType: r.payType,
+    if (r.payType == 'daily' &&
+        ex.laborIns + ex.healthIns + ex.dependentsIns != 0)
+      throw Exception('message: 日薪制不扣勞健保,');
+    final n = _payCalc(
+      PayrollRow(
+        personId: r.personId,
+        name: r.name,
+        slipName: r.slipName,
+        kind: r.kind,
+        status: r.status,
+        payType: r.payType,
         baseAmount: r.baseAmount,
-        autoDays: r.autoDays, autoHours: r.autoHours, daysOverride: days, hoursOverride: hours, otHours: otHours,
-        otHours2: otHours2, otMode: r.otMode, otRate: r.otRate, bonus: bonus, insurance: insurance, deduction: deduction,
-        extras: ex, note: note, autoOtHours: r.autoOtHours, autoOtHours2: r.autoOtHours2,
+        autoDays: r.autoDays,
+        autoHours: r.autoHours,
+        daysOverride: days,
+        hoursOverride: hours,
+        otHours: otHours,
+        otHours2: otHours2,
+        otMode: r.otMode,
+        otRate: r.otRate,
+        bonus: bonus,
+        insurance: insurance,
+        deduction: deduction,
+        extras: ex,
+        note: note,
+        autoOtHours: r.autoOtHours,
+        autoOtHours2: r.autoOtHours2,
         otManual: r.autoOtHours == null
             ? r.otManual
             : r.otMode == 'lsa'
-                ? (otHours != r.autoOtHours || otHours2 != (r.autoOtHours2 ?? 0))
-                : otHours + otHours2 != r.autoOtHours! + (r.autoOtHours2 ?? 0)));
+            ? (otHours != r.autoOtHours || otHours2 != (r.autoOtHours2 ?? 0))
+            : otHours + otHours2 != r.autoOtHours! + (r.autoOtHours2 ?? 0),
+      ),
+    );
     if (ex.cashPaid > (n.gross ?? 0)) {
       throw Exception('message: 領現金額不能比實發金額多（實發 ${(n.gross ?? 0).round()} 元）,');
     }
@@ -2864,7 +5373,11 @@ class DemoRepository implements Repository {
   @override
   Future<void> setPayrollCompany(String storeId, String name) async {
     if (_isStaff || _isManager) throw Exception('message: 公司名稱只有老闆能改,');
-    _payOt = PayrollSettings(otMode: _payOt.otMode, otRate: _payOt.otRate, companyName: name.trim().isEmpty ? null : name.trim());
+    _payOt = PayrollSettings(
+      otMode: _payOt.otMode,
+      otRate: _payOt.otRate,
+      companyName: name.trim().isEmpty ? null : name.trim(),
+    );
   }
 
   @override
@@ -2873,13 +5386,18 @@ class DemoRepository implements Repository {
     final k = _payKey(storeId, month), rows = _payRows[k];
     if (rows == null) throw Exception('message: 這個月還沒有薪資,');
     final names = (await payrollReport(storeId, month)).missingNames;
-    if (names.isNotEmpty) throw Exception('message: 還有人沒有薪資或還沒帶入，不能發布：${names.join('、')},');
+    if (names.isNotEmpty)
+      throw Exception('message: 還有人沒有薪資或還沒帶入，不能發布：${names.join('、')},');
     _payStatus[k] = 'published';
     rows.updateAll((_, r) => _payCalc(r, status: 'published'));
   }
 
   @override
-  Future<void> reopenPayroll(String storeId, DateTime month, String reason) async {
+  Future<void> reopenPayroll(
+    String storeId,
+    DateTime month,
+    String reason,
+  ) async {
     if (_isStaff || _isManager) throw Exception('message: 只有老闆能重新開啟,');
     final k = _payKey(storeId, month);
     _payStatus[k] = 'draft';
@@ -2892,12 +5410,30 @@ class DemoRepository implements Repository {
     final m = DateTime(DateTime.now().year, DateTime.now().month - 1, 1);
     return [
       PayrollSlip(
-          month: m, storeName: storeId == 'yc' ? '隱城' : '小城外', companyName: _payOt.companyName ?? '示範餐飲股份有限公司',
-          personName: _demoFullNames['阿明'] ?? '阿明', payType: 'hourly', baseAmount: 200, hours: 82.5, bonus: 500,
-          extras: const PayExtras(
-              attendanceBonus: 1000, laborIns: 277, healthIns: 172, dependentsIns: 172, incomeTax: 0, cashPaid: 5000,
-              items: [PayItem(income: true, label: '交通津貼', amount: 600), PayItem(income: false, label: '制服', amount: 300)]),
-          note: '11/3 支援小城外一天', gross: 17679, publishedAt: DateTime(m.year, m.month + 1, 5)),
+        month: m,
+        storeName: storeId == 'yc' ? '隱城' : '小城外',
+        companyName: _payOt.companyName ?? '示範餐飲股份有限公司',
+        personName: _demoFullNames['阿明'] ?? '阿明',
+        payType: 'hourly',
+        baseAmount: 200,
+        hours: 82.5,
+        bonus: 500,
+        extras: const PayExtras(
+          attendanceBonus: 1000,
+          laborIns: 277,
+          healthIns: 172,
+          dependentsIns: 172,
+          incomeTax: 0,
+          cashPaid: 5000,
+          items: [
+            PayItem(income: true, label: '交通津貼', amount: 600),
+            PayItem(income: false, label: '制服', amount: 300),
+          ],
+        ),
+        note: '11/3 支援小城外一天',
+        gross: 17679,
+        publishedAt: DateTime(m.year, m.month + 1, 5),
+      ),
     ];
   }
 }
