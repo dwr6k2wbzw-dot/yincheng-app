@@ -25,6 +25,8 @@ class ReservationSettings {
   final String? phone;
   // 0063 依星期另設時段（1＝週一…7＝週日；沒設的照 slots）
   final Map<int, List<String>> weekdaySlotTimes;
+  // ops 0151：10 分鐘內最多幾筆網路訂位（防止被灌爆；資料庫還沒有這一欄時是 null，畫面不顯示、存檔不送）
+  final int? webBurstLimit;
   const ReservationSettings({
     required this.storeId,
     required this.slug,
@@ -48,6 +50,7 @@ class ReservationSettings {
     this.address,
     this.phone,
     this.weekdaySlotTimes = const {},
+    this.webBurstLimit,
   });
   factory ReservationSettings.fromRow(Map<String, dynamic> r) => ReservationSettings(
         storeId: r['store_id'] as String,
@@ -76,6 +79,7 @@ class ReservationSettings {
             if (int.tryParse('${e.key}') != null && e.value is List && (e.value as List).isNotEmpty)
               int.parse('${e.key}'): ([for (final x in e.value as List) hm(x)]..sort()),
         },
+        webBurstLimit: (r['web_burst_limit'] as num?)?.toInt(),
       );
 
   /// 這一天的時段：那個星期有另外設定就用它，否則照平常的時段（0063）
@@ -104,6 +108,10 @@ class ReservationSettings {
     return out;
   }
 }
+
+/// 訂位設定要不要顯示「10 分鐘內最多幾筆網路訂位」（ops 0151）：只在公版（自助註冊那一份 App）顯示，
+/// 而且資料庫要已經有這一欄。不顯示時存檔也不送這個欄位。
+bool showBurstLimitField(ReservationSettings s, {required bool selfSignup}) => selfSignup && s.webBurstLimit != null;
 
 class Reservation {
   final String id;
