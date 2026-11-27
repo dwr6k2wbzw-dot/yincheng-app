@@ -6,6 +6,7 @@ import 'change_request_models.dart';
 import 'booking_profile.dart';
 import 'booking_assist.dart';
 import 'booking_import.dart';
+import 'line_bind.dart';
 import 'models.dart';
 import 'payroll.dart';
 import 'platform_wish.dart';
@@ -16,6 +17,7 @@ import 'shift_planner.dart';
 export 'attendance_models.dart';
 export 'booking_assist.dart';
 export 'change_request_models.dart';
+export 'line_bind.dart';
 export 'payroll.dart';
 export 'platform_wish.dart';
 export 'reservation_models.dart';
@@ -241,6 +243,8 @@ abstract class Repository {
   Future<int> lineOwnerLinks(); // 0081：我綁了幾個 LINE 私訊
   Future<void> linkLineOwner(String code); // 0081：老闆輸入 LINE 私訊給的代碼
   Future<void> unlinkLineOwner(); // 0081：解除自己的 LINE 私訊綁定
+  Future<bool> lineGroupBound(String storeId); // 0156：這家店綁了 LINE 群組沒（只有老闆讀得到）
+  Future<LineBindCode> createLineGroupBindCode(String storeId); // 0156：老闆產生群組綁定代碼（10 分鐘、一次性）
   Future<void> setHandoverItemDone(String itemId, bool done); // 0060：清單打勾
   Future<void> saveReminder(String storeId, WorkReminder r, {bool isNew = false});
   Future<void> deleteReminder(String reminderId);

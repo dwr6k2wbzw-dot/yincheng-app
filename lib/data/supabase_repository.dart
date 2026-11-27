@@ -860,6 +860,17 @@ class SupabaseRepository implements Repository {
     await _db.from('line_owner_links').delete().eq('user_id', me);
   }
 
+  // 0156：LINE 群組綁定（line_groups 只有老闆讀得到；代碼只在產生的這一次看得到）
+  @override
+  Future<bool> lineGroupBound(String storeId) async =>
+      (await _db.from('line_groups').select('store_id').eq('store_id', storeId)).isNotEmpty;
+
+  @override
+  Future<LineBindCode> createLineGroupBindCode(String storeId) async {
+    final r = await _db.rpc('line_group_bind_code', params: {'p_store': storeId});
+    return LineBindCode.fromJson(Map<String, dynamic>.from(r as Map));
+  }
+
   @override
   Future<void> setHandoverItemDone(String itemId, bool done) async {
     final rows = await _db
