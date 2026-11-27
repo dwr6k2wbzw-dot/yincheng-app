@@ -65,53 +65,53 @@ class _PlatformWishesScreenState extends State<PlatformWishesScreen> {
   }
 
   void _open(PlatformWish w) => showModalBottomSheet<void>(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: AppColors.card,
-    builder: (s) => DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.6,
-      maxChildSize: 0.92,
-      builder: (s, ctl) => ListView(
-        controller: ctl,
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
-        children: [
-          Text(
-            w.title,
-            style: const TextStyle(
-              fontSize: AppType.heading,
-              fontWeight: AppFont.heading,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: AppColors.card,
+        builder: (s) => DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.6,
+          maxChildSize: 0.92,
+          builder: (s, ctl) => ListView(
+            controller: ctl,
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
             children: [
-              WishStatusChip(status: w.status),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  _meta(w),
-                  style: TextStyle(
-                    color: AppColors.muted,
-                    fontSize: AppType.small,
-                  ),
+              Text(
+                w.title,
+                style: const TextStyle(
+                  fontSize: AppType.heading,
+                  fontWeight: AppFont.heading,
                 ),
               ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  WishStatusChip(status: w.status),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      _meta(w),
+                      style: TextStyle(
+                        color: AppColors.muted,
+                        fontSize: AppType.small,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              SelectableText(
+                w.body,
+                style: const TextStyle(fontSize: AppType.body, height: 1.6),
+              ),
+              if (w.reply != null) ...[
+                const SizedBox(height: 20),
+                _ReplyBlock(wish: w),
+              ],
             ],
           ),
-          const SizedBox(height: 16),
-          SelectableText(
-            w.body,
-            style: const TextStyle(fontSize: AppType.body, height: 1.6),
-          ),
-          if (w.reply != null) ...[
-            const SizedBox(height: 20),
-            _ReplyBlock(wish: w),
-          ],
-        ],
-      ),
-    ),
-  );
+        ),
+      );
 
   static String _meta(PlatformWish w) =>
       '${w.authorName.isEmpty ? '' : '${w.authorName}・'}${DateFormat('M/d HH:mm').format(toTaipei(w.createdAt))}';
@@ -133,77 +133,80 @@ class _PlatformWishesScreenState extends State<PlatformWishesScreen> {
       body: _error != null && items == null
           ? ErrorView(message: _error!, onRetry: _load)
           : items == null
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _load,
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-                children: [
-                  SectionCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'App 少了什麼功能？寫下來送給平台。',
-                          style: TextStyle(
-                            fontSize: AppType.title,
-                            fontWeight: AppFont.heading,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          '每一則都會有人看。決定要做、先不做或做好了，都會回覆在這裡，也會跳通知。',
-                          style: TextStyle(
-                            color: AppColors.muted,
-                            fontSize: AppType.small,
-                            height: 1.5,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          '本月已寫 $_used／$platformWishMonthlyLimit 則',
-                          style: TextStyle(
-                            color: full ? AppColors.bad : AppColors.primary,
-                            fontSize: AppType.small,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  if (items.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 56),
-                      child: Column(
-                        children: [
-                          Icon(
-                            Icons.lightbulb_outline,
-                            size: 40,
-                            color: AppColors.muted,
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            '還沒有許願單',
-                            style: TextStyle(color: AppColors.muted),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '按右下角「寫許願單」開始',
-                            style: TextStyle(
-                              color: AppColors.muted,
-                              fontSize: AppType.small,
+              ? const Center(child: CircularProgressIndicator())
+              : RefreshIndicator(
+                  onRefresh: _load,
+                  child: ListView(
+                    // 清單短、沒有許願單的時候也要能下拉更新（Codex P2）
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+                    children: [
+                      SectionCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'App 少了什麼功能？寫下來送給平台。',
+                              style: TextStyle(
+                                fontSize: AppType.title,
+                                fontWeight: AppFont.heading,
+                              ),
                             ),
-                          ),
-                        ],
+                            const SizedBox(height: 6),
+                            Text(
+                              '每一則都會有人看。決定要做、先不做或做好了，都會回覆在這裡，也會跳通知。',
+                              style: TextStyle(
+                                color: AppColors.muted,
+                                fontSize: AppType.small,
+                                height: 1.5,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              '本月已寫 $_used／$platformWishMonthlyLimit 則',
+                              style: TextStyle(
+                                color: full ? AppColors.bad : AppColors.primary,
+                                fontSize: AppType.small,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  for (final w in items) ...[
-                    _WishCard(wish: w, meta: _meta(w), onTap: () => _open(w)),
-                    const SizedBox(height: 10),
-                  ],
-                ],
-              ),
-            ),
+                      const SizedBox(height: 12),
+                      if (items.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 56),
+                          child: Column(
+                            children: [
+                              Icon(
+                                Icons.lightbulb_outline,
+                                size: 40,
+                                color: AppColors.muted,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                '還沒有許願單',
+                                style: TextStyle(color: AppColors.muted),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '按右下角「寫許願單」開始',
+                                style: TextStyle(
+                                  color: AppColors.muted,
+                                  fontSize: AppType.small,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      for (final w in items) ...[
+                        _WishCard(
+                            wish: w, meta: _meta(w), onTap: () => _open(w)),
+                        const SizedBox(height: 10),
+                      ],
+                    ],
+                  ),
+                ),
     );
   }
 }
@@ -219,63 +222,63 @@ class _WishCard extends StatelessWidget {
   final VoidCallback onTap;
   @override
   Widget build(BuildContext context) => Material(
-    color: Colors.transparent,
-    child: InkWell(
-      borderRadius: BorderRadius.circular(AppRadius.lg),
-      onTap: onTap,
-      child: SectionCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          onTap: onTap,
+          child: SectionCard(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Text(
-                    wish.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: AppType.title,
-                      fontWeight: AppFont.heading,
-                      color: wish.status == PlatformWishStatus.declined
-                          ? AppColors.muted
-                          : null,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        wish.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: AppType.title,
+                          fontWeight: AppFont.heading,
+                          color: wish.status == PlatformWishStatus.declined
+                              ? AppColors.muted
+                              : null,
+                        ),
+                      ),
                     ),
+                    const SizedBox(width: 10),
+                    WishStatusChip(status: wish.status),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  wish.body,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: AppColors.muted,
+                    fontSize: AppType.small,
+                    height: 1.5,
                   ),
                 ),
-                const SizedBox(width: 10),
-                WishStatusChip(status: wish.status),
+                if (wish.reply != null) ...[
+                  const SizedBox(height: 12),
+                  _ReplyBlock(wish: wish, compact: true),
+                ],
+                const SizedBox(height: 10),
+                Text(
+                  meta,
+                  style: TextStyle(
+                    color: AppColors.muted,
+                    fontSize: AppType.caption,
+                  ),
+                ),
               ],
             ),
-            const SizedBox(height: 6),
-            Text(
-              wish.body,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: AppColors.muted,
-                fontSize: AppType.small,
-                height: 1.5,
-              ),
-            ),
-            if (wish.reply != null) ...[
-              const SizedBox(height: 12),
-              _ReplyBlock(wish: wish, compact: true),
-            ],
-            const SizedBox(height: 10),
-            Text(
-              meta,
-              style: TextStyle(
-                color: AppColors.muted,
-                fontSize: AppType.caption,
-              ),
-            ),
-          ],
+          ),
         ),
-      ),
-    ),
-  );
+      );
 }
 
 /// 平台回覆：左邊一條細線，像信件裡的引用
@@ -285,40 +288,40 @@ class _ReplyBlock extends StatelessWidget {
   final bool compact;
   @override
   Widget build(BuildContext context) => Container(
-    width: double.infinity,
-    padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
-    decoration: BoxDecoration(
-      border: Border(
-        left: BorderSide(
-          color: AppColors.primary.withValues(alpha: 0.7),
-          width: 2,
-        ),
-      ),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '平台回覆${wish.repliedAt == null ? '' : '・${DateFormat('M/d').format(toTaipei(wish.repliedAt!))}'}',
-          style: TextStyle(
-            color: AppColors.primary,
-            fontSize: AppType.caption,
-            fontWeight: AppFont.label,
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+        decoration: BoxDecoration(
+          border: Border(
+            left: BorderSide(
+              color: AppColors.primary.withValues(alpha: 0.7),
+              width: 2,
+            ),
           ),
         ),
-        const SizedBox(height: 4),
-        Text(
-          wish.reply!,
-          maxLines: compact ? 3 : null,
-          overflow: compact ? TextOverflow.ellipsis : null,
-          style: TextStyle(
-            fontSize: compact ? AppType.small : AppType.body,
-            height: 1.55,
-          ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '平台回覆${wish.repliedAt == null ? '' : '・${DateFormat('M/d').format(toTaipei(wish.repliedAt!))}'}',
+              style: TextStyle(
+                color: AppColors.primary,
+                fontSize: AppType.caption,
+                fontWeight: AppFont.label,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              wish.reply!,
+              maxLines: compact ? 3 : null,
+              overflow: compact ? TextOverflow.ellipsis : null,
+              style: TextStyle(
+                fontSize: compact ? AppType.small : AppType.body,
+                height: 1.55,
+              ),
+            ),
+          ],
         ),
-      ],
-    ),
-  );
+      );
 }
 
 class WishStatusChip extends StatelessWidget {
@@ -399,96 +402,97 @@ class _WishComposerState extends State<_WishComposer> {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.fromLTRB(
-      20,
-      20,
-      20,
-      20 + MediaQuery.of(context).viewInsets.bottom,
-    ),
-    child: SingleChildScrollView(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Text(
-            '寫許願單',
-            style: TextStyle(
-              fontSize: AppType.heading,
-              fontWeight: AppFont.heading,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '寫清楚在哪個畫面、想做到什麼，平台比較好判斷。',
-            style: TextStyle(
-              color: AppColors.muted,
-              fontSize: AppType.small,
-              height: 1.5,
-            ),
-          ),
-          if (_error != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: AppColors.bad.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(AppRadius.sm),
+        padding: EdgeInsets.fromLTRB(
+          20,
+          20,
+          20,
+          20 + MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                '寫許願單',
+                style: TextStyle(
+                  fontSize: AppType.heading,
+                  fontWeight: AppFont.heading,
+                ),
               ),
-              child: Text(
-                _error!,
-                style: TextStyle(color: AppColors.bad, fontSize: AppType.small),
+              const SizedBox(height: 4),
+              Text(
+                '寫清楚在哪個畫面、想做到什麼，平台比較好判斷。',
+                style: TextStyle(
+                  color: AppColors.muted,
+                  fontSize: AppType.small,
+                  height: 1.5,
+                ),
               ),
-            ),
-          ],
-          const SizedBox(height: 16),
-          TextField(
-            controller: _title,
-            autofocus: true,
-            maxLength: platformWishTitleMax,
-            textInputAction: TextInputAction.next,
-            decoration: const InputDecoration(
-              labelText: '標題',
-              hintText: '例：訂位頁可以讓客人選座位區',
-            ),
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.bad.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                  ),
+                  child: Text(
+                    _error!,
+                    style: TextStyle(
+                        color: AppColors.bad, fontSize: AppType.small),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 16),
+              TextField(
+                controller: _title,
+                autofocus: true,
+                maxLength: platformWishTitleMax,
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(
+                  labelText: '標題',
+                  hintText: '例：訂位頁可以讓客人選座位區',
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _what,
+                minLines: 3,
+                maxLines: 8,
+                decoration: const InputDecoration(
+                  labelText: '想要什麼',
+                  hintText: '例：客人訂位時可以選「吧台」或「沙發區」',
+                  alignLabelWithHint: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _why,
+                minLines: 2,
+                maxLines: 5,
+                decoration: const InputDecoration(
+                  labelText: '為什麼需要（可以不寫）',
+                  hintText: '例：現在都要打電話來問',
+                  alignLabelWithHint: true,
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                height: 48,
+                child: FilledButton(
+                  onPressed: _busy ? null : _send,
+                  child: _busy
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('送出'),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _what,
-            minLines: 3,
-            maxLines: 8,
-            decoration: const InputDecoration(
-              labelText: '想要什麼',
-              hintText: '例：客人訂位時可以選「吧台」或「沙發區」',
-              alignLabelWithHint: true,
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _why,
-            minLines: 2,
-            maxLines: 5,
-            decoration: const InputDecoration(
-              labelText: '為什麼需要（可以不寫）',
-              hintText: '例：現在都要打電話來問',
-              alignLabelWithHint: true,
-            ),
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            height: 48,
-            child: FilledButton(
-              onPressed: _busy ? null : _send,
-              child: _busy
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('送出'),
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
+        ),
+      );
 }

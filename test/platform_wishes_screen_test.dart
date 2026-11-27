@@ -10,11 +10,21 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:yincheng_ops/app_state.dart';
 import 'package:yincheng_ops/data/demo_repository.dart';
 import 'package:yincheng_ops/data/models.dart';
+import 'package:yincheng_ops/data/platform_wish.dart';
 import 'package:yincheng_ops/screens/platform_wishes_screen.dart';
 import 'package:yincheng_ops/theme.dart';
 
 class _Repo extends DemoRepository {
+  _Repo({this.empty = false});
+  final bool empty;
+  int loads = 0;
   final sent = <String>[];
+  @override
+  Future<List<PlatformWish>> platformWishes(String storeId) async {
+    loads++;
+    return empty ? <PlatformWish>[] : await super.platformWishes(storeId);
+  }
+
   @override
   Future<String> createPlatformWish(String storeId, String title, String body) async {
     sent.add('$title|$body');
@@ -22,12 +32,12 @@ class _Repo extends DemoRepository {
   }
 }
 
-Future<_Repo> _open(WidgetTester tester) async {
+Future<_Repo> _open(WidgetTester tester, {bool empty = false}) async {
   SharedPreferences.setMockInitialValues({});
   tester.view.physicalSize = const Size(390 * 3, 844 * 3);
   tester.view.devicePixelRatio = 3;
   addTearDown(tester.view.reset);
-  final repo = _Repo();
+  final repo = _Repo(empty: empty);
   final m = Membership(storeId: 's1', storeName: '示範小館', role: Role.owner, displayName: '示範');
   await tester.pumpWidget(AppScope(
       state: AppState(repo),
@@ -62,5 +72,14 @@ void main() {
     expect(repo.sent, ['想要會員點數|客人來五次送一杯\n\n為什麼需要：想要更多回頭客']);
     expect(find.text('想要會員點數'), findsOneWidget);
     expect(find.text('平台收到了'), findsOneWidget);
+  });
+
+  testWidgets('沒有許願單的時候也能下拉更新（Codex P2）', (tester) async {
+    final repo = await _open(tester, empty: true);
+    expect(find.text('還沒有許願單'), findsOneWidget);
+    expect(repo.loads, 1);
+    await tester.fling(find.text('還沒有許願單'), const Offset(0, 400), 1000);
+    await tester.pumpAndSettle();
+    expect(repo.loads, 2);
   });
 }
