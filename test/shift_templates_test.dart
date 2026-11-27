@@ -1,6 +1,9 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yincheng_ops/data/demo_repository.dart';
 import 'package:yincheng_ops/data/shift_templates.dart';
+import 'package:yincheng_ops/screens/shift_template_picker.dart';
 
 void main() {
   group('業態範本（ops 0152）', () {
@@ -57,6 +60,38 @@ void main() {
           throwsA(predicate((e) => '$e'.contains('SHIFT_TEMPLATE_USED'))));
       await expectLater(repo.applyShiftTemplate('demo-new', 'zzz'),
           throwsA(predicate((e) => '$e'.contains('SHIFT_TEMPLATE_KIND'))));
+    });
+  });
+
+  group('選業態的卡片：讀螢幕軟體也點得到（Codex P2）', () {
+    Future<void> pump(WidgetTester t, {required bool enabled, required ValueChanged<String> onChanged}) =>
+        t.pumpWidget(MaterialApp(
+            home: Scaffold(
+                body: SingleChildScrollView(
+                    child: ShiftTemplatePicker(selected: 'other', onChanged: onChanged, enabled: enabled)))));
+
+    testWidgets('每張卡有點擊動作，用無障礙動作點下去會選到', (t) async {
+      final h = t.ensureSemantics();
+      String? got;
+      await pump(t, enabled: true, onChanged: (k) => got = k);
+      final bar = shiftTemplates.firstWhere((x) => x.kind == 'bar');
+      final f = find.bySemanticsLabel(RegExp('^${bar.label}，'));
+      expect(f, findsOneWidget);
+      final node = t.getSemantics(f);
+      expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+      node.owner!.performAction(node.id, SemanticsAction.tap);
+      await t.pump();
+      expect(got, 'bar');
+      h.dispose();
+    });
+
+    testWidgets('停用時沒有點擊動作', (t) async {
+      final h = t.ensureSemantics();
+      await pump(t, enabled: false, onChanged: (_) {});
+      final bar = shiftTemplates.firstWhere((x) => x.kind == 'bar');
+      final node = t.getSemantics(find.bySemanticsLabel(RegExp('^${bar.label}，')));
+      expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isFalse);
+      h.dispose();
     });
   });
 }

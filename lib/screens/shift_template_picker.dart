@@ -42,6 +42,9 @@ class _TemplateCard extends StatelessWidget {
       button: true,
       selected: selected,
       label: '${t.label}，${t.note}，${t.summary}',
+      enabled: onTap != null,
+      // 底下的 InkWell 被 excludeSemantics 蓋掉了，點的動作要掛在這一層，讀螢幕軟體才點得到（Codex P2）
+      onTap: onTap,
       excludeSemantics: true,
       child: Material(
         color: selected ? AppColors.cardHigh : AppColors.card,

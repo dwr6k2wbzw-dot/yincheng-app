@@ -567,6 +567,8 @@ class ShiftRulesScreen extends StatefulWidget {
 
 class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
   ShiftPlanSetup? _setup;
+  // 班別／時段清單：一開始用班表頁傳進來的，套用業態範本之後重讀（Codex P2）
+  late ShiftOptions? _options = widget.options;
   Map<int, StaffingNeed> _staff = {};
   bool _staffDirty = false;
   Object? _error;
@@ -629,6 +631,7 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
     if (ok != true || !mounted) return;
     try {
       await _repo.applyShiftTemplate(_store, kind);
+      await _refreshAfterTemplate();
       if (mounted) {
         showMessage(context, '已套用「${shiftTemplates.firstWhere((t) => t.kind == kind).label}」範本，班別／時段也一起帶入了');
       }
@@ -636,6 +639,18 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
     } catch (e) {
       if (mounted) showMessage(context, friendlyError(e), error: true);
     }
+  }
+
+  /// 套用範本會新增班別、打開班別代碼的開關：重讀班別清單和成員資格（成員資格會一起記下功能開關），
+  /// 不然點人設排班條件時還是空的班別、預設記號也還是 V（Codex P2）。讀不到就留原本的，畫面照常。
+  Future<void> _refreshAfterTemplate() async {
+    try {
+      await _repo.myMemberships();
+    } catch (_) {}
+    try {
+      final m = await _repo.shiftMonth(_store, widget.month);
+      if (mounted) setState(() => _options = m.options);
+    } catch (_) {}
   }
 
   Future<void> _saveStaff() async {
@@ -731,7 +746,7 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
             storeName: _storeName,
             storeId: _store,
             repo: _repo,
-            options: widget.options)));
+            options: _options)));
     if (saved == true) _load();
   }
 
@@ -1118,7 +1133,7 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
                       if (showApplyTemplate(
                           isOwner: widget.membership.role == Role.owner,
                           staffingEmpty: _setup!.staffing.isEmpty,
-                          optionsEmpty: widget.options?.items.isEmpty ?? true)) ...[
+                          optionsEmpty: _options?.items.isEmpty ?? true)) ...[
                         _ApplyTemplateCard(onTap: _applyTemplate),
                         const SizedBox(height: 10),
                       ],
