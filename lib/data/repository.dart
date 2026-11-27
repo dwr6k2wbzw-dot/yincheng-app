@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'attendance_models.dart';
 import 'change_request_models.dart';
+import 'booking_profile.dart';
 import 'models.dart';
 import 'payroll.dart';
 import 'purchase_items_math.dart';
@@ -277,6 +278,15 @@ abstract class Repository {
   // ---------------- 訂位（0050） ----------------
   Future<ReservationSettings?> reservationSettings(String storeId);
   Future<void> saveReservationSettings(String storeId, Map<String, dynamic> values);
+  // 訂位頁的樣子（ops 0135／0145；只有老闆能改）
+  /// 這家店的訂位頁資料；還沒建立過＝null
+  Future<BookingProfile?> bookingProfile(String storeId);
+  /// 新增或更新（老闆）
+  Future<void> saveBookingProfile(String storeId, BookingProfile p);
+  /// 上傳 logo／封面照到公開檔案區，回傳路徑（{店的 id}/{kind}-xxxx.{ext}）。kind＝logo／hero
+  Future<String> uploadBookingAsset(String storeId, String kind, Uint8List bytes, String contentType);
+  /// 刪掉沒在用的舊圖（失敗不影響畫面；訂位頁正在用的資料庫會擋）
+  Future<void> deleteBookingAsset(String path);
   Future<List<Reservation>> reservations(String storeId, DateTime from, DateTime to);
   Future<void> addReservation(String storeId,
       {required DateTime date, required String time, required int party, required String name, required String phone, String? email, String? note, List<String> tableIds = const []});

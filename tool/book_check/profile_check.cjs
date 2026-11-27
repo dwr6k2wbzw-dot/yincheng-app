@@ -115,6 +115,26 @@ const read = (p) => p.evaluate(() => ({
     check('內建的圖加版本號', await p.evaluate(() => YC.asset('logo-xcw.png')), 'logo-xcw.png?v=v1');
     await b.close();
   }
+  // 老闆自己上傳的圖（ops 0145）：換成公開檔案區的網址、不加版本號
+  {
+    const sid = '11111111-2222-4333-8444-555555555555';
+    const pub = 'https://yfulcyeoqavqarpfnznw.supabase.co/storage/v1/object/public/booking-assets/';
+    const { b, p } = await open('index.html?s=snap&anim=0', 'zh-TW',
+      { '*': avail({ langs: ['zh'], logo_url: sid + '/logo-abc123.png', hero_url: sid + '/hero-def456.webp' }) }, snap + " window.YC_V = 'v1';");
+    const r = await look(p);
+    check('上傳的 logo 用公開檔案區網址', await p.$eval('#logo', (x) => x.getAttribute('src')), pub + sid + '/logo-abc123.png');
+    check('上傳的封面照用公開檔案區網址', r.bg.includes(pub + sid + '/hero-def456.webp'), true);
+    check('名字格式不對的不當成上傳的圖', await p.evaluate((x) => YC.asset(x), sid + '/x/logo-abc123.png'), sid + '/x/logo-abc123.png');
+    await b.close();
+  }
+  {
+    const sid = '11111111-2222-4333-8444-555555555555';
+    const { b, p } = await open('index.html?s=snap&anim=0', 'zh-TW', { '*': avail({ langs: ['zh'] }) },
+      snap.replace(/hero-[a-z]+\.jpg/, sid + '/hero-def456.jpg'));
+    const href = await p.evaluate(() => (document.querySelector('link[rel=preload][as=image]') || {}).href || '');
+    check('預載上傳的封面照用公開檔案區網址', href.endsWith('/storage/v1/object/public/booking-assets/' + sid + '/hero-def456.jpg'), true);
+    await b.close();
+  }
   for (const [name, prof, want] of [['我的訂位：資料庫沒有 logo 就不放', { logo_url: null }, false], ['我的訂位：資料庫還沒更新用快照', undefined, true]]) {
     const b = await chromium.launch(process.env.CHROME ? { executablePath: process.env.CHROME, args: ['--no-sandbox'] } : {});
     const p = await b.newPage();

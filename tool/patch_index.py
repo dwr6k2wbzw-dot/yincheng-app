@@ -194,6 +194,65 @@ window.ycPickImage = function (fromLibrary) {
     input.click();
   });
 };
+// 訂位頁的 logo、封面照（ops 0145，公版階段 2 第 2 步）：從相簿選，縮小後回傳 data URL。
+//   logo：長邊最多 800、存 PNG（保留透明背景），太大改 WebP；封面照：長邊最多 2400、JPEG 85%。
+//   公開檔案區一張最多 3MB，這裡壓到 2.8MB 以內才回傳。
+window.ycPickBrandImage = function (kind) {
+  return new Promise(function (resolve, reject) {
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/png,image/jpeg,image/webp';
+    input.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0';
+    document.body.appendChild(input);
+    var finished = false, cancelTimer = null;
+    function finish(v, err) {
+      if (finished) return;
+      finished = true;
+      clearTimeout(cancelTimer);
+      setTimeout(function () { input.remove(); }, 0);
+      if (err) reject(err); else resolve(v);
+    }
+    input.addEventListener('cancel', function () {
+      clearTimeout(cancelTimer);
+      cancelTimer = setTimeout(function () { finish(null); }, 1500);
+    });
+    input.addEventListener('change', async function () {
+      clearTimeout(cancelTimer);
+      var f = input.files && input.files[0];
+      if (!f) { finish(null); return; }
+      var url = URL.createObjectURL(f);
+      try {
+        var img = new Image();
+        await new Promise(function (ok, bad) {
+          img.onload = ok;
+          img.onerror = function () { bad(new Error('圖片讀取失敗（請選 PNG、JPG 或 WebP）')); };
+          img.src = url;
+        });
+        var logo = kind === 'logo';
+        var max = logo ? 800 : 2400;
+        var w = img.naturalWidth, h = img.naturalHeight;
+        if (w < 64 || h < 64) throw new Error('圖片太小了，請選大一點的圖');
+        var k = Math.min(1, max / Math.max(w, h));
+        var c = document.createElement('canvas');
+        c.width = Math.round(w * k); c.height = Math.round(h * k);
+        var g = c.getContext('2d');
+        g.imageSmoothingQuality = 'high';
+        g.drawImage(img, 0, 0, c.width, c.height);
+        var limit = 2.8 * 1024 * 1024 * 4 / 3; // data URL 的 base64 長度
+        var out = logo ? c.toDataURL('image/png') : c.toDataURL('image/jpeg', 0.85);
+        if (out.length > limit) out = c.toDataURL('image/webp', 0.9);
+        if (out.length > limit || out.indexOf('data:image/') !== 0) out = c.toDataURL('image/jpeg', 0.8);
+        if (out.length > limit) throw new Error('圖片太大了，請換一張');
+        finish(out);
+      } catch (e) {
+        finish(null, e);
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    });
+    input.click();
+  });
+};
 // App 新版本檢查（小鈴鐺）：deploy.yml 會寫入 window.ycBuild 與 version.txt，兩者不同就代表有新版
 window.ycCheckUpdate = async function () {
   try {

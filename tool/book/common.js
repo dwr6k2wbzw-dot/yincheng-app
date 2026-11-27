@@ -39,7 +39,13 @@ window.YC = {
     return (d.getMonth() + 1) + '/' + d.getDate() + '（週' + this.week[d.getDay()] + '）';
   },
   // 訂位頁內建的圖（logo、封面照，例 logo-xcw.png）加上這一版的版本號（部署時寫在 YC_V），網頁一換新手機就不會用到舊圖；
-  // 其他網址（之後店家上傳的圖）原樣不動（Codex 審查）
-  asset(f) { return f + (window.YC_V && /^[a-z0-9][a-z0-9-]*\.(png|jpe?g|webp)$/.test(f) ? '?v=' + window.YC_V : ''); },
+  // 老闆自己上傳的圖（ops 0145：{店的 id}/logo-xxxx.png）放在公開檔案區 booking-assets，換成那裡的網址
+  // （每次換圖都是新檔名，不用版本號）；其他網址原樣不動（Codex 審查）
+  asset(f) {
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/(logo|hero)-[a-z0-9]{6,40}\.(png|jpe?g|webp)$/.test(f)) {
+      return this.url + '/storage/v1/object/public/booking-assets/' + f;
+    }
+    return f + (window.YC_V && /^[a-z0-9][a-z0-9-]*\.(png|jpe?g|webp)$/.test(f) ? '?v=' + window.YC_V : '');
+  },
   esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); },
 };

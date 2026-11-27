@@ -2,6 +2,7 @@ import 'shift_off_rules.dart';
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'booking_profile.dart';
 import 'models.dart';
 import 'person_names.dart';
 import 'purchase_items_math.dart';
@@ -1220,6 +1221,34 @@ class DemoRepository implements Repository {
   Future<void> saveReservationSettings(String storeId, Map<String, dynamic> values) async {
     _demoResSettings.putIfAbsent(storeId, () => {}).addAll(values);
   }
+  // 訂位頁的樣子（示範）：上傳的圖只留在這支手機的記憶體
+  final Map<String, BookingProfile> _demoProfiles = {};
+  final Map<String, Uint8List> demoBookingAssets = {};
+  @override
+  Future<BookingProfile?> bookingProfile(String storeId) async => _demoProfiles[storeId] ??
+      const BookingProfile(
+        langs: ['zh', 'en'],
+        title: {'zh': '示範酒吧', 'en': 'Demo Bar'},
+        intro: {'zh': '老宅二樓的小酒吧', 'en': 'A small bar upstairs in an old house'},
+        address: {'en': '2F, No. 15, Demo Rd., Taipei'},
+        minSpend: 600,
+        minSpendText: {'zh': '每人一杯飲品\n{amount}', 'en': 'One drink per person.\n{amount}'},
+        infoRows: [BookingInfoRow(label: {'zh': '營業時間', 'en': 'Hours'}, text: {'zh': '每天 19:00～01:00', 'en': 'Daily 19:00–01:00'})],
+        logoUrl: 'logo-xcw.png',
+        heroUrl: 'hero-xcw.jpg',
+        heroPos: '22% 45%',
+      );
+  @override
+  Future<void> saveBookingProfile(String storeId, BookingProfile p) async => _demoProfiles[storeId] = p;
+  @override
+  Future<String> uploadBookingAsset(String storeId, String kind, Uint8List bytes, String contentType) async {
+    final path = newBookingAssetPath(storeId.length == 36 ? storeId : '00000000-0000-4000-8000-000000000000', kind,
+        contentType == 'image/png' ? 'png' : contentType == 'image/webp' ? 'webp' : 'jpg');
+    demoBookingAssets[path] = bytes;
+    return path;
+  }
+  @override
+  Future<void> deleteBookingAsset(String path) async => demoBookingAssets.remove(path);
   @override
   Future<List<Reservation>> reservations(String storeId, DateTime from, DateTime to) async =>
       (_demoRes[storeId] ??= _seedReservations(storeId)).where((r) => !r.date.isBefore(from) && !r.date.isAfter(to)).toList();
