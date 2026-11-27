@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../app_state.dart';
+import '../config.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
 import '../data/schedule_health.dart';
@@ -1103,7 +1104,8 @@ class _PeopleScreenState extends State<_PeopleScreen> {
   }
 
   Future<void> _loadLinks() async {
-    if (!widget.isOwner) return;
+    // 只在公版顯示（老闆 2026-11-27：隱城／小城外這一份畫面完全不變；兩店的連結照舊由後台處理）
+    if (!AppConfig.selfSignup || !widget.isOwner) return;
     try {
       final l = await AppScope.of(context).repo.shiftLinkStores(widget.storeId);
       if (mounted) setState(() => _linkStores = l);
