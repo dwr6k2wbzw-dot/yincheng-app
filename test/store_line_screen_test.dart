@@ -19,6 +19,10 @@ final _token = 'tok-${'t' * 60}WXYZ';
 
 class _Repo extends DemoRepository {
   bool offline = false;
+  StoreLineResult? testResult;
+  @override
+  Future<StoreLineResult> testStoreLine(String storeId) async =>
+      testResult ?? await super.testStoreLine(storeId);
   @override
   Future<StoreLineResult> saveStoreLine(
       String storeId, String secret, String token) async {
@@ -91,6 +95,36 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('Channel secret 不對'), findsWidgets);
     expect(find.text('還沒驗證成功'), findsOneWidget);
+  });
+
+  testWidgets('驗證一次：token 可以用但 Webhook 測試沒過，不說正常、提醒還差一步（Codex P2）',
+      (tester) async {
+    final repo = await _open(tester);
+    await tester.enterText(_field('Channel secret'), _secret);
+    await tester.enterText(_field('Channel access token'), _token);
+    await tester.tap(find.text('驗證並接上'));
+    await tester.pumpAndSettle();
+    repo.testResult = const StoreLineResult.ok(
+        verified: false,
+        webhookSet: false,
+        warning: 'LINE 的 Webhook 測試沒有通過：請確認 Use webhook 有打開');
+    await tester.tap(find.text('驗證一次'));
+    await tester.pumpAndSettle();
+    expect(find.text('LINE 連線正常'), findsNothing);
+    expect(find.text('還差一步'), findsOneWidget);
+    expect(find.textContaining('Use webhook 有打開'), findsWidgets);
+    expect(find.textContaining('/functions/v1/line-notify?k='), findsWidgets,
+        reason: '要給 Webhook 網址讓老闆貼');
+    await tester.tap(find.text('知道了'));
+    await tester.pumpAndSettle();
+    // 等前面「接上了！」的提示消失（提示會排隊）
+    await tester.pump(const Duration(seconds: 10));
+    await tester.pumpAndSettle();
+    repo.testResult = const StoreLineResult.ok();
+    await tester.tap(find.text('驗證一次'));
+    await tester.pumpAndSettle();
+    expect(find.text('LINE 連線正常'), findsOneWidget);
+    expect(find.text('還差一步'), findsNothing);
   });
 
   testWidgets('解除：回到還沒接上', (tester) async {

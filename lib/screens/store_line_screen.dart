@@ -153,10 +153,10 @@ class _StoreLineScreenState extends State<StoreLineScreen> {
       _busy = true;
       _note = null;
     });
-    var ok = false;
+    StoreLineResult? res;
     try {
-      final r = await _repo.testStoreLine(_store);
-      ok = r.ok;
+      res = await _repo.testStoreLine(_store);
+      final r = res;
       if (mounted) setState(() => _note = r.ok ? null : r.error);
     } catch (e) {
       if (mounted) setState(() => _note = friendlyError(e));
@@ -165,7 +165,13 @@ class _StoreLineScreenState extends State<StoreLineScreen> {
       if (mounted) setState(() => _busy = false);
     }
     await _load();
-    if (mounted && ok) showMessage(context, 'LINE 連線正常');
+    if (!mounted || !res.ok) return;
+    if (res.verified) {
+      showMessage(context, 'LINE 連線正常');
+    } else {
+      // token 可以用、但 Webhook 測試沒過：跟存金鑰那條路一樣提示，不說「正常」（Codex P2）
+      await _afterSaveDialog(res);
+    }
   }
 
   Future<void> _clear() async {
