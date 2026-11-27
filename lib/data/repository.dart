@@ -215,6 +215,8 @@ abstract class Repository {
   Future<void> saveShiftPlanDraft(String storeId, DateTime month, Map<String, Map<int, String>> plan, Map<String, Set<int>> locked);
   Future<void> deleteShiftPlanDraft(String storeId, DateTime month);
   Future<void> saveShiftPreferRun(String storeId, int? days);
+  /// 0150 指休規則：同一天最多幾位正職、每人每月最多幾天（null＝不限）；只有老闆店長
+  Future<void> saveShiftOffLimits(String storeId, int? perDay, int? monthMax);
   Future<String> remindShiftRequests(String storeId, DateTime month);
 
   // 交接事項與工作提醒（同店成員可看、可寫交接、可打勾；提醒只有老闆／店長能建立）

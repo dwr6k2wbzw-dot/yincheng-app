@@ -276,7 +276,7 @@ class DemoRepository implements Repository {
   @override
   Future<ShiftPlanSetup> shiftPlanSetup(String storeId, DateTime month) async => ShiftPlanSetup(
       staffing: _staffing, specialDays: _staffDays, deadline: _deadline, rules: _shiftRules, requests: _shiftReq, pairRules: [..._pairRules],
-      preferRun: _preferRun);
+      preferRun: _preferRun, offPerDay: _offPerDay, offMonthMax: _offMonthMax);
   final _pairRules = <PairRule>[];
   @override
   Future<void> addShiftPairRule(String storeId, String a, String b, String kind) async =>
@@ -353,6 +353,13 @@ class DemoRepository implements Repository {
   Future<void> deleteShiftPlanDraft(String storeId, DateTime month) async => _planDrafts.remove('$storeId|${month.year}-${month.month}');
   @override
   Future<void> saveShiftPreferRun(String storeId, int? days) async => _preferRun = days;
+  int? _offPerDay = shiftOffPerDayDefault;
+  int? _offMonthMax = shiftOffMonthMaxDefault;
+  @override
+  Future<void> saveShiftOffLimits(String storeId, int? perDay, int? monthMax) async {
+    _offPerDay = perDay;
+    _offMonthMax = monthMax;
+  }
   @override
   Future<String> remindShiftRequests(String storeId, DateTime month) async => '（示範）${month.month} 月班表要開始排了';
 
