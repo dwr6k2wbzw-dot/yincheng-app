@@ -1891,6 +1891,21 @@ class SupabaseRepository implements Repository {
   }
 
   @override
+  Future<List<PlatformWish>> platformWishes(String storeId) async {
+    final rows = await _db
+        .from('platform_wishes')
+        .select('id, title, body, author_name, status, reply, created_at, replied_at')
+        .eq('store_id', storeId)
+        .order('created_at', ascending: false)
+        .limit(200);
+    return [for (final r in rows) PlatformWish.fromRow(r)];
+  }
+
+  @override
+  Future<String> createPlatformWish(String storeId, String title, String body) async =>
+      await _db.rpc('platform_wish_create', params: {'p_store': storeId, 'p_title': title, 'p_body': body}) as String;
+
+  @override
   Future<String> uploadBookingAsset(String storeId, String kind, Uint8List bytes, String contentType) async {
     final ext = switch (contentType) { 'image/png' => 'png', 'image/webp' => 'webp', _ => 'jpg' };
     final path = newBookingAssetPath(storeId, kind, ext);

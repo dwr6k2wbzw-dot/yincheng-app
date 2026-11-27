@@ -7,6 +7,7 @@ import 'booking_profile.dart';
 import 'booking_assist.dart';
 import 'models.dart';
 import 'payroll.dart';
+import 'platform_wish.dart';
 import 'purchase_items_math.dart';
 import 'reservation_models.dart';
 import 'shift_planner.dart';
@@ -14,6 +15,7 @@ export 'attendance_models.dart';
 export 'booking_assist.dart';
 export 'change_request_models.dart';
 export 'payroll.dart';
+export 'platform_wish.dart';
 export 'reservation_models.dart';
 export 'shift_planner.dart';
 
@@ -298,6 +300,11 @@ abstract class Repository {
   Future<List<AssistRecord>> bookingAssistHistory(String storeId);
   /// 整筆改回去（之後又被改過的不能改回去）
   Future<void> undoBookingAssist(String id);
+  // 許願單（ops 0149，公版；只有老闆、店長）：寫一則送到平台待辦，平台回覆狀態和說明
+  /// 這家店的許願單（新的在前）
+  Future<List<PlatformWish>> platformWishes(String storeId);
+  /// 寫一則（每家店每個月最多 20 則），回傳 id
+  Future<String> createPlatformWish(String storeId, String title, String body);
   Future<List<Reservation>> reservations(String storeId, DateTime from, DateTime to);
   Future<void> addReservation(String storeId,
       {required DateTime date, required String time, required int party, required String name, required String phone, String? email, String? note, List<String> tableIds = const []});
