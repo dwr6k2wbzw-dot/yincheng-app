@@ -96,6 +96,9 @@ class PairRule {
 }
 
 /// 每天需要幾人（依星期）
+/// 排班條件「最多連上幾天」沒填時，自動排班照這個算
+const defaultMaxConsecutive = 6;
+
 class StaffingNeed {
   final int need;
   final int minFull; // 其中至少幾個正職

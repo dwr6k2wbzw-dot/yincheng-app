@@ -42,6 +42,19 @@ void main() {
       expect(m.beforeText, '9 天');
       expect(m.afterText, '8.5 天');
     });
+
+    test('清空時顯示的意思跟排班實際算法一致（Codex P2）', () {
+      String cleared(String op, String field) =>
+          AssistChange({'op': op, 'person_id': 'p1', 'person_name': '王凱文', 'field': field, 'before': 3, 'after': null}).afterText;
+      expect(cleared('rule', 'max_consecutive'), '$defaultMaxConsecutive 天（預設）', reason: '排班照 6 天算，不是不限');
+      expect(defaultMaxConsecutive, 6);
+      expect(cleared('rule', 'month_off'), '照當月應休（沒填約每月 9 天）');
+      expect(cleared('rule', 'min_shifts'), '沒有下限');
+      expect(cleared('rule', 'max_shifts'), '沒有上限');
+      expect(cleared('setting', 'prefer_run'), '不設（只看每個人的最多連上幾天）');
+      expect(cleared('setting', 'off_per_day'), '不限');
+      expect(cleared('setting', 'off_month_max'), '不限');
+    });
   });
 
   group('示範版流程', () {

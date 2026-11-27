@@ -1,4 +1,5 @@
 import 'booking_profile.dart';
+import 'shift_planner.dart';
 
 /// AI 設定助理的一項建議：訂位（ops 0147：text／min_spend／langs／day）、
 /// 排班（ops 0154：staffing／staffing_day／setting／rule）。原樣（[raw]）送回資料庫套用，畫面只用來顯示。
@@ -86,7 +87,10 @@ class AssistChange {
       case 'staffing_day':
         return v is Map ? '${v['need']} 人' : '照星期的人數';
       case 'setting':
-        if (v == null) return '不限';
+        // 空白的意思要跟排班實際算法一致（Codex P2）
+        if (v == null) {
+          return raw['field'] == 'prefer_run' ? '不設（只看每個人的最多連上幾天）' : '不限';
+        }
         return switch (raw['field']) {
           'request_deadline' => '每月 $v 號',
           'off_per_day' => '$v 位',
@@ -98,7 +102,16 @@ class AssistChange {
               ? v.map((d) => d is int && d >= 1 && d <= 7 ? '週${_weekdays[d - 1]}' : '$d').join('、')
               : '（沒有）';
         }
-        if (v == null) return '不限';
+        // 空白＝排班照預設算（shift_auto_plan_screen）：最多連上 6 天、休幾天照當月應休、最少／最多天數不設限
+        if (v == null) {
+          return switch (raw['field']) {
+            'max_consecutive' => '$defaultMaxConsecutive 天（預設）',
+            'month_off' => '照當月應休（沒填約每月 9 天）',
+            'min_shifts' => '沒有下限',
+            'max_shifts' => '沒有上限',
+            _ => '不限',
+          };
+        }
         final n = v is num && v == v.roundToDouble() ? v.toInt() : v;
         return '$n 天';
       default:

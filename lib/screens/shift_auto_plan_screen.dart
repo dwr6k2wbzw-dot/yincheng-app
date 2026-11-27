@@ -234,7 +234,7 @@ class _ShiftAutoPlanScreenState extends State<ShiftAutoPlanScreen> {
                 _defaultOff,
             minShifts: r?.minShifts,
             maxShifts: r?.maxShifts,
-            maxConsecutive: r?.maxConsecutive ?? 6,
+            maxConsecutive: r?.maxConsecutive ?? defaultMaxConsecutive,
             noWeekdays: r?.noWeekdays ?? const {},
             marks: ruleMarks.isNotEmpty
                 ? ruleMarks
