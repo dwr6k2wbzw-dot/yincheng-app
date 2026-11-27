@@ -10,6 +10,7 @@ import '../data/repository.dart';
 import '../config.dart';
 import 'change_requests_screen.dart';
 import 'platform_wishes_screen.dart';
+import 'store_ai_screen.dart';
 import 'create_store_screen.dart';
 import 'dashboard_screen.dart';
 import 'members_screen.dart';
@@ -183,6 +184,10 @@ class _HomeShellState extends State<HomeShell> with SingleTickerProviderStateMix
                 Navigator.of(context).push(MaterialPageRoute(builder: (_) => PlatformWishesScreen(membership: m)));
                 return;
               }
+              if (v == 'ai') {
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => StoreAiScreen(membership: m)));
+                return;
+              }
               if (v == 'code') {
                 enterInviteCode(context);
                 return;
@@ -223,6 +228,9 @@ class _HomeShellState extends State<HomeShell> with SingleTickerProviderStateMix
               // 許願單（ops 0149）：公版那一份才有，老闆、店長把想要的功能送到平台待辦
               if (AppConfig.selfSignup && (m.role == Role.owner || m.role == Role.manager))
                 const PopupMenuItem(value: 'pwish', child: ListTile(leading: Icon(Icons.lightbulb_outline), title: Text('許願單'))),
+              // AI 設定（ops 0157）：公版那一份才有，只有老闆；接上店家自己的 Claude／OpenAI／Gemini
+              if (AppConfig.selfSignup && m.role == Role.owner)
+                const PopupMenuItem(value: 'ai', child: ListTile(leading: Icon(Icons.memory_outlined), title: Text('AI 設定'))),
               const PopupMenuItem(value: 'code', child: ListTile(leading: Icon(Icons.key_outlined), title: Text('輸入邀請碼'))),
               const PopupMenuItem(value: 'speed', child: ListTile(leading: Icon(Icons.speed), title: Text('載入速度'))),
               const PopupMenuItem(value: 'logout', child: ListTile(leading: Icon(Icons.logout), title: Text('登出'))),

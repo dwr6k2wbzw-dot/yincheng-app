@@ -2984,6 +2984,39 @@ class DemoRepository implements Repository {
           ),
         ];
       });
+  // 店家接自己的 AI（ops 0157）：示範版不連 AI；金鑰裡有 bad 就當作無效，其餘都算測試成功
+  final Map<String, StoreAiSetting> _storeAi = {};
+  @override
+  Future<StoreAiSetting?> storeAiSetting(String storeId) async => _storeAi[storeId];
+  @override
+  Future<StoreAiResult> saveStoreAi(String storeId, StoreAiProvider provider, String model, String key) async {
+    await Future<void>.delayed(const Duration(milliseconds: 900));
+    final info = storeAiInfo(provider);
+    final problem = storeAiModelProblem(model) ?? storeAiKeyProblem(key);
+    if (problem != null) return StoreAiResult.fail(problem);
+    if (key.contains('bad')) return StoreAiResult.fail('${info.label} 的金鑰無效或沒有權限，請到「AI 設定」檢查金鑰');
+    final k = key.trim();
+    _storeAi[storeId] = StoreAiSetting(
+      provider: provider,
+      model: model.trim().replaceFirst(RegExp(r'^models/'), ''),
+      keyLast4: k.substring(k.length - 4),
+      verifiedAt: DateTime.now(),
+    );
+    return StoreAiResult.ok(last4: k.substring(k.length - 4));
+  }
+
+  @override
+  Future<StoreAiResult> testStoreAi(String storeId) async {
+    await Future<void>.delayed(const Duration(milliseconds: 700));
+    final s = _storeAi[storeId];
+    if (s == null) return const StoreAiResult.fail('這家店還沒有設定自己的 AI');
+    _storeAi[storeId] = StoreAiSetting(provider: s.provider, model: s.model, keyLast4: s.keyLast4, verifiedAt: DateTime.now());
+    return const StoreAiResult.ok();
+  }
+
+  @override
+  Future<void> clearStoreAi(String storeId) async => _storeAi.remove(storeId);
+
   @override
   Future<List<PlatformWish>> platformWishes(String storeId) async => [
     ..._wishesOf(storeId),

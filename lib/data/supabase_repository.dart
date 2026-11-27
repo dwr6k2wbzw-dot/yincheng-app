@@ -2130,6 +2130,44 @@ class SupabaseRepository implements Repository {
       await _db.rpc('platform_wish_create', params: {'p_store': storeId, 'p_title': title, 'p_body': body}) as String;
 
   @override
+  Future<StoreAiSetting?> storeAiSetting(String storeId) async {
+    final row = await _db
+        .from('store_ai_settings')
+        .select('provider, model, key_last4, verified_at, last_error')
+        .eq('store_id', storeId)
+        .maybeSingle();
+    return row == null ? null : StoreAiSetting.fromRow(row);
+  }
+
+  Future<StoreAiResult> _storeAiKey(Map<String, dynamic> body) async {
+    try {
+      final r = await _db.functions.invoke('store-ai-key', body: body);
+      final d = r.data;
+      if (d is Map && d['ok'] == true) return StoreAiResult.ok(last4: d['last4'] as String?);
+      return StoreAiResult.fail(d is Map && d['error'] is String ? d['error'] as String : '測試失敗，請稍後再試');
+    } on FunctionException catch (e) {
+      final d = e.details;
+      return StoreAiResult.fail(d is Map && d['error'] is String
+          ? d['error'] as String
+          : e.status == 404
+              ? 'AI 設定還沒開通，請稍後再試'
+              : '暫時連不上，請稍後再試');
+    }
+  }
+
+  @override
+  Future<StoreAiResult> saveStoreAi(String storeId, StoreAiProvider provider, String model, String key) =>
+      _storeAiKey({'op': 'save', 'store_id': storeId, 'provider': provider.name, 'model': model.trim(), 'key': key.trim()});
+
+  @override
+  Future<StoreAiResult> testStoreAi(String storeId) => _storeAiKey({'op': 'test', 'store_id': storeId});
+
+  @override
+  Future<void> clearStoreAi(String storeId) async {
+    await _db.rpc('store_ai_clear', params: {'p_store': storeId});
+  }
+
+  @override
   Future<String> uploadBookingAsset(String storeId, String kind, Uint8List bytes, String contentType) async {
     final ext = switch (contentType) { 'image/png' => 'png', 'image/webp' => 'webp', _ => 'jpg' };
     final path = newBookingAssetPath(storeId, kind, ext);
