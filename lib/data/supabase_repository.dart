@@ -111,8 +111,19 @@ class SupabaseRepository implements Repository {
   Future<int> claimInvite(String code) async =>
       (await _db.rpc('claim_invite', params: {'p_code': code}) as num).toInt();
   @override
-  Future<String> signupCreateStore(String storeName, String displayName) async =>
-      await _db.rpc('signup_create_store', params: {'p_store_name': storeName, 'p_display_name': displayName}) as String;
+  Future<String> signupCreateStore(String storeName, String displayName, {String? kind}) async {
+    final params = {'p_store_name': storeName, 'p_display_name': displayName};
+    try {
+      return await _db.rpc('signup_create_store', params: {...params, if (kind != null) 'p_kind': kind}) as String;
+    } on PostgrestException catch (e) {
+      // 資料庫還沒有 0152（沒有 p_kind 這個參數）：照原本的方式建店，排班之後再設
+      if (kind == null || e.code != 'PGRST202') rethrow;
+      return await _db.rpc('signup_create_store', params: params) as String;
+    }
+  }
+  @override
+  Future<void> applyShiftTemplate(String storeId, String kind) async =>
+      await _db.rpc('shift_apply_template', params: {'p_store': storeId, 'p_kind': kind});
   @override
   Future<String> createInvite(List<String> storeIds, Role role, String name) async =>
       await _db.rpc('create_invite', params: {'p_stores': storeIds, 'p_role': role.name, 'p_name': name}) as String;
@@ -769,6 +780,37 @@ class SupabaseRepository implements Repository {
   }
 
   @override
+  Future<String> shiftPhotoAiMode(String storeId) async {
+    try {
+      final r = await _db.rpc('shift_photo_ai_status', params: {'p_store': storeId});
+      return r is Map && r['mode'] == 'api' ? 'api' : 'subscription';
+    } catch (_) {
+      return 'subscription';
+    }
+  }
+
+  @override
+  Future<int?> readShiftPhotos(String storeId, DateTime month) async {
+    try {
+      final r = await _db.functions.invoke('shift-photo-read',
+          body: {'store_id': storeId, 'month': _day.format(DateTime(month.year, month.month, 1))});
+      final data = r.data;
+      if (data is Map && data['ok'] == true) {
+        return data['status'] == 'ready' ? (data['cells'] as num?)?.toInt() ?? 0 : null;
+      }
+      throw Exception('message: ${data is Map && data['error'] is String ? data['error'] : '班表照片辨識暫時沒有回應，請稍後再試'},');
+    } on FunctionException catch (e) {
+      final d = e.details;
+      final msg = d is Map && d['error'] is String
+          ? d['error'] as String
+          : e.status == 404
+              ? '班表照片辨識還沒開通，請直接點格子排班'
+              : '班表照片辨識暫時沒有回應，請稍後再試';
+      throw Exception('message: $msg,');
+    }
+  }
+
+  @override
   Future<void> deleteShiftPhoto(String photoId) async {
     final rows = await _db.from('shift_month_files').delete().eq('id', photoId).select('id');
     if (rows.isEmpty) throw Exception('message: 沒有權限刪除這張照片（只有老闆、店長可以刪）,');
@@ -858,6 +900,17 @@ class SupabaseRepository implements Repository {
     final me = currentUserId;
     if (me == null) return;
     await _db.from('line_owner_links').delete().eq('user_id', me);
+  }
+
+  // 0156：LINE 群組綁定（line_groups 只有老闆讀得到；代碼只在產生的這一次看得到）
+  @override
+  Future<bool> lineGroupBound(String storeId) async =>
+      (await _db.from('line_groups').select('store_id').eq('store_id', storeId)).isNotEmpty;
+
+  @override
+  Future<LineBindCode> createLineGroupBindCode(String storeId) async {
+    final r = await _db.rpc('line_group_bind_code', params: {'p_store': storeId});
+    return LineBindCode.fromJson(Map<String, dynamic>.from(r as Map));
   }
 
   @override

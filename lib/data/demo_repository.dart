@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import '../config.dart';
 import 'booking_import.dart';
 import 'booking_profile.dart';
 import 'models.dart';
@@ -10,6 +11,8 @@ import 'person_names.dart';
 import 'purchase_items_math.dart';
 import 'repository.dart';
 import 'shift_links.dart';
+import 'shift_templates.dart';
+import 'store_features.dart';
 import '../services/clock.dart';
 
 /// 示範資料：不連線，數字全部是虛構的示範值（不是真實營收），只用來看畫面與操作流程。
@@ -188,8 +191,8 @@ class DemoRepository implements Repository {
         if (!future || _demoOff.containsKey(key))
           for (final (i, _) in fulls.indexed) 'f$i': ShiftStats(shouldOff: _demoOff[key]?['f$i'] ?? 9, prevUnused: 3),
       },
-      const [],
-      null,
+      [...?_demoPhotos[key]],
+      _demoDrafts[key],
       ShiftOptions([..._markOpts]),
     );
   }
@@ -299,14 +302,56 @@ class DemoRepository implements Repository {
   Future<void> saveShiftStats(String storeId, String personId, DateTime month, ShiftStats s) async {
     if (s.shouldOff != null) _demoOff.putIfAbsent('${month.year}-${month.month}', () => {})[personId] = s.shouldOff!;
   }
+  // 示範：上傳的班表照片與辨識草稿（只存在記憶體）。公版那一份（SELF_SIGNUP）示範 api 模式：上傳完直接辨識
+  final _demoPhotos = <String, List<ShiftPhoto>>{};
+  final _demoDrafts = <String, ShiftDraft>{};
   @override
-  Future<void> uploadShiftPhoto(String storeId, DateTime month, Uint8List jpeg) async {}
+  Future<void> uploadShiftPhoto(String storeId, DateTime month, Uint8List jpeg) async {
+    final key = '${month.year}-${month.month}';
+    final list = _demoPhotos.putIfAbsent(key, () => []);
+    list.add(ShiftPhoto('ph${list.length + 1}', 'demo/schedules/$key-${list.length + 1}.jpg', DateTime.now()));
+    _demoDrafts[key] = ShiftDraft(id: 'dr-$key-${list.length}', status: 'pending', createdAt: DateTime.now(),
+        message: AppConfig.selfSignup ? '' : null);
+  }
   @override
-  Future<void> deleteShiftPhoto(String photoId) async {}
+  Future<String> shiftPhotoAiMode(String storeId) async => AppConfig.selfSignup ? 'api' : 'subscription';
   @override
-  Future<int> applyShiftDraft(ShiftDraft d) async => 0;
+  Future<int?> readShiftPhotos(String storeId, DateTime month) async {
+    final key = '${month.year}-${month.month}';
+    final old = _demoDrafts[key];
+    if (old == null || !old.isPending) throw Exception('message: 這個月沒有待辨識的照片,');
+    await Future<void>.delayed(const Duration(milliseconds: 2500));
+    final days = DateTime(month.year, month.month + 1, 0).day;
+    final entries = <String, Map<int, String>>{
+      '阿明': {for (var d = 1; d <= days; d++) d: d % 7 < 2 ? '休' : 'V'},
+      '小安': {for (var d = 1; d <= days; d++) d: (d + 3) % 7 < 2 ? '休' : 'V'},
+      '小魚': {for (var d = 1; d <= days; d++) if (d % 3 == 0) d: 'V'},
+    };
+    _demoDrafts[key] = ShiftDraft(
+      id: old.id,
+      status: 'ready',
+      createdAt: old.createdAt,
+      processedAtRaw: DateTime.now().toUtc().toIso8601String(),
+      photoCount: _demoPhotos[key]?.length ?? 1,
+      people: const [ShiftDraftPerson('阿明', 'full'), ShiftDraftPerson('小安', 'full'), ShiftDraftPerson('小魚', 'part')],
+      entries: entries,
+      warnings: const ['小魚 12 號看不清楚'],
+    );
+    return entries.values.fold<int>(0, (a, e) => a + e.length);
+  }
   @override
-  Future<void> dismissShiftDraft(String draftId) async {}
+  Future<void> deleteShiftPhoto(String photoId) async {
+    for (final e in _demoPhotos.entries) {
+      e.value.removeWhere((p) => p.id == photoId);
+    }
+  }
+  @override
+  Future<int> applyShiftDraft(ShiftDraft d) async {
+    _demoDrafts.removeWhere((_, v) => v.id == d.id);
+    return d.cellCount;
+  }
+  @override
+  Future<void> dismissShiftDraft(String draftId) async => _demoDrafts.removeWhere((_, v) => v.id == draftId);
   @override
   Future<String> shiftPhotoUrl(String path) async => '';
 
@@ -437,6 +482,13 @@ class DemoRepository implements Repository {
   }
   @override
   Future<void> unlinkLineOwner() async => _lineLinks = 0;
+  // 0156：示範版——小城外假裝已經綁好群組，其他店還沒綁
+  @override
+  Future<bool> lineGroupBound(String storeId) async => storeId == 'xc';
+  @override
+  Future<LineBindCode> createLineGroupBindCode(String storeId) async =>
+      LineBindCode((DateTime.now().millisecondsSinceEpoch % 100000000).toString().padLeft(8, '0'),
+          DateTime.now().add(const Duration(minutes: 10)));
   @override
   Future<bool> lineNotifyEnabled(String storeId) async => _lineOn[storeId] ?? true;
   @override
@@ -532,13 +584,40 @@ class DemoRepository implements Repository {
   bool get _isNew => _email.contains('new');
   Membership? _newStore;
   @override
-  Future<String> signupCreateStore(String storeName, String displayName) async {
+  Future<String> signupCreateStore(String storeName, String displayName, {String? kind}) async {
     await Future<void>.delayed(const Duration(milliseconds: 400));
     if (const ['隱城', '小城外'].contains(storeName.trim())) {
       throw Exception('message: SIGNUP_TAKEN：這個店名已經有人用了，請換一個（例如加上地區或分店名）');
     }
     _newStore = Membership(storeId: 'demo-new', storeName: storeName.trim(), role: Role.owner, displayName: displayName.trim());
+    if (kind != null) {
+      // 示範：新店照範本帶入（同資料庫 0152：人力、班別／時段、設定，打開班表分頁）
+      _staffing = {};
+      _markOpts.clear();
+      await applyShiftTemplate('demo-new', kind);
+    }
     return 'demo-new';
+  }
+  @override
+  Future<void> applyShiftTemplate(String storeId, String kind) async {
+    final t = shiftTemplates.where((x) => x.kind == kind).firstOrNull;
+    if (t == null) throw Exception('message: SHIFT_TEMPLATE_KIND：不認得這種店的類型');
+    if (_staffing.isNotEmpty || _markOpts.isNotEmpty) {
+      throw Exception('message: SHIFT_TEMPLATE_USED：這家店已經有班表或排班設定了，範本只能套在全新的店（請直接在排班條件裡改）');
+    }
+    _staffing = {for (var w = 1; w <= 7; w++) w: StaffingNeed(t.staffing[w - 1].$1, t.staffing[w - 1].$2)};
+    var n = 0;
+    for (final c in t.codes) {
+      n++;
+      _markOpts.add(ShiftMarkOption(id: 'tpl$n', kind: 'code', mark: c.$1, timeRange: c.$2, sortOrder: n));
+    }
+    for (final r in t.ranges) {
+      n++;
+      _markOpts.add(ShiftMarkOption(id: 'tpl$n', kind: 'range', mark: r, sortOrder: n));
+    }
+    _preferRun = kind == 'other' ? null : 5;
+    final name = _newStore?.storeId == storeId ? _newStore!.storeName : null;
+    if (name != null) StoreFeatures.remember(name, StoreFeatures(schedule: true, shiftCodes: t.codes.isNotEmpty));
   }
   @override
   Future<String> createInvite(List<String> storeIds, Role role, String name) async {
@@ -982,7 +1061,7 @@ class DemoRepository implements Repository {
   @override
   Future<SlipReading> readSlip(String storeId, String image) async {
     // 示範：假裝讀到一張酒商送貨單（第二行對不到庫存品項、第三行沒把握）
-    await Future<void>.delayed(const Duration(milliseconds: 1200));
+    await Future<void>.delayed(const Duration(milliseconds: 2500));
     final first = _products.where((p) => !_inactive.contains(p.id)).firstOrNull;
     return SlipReading(
       vendor: '大倉捷',

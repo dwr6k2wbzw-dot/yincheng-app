@@ -6,6 +6,7 @@ import 'change_request_models.dart';
 import 'booking_profile.dart';
 import 'booking_assist.dart';
 import 'booking_import.dart';
+import 'line_bind.dart';
 import 'models.dart';
 import 'payroll.dart';
 import 'platform_wish.dart';
@@ -16,6 +17,7 @@ import 'shift_planner.dart';
 export 'attendance_models.dart';
 export 'booking_assist.dart';
 export 'change_request_models.dart';
+export 'line_bind.dart';
 export 'payroll.dart';
 export 'platform_wish.dart';
 export 'reservation_models.dart';
@@ -52,7 +54,10 @@ abstract class Repository {
   /// 用邀請碼加入店家。回傳加入的店家數；-1＝邀請碼無效、已用過或已過期
   Future<int> claimInvite(String code);
   /// 自助註冊（ops 0119，只有公版環境開放）：建立「組織＋第一家店」，自己是老闆。回傳店的 id
-  Future<String> signupCreateStore(String storeName, String displayName);
+  /// [kind]：店的類型（ops 0152 排班範本 bar／cafe／restaurant／other），給了就照範本帶入排班的起手設定
+  Future<String> signupCreateStore(String storeName, String displayName, {String? kind});
+  /// 排班的業態範本（ops 0152，只有老闆、只有全新的店）：帶入每天要幾人、班別／時段、排班設定
+  Future<void> applyShiftTemplate(String storeId, String kind);
   Future<String> createInvite(List<String> storeIds, Role role, String name);
   Future<List<MemberInfo>> storeMembers(String storeId);
   Future<List<MemberInvite>> openInvites(String storeId);
@@ -172,6 +177,11 @@ abstract class Repository {
   Future<void> saveShiftPerson(String storeId, ShiftPerson p, {bool isNew = false});
   Future<void> saveShiftStats(String storeId, String personId, DateTime month, ShiftStats s);
   Future<void> uploadShiftPhoto(String storeId, DateTime month, Uint8List jpeg);
+  /// 班表照片辨識的方式（ops 0153）：subscription＝每小時同步（隱城、小城外）／api＝上傳完直接辨識（公版）。
+  /// 只有老闆、店長讀得到；讀不到（舊資料庫、沒權限）一律當 subscription
+  Future<String> shiftPhotoAiMode(String storeId);
+  /// api 模式：叫後臺立刻辨識這個月的照片（成功回讀到幾格；照片途中有變動回 null，請再按一次）
+  Future<int?> readShiftPhotos(String storeId, DateTime month);
   Future<void> deleteShiftPhoto(String photoId); // 0070：一個月多張，刪掉其中一張
   /// 套用照片辨識草稿（0070）：整月換成照片上的班，回傳寫入格數
   Future<int> applyShiftDraft(ShiftDraft d);
@@ -241,6 +251,8 @@ abstract class Repository {
   Future<int> lineOwnerLinks(); // 0081：我綁了幾個 LINE 私訊
   Future<void> linkLineOwner(String code); // 0081：老闆輸入 LINE 私訊給的代碼
   Future<void> unlinkLineOwner(); // 0081：解除自己的 LINE 私訊綁定
+  Future<bool> lineGroupBound(String storeId); // 0156：這家店綁了 LINE 群組沒（只有老闆讀得到）
+  Future<LineBindCode> createLineGroupBindCode(String storeId); // 0156：老闆產生群組綁定代碼（10 分鐘、一次性）
   Future<void> setHandoverItemDone(String itemId, bool done); // 0060：清單打勾
   Future<void> saveReminder(String storeId, WorkReminder r, {bool isNew = false});
   Future<void> deleteReminder(String reminderId);

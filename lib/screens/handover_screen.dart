@@ -3,6 +3,7 @@ import '../data/store_features.dart';
 
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../app_state.dart';
@@ -485,6 +486,30 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
   bool? _lineOn;
   bool _lineLoading = false;
   int? _lineLinks; // 0081：我綁了 LINE 私訊沒
+  bool? _lineGroupBound; // 0156：這家店綁了 LINE 群組沒（只有老闆）
+
+  // 0156：產生群組綁定代碼（只有老闆）。群組裡要打「綁定 店名 代碼」才綁得上
+  Future<void> _lineBindCode() async {
+    LineBindCode? first;
+    try {
+      first = await _repo.createLineGroupBindCode(_store);
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+      return;
+    }
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (c) => _LineBindDialog(
+        storeName: widget.membership.storeName,
+        first: first!,
+        regenerate: () => _repo.createLineGroupBindCode(_store),
+      ),
+    );
+    _repo.lineGroupBound(_store).then((v) {
+      if (mounted) setState(() => _lineGroupBound = v);
+    }).catchError((_) {});
+  }
 
   Future<void> _linkLine() async {
     final ctrl = TextEditingController();
@@ -541,6 +566,9 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
         if (mounted) setState(() => _lineLinks = v);
       }).catchError((_) {});
       if (_isOwner) {
+        _repo.lineGroupBound(_store).then((v) {
+          if (mounted) setState(() => _lineGroupBound = v);
+        }).catchError((_) {});
         _repo.lineNotifyEnabled(_store).then((v) {
           if (mounted) setState(() => _lineOn = v);
         }).catchError((_) {
@@ -575,6 +603,19 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
               subtitle: Text(on ? '勾「重要」的交接會發到這家店的 LINE 群組' : '已關掉，交接只在 App 裡看',
                   style: TextStyle(fontSize: AppType.small, color: AppColors.muted)),
             ),
+            // 0156：群組要用老闆產生的代碼才綁得上
+            Row(children: [
+              Expanded(
+                child: Text(
+                    _lineGroupBound == null
+                        ? 'LINE 群組：讀取中…'
+                        : _lineGroupBound!
+                            ? 'LINE 群組：已綁定。要換群組，先在原群組打「解除綁定」，再產生代碼'
+                            : 'LINE 群組：還沒綁定。產生代碼後，在群組打「綁定 店名 代碼」',
+                    style: TextStyle(fontSize: AppType.small, color: AppColors.muted, height: 1.5)),
+              ),
+              TextButton(onPressed: _lineBindCode, child: const Text('產生群組綁定代碼')),
+            ]),
             const Divider(height: 1),
           ],
           // 0081／0084：老闆、店長私訊 AI 助理（也能許願改 App）
@@ -955,4 +996,105 @@ class _HandoverDraft {
   final String? photo;
   final bool important; // 0079：發到 LINE 群組
   const _HandoverDraft(this.body, this.items, this.photo, [this.important = false]);
+}
+
+
+/// 0156：顯示群組綁定代碼（倒數 10 分鐘、可複製整句、過期可重新產生）
+class _LineBindDialog extends StatefulWidget {
+  final String storeName;
+  final LineBindCode first;
+  final Future<LineBindCode> Function() regenerate;
+  const _LineBindDialog({required this.storeName, required this.first, required this.regenerate});
+
+  @override
+  State<_LineBindDialog> createState() => _LineBindDialogState();
+}
+
+class _LineBindDialogState extends State<_LineBindDialog> {
+  late LineBindCode _code = widget.first;
+  Timer? _tick;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _again() async {
+    setState(() => _busy = true);
+    try {
+      final c = await widget.regenerate();
+      if (mounted) setState(() => _code = c);
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final expired = _code.expired(now);
+    final command = _code.command(widget.storeName);
+    final small = TextStyle(color: AppColors.muted, fontSize: AppType.small, height: 1.6);
+    return AlertDialog(
+      title: const Text('LINE 群組綁定代碼'),
+      content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Center(
+          child: SelectableText(
+            _code.code,
+            style: TextStyle(
+              fontSize: 34,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 6,
+              color: expired ? AppColors.muted : null,
+              decoration: expired ? TextDecoration.lineThrough : null,
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Center(
+          child: Text(_code.remaining(now),
+              style: TextStyle(fontSize: AppType.small, color: expired ? AppColors.bad : AppColors.muted)),
+        ),
+        const SizedBox(height: 16),
+        Text('1. 把店裡的 LINE 機器人拉進工作群組\n2. 在群組打下面這一句（10 分鐘內、用一次就失效）', style: small),
+        const SizedBox(height: 8),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppColors.line),
+          ),
+          child: SelectableText(command, style: const TextStyle(fontWeight: FontWeight.w600)),
+        ),
+        const SizedBox(height: 8),
+        Text('只有拿到這組代碼的人才能把群組綁到這家店；不要傳給店外的人。', style: small),
+      ]),
+      actions: [
+        if (expired)
+          TextButton(onPressed: _busy ? null : _again, child: const Text('重新產生'))
+        else
+          TextButton(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: command));
+              if (context.mounted) showMessage(context, '已複製，貼到 LINE 群組送出');
+            },
+            child: const Text('複製這一句'),
+          ),
+        FilledButton(onPressed: () => Navigator.pop(context), child: const Text('好了')),
+      ],
+    );
+  }
 }
