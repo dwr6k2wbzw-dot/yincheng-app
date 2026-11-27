@@ -8,8 +8,10 @@ import '../data/repository.dart';
 import '../data/schedule_health.dart';
 import '../data/shift_off_rules.dart';
 import '../data/shift_marks.dart';
+import '../data/shift_templates.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'shift_template_picker.dart';
 
 part 'shift_auto_plan_screen.dart';
 
@@ -596,6 +598,46 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
     }
   }
 
+  Future<void> _applyTemplate() async {
+    var kind = defaultShiftTemplate;
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (c) => StatefulBuilder(
+        builder: (c, set) => SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              const Text('套用業態範本', style: TextStyle(fontSize: AppType.heading, fontWeight: AppFont.heading)),
+              const SizedBox(height: 4),
+              Text('帶入這類店常見的每天人數、班別和時段，套完可以再改。只能套一次。',
+                  style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+              const SizedBox(height: 12),
+              ShiftTemplatePicker(selected: kind, onChanged: (k) => set(() => kind = k)),
+              const SizedBox(height: 8),
+              FilledButton(
+                onPressed: () => Navigator.pop(c, true),
+                style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+                child: const Text('套用'),
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await _repo.applyShiftTemplate(_store, kind);
+      if (mounted) {
+        showMessage(context, '已套用「${shiftTemplates.firstWhere((t) => t.kind == kind).label}」範本，班別／時段也一起帶入了');
+      }
+      _load();
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+    }
+  }
+
   Future<void> _saveStaff() async {
     try {
       await _repo.saveShiftStaffing(_store, _staff);
@@ -1072,6 +1114,14 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
               : ListView(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 40),
                   children: [
+                      // ops 0152：全新的店（還沒有人力、也沒有班別）可以一鍵帶入業態範本；只有公版、只有老闆
+                      if (showApplyTemplate(
+                          isOwner: widget.membership.role == Role.owner,
+                          staffingEmpty: _setup!.staffing.isEmpty,
+                          optionsEmpty: widget.options?.items.isEmpty ?? true)) ...[
+                        _ApplyTemplateCard(onTap: _applyTemplate),
+                        const SizedBox(height: 10),
+                      ],
                       SectionCard(
                         child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1790,6 +1840,36 @@ class _ShiftMarkOptionsScreenState extends State<ShiftMarkOptionsScreen> {
                               ],
                               code: false),
                         ]),
+    );
+  }
+}
+
+/// 排班條件頁最上面：全新的店一鍵帶入業態範本（ops 0152，只有公版）
+class _ApplyTemplateCard extends StatelessWidget {
+  const _ApplyTemplateCard({required this.onTap});
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) {
+    return SectionCard(
+      child: InkWell(
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 56),
+          child: Row(children: [
+            Icon(Icons.auto_awesome_outlined, color: AppColors.primary),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('還沒設排班？先套用業態範本', style: TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Text('酒吧、咖啡廳、餐廳的常見人數和班別，一次帶入',
+                    style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+              ]),
+            ),
+            const Icon(Icons.chevron_right),
+          ]),
+        ),
+      ),
     );
   }
 }

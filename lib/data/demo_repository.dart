@@ -10,6 +10,8 @@ import 'person_names.dart';
 import 'purchase_items_math.dart';
 import 'repository.dart';
 import 'shift_links.dart';
+import 'shift_templates.dart';
+import 'store_features.dart';
 import '../services/clock.dart';
 
 /// 示範資料：不連線，數字全部是虛構的示範值（不是真實營收），只用來看畫面與操作流程。
@@ -532,13 +534,40 @@ class DemoRepository implements Repository {
   bool get _isNew => _email.contains('new');
   Membership? _newStore;
   @override
-  Future<String> signupCreateStore(String storeName, String displayName) async {
+  Future<String> signupCreateStore(String storeName, String displayName, {String? kind}) async {
     await Future<void>.delayed(const Duration(milliseconds: 400));
     if (const ['隱城', '小城外'].contains(storeName.trim())) {
       throw Exception('message: SIGNUP_TAKEN：這個店名已經有人用了，請換一個（例如加上地區或分店名）');
     }
     _newStore = Membership(storeId: 'demo-new', storeName: storeName.trim(), role: Role.owner, displayName: displayName.trim());
+    if (kind != null) {
+      // 示範：新店照範本帶入（同資料庫 0152：人力、班別／時段、設定，打開班表分頁）
+      _staffing = {};
+      _markOpts.clear();
+      await applyShiftTemplate('demo-new', kind);
+    }
     return 'demo-new';
+  }
+  @override
+  Future<void> applyShiftTemplate(String storeId, String kind) async {
+    final t = shiftTemplates.where((x) => x.kind == kind).firstOrNull;
+    if (t == null) throw Exception('message: SHIFT_TEMPLATE_KIND：不認得這種店的類型');
+    if (_staffing.isNotEmpty || _markOpts.isNotEmpty) {
+      throw Exception('message: SHIFT_TEMPLATE_USED：這家店已經有班表或排班設定了，範本只能套在全新的店（請直接在排班條件裡改）');
+    }
+    _staffing = {for (var w = 1; w <= 7; w++) w: StaffingNeed(t.staffing[w - 1].$1, t.staffing[w - 1].$2)};
+    var n = 0;
+    for (final c in t.codes) {
+      n++;
+      _markOpts.add(ShiftMarkOption(id: 'tpl$n', kind: 'code', mark: c.$1, timeRange: c.$2, sortOrder: n));
+    }
+    for (final r in t.ranges) {
+      n++;
+      _markOpts.add(ShiftMarkOption(id: 'tpl$n', kind: 'range', mark: r, sortOrder: n));
+    }
+    _preferRun = kind == 'other' ? null : 5;
+    final name = _newStore?.storeId == storeId ? _newStore!.storeName : null;
+    if (name != null) StoreFeatures.remember(name, StoreFeatures(schedule: true, shiftCodes: t.codes.isNotEmpty));
   }
   @override
   Future<String> createInvite(List<String> storeIds, Role role, String name) async {
