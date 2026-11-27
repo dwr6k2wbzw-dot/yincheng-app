@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../app_state.dart';
+import '../config.dart';
 import '../services/load_timing.dart';
 import '../data/month_compare.dart';
 import '../data/models.dart';
@@ -14,6 +15,7 @@ import '../widgets/common.dart';
 // 匯出損益表用的 Excel 工具很大：按「匯出」時才下載（老闆 2026-10-16：加快打開速度）
 import '../services/pl_export.dart' deferred as pl;
 import '../widgets/revenue_mix.dart';
+import 'onboarding_screen.dart';
 import 'reservations_screen.dart';
 
 /// 營運總覽（PRD 畫面 01）。老闆／店長看營收與成本；員工版只顯示零用金與快速操作（營收由資料庫權限隱藏）。
@@ -261,6 +263,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: LinearProgressIndicator(minHeight: 2, color: AppColors.primary, backgroundColor: AppColors.line),
                   ),
                 ),
+              // 開店精靈（ops 0155）：只有公版、只有老闆；開店設定還沒做完才出現
+              if (AppConfig.selfSignup && widget.membership.role == Role.owner)
+                OnboardingCard(key: ValueKey('onboard-${widget.membership.storeId}'), membership: widget.membership),
               if (widget.membership.isPartTime) ...[
                 // 0065（老闆 2026-10-19）：訂位所有成員都看得到
                 ReservationSummaryCard(key: ValueKey('rs-${widget.membership.storeId}-$_gen'), membership: widget.membership),
