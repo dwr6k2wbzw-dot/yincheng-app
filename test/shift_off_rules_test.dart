@@ -34,6 +34,39 @@ void main() {
     expect(offCheck(takenDays: const {}, mine: {...five, 9: 'on'}, personId: 'a', day: 9).overLimit, isTrue);
   });
 
+  test('ops 0150 同一天上限 2 位：一位時不擋、兩位才擋；不限＝永遠不擋', () {
+    expect(offCheck(takenDays: {5: {'a'}}, mine: const {}, personId: 'c', day: 5, perDay: 2).dayFull, isFalse);
+    expect(offCheck(takenDays: {5: {'a', 'b'}}, mine: const {}, personId: 'c', day: 5, perDay: 2).dayFull, isTrue);
+    expect(offCheck(takenDays: {5: {'a', 'b', 'd'}}, mine: const {}, personId: 'c', day: 5, perDay: null).dayFull, isFalse);
+    // 預設照舊（一位就滿）
+    expect(offCheck(takenDays: {5: {'a'}}, mine: const {}, personId: 'c', day: 5).dayFull, isTrue);
+  });
+
+  test('ops 0150 每月上限 3 天、不限', () {
+    final three = {1: 'off', 2: 'off', 3: 'off'};
+    expect(offCheck(takenDays: const {}, mine: three, personId: 'a', day: 10, monthMax: 3).overLimit, isTrue);
+    expect(offCheck(takenDays: const {}, mine: {1: 'off', 2: 'off'}, personId: 'a', day: 10, monthMax: 3).overLimit, isFalse);
+    expect(offCheck(takenDays: const {}, mine: {for (var d = 1; d <= 20; d++) d: 'off'}, personId: 'a', day: 25, monthMax: null).overLimit,
+        isFalse);
+  });
+
+  test('ops 0150 排班設定讀上限：沒有那一列、資料庫還沒更新＝預設 1／5；欄位空白＝不限', () {
+    expect(offLimitsFromRow(null), (perDay: 1, monthMax: 5));
+    expect(offLimitsFromRow({'request_deadline': 20}), (perDay: 1, monthMax: 5));
+    expect(offLimitsFromRow({'off_per_day': 2, 'off_month_max': 3}), (perDay: 2, monthMax: 3));
+    expect(offLimitsFromRow({'off_per_day': null, 'off_month_max': null}), (perDay: null, monthMax: null));
+  });
+
+  test('ops 0150 說明文字跟著設定變', () {
+    expect(offRuleText(1, 5), '同一天只能一位正職指休（先填先贏），每月最多 5 天；要再多請找店長協調班表。');
+    expect(offRuleText(2, null), '同一天最多 2 位正職指休（先填先贏）；要再多請找店長協調班表。');
+    expect(offRuleText(null, 3), '每月最多 3 天；要再多請找店長協調班表。');
+    expect(offRuleText(null, null), '指休沒有限制。');
+    expect(offBlockedText(dayFull: true, perDay: 1), '已有人指休，請找店長協調班表');
+    expect(offBlockedText(dayFull: true, perDay: 2), '這天指休的人已經滿了（最多 2 位），請找店長協調班表');
+    expect(offBlockedText(dayFull: false, monthMax: 3), '一個月最多指休 3 天，要再多請找店長協調班表');
+  });
+
   test('勞基法特休：半年 3、1 年 7、2 年 10、3～4 年 14、5～9 年 15、10 年 16、24 年起 30', () {
     final g = lsaSpecialGrants(DateTime(2025, 7, 18));
     expect(g.first, (DateTime(2026, 1, 18), 3));

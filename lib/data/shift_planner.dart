@@ -112,7 +112,11 @@ class ShiftPlanSetup {
   final List<PairRule> pairRules; // 自訂規則（只有老闆店長讀得到）
   final int? preferRun; // 0098：盡量不要連上超過幾天（null＝不設；硬上限仍是每人的最多連上）
   final Map<String, Set<int>> otherStoreDays; // 0098：人 → 這個月在另一家店有班的日子（只有老闆店長拿得到）
+  final int? offPerDay; // 0150：同一天最多幾位正職指休（null＝不限）
+  final int? offMonthMax; // 0150：一位正職每月最多指休幾天（null＝不限）
   const ShiftPlanSetup({
+    this.offPerDay = 1,
+    this.offMonthMax = 5,
     this.preferRun,
     this.otherStoreDays = const {},
     this.pairRules = const [],

@@ -1005,6 +1005,8 @@ class SupabaseRepository implements Repository {
       requests: requests,
       pairRules: [for (final x in r[4] as List) PairRule.fromRow(x as Map<String, dynamic>)],
       preferRun: ((r[2] as Map?)?['prefer_run'] as num?)?.toInt(),
+      offPerDay: offLimitsFromRow(r[2] as Map<String, dynamic>?).perDay,
+      offMonthMax: offLimitsFromRow(r[2] as Map<String, dynamic>?).monthMax,
       otherStoreDays: await _otherStoreDays(storeId, from),
     );
   }
@@ -1161,6 +1163,11 @@ class SupabaseRepository implements Repository {
   @override
   Future<void> saveShiftPreferRun(String storeId, int? days) =>
       _db.from('shift_settings').upsert({'store_id': storeId, 'prefer_run': days}, onConflict: 'store_id');
+
+  @override
+  Future<void> saveShiftOffLimits(String storeId, int? perDay, int? monthMax) => _db
+      .from('shift_settings')
+      .upsert({'store_id': storeId, 'off_per_day': perDay, 'off_month_max': monthMax}, onConflict: 'store_id');
 
   @override
   Future<String> remindShiftRequests(String storeId, DateTime month) async =>
