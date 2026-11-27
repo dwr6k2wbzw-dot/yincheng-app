@@ -1240,6 +1240,123 @@ class DemoRepository implements Repository {
       );
   @override
   Future<void> saveBookingProfile(String storeId, BookingProfile p) async => _demoProfiles[storeId] = p;
+  // 訂位的 AI 設定助理（示範）：不連 AI，只認得幾種說法，照真的流程走（建議 → 確認套用 → 可以改回去）
+  final Map<String, List<AssistRecord>> _demoAssist = {};
+  Map<String, dynamic> _profileRow(BookingProfile p) => {
+        'langs': [...p.langs],
+        'title': {...p.title},
+        'short_name': {...p.shortName},
+        'intro': {...p.intro},
+        'address_i18n': {...p.address},
+        'directions_i18n': {...p.directions},
+        'min_spend': p.minSpend,
+        'min_spend_text': {...p.minSpendText},
+        'info_rows': [for (final r in p.infoRows) {'label': r.label, 'text': r.text}],
+        'logo_url': p.logoUrl,
+        'hero_url': p.heroUrl,
+        'hero_pos': p.heroPos,
+        'sister_store_id': p.sisterStoreId,
+      };
+  @override
+  Future<AssistReply> askBookingAssistant(String storeId, String message, List<AssistTurn> history) async {
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+    final p = (await bookingProfile(storeId))!;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    String iso(DateTime d) => d.toIso8601String().substring(0, 10);
+    final changes = <Map<String, dynamic>>[];
+    final parts = <String>[];
+    if (RegExp(r'包場|不開放|公休|休息').hasMatch(message)) {
+      final want = message.contains('日') && !message.contains('六') ? 7 : message.contains('五') ? 5 : 6;
+      var d = today.add(const Duration(days: 1));
+      while (d.weekday != want) {
+        d = d.add(const Duration(days: 1));
+      }
+      final cur = _demoSpecial[storeId]?[iso(d)];
+      final note = message.contains('包場') ? '包場' : null;
+      changes.add({
+        'op': 'day', 'date': iso(d),
+        'before': cur != null && cur.closed ? {'closed': true, 'note': cur.note} : null,
+        'after': {'closed': true, 'note': note},
+      });
+      parts.add('${AssistChange.dayLabel(iso(d))}改成整天不開放線上訂位${note == null ? '' : '，說明寫「$note」'}');
+    }
+    final amount = RegExp(r'低消[^0-9]*([0-9]{2,6})').firstMatch(message);
+    if (amount != null) {
+      changes.add({'op': 'min_spend', 'before': p.minSpend, 'after': int.parse(amount.group(1)!)});
+      parts.add('每人低消改成 ${amount.group(1)} 元');
+    }
+    if (message.contains('日文') && !p.langs.contains('ja')) {
+      changes.add({'op': 'langs', 'before': [...p.langs], 'after': [for (final l in BookingProfile.langsAll) if (p.langs.contains(l) || l == 'ja') l]});
+      changes.add({'op': 'text', 'field': 'intro', 'lang': 'ja', 'before': p.intro['ja'], 'after': '古い家の二階にある小さなバー'});
+      parts.add('訂位頁加開日文，也幫你寫好日文介紹');
+    }
+    if (message.contains('英文') && message.contains('介紹')) {
+      changes.add({'op': 'text', 'field': 'intro', 'lang': 'en', 'before': p.intro['en'], 'after': 'A quiet little bar upstairs in an old Taipei house'});
+      parts.add('英文介紹改寫得更有畫面一點');
+    }
+    if (changes.isEmpty) {
+      return const AssistReply(
+          reply: '示範版只認得幾種說法，例如「這週六包場不開放」「低消改 700」「加開日文」「英文介紹改一下」。正式版可以用自己的話說。');
+    }
+    return AssistReply(reply: '好，我打算：${parts.join('；')}。請看下面確認。', changes: [for (final c in changes) AssistChange(c)]);
+  }
+
+  void _demoAssistExec(String storeId, BookingProfile p, List<Map<String, dynamic>> changes) {
+    final row = _profileRow(p);
+    final days = _demoSpecial[storeId] ??= {};
+    for (final c in changes) {
+      switch (c['op']) {
+        case 'text':
+          final m = row[c['field']] as Map<String, String>;
+          if ((m[c['lang']] ?? '').isEmpty ? c['before'] != null : m[c['lang']] != c['before']) {
+            throw Exception('message: BOOKING_ASSIST_STALE：設定在你按確認之前被改過了，這次沒有套用，請重新問一次,');
+          }
+          final a = c['after'] as String?;
+          a == null || a.isEmpty ? m.remove(c['lang']) : m[c['lang'] as String] = a;
+        case 'min_spend':
+          row['min_spend'] = c['after'];
+        case 'langs':
+          row['langs'] = [for (final l in c['after'] as List) '$l'];
+        case 'day':
+          final a = c['after'];
+          final d = DateTime.parse(c['date'] as String);
+          if (a == null) {
+            days.remove(c['date']);
+          } else {
+            days[c['date'] as String] = ReservationSpecialDay(day: d, closed: true, note: (a as Map)['note'] as String?);
+          }
+      }
+    }
+    _demoProfiles[storeId] = BookingProfile.fromRow(row);
+  }
+
+  @override
+  Future<void> applyBookingAssist(String storeId, String request, List<AssistChange> changes) async {
+    _demoAssistExec(storeId, (await bookingProfile(storeId))!, [for (final c in changes) c.raw]);
+    (_demoAssist[storeId] ??= []).insert(
+        0,
+        AssistRecord(
+            id: 'demo-${DateTime.now().microsecondsSinceEpoch}', appliedAt: DateTime.now(), request: request, changes: changes));
+  }
+
+  @override
+  Future<List<AssistRecord>> bookingAssistHistory(String storeId) async => [...?_demoAssist[storeId]];
+
+  @override
+  Future<void> undoBookingAssist(String id) async {
+    for (final e in _demoAssist.entries) {
+      final i = e.value.indexWhere((r) => r.id == id);
+      if (i < 0) continue;
+      final r = e.value[i];
+      if (r.undoneAt != null) throw Exception('message: 這筆修改已經改回去了,');
+      _demoAssistExec(e.key, (await bookingProfile(e.key))!, [
+        for (final c in r.changes.reversed) {...c.raw, 'before': c.raw['after'], 'after': c.raw['before']},
+      ]);
+      e.value[i] = AssistRecord(id: r.id, appliedAt: r.appliedAt, request: r.request, changes: r.changes, undoneAt: DateTime.now());
+      return;
+    }
+  }
   @override
   Future<String> uploadBookingAsset(String storeId, String kind, Uint8List bytes, String contentType) async {
     final path = newBookingAssetPath(storeId.length == 36 ? storeId : '00000000-0000-4000-8000-000000000000', kind,
