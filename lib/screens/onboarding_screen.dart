@@ -11,6 +11,7 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import 'booking_page_screen.dart';
 import 'members_screen.dart';
+import 'onboarding_action_bar.dart';
 import 'reservations_screen.dart';
 
 /// 開店精靈（公版，ops 0155）：新店建好之後，一步一步把線上訂位設好。
@@ -664,44 +665,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       _ when last => ('完成', () => Navigator.of(context).pop()),
       _ => ('下一步', () => _go(_step + 1)),
     };
-    return Container(
-      decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: AppColors.line)),
-      ),
-      padding: const EdgeInsets.fromLTRB(12, 10, 16, 10),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 560),
-          child: Row(
-            children: [
-              if (_step > 0)
-                TextButton.icon(
-                  onPressed: _busy ? null : () => _go(_step - 1),
-                  icon: const Icon(Icons.chevron_left),
-                  label: const Text('上一步'),
-                ),
-              const Spacer(),
-              if (!last && !(_step <= 1 && s.booking))
-                TextButton(
-                  onPressed: _busy ? null : () => _go(_step + 1),
-                  child: const Text('先略過'),
-                ),
-              const SizedBox(width: 8),
-              FilledButton(
-                onPressed: _busy ? null : onTap,
-                style: FilledButton.styleFrom(minimumSize: const Size(120, 48)),
-                child: _busy
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Text(label),
-              ),
-            ],
-          ),
-        ),
-      ),
+    return OnboardingActionBar(
+      label: label,
+      onPrimary: onTap,
+      busy: _busy,
+      showBack: _step > 0,
+      onBack: () => _go(_step - 1),
+      showSkip: !last && !(_step <= 1 && s.booking),
+      onSkip: () => _go(_step + 1),
     );
   }
 }
