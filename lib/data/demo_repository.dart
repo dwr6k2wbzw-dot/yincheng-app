@@ -3017,6 +3017,57 @@ class DemoRepository implements Repository {
   @override
   Future<void> clearStoreAi(String storeId) async => _storeAi.remove(storeId);
 
+  // 0160：店家自己的 LINE 官方帳號（示範：token 含 bad＝LINE 說不能用；secret 全是 0＝secret 不對）
+  final Map<String, StoreLineStatus> _storeLine = {};
+  @override
+  Future<StoreLineStatus> storeLineStatus(String storeId) async =>
+      _storeLine[storeId] ??
+      StoreLineStatus(connected: false, groupBound: await lineGroupBound(storeId), groupVia: await lineGroupBound(storeId) ? 'platform' : null);
+  @override
+  Future<StoreLineResult> saveStoreLine(String storeId, String secret, String token) async {
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    final problem = storeLineSecretProblem(secret) ?? storeLineTokenProblem(token);
+    if (problem != null) return StoreLineResult.fail(problem);
+    if (token.contains('bad')) {
+      return const StoreLineResult.fail('LINE 的 Channel access token 無效或已經被撤銷，請到 LINE Developers 重新發一組再貼上');
+    }
+    final s = secret.trim(), t = token.trim();
+    final secretWrong = RegExp(r'^0+$').hasMatch(s);
+    const path = '/functions/v1/line-notify?k=3f9a1c0d5e7b2a4c6d8e0f1a2b3c4d5e';
+    _storeLine[storeId] = StoreLineStatus(
+      connected: true,
+      botName: '示範小館通知',
+      basicId: '@demo1234',
+      secretLast4: s.substring(s.length - 4),
+      tokenLast4: t.substring(t.length - 4),
+      verifiedAt: secretWrong ? null : DateTime.now(),
+      lastError: secretWrong ? 'Channel secret 不對，請到 LINE Developers 的 Basic settings 重新複製' : null,
+      webhookPath: path,
+    );
+    return StoreLineResult.ok(
+      verified: !secretWrong,
+      webhookSet: true,
+      webhookUrl: 'https://demo.supabase.co$path',
+      warning: secretWrong ? 'Channel secret 不對，請到 LINE Developers 的 Basic settings 重新複製' : null,
+    );
+  }
+
+  @override
+  Future<StoreLineResult> testStoreLine(String storeId) async {
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    final s = _storeLine[storeId];
+    if (s == null || !s.connected) return const StoreLineResult.fail('這家店還沒有接上自己的 LINE 官方帳號');
+    if (s.lastError != null) return StoreLineResult.fail(s.lastError);
+    _storeLine[storeId] = StoreLineStatus(
+      connected: true, botName: s.botName, basicId: s.basicId, secretLast4: s.secretLast4, tokenLast4: s.tokenLast4,
+      verifiedAt: DateTime.now(), webhookPath: s.webhookPath, groupBound: s.groupBound, groupVia: s.groupVia,
+    );
+    return const StoreLineResult.ok();
+  }
+
+  @override
+  Future<void> clearStoreLine(String storeId) async => _storeLine.remove(storeId);
+
   @override
   Future<List<PlatformWish>> platformWishes(String storeId) async => [
     ..._wishesOf(storeId),

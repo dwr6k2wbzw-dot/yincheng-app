@@ -2202,6 +2202,47 @@ class SupabaseRepository implements Repository {
   }
 
   @override
+  Future<StoreLineStatus> storeLineStatus(String storeId) async {
+    final r = await _db.rpc('store_line_status', params: {'p_store': storeId});
+    return r is Map ? StoreLineStatus.fromJson(Map<String, dynamic>.from(r)) : StoreLineStatus.none;
+  }
+
+  Future<StoreLineResult> _storeLineKey(Map<String, dynamic> body) async {
+    try {
+      final r = await _db.functions.invoke('store-line-key', body: body);
+      final d = r.data;
+      if (d is Map && d['ok'] == true) {
+        return StoreLineResult.ok(
+          verified: d['verified'] != false,
+          webhookSet: d['webhook_set'] != false,
+          webhookUrl: d['webhook_url'] as String?,
+          warning: d['warning'] as String?,
+        );
+      }
+      return StoreLineResult.fail(d is Map && d['error'] is String ? d['error'] as String : '驗證失敗，請稍後再試');
+    } on FunctionException catch (e) {
+      final d = e.details;
+      return StoreLineResult.fail(d is Map && d['error'] is String
+          ? d['error'] as String
+          : e.status == 404
+              ? 'LINE 設定還沒開通，請稍後再試'
+              : '暫時連不上，請稍後再試');
+    }
+  }
+
+  @override
+  Future<StoreLineResult> saveStoreLine(String storeId, String secret, String token) =>
+      _storeLineKey({'op': 'save', 'store_id': storeId, 'secret': secret.trim(), 'token': token.trim()});
+
+  @override
+  Future<StoreLineResult> testStoreLine(String storeId) => _storeLineKey({'op': 'test', 'store_id': storeId});
+
+  @override
+  Future<void> clearStoreLine(String storeId) async {
+    await _db.rpc('store_line_clear', params: {'p_store': storeId});
+  }
+
+  @override
   Future<String> uploadBookingAsset(String storeId, String kind, Uint8List bytes, String contentType) async {
     final ext = switch (contentType) { 'image/png' => 'png', 'image/webp' => 'webp', _ => 'jpg' };
     final path = newBookingAssetPath(storeId, kind, ext);

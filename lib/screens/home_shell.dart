@@ -12,6 +12,7 @@ import 'change_requests_screen.dart';
 import 'platform_admin_wishes_screen.dart';
 import 'platform_wishes_screen.dart';
 import 'store_ai_screen.dart';
+import 'store_line_screen.dart';
 import 'create_store_screen.dart';
 import 'dashboard_screen.dart';
 import 'members_screen.dart';
@@ -193,6 +194,10 @@ class _HomeShellState extends State<HomeShell> with SingleTickerProviderStateMix
                 Navigator.of(context).push(MaterialPageRoute(builder: (_) => StoreAiScreen(membership: m)));
                 return;
               }
+              if (v == 'line') {
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => StoreLineScreen(membership: m)));
+                return;
+              }
               if (v == 'code') {
                 enterInviteCode(context);
                 return;
@@ -239,6 +244,8 @@ class _HomeShellState extends State<HomeShell> with SingleTickerProviderStateMix
               // AI 設定（ops 0157）：公版那一份才有，只有老闆；接上店家自己的 Claude／OpenAI／Gemini
               if (AppConfig.selfSignup && m.role == Role.owner)
                 const PopupMenuItem(value: 'ai', child: ListTile(leading: Icon(Icons.memory_outlined), title: Text('AI 設定'))),
+              if (AppConfig.selfSignup && m.role == Role.owner)
+                const PopupMenuItem(value: 'line', child: ListTile(leading: Icon(Icons.forum_outlined), title: Text('LINE 官方帳號'))),
               const PopupMenuItem(value: 'code', child: ListTile(leading: Icon(Icons.key_outlined), title: Text('輸入邀請碼'))),
               const PopupMenuItem(value: 'speed', child: ListTile(leading: Icon(Icons.speed), title: Text('載入速度'))),
               const PopupMenuItem(value: 'logout', child: ListTile(leading: Icon(Icons.logout), title: Text('登出'))),

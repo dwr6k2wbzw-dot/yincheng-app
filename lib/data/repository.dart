@@ -16,6 +16,7 @@ import 'reservation_models.dart';
 import 'shift_links.dart';
 import 'shift_planner.dart';
 import 'store_ai.dart';
+import 'store_line.dart';
 export 'attendance_models.dart';
 export 'booking_assist.dart';
 export 'change_request_models.dart';
@@ -25,6 +26,7 @@ export 'platform_wish.dart';
 export 'reservation_models.dart';
 export 'shift_planner.dart';
 export 'store_ai.dart';
+export 'store_line.dart';
 
 /// App 與資料來源之間的介面。正式使用 SupabaseRepository；示範模式使用 DemoRepository。
 abstract class Repository {
@@ -374,6 +376,15 @@ abstract class Repository {
   Future<StoreAiResult> testStoreAi(String storeId);
   /// 清除，改回用平台內建的 AI
   Future<void> clearStoreAi(String storeId);
+  // 店家接自己的 LINE 官方帳號（ops 0160，公版；只有老闆）：金鑰存進加密保管庫，App 只拿得到末 4 碼
+  /// 目前的狀態（還沒接上回 StoreLineStatus.none）
+  Future<StoreLineStatus> storeLineStatus(String storeId);
+  /// 先用 access token 打 LINE 確認能用才存，再試著設好 Webhook、請 LINE 測試
+  Future<StoreLineResult> saveStoreLine(String storeId, String secret, String token);
+  /// 用已存的金鑰再驗證一次
+  Future<StoreLineResult> testStoreLine(String storeId);
+  /// 清除（透過這個帳號綁的群組一起拿掉）
+  Future<void> clearStoreLine(String storeId);
   Future<List<Reservation>> reservations(String storeId, DateTime from, DateTime to);
   Future<void> addReservation(String storeId,
       {required DateTime date, required String time, required int party, required String name, required String phone, String? email, String? note, List<String> tableIds = const []});
