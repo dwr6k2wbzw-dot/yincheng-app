@@ -5,6 +5,7 @@ import 'attendance_models.dart';
 import 'change_request_models.dart';
 import 'booking_profile.dart';
 import 'booking_assist.dart';
+import 'booking_import.dart';
 import 'models.dart';
 import 'payroll.dart';
 import 'platform_wish.dart';
@@ -309,6 +310,15 @@ abstract class Repository {
   Future<List<AssistRecord>> bookingAssistHistory(String storeId);
   /// 整筆改回去（之後又被改過的不能改回去）
   Future<void> undoBookingAssist(String id);
+  // 訂位搬家（ops 0148；老闆、店長）：先預覽（資料庫檢查每一列、不寫入），沒問題再匯入；每一批可以整批復原
+  Future<ImportResult> previewReservationImport(String storeId, List<ImportRow> rows);
+  /// [requestId]：同一個檔案按兩次只匯一次
+  Future<ImportResult> importReservations(String storeId, List<ImportRow> rows, String? fileName, String requestId);
+  Future<List<ImportBatch>> reservationImports(String storeId);
+  /// 回取消了幾筆（已經到店、未到、過去的不動）
+  Future<int> undoReservationImport(String batchId);
+  /// 匯出用：這家店全部的訂位（含已取消、隱藏的）
+  Future<List<Reservation>> allReservations(String storeId);
   // 許願單（ops 0149，公版；只有老闆、店長）：寫一則送到平台待辦，平台回覆狀態和說明
   /// 這家店的許願單（新的在前）
   Future<List<PlatformWish>> platformWishes(String storeId);

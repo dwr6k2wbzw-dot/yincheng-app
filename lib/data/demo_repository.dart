@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'booking_import.dart';
 import 'booking_profile.dart';
 import 'models.dart';
 import 'person_names.dart';
@@ -1477,6 +1478,135 @@ class DemoRepository implements Repository {
   }
   @override
   Future<void> deleteBookingAsset(String path) async => demoBookingAssets.remove(path);
+  // 訂位搬家（ops 0148）：照資料庫的規則簡單模擬
+  final _demoImports = <String, List<ImportBatch>>{};
+  final _demoImportReq = <String, String>{};
+
+  ImportResult _demoImportCheck(String storeId, List<ImportRow> rows, {String? batchId}) {
+    final n = DateTime.now().subtract(const Duration(hours: 6));
+    final today = DateTime(n.year, n.month, n.day);
+    final errors = <Map<String, dynamic>>[], skipped = <Map<String, dynamic>>[], ok = <(ImportRow, DateTime)>[];
+    final seen = <String>{};
+    final existing = _demoRes[storeId] ??= _seedReservations(storeId);
+    String nameKey(String v) => v.replaceAll(RegExp(r'\s+'), '').toLowerCase();
+    for (var i = 0; i < rows.length; i++) {
+      final r = rows[i];
+      String? msg;
+      final d = DateTime.tryParse(r.date);
+      if (r.date.isEmpty) {
+        msg = '沒有日期';
+      } else if (d == null || !RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(r.date)) {
+        msg = '日期看不懂（請寫成 2026-12-24）';
+      } else if (d.isBefore(today)) {
+        msg = '日期已經過了（只能匯入今天以後的訂位）';
+      } else if (d.isAfter(today.add(const Duration(days: 366)))) {
+        msg = '日期超過一年以後';
+      } else if (r.time.isEmpty) {
+        msg = '沒有時間';
+      } else if (!RegExp(r'^([01]\d|2[0-3]):[0-5]\d$').hasMatch(r.time)) {
+        msg = '時間看不懂（請寫成 19:30）';
+      } else if ((int.tryParse(r.party) ?? 0) < 1 || int.parse(r.party) > 9999) {
+        msg = '人數要是 1～9999 的整數';
+      } else if (r.name.trim().isEmpty) {
+        msg = '沒有姓名';
+      } else if (r.name.trim().length > 40) {
+        msg = '姓名超過 40 個字';
+      } else if (r.phone.isNotEmpty && !RegExp(r'^[0-9+() -]{8,20}$').hasMatch(r.phone)) {
+        msg = '電話格式不對（8～20 個數字，可以有 + ( ) - 空白）';
+      } else if (r.email.isNotEmpty && !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(r.email)) {
+        msg = 'Email 格式不對';
+      } else if (r.note.length > 200) {
+        msg = '備註超過 200 個字';
+      } else if (r.lang.isNotEmpty && !['zh', 'en', 'ja'].contains(r.lang)) {
+        msg = '語言只能是 zh、en、ja';
+      }
+      if (msg != null) {
+        errors.add({'row': i + 1, 'message': msg});
+        continue;
+      }
+      final digits = phoneDigitsOf(r.phone);
+      final key = '${r.date} ${r.time} ${digits.isNotEmpty ? 'p:$digits' : 'n:${nameKey(r.name)}'}';
+      if (!seen.add(key)) {
+        skipped.add({'row': i + 1, 'reason': '檔案裡前面已經有同一筆'});
+        continue;
+      }
+      final dup = existing.any((x) =>
+          x.date == d && x.time == r.time && (x.status == 'confirmed' || x.status == 'arrived') &&
+          (digits.isNotEmpty ? phoneDigitsOf(x.phone) == digits : x.phone.isEmpty && nameKey(x.name) == nameKey(r.name)));
+      if (dup) {
+        skipped.add({'row': i + 1, 'reason': '這個時間已經有這位客人的訂位'});
+        continue;
+      }
+      ok.add((r, d!));
+    }
+    if (batchId == null || errors.isNotEmpty || ok.isEmpty) {
+      return ImportResult.fromJson({'ready': ok.length, 'errors': errors, 'skipped': skipped}, rows);
+    }
+    for (final (r, d) in ok) {
+      existing.add(Reservation(
+        id: '$storeId-imp${existing.length}', date: d, time: r.time, party: int.parse(r.party), name: r.name.trim(),
+        phone: r.phone, email: r.email.isEmpty ? null : r.email, note: r.note.isEmpty ? null : r.note,
+        status: 'confirmed', source: 'app', createdAt: DateTime.now(), lang: r.lang.isEmpty ? 'zh' : r.lang, importBatchId: batchId,
+      ));
+    }
+    return ImportResult.fromJson({'batch': batchId, 'inserted': ok.length, 'errors': errors, 'skipped': skipped}, rows);
+  }
+
+  @override
+  Future<ImportResult> previewReservationImport(String storeId, List<ImportRow> rows) async {
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    if (rows.length > 2000) throw Exception('一次最多匯入 2000 筆，請分成幾個檔案');
+    return _demoImportCheck(storeId, rows);
+  }
+
+  @override
+  Future<ImportResult> importReservations(String storeId, List<ImportRow> rows, String? fileName, String requestId) async {
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    final prev = _demoImportReq[requestId];
+    if (prev != null) {
+      final b = _demoImports[storeId]!.firstWhere((x) => x.id == prev);
+      return ImportResult(batchId: b.id, inserted: b.inserted, repeat: true);
+    }
+    final id = 'demo-batch-${DateTime.now().microsecondsSinceEpoch}';
+    final res = _demoImportCheck(storeId, rows, batchId: id);
+    if (res.batchId == null) return res;
+    _demoImportReq[requestId] = id;
+    (_demoImports[storeId] ??= []).insert(0, ImportBatch(
+      id: id, createdAt: DateTime.now(), fileName: fileName, total: rows.length, inserted: res.inserted, skipped: res.skipped.length));
+    return res;
+  }
+
+  @override
+  Future<List<ImportBatch>> reservationImports(String storeId) async => [...?_demoImports[storeId]];
+
+  @override
+  Future<int> undoReservationImport(String batchId) async {
+    final n = DateTime.now().subtract(const Duration(hours: 6));
+    final today = DateTime(n.year, n.month, n.day);
+    for (final e in _demoImports.entries) {
+      final i = e.value.indexWhere((b) => b.id == batchId);
+      if (i < 0) continue;
+      final b = e.value[i];
+      if (b.undoneAt != null) throw Exception('這一批已經復原過了');
+      var count = 0;
+      final list = _demoRes[e.key] ?? [];
+      for (var k = 0; k < list.length; k++) {
+        final r = list[k];
+        if (r.importBatchId == batchId && r.status == 'confirmed' && !r.date.isBefore(today)) {
+          list[k] = r.copyWith(status: 'cancelled', hiddenAt: DateTime.now());
+          count++;
+        }
+      }
+      e.value[i] = ImportBatch(id: b.id, createdAt: b.createdAt, fileName: b.fileName, total: b.total, inserted: b.inserted,
+          skipped: b.skipped, undoneAt: DateTime.now(), undoneCount: count);
+      return count;
+    }
+    throw Exception('找不到這一批匯入，或你沒有權限');
+  }
+
+  @override
+  Future<List<Reservation>> allReservations(String storeId) async => [...(_demoRes[storeId] ??= _seedReservations(storeId))];
+
   @override
   Future<List<Reservation>> reservations(String storeId, DateTime from, DateTime to) async =>
       (_demoRes[storeId] ??= _seedReservations(storeId)).where((r) => !r.date.isBefore(from) && !r.date.isAfter(to)).toList();

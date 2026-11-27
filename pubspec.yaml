@@ -16,6 +16,7 @@ dependencies:
   uuid: ^4.4.0
   shared_preferences: ^2.2.3
   excel: ^4.0.6  # 匯出損益表（.xlsx）
+  archive: any  # 跟著 excel 的版本；讀 .xlsx 公式格的快取值（訂位搬家）
   qr_flutter: ^4.1.0
   mobile_scanner: ^7.5.0
 

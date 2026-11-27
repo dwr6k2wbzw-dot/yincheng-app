@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide toDouble;
 
 import '../config.dart';
+import 'booking_import.dart';
 import 'booking_profile.dart';
 import 'models.dart';
 import 'purchase_items_math.dart';
@@ -1932,6 +1933,68 @@ class SupabaseRepository implements Repository {
   @override
   Future<void> undoBookingAssist(String id) async {
     await _db.rpc('booking_assist_undo', params: {'p_id': id});
+  }
+
+  Future<ImportResult> _reservationImport(String storeId, List<ImportRow> rows, String? fileName, String? requestId, bool dry) async {
+    final r = await _db.rpc('reservation_import', params: {
+      'p_store': storeId,
+      'p_rows': [for (final x in rows) x.toJson()],
+      'p_file': fileName,
+      'p_request': requestId,
+      'p_dry_run': dry,
+    });
+    return ImportResult.fromJson(Map<String, dynamic>.from(r as Map), rows);
+  }
+
+  @override
+  Future<ImportResult> previewReservationImport(String storeId, List<ImportRow> rows) =>
+      _reservationImport(storeId, rows, null, null, true);
+
+  @override
+  Future<ImportResult> importReservations(String storeId, List<ImportRow> rows, String? fileName, String requestId) =>
+      _reservationImport(storeId, rows, fileName, requestId, false);
+
+  @override
+  Future<List<ImportBatch>> reservationImports(String storeId) async {
+    final rows = await _db
+        .from('reservation_imports')
+        .select('id, created_at, file_name, total_rows, inserted, skipped, undone_at, undone_count')
+        .eq('store_id', storeId)
+        .order('created_at', ascending: false)
+        .limit(50);
+    return [for (final r in rows) ImportBatch.fromRow(r)];
+  }
+
+  @override
+  Future<int> undoReservationImport(String batchId) async {
+    final r = await _db.rpc('reservation_import_undo', params: {'p_batch': batchId});
+    return ((r as Map)['cancelled'] as num?)?.toInt() ?? 0;
+  }
+
+  @override
+  Future<List<Reservation>> allReservations(String storeId) async {
+    const cols = 'id, slot_date, slot_time, party_size, guest_name, phone, email, note, status, source, email_error, created_at, '
+        'requested_party, party_request_status, lang, table_ids, seated_at, cleared_at, walk_in, hidden_at, ref';
+    // 資料庫還沒有 0148 時讀不到 import_batch_id：拿掉再讀一次
+    var select = '$cols, import_batch_id';
+    final out = <Reservation>[];
+    const page = 1000;
+    for (var from = 0;; from += page) {
+      List<Map<String, dynamic>> rows;
+      try {
+        rows = await _db.from('reservations').select(select).eq('store_id', storeId)
+            .order('slot_date').order('slot_time').order('id').range(from, from + page - 1);
+      } on PostgrestException catch (e) {
+        if (from == 0 && select != cols && e.code == '42703') {
+          select = cols;
+          from -= page;
+          continue;
+        }
+        rethrow;
+      }
+      out.addAll(rows.map(Reservation.fromRow));
+      if (rows.length < page) return out;
+    }
   }
 
   @override
