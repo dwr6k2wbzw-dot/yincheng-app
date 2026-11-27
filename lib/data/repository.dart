@@ -13,6 +13,7 @@ import 'purchase_items_math.dart';
 import 'reservation_models.dart';
 import 'shift_links.dart';
 import 'shift_planner.dart';
+import 'store_ai.dart';
 export 'attendance_models.dart';
 export 'booking_assist.dart';
 export 'change_request_models.dart';
@@ -20,6 +21,7 @@ export 'payroll.dart';
 export 'platform_wish.dart';
 export 'reservation_models.dart';
 export 'shift_planner.dart';
+export 'store_ai.dart';
 
 /// App 與資料來源之間的介面。正式使用 SupabaseRepository；示範模式使用 DemoRepository。
 abstract class Repository {
@@ -324,6 +326,15 @@ abstract class Repository {
   Future<List<PlatformWish>> platformWishes(String storeId);
   /// 寫一則（每家店每個月最多 20 則），回傳 id
   Future<String> createPlatformWish(String storeId, String title, String body);
+  // 店家接自己的 AI（ops 0157，公版；只有老闆）：金鑰存進加密保管庫，App 只拿得到末 4 碼
+  /// 這家店目前的設定；null＝用平台內建的 AI
+  Future<StoreAiSetting?> storeAiSetting(String storeId);
+  /// 先用這把金鑰實際打一次 AI，成功才存
+  Future<StoreAiResult> saveStoreAi(String storeId, StoreAiProvider provider, String model, String key);
+  /// 用已存的金鑰再測一次
+  Future<StoreAiResult> testStoreAi(String storeId);
+  /// 清除，改回用平台內建的 AI
+  Future<void> clearStoreAi(String storeId);
   Future<List<Reservation>> reservations(String storeId, DateTime from, DateTime to);
   Future<void> addReservation(String storeId,
       {required DateTime date, required String time, required int party, required String name, required String phone, String? email, String? note, List<String> tableIds = const []});
