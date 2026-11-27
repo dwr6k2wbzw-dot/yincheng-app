@@ -17,8 +17,11 @@
   var p = (window.YC_PRE || {})[s];
   if (!p || !p.hero_url) return;
   var l = document.createElement('link');
-  // 版本號只加在內建的圖上（同 common.js 的 YC.asset）
-  l.rel = 'preload'; l.as = 'image'; l.href = p.hero_url + (window.YC_V && /^[a-z0-9][a-z0-9-]*\.(png|jpe?g|webp)$/.test(p.hero_url) ? '?v=' + window.YC_V : ''); l.fetchPriority = 'high';
+  // 網址算法同 common.js 的 YC.asset（這時 common.js 還沒載入）：版本號只加在內建的圖上，上傳的圖用公開檔案區的網址
+  var up = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/hero-[a-z0-9]{6,40}\.(png|jpe?g|webp)$/.test(p.hero_url);
+  l.rel = 'preload'; l.as = 'image'; l.fetchPriority = 'high';
+  l.href = up ? 'https://yfulcyeoqavqarpfnznw.supabase.co/storage/v1/object/public/booking-assets/' + p.hero_url
+              : p.hero_url + (window.YC_V && /^[a-z0-9][a-z0-9-]*\.(png|jpe?g|webp)$/.test(p.hero_url) ? '?v=' + window.YC_V : '');
   document.head.appendChild(l);
 })();
 </script>

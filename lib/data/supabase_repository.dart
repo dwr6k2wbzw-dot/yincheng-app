@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide toDouble;
 
 import '../config.dart';
+import 'booking_profile.dart';
 import 'models.dart';
 import 'purchase_items_math.dart';
 import 'row_cache.dart';
@@ -1824,6 +1825,37 @@ class SupabaseRepository implements Repository {
   Future<void> saveReservationSettings(String storeId, Map<String, dynamic> values) async {
     final rows = await _db.from('reservation_settings').update(values).eq('store_id', storeId).select('store_id');
     if (rows.isEmpty) throw Exception('message: 只有老闆可以修改訂位設定,');
+  }
+
+  @override
+  Future<BookingProfile?> bookingProfile(String storeId) async {
+    final r = await _db.from('booking_profiles').select().eq('store_id', storeId).maybeSingle();
+    return r == null ? null : BookingProfile.fromRow(r);
+  }
+
+  @override
+  Future<void> saveBookingProfile(String storeId, BookingProfile p) async {
+    // 老闆才寫得進去（RLS）；寫不進去時 upsert 會丟錯，不會靜靜地沒存到
+    final rows = await _db.from('booking_profiles').upsert({'store_id': storeId, ...p.toRow()}, onConflict: 'store_id').select('store_id');
+    if (rows.isEmpty) throw Exception('message: 只有老闆可以修改訂位頁,');
+  }
+
+  @override
+  Future<String> uploadBookingAsset(String storeId, String kind, Uint8List bytes, String contentType) async {
+    final ext = switch (contentType) { 'image/png' => 'png', 'image/webp' => 'webp', _ => 'jpg' };
+    final path = newBookingAssetPath(storeId, kind, ext);
+    await _db.storage.from('booking-assets').uploadBinary(path, bytes,
+        fileOptions: FileOptions(contentType: contentType, upsert: false, cacheControl: '31536000'));
+    return path;
+  }
+
+  @override
+  Future<void> deleteBookingAsset(String path) async {
+    try {
+      await _db.storage.from('booking-assets').remove([path]);
+    } catch (_) {
+      // 刪不掉（例如還在用、沒網路）就留著；每家店最多 30 張
+    }
   }
 
   @override

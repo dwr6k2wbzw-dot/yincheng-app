@@ -14,6 +14,7 @@ import '../services/open_external.dart';
 import '../theme.dart';
 import '../widgets/auto_refresh.dart';
 import '../widgets/common.dart';
+import 'booking_page_screen.dart';
 import 'reservation_floor.dart';
 import 'reservation_timeline.dart';
 
@@ -1563,6 +1564,21 @@ class _ReservationSettingsScreenState extends State<ReservationSettingsScreen> {
             onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => SpecialDaysScreen(membership: widget.membership))),
             icon: const Icon(Icons.event_busy_outlined),
             label: const Text('特殊日期（公休、包場、改名額）'),
+          ),
+          const SizedBox(height: 8),
+          // 公版階段 2 第 3 步：訂位頁的 logo、封面照、介紹、低消、資訊卡、姊妹店（只有老闆，跟這個畫面一樣）
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => BookingPageScreen(
+                      membership: widget.membership,
+                      settings: widget.settings,
+                      sisterChoices: [
+                        for (final m in AppScope.of(context).memberships)
+                          if (m.role == Role.owner && m.storeId != widget.membership.storeId) m,
+                      ],
+                    ))),
+            icon: const Icon(Icons.palette_outlined),
+            label: const Text('訂位頁的樣子（logo、封面照、介紹、低消）'),
           ),
           const SizedBox(height: 16),
           TextField(
