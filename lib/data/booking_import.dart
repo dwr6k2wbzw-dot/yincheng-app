@@ -3,6 +3,9 @@
 /// 對不對（日期過了沒、電話格式…）一律由資料庫的 reservation_import 檢查，App 不重複判斷。
 library;
 
+import 'dart:convert';
+import 'dart:typed_data';
+
 /// 範本的欄位（順序就是範本的順序）
 const importColumns = ['日期', '時間', '人數', '姓名', '電話', 'Email', '備註', '語言'];
 
@@ -16,6 +19,19 @@ const _headerAliases = <String, List<String>>{
   'email': ['email', 'e-mail', '信箱', '電子郵件'],
   'note': ['備註', '需求', '特殊需求', 'note', 'notes', 'memo', 'remark'],
   'lang': ['語言', 'lang', 'language'],
+  'status': ['狀態', '訂位狀態', 'status', 'state'],
+};
+
+/// 狀態欄：這些算「有效訂位」→ 匯入（空白也是）
+const _activeStatus = {
+  '已確認', '確認', '已成立', '成立', '有效', '預約', '已預約', '訂位成功', '待到店', '未到店', '保留',
+  'confirmed', 'confirm', 'booked', 'reserved', 'active', 'ok', 'pending', 'upcoming',
+};
+
+/// 狀態欄：這些不是有效訂位 → 那一列略過（自己 App 匯出的「已取消、未到、已到店」也在這裡）
+const _inactiveStatus = {
+  '已取消', '取消', '客人取消', '店家取消', '未到', '沒來', '放鳥', '已到店', '到店', '已入座', '入座', '已完成', '完成', '已結帳',
+  'cancelled', 'canceled', 'cancel', 'noshow', 'no_show', 'no-show', 'arrived', 'seated', 'completed', 'done', 'finished',
 };
 
 String _norm(String s) => s.replaceAll(RegExp(r'\s+'), '').toLowerCase();
@@ -52,7 +68,11 @@ class ImportRow {
 class ImportTable {
   final List<ImportRow> rows;
   final String? problem;
-  const ImportTable(this.rows, [this.problem]);
+  /// 狀態欄是已取消、未到、已到店的列（不送資料庫）
+  final List<ImportIssue> skipped;
+  /// 狀態欄看不懂的列（不能匯入）
+  final List<ImportIssue> errors;
+  const ImportTable(this.rows, [this.problem, this.skipped = const [], this.errors = const []]);
 }
 
 /// 第一個有「日期」「姓名」的列當表頭（前面幾列可以是標題、說明）；表頭之後的空白列跳過。
@@ -95,9 +115,19 @@ ImportTable readImportTable(List<List<String>> cells) {
   }
 
   final rows = <ImportRow>[];
+  final skipped = <ImportIssue>[], errors = <ImportIssue>[];
   for (var i = head + 1; i < cells.length; i++) {
     final r = cells[i];
     if (r.every((v) => v.trim().isEmpty)) continue;
+    final status = at(r, 'status'), st = _norm(status);
+    if (st.isNotEmpty && !_activeStatus.contains(st)) {
+      if (_inactiveStatus.contains(st)) {
+        skipped.add(ImportIssue(i + 1, '狀態是$status'));
+      } else {
+        errors.add(ImportIssue(i + 1, '看不懂的狀態「$status」（有效的寫已確認或空白；已取消、未到、已到店的會略過）'));
+      }
+      continue;
+    }
     rows.add(ImportRow(
       line: i + 1,
       date: normDate(at(r, 'date')),
@@ -110,8 +140,19 @@ ImportTable readImportTable(List<List<String>> cells) {
       lang: normLang(at(r, 'lang')),
     ));
   }
-  if (rows.isEmpty) return const ImportTable([], '表頭下面沒有任何訂位');
-  return ImportTable(rows);
+  if (rows.isEmpty && skipped.isEmpty && errors.isEmpty) {
+    return const ImportTable([], '表頭下面沒有任何訂位');
+  }
+  return ImportTable(rows, null, skipped, errors);
+}
+
+/// CSV 一律用 UTF-8 讀；解不開（多半是 Excel 存的 Big5）就請人另存，不要讀成亂碼
+String decodeCsvBytes(Uint8List bytes) {
+  try {
+    return utf8.decode(bytes);
+  } on FormatException {
+    throw const FormatException('這個 CSV 不是 UTF-8 編碼（可能是 Big5），請在 Excel 另存成「CSV UTF-8」或直接存成 .xlsx 再選一次');
+  }
 }
 
 String _two(int n) => n.toString().padLeft(2, '0');
@@ -240,6 +281,19 @@ class ImportResult {
     this.skipped = const [],
     this.repeat = false,
   });
+
+  /// 加上 App 讀檔時就略過、看不懂的列（狀態欄），照列號排好
+  ImportResult withLocal(List<ImportIssue> localSkipped, List<ImportIssue> localErrors) {
+    int byLine(ImportIssue a, ImportIssue b) => a.line.compareTo(b.line);
+    return ImportResult(
+      batchId: batchId,
+      inserted: inserted,
+      ready: ready,
+      errors: [...localErrors, ...errors]..sort(byLine),
+      skipped: [...localSkipped, ...skipped]..sort(byLine),
+      repeat: repeat,
+    );
+  }
 
   /// rows：送出去的那些列（資料庫回的 row 是第幾個，從 1 開始；換成檔案裡的列號）
   factory ImportResult.fromJson(Map<String, dynamic> j, List<ImportRow> rows) {

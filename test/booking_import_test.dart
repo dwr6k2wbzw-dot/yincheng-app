@@ -125,12 +125,69 @@ void main() {
     });
   });
 
+  group('狀態欄', () {
+    test('有效的匯入；已取消、未到、已到店略過；看不懂的列成問題；列號照檔案', () {
+      final t = readImportTable([
+        ['日期', '時間', '人數', '姓名', '狀態'],
+        ['2026-12-24', '19:00', '2', '甲', ''],
+        ['2026-12-24', '19:00', '2', '乙', '已確認'],
+        ['2026-12-24', '19:00', '2', '丙', 'Booked'],
+        ['2026-12-24', '19:00', '2', '丁', '已取消'],
+        ['2026-12-24', '19:00', '2', '戊', 'no_show'],
+        ['2026-12-24', '19:00', '2', '己', 'Arrived'],
+        ['2026-12-24', '19:00', '2', '庚', '改期中'],
+      ]);
+      expect(t.problem, isNull);
+      expect([for (final r in t.rows) r.name], ['甲', '乙', '丙']);
+      expect([for (final e in t.skipped) '${e.line} ${e.text}'], ['5 狀態是已取消', '6 狀態是no_show', '7 狀態是Arrived']);
+      expect(t.errors.single.line, 8);
+      expect(t.errors.single.text, startsWith('看不懂的狀態「改期中」'));
+    });
+    test('全部都是已取消：不是「沒有任何訂位」，而是全部略過', () {
+      final t = readImportTable([
+        ['日期', '時間', '人數', '姓名', 'Status'],
+        ['2026-12-24', '19:00', '2', '甲', 'cancelled'],
+      ]);
+      expect(t.problem, isNull);
+      expect(t.rows, isEmpty);
+      expect(t.skipped.single.line, 2);
+    });
+    test('自己 App 匯出的檔案匯回來：已取消、未到、已到店都略過，只留已確認', () {
+      Reservation r(String id, String status) => Reservation(
+          id: id, date: DateTime(2026, 12, 24), time: '19:00', party: 2, name: id, phone: '',
+          status: status, source: 'app', createdAt: DateTime(2026, 11, 1));
+      final x = readXlsxCells(buildReservationsXlsx('隱城', [
+        r('甲', 'confirmed'),
+        r('乙', 'cancelled'),
+        r('丙', 'no_show'),
+        r('丁', 'arrived'),
+      ]));
+      final t = readImportTable(x.cells);
+      expect([for (final r in t.rows) r.name], ['甲']);
+      expect([for (final e in t.skipped) e.text], ['狀態是已取消', '狀態是未到', '狀態是已到店']);
+      expect(t.errors, isEmpty);
+    });
+    test('預覽結果加上讀檔時分出來的列，照列號排', () {
+      const db = ImportResult(ready: 1, skipped: [ImportIssue(9, '這個時間已經有這位客人的訂位')], errors: [ImportIssue(4, '沒有日期')]);
+      final m = db.withLocal([const ImportIssue(3, '狀態是已取消')], [const ImportIssue(12, '看不懂的狀態')]);
+      expect([for (final e in m.skipped) e.line], [3, 9]);
+      expect([for (final e in m.errors) e.line], [4, 12]);
+      expect(m.ready, 1);
+    });
+  });
+
   group('CSV', () {
     test('BOM、引號、逗號、換行、雙引號', () {
       final rows =
           parseCsv('﻿日期,姓名,備註\r\n2026-12-24,"王, 先生","說""要""靠窗\n兩行"\r\n');
       expect(rows.length, 2);
       expect(rows[1], ['2026-12-24', '王, 先生', '說"要"靠窗\n兩行']);
+    });
+    test('不是 UTF-8（Big5）：不讀成亂碼，請人另存', () {
+      // 「中文」的 Big5
+      expect(() => decodeCsvBytes(Uint8List.fromList([0xA4, 0xA4, 0xA4, 0xE5])),
+          throwsA(isA<FormatException>().having((e) => e.message, 'message', contains('不是 UTF-8 編碼（可能是 Big5）'))));
+      expect(decodeCsvBytes(Uint8List.fromList(utf8.encode('日期,姓名'))), '日期,姓名');
     });
     test('分號分隔', () {
       expect(parseCsv('日期;姓名\n2026-12-24;王')[1], ['2026-12-24', '王']);

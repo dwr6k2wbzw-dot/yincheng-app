@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
@@ -29,6 +27,8 @@ class _BookingImportScreenState extends State<BookingImportScreen> {
   List<ImportRow> _rows = const [];
   String _requestId = const Uuid().v4();
   ImportResult? _preview;
+  // 狀態欄分出來的列（不送資料庫，預覽、結果裡一起列）
+  List<ImportIssue> _localSkipped = const [], _localErrors = const [];
   String? _fileProblem;
   ImportResult? _done;
   bool _busy = false, _exporting = false, _changed = false;
@@ -92,7 +92,7 @@ class _BookingImportScreenState extends State<BookingImportScreen> {
       final lower = name.toLowerCase();
       final List<List<String>> cells;
       if (lower.endsWith('.csv') || lower.endsWith('.txt')) {
-        cells = parseCsv(utf8.decode(f.bytes, allowMalformed: true));
+        cells = parseCsv(decodeCsvBytes(f.bytes));
       } else if (lower.endsWith('.xlsx')) {
         final x = readXlsxCells(f.bytes);
         if (x.problem != null) {
@@ -114,11 +114,16 @@ class _BookingImportScreenState extends State<BookingImportScreen> {
             _fileProblem = '這個檔案有 ${t.rows.length} 筆，一次最多 2000 筆，請分成幾個檔案');
         return;
       }
-      final p = await _repo.previewReservationImport(_store, t.rows);
+      // 狀態欄是已取消、未到、已到店的列、看不懂的狀態：App 讀檔時就分出來，不送資料庫
+      final p = t.rows.isEmpty
+          ? const ImportResult()
+          : await _repo.previewReservationImport(_store, t.rows);
       if (!mounted) return;
       setState(() {
         _rows = t.rows;
-        _preview = p;
+        _localSkipped = t.skipped;
+        _localErrors = t.errors;
+        _preview = p.withLocal(t.skipped, t.errors);
       });
     } on FormatException catch (e) {
       if (mounted) setState(() => _fileProblem = e.message);
@@ -142,11 +147,11 @@ class _BookingImportScreenState extends State<BookingImportScreen> {
       if (!mounted) return;
       if (r.errors.isNotEmpty) {
         // 預覽之後有人新增了同一筆、或日期剛好過了午夜：照新的結果再給老闆看一次
-        setState(() => _preview = r);
+        setState(() => _preview = r.withLocal(_localSkipped, _localErrors));
         return;
       }
       setState(() {
-        _done = r;
+        _done = r.withLocal(_localSkipped, const []);
         _preview = null;
         _rows = const [];
         _changed = true;
@@ -317,7 +322,7 @@ class _BookingImportScreenState extends State<BookingImportScreen> {
                 '已匯入 ${_done!.inserted} 筆',
                 _done!.skipped.isEmpty
                     ? '在訂位管理照日期就看得到。'
-                    : '另外略過 ${_done!.skipped.length} 筆重複的。在訂位管理照日期就看得到。'),
+                    : '另外略過 ${_done!.skipped.length} 筆（重複或不是有效訂位）。在訂位管理照日期就看得到。'),
           ],
           if (_preview != null && !_busy) ..._previewBlock(_preview!),
         ]),
@@ -414,7 +419,7 @@ class _BookingImportScreenState extends State<BookingImportScreen> {
           child: ExpansionTile(
             tilePadding: EdgeInsets.zero,
             childrenPadding: EdgeInsets.zero,
-            title: Text('略過的 ${p.skipped.length} 列（已經有了，不會重複）',
+            title: Text('略過的 ${p.skipped.length} 列（已經有了、或不是有效訂位）',
                 style:
                     TextStyle(color: AppColors.muted, fontSize: AppType.small)),
             children: _issues(p.skipped, AppColors.muted),
