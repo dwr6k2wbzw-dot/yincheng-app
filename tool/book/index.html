@@ -56,6 +56,7 @@
       <label class="f" for="email" data-i18n="email">Email（確認信會寄到這裡）</label><input id="email" name="email" type="email" maxlength="120" required autocomplete="email">
       <label class="f" for="note" data-i18n="note">備註（選填）</label><textarea id="note" maxlength="200"></textarea>
       <div class="hp" aria-hidden="true"><label>請勿填寫<input id="website" tabindex="-1" autocomplete="off"></label></div>
+      <div id="cf" hidden></div>
       <p class="err" id="err" hidden></p>
       <p style="margin-top:14px"><button class="primary" id="submit" type="submit" data-i18n="submit">確認訂位</button></p>
       <p class="note" data-i18n="privacy">送出即表示同意店家使用您的姓名、電話與 Email 聯繫這次訂位，不會用於其他用途。</p>
@@ -131,6 +132,7 @@
     renderInfo();
     if (!info.enabled) { $('contact').textContent = (info.contact_note ? info.contact_note + '\n\n' : '') + T('paused'); return; }
     $('app').hidden = false;
+    setupCaptcha(info.captcha);
     party = Math.max(1, Math.min(party, info.max_party));
     $('partyNote').textContent = T('partyNote', info.max_party);
     if (!info.days.length) { $('contact').textContent += '\n' + T('noDays'); }
@@ -294,6 +296,48 @@
   let reqId = null, reqSig = null;
   const newId = () => (crypto.randomUUID ? crypto.randomUUID()
     : '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, (c) => (+c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (+c / 4)))).toString(16)));
+  // 機器人驗證（ops 0146）：只有打開的店（資料庫回 captcha）才載入 Cloudflare Turnstile；隱城、小城外沒打開，什麼都不載入。
+  // 送出前拿 Turnstile 的一次性 token 去換一張通行證（10 分鐘、只能用一次）；訂位失敗時通行證還在，可以直接再送。
+  let cap = null, cfWidget = null, cfToken = null, pass = null, passAt = 0;
+  const localErr = (m) => Object.assign(new Error(m), { local: true });  // 已經照語言寫好的訊息，不用再翻
+  function setupCaptcha(c) {
+    cap = c || null;
+    const box = $('cf');
+    if (!cap) { box.hidden = true; return; }
+    box.hidden = false;
+    if (!cap.site_key) { box.innerHTML = '<p class="err">' + YC.esc(T('captchaOff')) + '</p>'; $('submit').disabled = true; return; }
+    if (cfWidget !== null) return;
+    const render = () => {
+      cfWidget = window.turnstile.render('#cf', {
+        sitekey: cap.site_key, action: 'booking', theme: 'auto',
+        language: YCI.lang === 'zh' ? 'zh-tw' : YCI.lang,
+        callback: (t) => { cfToken = t; },
+        'expired-callback': () => { cfToken = null; },
+        'error-callback': () => { cfToken = null; },
+      });
+    };
+    if (window.turnstile) { render(); return; }
+    window.ycCfReady = render;
+    const sc = document.createElement('script');
+    sc.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=ycCfReady';
+    sc.async = true; sc.defer = true;
+    document.head.appendChild(sc);
+  }
+  function resetCaptcha() {
+    pass = null; cfToken = null;
+    if (cfWidget !== null && window.turnstile) window.turnstile.reset(cfWidget);
+  }
+  async function captchaPass() {
+    if (pass && Date.now() - passAt < 9 * 60 * 1000) return pass;
+    if (!cfToken) throw localErr(T('captchaNeed'));
+    const t = cfToken; cfToken = null;
+    try {
+      pass = await YC.captcha(slug, t); passAt = Date.now();
+    } finally {
+      if (window.turnstile && cfWidget !== null) window.turnstile.reset(cfWidget);  // token 只能用一次
+    }
+    return pass;
+  }
   $('form').onsubmit = async (e) => {
     e.preventDefault();
     const err = $('err'); err.hidden = true;
@@ -311,10 +355,11 @@
       if (sig !== reqSig) { reqSig = sig; reqId = newId(); }
       let r;
       try {
-        r = await YC.rpc('book_reservation', { ...args, p_request: reqId });
+        r = await YC.rpc('book_reservation', cap ? { ...args, p_request: reqId, p_captcha: await captchaPass() } : { ...args, p_request: reqId });
       } catch (ex) {
+        if (/CAPTCHA_REQUIRED/.test(ex.message)) { resetCaptcha(); throw localErr(T('captchaNeed')); }
         // 資料庫還沒更新到認得代號的版本（PGRST202＝找不到這個參數的函式）：照原本的方式送
-        if (ex.code !== 'PGRST202') throw ex;
+        if (ex.code !== 'PGRST202' || cap) throw ex;
         r = await YC.rpc('book_reservation', args);
       }
       $('app').hidden = true;
@@ -326,7 +371,7 @@
       const sent = await YC.mail(r.token, 'confirm');
       $('mailNote').textContent = sent ? T('mailSent', $('email').value) : T('mailLate');
     } catch (ex) {
-      err.textContent = YCI.err(ex.message); err.hidden = false;
+      err.textContent = ex.local ? ex.message : YCI.err(ex.message); err.hidden = false;
       $('submit').disabled = false; $('submit').textContent = T('submit');
       try { await load(); } catch (_) {}
     }
