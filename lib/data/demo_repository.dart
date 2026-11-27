@@ -1215,7 +1215,7 @@ class DemoRepository implements Repository {
   Future<ReservationSettings?> reservationSettings(String storeId) async => ReservationSettings.fromRow({
         'store_id': storeId, 'slug': 'demo', 'enabled': true, 'display_name': '示範店', 'first_slot': '19:00',
         'last_slot': '23:00', 'slot_minutes': 30, 'max_guests_per_slot': 20, 'max_party': 6, 'days_ahead': 7,
-        'same_day_cutoff': '17:00',
+        'same_day_cutoff': '17:00', 'web_burst_limit': 30,
         ...?_demoResSettings[storeId],
       });
   @override
