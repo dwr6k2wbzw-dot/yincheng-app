@@ -174,6 +174,11 @@ abstract class Repository {
   Future<void> saveShiftPerson(String storeId, ShiftPerson p, {bool isNew = false});
   Future<void> saveShiftStats(String storeId, String personId, DateTime month, ShiftStats s);
   Future<void> uploadShiftPhoto(String storeId, DateTime month, Uint8List jpeg);
+  /// 班表照片辨識的方式（ops 0153）：subscription＝每小時同步（隱城、小城外）／api＝上傳完直接辨識（公版）。
+  /// 只有老闆、店長讀得到；讀不到（舊資料庫、沒權限）一律當 subscription
+  Future<String> shiftPhotoAiMode(String storeId);
+  /// api 模式：叫後臺立刻辨識這個月的照片（成功回讀到幾格；照片途中有變動回 null，請再按一次）
+  Future<int?> readShiftPhotos(String storeId, DateTime month);
   Future<void> deleteShiftPhoto(String photoId); // 0070：一個月多張，刪掉其中一張
   /// 套用照片辨識草稿（0070）：整月換成照片上的班，回傳寫入格數
   Future<int> applyShiftDraft(ShiftDraft d);
