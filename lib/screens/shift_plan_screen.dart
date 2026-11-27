@@ -1202,10 +1202,12 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
                           ]),
                         ),
                       ),
-                      const SizedBox(height: 10),
-                      SectionCard(
-                        child: InkWell(
-                          onTap: _editOffLimits,
+                      // ops 0150：指休規則的設定入口只在公版出現（隱城／小城外這一份畫面不變）
+                      if (offLimitsSettingVisible) ...[
+                        const SizedBox(height: 10),
+                        SectionCard(
+                          child: InkWell(
+                            onTap: _editOffLimits,
                           child: Row(children: [
                             const Expanded(
                                 child: Text('員工指休規則',
@@ -1220,6 +1222,7 @@ class _ShiftRulesScreenState extends State<ShiftRulesScreen> {
                           ]),
                         ),
                       ),
+                      ],
                       const SizedBox(height: 10),
                       _pairRulesCard(),
                       const SizedBox(height: 10),

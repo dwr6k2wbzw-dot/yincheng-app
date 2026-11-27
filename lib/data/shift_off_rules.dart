@@ -3,12 +3,17 @@
 //   老闆、店長可以超過（App 先提醒）。
 // 「正職」＝班表上的正職，而且排班條件沒有勾「排班時當兼職」。資料庫也擋，這裡是先在畫面上講清楚。
 
+import '../config.dart';
 import 'models.dart';
 import 'shift_planner.dart';
 
 /// 沒設定（或資料庫還沒更新）時的預設，跟兩家店原本的規則一樣
 const shiftOffPerDayDefault = 1;
 const shiftOffMonthMaxDefault = 5;
+
+/// 排班條件頁的「員工指休規則」設定入口只在公版（建置時 SELF_SIGNUP=true）出現（老闆 2026-11-27：隱城／小城外這一份畫面完全不變）。
+/// 兩家店的規則照樣從資料庫讀（值是 1 位／5 天），只是沒有地方改。
+const offLimitsSettingVisible = AppConfig.selfSignup;
 
 /// 排班設定那一列 → (同一天最多幾位, 每月最多幾天)；沒有那一列、或還沒有這兩欄＝預設；欄位空白＝不限（null）
 ({int? perDay, int? monthMax}) offLimitsFromRow(Map<String, dynamic>? r) => (

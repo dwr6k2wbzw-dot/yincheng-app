@@ -67,6 +67,10 @@ void main() {
     expect(offBlockedText(dayFull: false, monthMax: 3), '一個月最多指休 3 天，要再多請找店長協調班表');
   });
 
+  test('ops 0150 設定入口只在公版：隱城／小城外這一份（沒加 SELF_SIGNUP）看不到', () {
+    expect(offLimitsSettingVisible, isFalse);
+  });
+
   test('勞基法特休：半年 3、1 年 7、2 年 10、3～4 年 14、5～9 年 15、10 年 16、24 年起 30', () {
     final g = lsaSpecialGrants(DateTime(2025, 7, 18));
     expect(g.first, (DateTime(2026, 1, 18), 3));
