@@ -129,10 +129,6 @@ List<String> normalizeSlots(Iterable<String> raw) {
   return (n, null);
 }
 
-/// 公版新店的訂位頁網址（只有隱城、小城外有專屬路徑；新店一律用 ?s=代號）
-String onboardingBookingUrl(String slug) =>
-    'https://dwr6k2wbzw-dot.github.io/yincheng-app/book/?s=$slug';
-
 /// 開店精靈的錯誤代號 → 是哪一欄的問題（slug／name／phone／address／slots／weekdays／limits／other）
 String onboardingErrorField(String raw) {
   if (raw.contains('ONBOARD_SLUG')) return 'slug';

@@ -3,6 +3,7 @@ import 'package:yincheng_ops/data/demo_repository.dart';
 import 'package:yincheng_ops/data/models.dart';
 import 'package:yincheng_ops/data/onboarding.dart';
 import 'package:yincheng_ops/data/repository.dart';
+import 'package:yincheng_ops/data/reservation_models.dart';
 
 void main() {
   group('訂位網址代號', () {
@@ -75,9 +76,16 @@ void main() {
         '這個訂位網址代號有人用了，請換一個');
   });
 
-  test('新店網址用 ?s=代號', () {
-    expect(onboardingBookingUrl('lane-bar'),
+  test('訂位頁網址：新店用 ?s=代號，隱城、小城外照舊用專屬網址（精靈、訂位管理分享共用）', () {
+    expect(reservationPageUrl('lane-bar'),
         'https://dwr6k2wbzw-dot.github.io/yincheng-app/book/?s=lane-bar');
+    expect(reservationPageUrl('yincheng'),
+        'https://dwr6k2wbzw-dot.github.io/yincheng-app/book/yincheng/');
+    expect(reservationPageUrl('xcw'),
+        'https://dwr6k2wbzw-dot.github.io/yincheng-app/book/xcw/');
+    // 看起來像兩家店、但不是那兩個代號的，也不能給專屬網址
+    expect(reservationPageUrl('yincheng-2'),
+        'https://dwr6k2wbzw-dot.github.io/yincheng-app/book/?s=yincheng-2');
   });
 
   group('示範版走一遍', () {

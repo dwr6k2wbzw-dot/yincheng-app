@@ -6,6 +6,7 @@ import '../app_state.dart';
 import '../data/models.dart';
 import '../data/onboarding.dart';
 import '../data/repository.dart';
+import '../data/reservation_models.dart';
 import '../services/open_external.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -361,7 +362,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         if (slug.isNotEmpty && slugError(slug) == null) ...[
           const SizedBox(height: 8),
           Text(
-            onboardingBookingUrl(slug),
+            reservationPageUrl(slug),
             style: TextStyle(color: AppColors.muted, fontSize: AppType.caption),
           ),
         ],
@@ -513,7 +514,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   // ---------------------------------------------------------------- ⑤
   Widget _doneStep() {
     final s = _status!;
-    final url = s.slug == null ? null : onboardingBookingUrl(s.slug!);
+    final url = s.slug == null ? null : reservationPageUrl(s.slug!);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
