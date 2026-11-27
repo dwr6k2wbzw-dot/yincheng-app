@@ -253,6 +253,39 @@ window.ycPickBrandImage = function (kind) {
     input.click();
   });
 };
+// 選一個檔案（訂位搬家，ops 0148）：回 JSON 字串 {"name":檔名,"data":"data:…;base64,…"}；取消回 null。最多 5MB。
+window.ycPickFile = function (accept) {
+  return new Promise(function (resolve, reject) {
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = accept || '';
+    input.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0';
+    document.body.appendChild(input);
+    var finished = false, cancelTimer = null;
+    function finish(v, err) {
+      if (finished) return;
+      finished = true;
+      clearTimeout(cancelTimer);
+      setTimeout(function () { input.remove(); }, 0);
+      if (err) reject(err); else resolve(v);
+    }
+    input.addEventListener('cancel', function () {
+      clearTimeout(cancelTimer);
+      cancelTimer = setTimeout(function () { finish(null); }, 1500);
+    });
+    input.addEventListener('change', function () {
+      clearTimeout(cancelTimer);
+      var f = input.files && input.files[0];
+      if (!f) { finish(null); return; }
+      if (f.size > 5 * 1024 * 1024) { finish(null, new Error('檔案太大了（最多 5MB）')); return; }
+      var rd = new FileReader();
+      rd.onload = function () { finish(JSON.stringify({ name: f.name, data: rd.result })); };
+      rd.onerror = function () { finish(null, new Error('檔案讀取失敗，請再選一次')); };
+      rd.readAsDataURL(f);
+    });
+    input.click();
+  });
+};
 // App 新版本檢查（小鈴鐺）：deploy.yml 會寫入 window.ycBuild 與 version.txt，兩者不同就代表有新版
 window.ycCheckUpdate = async function () {
   try {
