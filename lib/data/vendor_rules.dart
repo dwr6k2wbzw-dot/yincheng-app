@@ -399,6 +399,15 @@ String? validateVendorRule(
       return '最後的括號說明會自動去掉，請填「$base」就好';
     }
   }
+  // 合併寫法的結果也不能有最後的括號說明：本來就叫「欣利實業（茗茶酒）」的進貨會被去掉括號變成「欣利實業」，
+  // 跟合併過來的分成兩組（Codex 第五輪）
+  if (kind == 'alias') {
+    final t = target.trim();
+    final base = t.replaceFirst(_vendorParen, '').trim();
+    if (base.isNotEmpty && base != t) {
+      return '合併後的名字不要加括號說明，請填「$base」就好';
+    }
+  }
   if (VendorRule.needsTarget(kind)) {
     if (target.trim().isEmpty) return '請填要改成的名字';
     if (target.trim() == name.trim()) return '兩個名字一樣，不用設定';
