@@ -16,6 +16,7 @@ import '../widgets/common.dart';
 import '../services/pl_export.dart' deferred as pl;
 import '../widgets/revenue_mix.dart';
 import 'onboarding_screen.dart';
+import 'pl_settings_screen.dart';
 import 'reservations_screen.dart';
 
 /// 營運總覽（PRD 畫面 01）。老闆／店長看營收與成本；員工版只顯示零用金與快速操作（營收由資料庫權限隱藏）。
@@ -706,6 +707,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return s.revenue - s.purchaseCost - misc - rent - payroll;
   }
 
+  /// 損益設定（ops 0169）：只有公版、只有老闆
+  Future<void> _openPlSettings() async {
+    await Navigator.push(context, MaterialPageRoute<void>(builder: (_) => PlSettingsScreen(membership: widget.membership)));
+    if (mounted) _reload();
+  }
+
   /// 本月損益（只有老闆：含人事成本）
   /// 損益＝營收 − 進貨 − 雜項 − 租金 − 人事（老闆 2026-10-09 確認：酒水副材料-雜項歸雜項，不重複扣）
   Widget _profitCard(_DashboardData d, MonthlySummary s) {
@@ -737,6 +744,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Expanded(child: Text('本月損益', style: TextStyle(color: AppColors.muted))),
+          // 損益設定（ops 0169）：只有公版、只有老闆（這張卡片本來就只有老闆看得到）
+          if (AppConfig.selfSignup)
+            IconButton(
+              tooltip: '損益設定',
+              onPressed: _openPlSettings,
+              icon: const Icon(Icons.tune, size: 20),
+            ),
           TextButton.icon(
             onPressed: () => _exportPl(d, s),
             icon: const Icon(Icons.ios_share, size: 18),
@@ -750,6 +764,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Text(ofRevenue(profit),
               style: TextStyle(fontSize: AppType.title, fontWeight: AppFont.figure, color: profit >= 0 ? AppColors.good : AppColors.bad, fontFeatures: tabular)),
         ]),
+        if (AppConfig.selfSignup && d.accounts.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: InkWell(
+              onTap: _openPlSettings,
+              child: Text('還沒有會計科目：到「損益設定」選業態，一鍵帶入常用科目 ›',
+                  style: TextStyle(color: AppColors.primary, fontSize: AppType.small)),
+            ),
+          ),
         if (missing.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 4),

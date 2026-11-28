@@ -6,14 +6,20 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide toDouble;
 
 import '../config.dart';
+import 'attendance_setup.dart';
 import 'booking_import.dart';
 import 'booking_profile.dart';
+import 'line_notify_events.dart';
 import 'models.dart';
+import 'pl_template.dart';
 import 'onboarding.dart';
+import 'product_import.dart';
 import 'purchase_items_math.dart';
 import 'row_cache.dart';
 import 'repository.dart';
+import 'vendor_rules.dart';
 import 'shift_links.dart';
+import 'staff_import.dart';
 import 'staff_order.dart';
 
 /// 透過 Supabase（PostgREST）讀寫。所有權限由資料庫的 RLS 與觸發器把關，App 端不做權限判斷以外的假設。
@@ -506,6 +512,34 @@ class SupabaseRepository implements Repository {
     if (r.isEmpty) throw Exception('message: 沒有權限刪除（只有老闆、店長可以）,');
   }
 
+  // ---------------- 0166 廠商名稱設定 ----------------
+  @override
+  Future<List<VendorRule>> vendorRules(String storeId) async {
+    final rows = await _db
+        .from('vendor_name_rules')
+        .select('id, kind, category_code, name, target, sort_order, created_by')
+        .eq('store_id', storeId)
+        .order('kind')
+        .order('sort_order');
+    return rows.map(VendorRule.fromRow).toList();
+  }
+
+  @override
+  Future<void> saveVendorRule(String storeId, VendorRule rule) async {
+    if (rule.id == null) {
+      await _db.from('vendor_name_rules').insert({...rule.toRow(), 'store_id': storeId});
+    } else {
+      final r = await _db.from('vendor_name_rules').update(rule.toRow()).eq('id', rule.id!).select('id');
+      if (r.isEmpty) throw Exception('message: 沒有權限修改（只有老闆、店長可以）,');
+    }
+  }
+
+  @override
+  Future<void> deleteVendorRule(String id) async {
+    final r = await _db.from('vendor_name_rules').delete().eq('id', id).select('id');
+    if (r.isEmpty) throw Exception('message: 沒有權限刪除（只有老闆、店長可以）,');
+  }
+
   // ---------------- 0039 刷卡手續費率 ----------------
   @override
   Future<double> cardFeeRate(String storeId) async {
@@ -540,6 +574,42 @@ class SupabaseRepository implements Repository {
       if (e.code == '42703') return null;
       rethrow;
     }
+  }
+
+  // ---------------- 0169 損益設定（只有公版、只有老闆）----------------
+  @override
+  Future<List<PlTemplate>> plTemplates() async {
+    final r = await _db.rpc('pl_template_list');
+    return [for (final x in (r as List? ?? const [])) PlTemplate.fromJson(x as Map<String, dynamic>)];
+  }
+
+  @override
+  Future<int> applyPlTemplate(String storeId, String kind) async =>
+      ((await _db.rpc('pl_apply_template', params: {'p_store': storeId, 'p_kind': kind})) as num?)?.toInt() ?? 0;
+
+  @override
+  Future<void> savePlAccount(String storeId, PlAccount account, {bool isNew = false}) async {
+    final row = {
+      'name': account.name.trim(),
+      'category': account.category,
+      'auto_kind': account.autoKind,
+      'sort_order': account.sortOrder,
+      'active': account.active,
+    };
+    if (isNew) {
+      await _db.from('pl_accounts').insert({...row, 'store_id': storeId});
+    } else {
+      final r = await _db.from('pl_accounts').update(row).eq('id', account.id).eq('store_id', storeId).select('id');
+      if (r.isEmpty) throw Exception('message: 沒有權限修改（只有老闆可以）,');
+    }
+  }
+
+  @override
+  Future<void> savePlTitle(String storeId, String? title) async {
+    final t = (title ?? '').trim();
+    await _db
+        .from('store_settings')
+        .upsert({'store_id': storeId, 'pl_title': t.isEmpty ? null : t}, onConflict: 'store_id');
   }
 
   @override
@@ -611,12 +681,20 @@ class SupabaseRepository implements Repository {
 
   @override
   Future<List<CostCategory>> costCategories() async {
-    final rows =
-        await _db.from('cost_categories').select('code, name, store_name, cost_group, in_misc_rate, selectable, display_as').order('sort_order');
+    const cols = 'code, name, store_name, cost_group, in_misc_rate, selectable, display_as';
+    List<Map<String, dynamic>> rows;
+    try {
+      // ops 0165：類別跟著店（多讀 store_id）；資料庫還沒更新時退回舊的欄位
+      rows = await _db.from('cost_categories').select('$cols, store_id').order('sort_order');
+    } on PostgrestException catch (e) {
+      if (e.code != '42703' && !e.message.contains('store_id')) rethrow;
+      rows = await _db.from('cost_categories').select(cols).order('sort_order');
+    }
     final list = rows
         .map((r) => CostCategory.full(r['code'] as String, r['name'] as String, r['store_name'] as String?,
             costGroup: r['cost_group'] as String? ?? 'other', inMiscRate: r['in_misc_rate'] as bool? ?? false,
-            selectable: r['selectable'] as bool? ?? true, displayAs: r['display_as'] as String?))
+            selectable: r['selectable'] as bool? ?? true, displayAs: r['display_as'] as String?,
+            storeId: r['store_id'] as String?))
         .toList();
     // 老闆指定的順序優先（List.sort 不穩定，所以用原本位置當第二排序）
     final pos = {for (final (i, c) in list.indexed) c.code: i};
@@ -626,6 +704,26 @@ class SupabaseRepository implements Repository {
     }
     list.sort((a, b) => rank(a).compareTo(rank(b)));
     return list;
+  }
+
+  @override
+  Future<String> saveCostCategory(String storeId,
+      {String? code, required String name, required String costGroup, required bool inMiscRate, bool selectable = true}) async {
+    final r = await _db.rpc('cost_category_save', params: {
+      'p_store': storeId,
+      'p_code': code,
+      'p_name': name,
+      'p_cost_group': costGroup,
+      'p_in_misc_rate': inMiscRate,
+      'p_selectable': selectable,
+    });
+    return r as String;
+  }
+
+  @override
+  Future<int> seedCostCategories(String storeId) async {
+    final r = await _db.rpc('cost_category_seed', params: {'p_store': storeId});
+    return (r as num?)?.toInt() ?? 0;
   }
 
   // ---------------- 班表 ----------------
@@ -891,6 +989,25 @@ class SupabaseRepository implements Repository {
     await _db.from('store_settings').upsert({'store_id': storeId, 'line_notify_enabled': on}, onConflict: 'store_id');
   }
 
+  // 0162：哪些通知發到 LINE 群組（資料庫還沒有 0162 的欄位時當作預設＝只有重要交接）
+  @override
+  Future<Set<String>> lineNotifyEvents(String storeId) async {
+    try {
+      final r = await _db.from('store_settings').select('line_notify_events').eq('store_id', storeId).maybeSingle();
+      return r == null ? {...lineNotifyDefault} : parseLineNotifyEvents(r['line_notify_events']);
+    } on PostgrestException catch (e) {
+      if (e.code == '42703' || e.code == 'PGRST204') return {...lineNotifyDefault};
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> saveLineNotifyEvents(String storeId, Set<String> events) async {
+    await _db.from('store_settings').upsert(
+        {'store_id': storeId, 'line_notify_events': lineNotifyEventsToList(events)},
+        onConflict: 'store_id');
+  }
+
   // 0081：老闆 LINE 私訊綁定（只看得到自己的）
   @override
   Future<int> lineOwnerLinks() async => (await _db.from('line_owner_links').select('line_user_id')).length;
@@ -903,6 +1020,24 @@ class SupabaseRepository implements Repository {
     final me = currentUserId;
     if (me == null) return;
     await _db.from('line_owner_links').delete().eq('user_id', me);
+  }
+
+  // 0161：透過這家店自己的 LINE 官方帳號綁的私訊（綁定一樣用 line_owner_link，代碼本身記是哪個帳號發的）
+  @override
+  Future<bool> lineOwnerLinkedVia(String storeId) async =>
+      (await _db.from('line_owner_links').select('line_user_id').eq('via_store', storeId)).isNotEmpty;
+
+  @override
+  Future<bool> linkLineOwnerVia(String storeId, String code) async {
+    await linkLineOwner(code);
+    return lineOwnerLinkedVia(storeId);
+  }
+
+  @override
+  Future<void> unlinkLineOwnerVia(String storeId) async {
+    final me = currentUserId;
+    if (me == null) return;
+    await _db.from('line_owner_links').delete().eq('user_id', me).eq('via_store', storeId);
   }
 
   // 0156：LINE 群組綁定（line_groups 只有老闆讀得到；代碼只在產生的這一次看得到）
@@ -2073,6 +2208,69 @@ class SupabaseRepository implements Repository {
   Future<ImportResult> importReservations(String storeId, List<ImportRow> rows, String? fileName, String requestId) =>
       _reservationImport(storeId, rows, fileName, requestId, false);
 
+  // ---------------- 營收搬家（ops 0168） ----------------
+  Future<RevenueImportResult> _revenueImport(
+      String storeId, List<RevenueImportRow> rows, String? fileName, String? requestId, bool dry) async {
+    final r = await _db.rpc('revenue_import', params: {
+      'p_store': storeId,
+      'p_rows': [for (final x in rows) x.toJson()],
+      'p_file': fileName,
+      'p_request': requestId,
+      'p_dry_run': dry,
+    });
+    return RevenueImportResult.fromJson(Map<String, dynamic>.from(r as Map), rows);
+  }
+
+  @override
+  Future<RevenueImportResult> previewRevenueImport(String storeId, List<RevenueImportRow> rows) =>
+      _revenueImport(storeId, rows, null, null, true);
+
+  @override
+  Future<RevenueImportResult> importRevenue(
+          String storeId, List<RevenueImportRow> rows, String? fileName, String requestId) =>
+      _revenueImport(storeId, rows, fileName, requestId, false);
+
+  @override
+  Future<List<RevenueImportBatch>> revenueImports(String storeId) async {
+    final rows = await _db
+        .from('revenue_imports')
+        .select('id, created_at, file_name, total_rows, inserted, skipped, date_from, date_to, undone_at, undone_count, undone_kept')
+        .eq('store_id', storeId)
+        .order('created_at', ascending: false)
+        .limit(50);
+    return [for (final r in rows) RevenueImportBatch.fromRow(r)];
+  }
+
+  @override
+  Future<(int, int)> undoRevenueImport(String batchId) async {
+    final r = Map<String, dynamic>.from(await _db.rpc('revenue_import_undo', params: {'p_batch': batchId}) as Map);
+    return ((r['deleted'] as num?)?.toInt() ?? 0, (r['kept'] as num?)?.toInt() ?? 0);
+  }
+
+  @override
+  Future<List<RevenueEntry>> allRevenueEntries(String storeId) async {
+    // 資料庫還沒有 0168 時讀不到 file_import_id：拿掉再讀一次
+    var select = '$_revCols, file_import_id';
+    final out = <RevenueEntry>[];
+    const page = 1000;
+    for (var from = 0;; from += page) {
+      List<Map<String, dynamic>> rows;
+      try {
+        rows = await _db.from('daily_revenue').select(select).eq('store_id', storeId).eq('kind', 'daily')
+            .order('biz_date').range(from, from + page - 1);
+      } on PostgrestException catch (e) {
+        if (from == 0 && select != _revCols && e.code == '42703') {
+          select = _revCols;
+          from -= page;
+          continue;
+        }
+        rethrow;
+      }
+      out.addAll(rows.map(RevenueEntry.fromRow));
+      if (rows.length < page) return out;
+    }
+  }
+
   @override
   Future<List<ImportBatch>> reservationImports(String storeId) async {
     final rows = await _db
@@ -2088,6 +2286,84 @@ class SupabaseRepository implements Repository {
   Future<int> undoReservationImport(String batchId) async {
     final r = await _db.rpc('reservation_import_undo', params: {'p_batch': batchId});
     return ((r as Map)['cancelled'] as num?)?.toInt() ?? 0;
+  }
+
+  Future<ImportResult> _productImport(String storeId, List<ProductImportRow> rows, String? fileName, String? requestId, bool dry) async {
+    final r = await _db.rpc('product_import', params: {
+      'p_store': storeId,
+      'p_rows': [for (final x in rows) x.toJson()],
+      'p_file': fileName,
+      'p_request': requestId,
+      'p_dry_run': dry,
+    });
+    return productImportResult(Map<String, dynamic>.from(r as Map), rows);
+  }
+
+  @override
+  Future<ImportResult> previewProductImport(String storeId, List<ProductImportRow> rows) =>
+      _productImport(storeId, rows, null, null, true);
+
+  @override
+  Future<ImportResult> importProducts(String storeId, List<ProductImportRow> rows, String? fileName, String requestId) =>
+      _productImport(storeId, rows, fileName, requestId, false);
+
+  @override
+  Future<List<ImportBatch>> productImports(String storeId) async {
+    final rows = await _db
+        .from('product_imports')
+        .select('id, created_at, file_name, total_rows, inserted, skipped, undone_at, undone_count')
+        .eq('store_id', storeId)
+        .order('created_at', ascending: false)
+        .limit(50);
+    return [for (final r in rows) ImportBatch.fromRow(r)];
+  }
+
+  @override
+  Future<int> undoProductImport(String batchId) async {
+    final r = await _db.rpc('product_import_undo', params: {'p_batch': batchId});
+    return ((r as Map)['deactivated'] as num?)?.toInt() ?? 0;
+  }
+
+  @override
+  Future<Map<String, double?>> productCosts(String storeId) async {
+    final rows = await _db.from('v_product_costs').select('id, cost_price').eq('store_id', storeId);
+    return {for (final r in rows) r['id'] as String: r['cost_price'] == null ? null : toDouble(r['cost_price'])};
+  }
+
+  Future<StaffImportResult> _staffImport(String storeId, List<StaffImportRow> rows, String? fileName, String? requestId, bool dry) async {
+    final r = await _db.rpc('staff_import', params: {
+      'p_store': storeId,
+      'p_rows': [for (final x in rows) x.toJson()],
+      'p_file': fileName,
+      'p_request': requestId,
+      'p_dry_run': dry,
+    });
+    return StaffImportResult.fromJson(Map<String, dynamic>.from(r as Map), rows);
+  }
+
+  @override
+  Future<StaffImportResult> previewStaffImport(String storeId, List<StaffImportRow> rows) =>
+      _staffImport(storeId, rows, null, null, true);
+
+  @override
+  Future<StaffImportResult> importStaff(String storeId, List<StaffImportRow> rows, String? fileName, String requestId) =>
+      _staffImport(storeId, rows, fileName, requestId, false);
+
+  @override
+  Future<List<StaffImportBatch>> staffImports(String storeId) async {
+    final rows = await _db
+        .from('staff_imports')
+        .select('id, created_at, file_name, total_rows, inserted, with_pay, skipped, undone_at, undone_count, undone_kept')
+        .eq('store_id', storeId)
+        .order('created_at', ascending: false)
+        .limit(50);
+    return [for (final r in rows) StaffImportBatch.fromRow(r)];
+  }
+
+  @override
+  Future<StaffImportUndo> undoStaffImport(String batchId) async {
+    final r = await _db.rpc('staff_import_undo', params: {'p_batch': batchId});
+    return StaffImportUndo.fromJson(Map<String, dynamic>.from(r as Map));
   }
 
   @override
@@ -2204,6 +2480,21 @@ class SupabaseRepository implements Repository {
   }
 
   @override
+  Future<AttendanceSetupStatus> attendanceSetupStatus(String storeId) async {
+    final r = await _db.rpc('attendance_setup_status', params: {'p_store': storeId});
+    return AttendanceSetupStatus.fromJson(r is Map ? Map<String, dynamic>.from(r) : const {});
+  }
+
+  @override
+  Future<void> attendanceSetupEnable(String storeId) async {
+    await _db.rpc('attendance_setup_enable', params: {'p_store': storeId});
+  }
+
+  @override
+  Future<String> attendanceKioskInvite(String storeId) async =>
+      (await _db.rpc('attendance_kiosk_invite', params: {'p_store': storeId})) as String;
+
+  @override
   Future<StoreLineStatus> storeLineStatus(String storeId) async {
     final r = await _db.rpc('store_line_status', params: {'p_store': storeId});
     return r is Map ? StoreLineStatus.fromJson(Map<String, dynamic>.from(r)) : StoreLineStatus.none;
@@ -2243,6 +2534,19 @@ class SupabaseRepository implements Repository {
   Future<void> clearStoreLine(String storeId) async {
     await _db.rpc('store_line_clear', params: {'p_store': storeId});
   }
+  @override
+  Future<AttendanceSettings> attendanceSettings(String storeId) async {
+    final r = await _db.rpc('attendance_settings', params: {'p_store': storeId});
+    final rows = r is List ? r : const [];
+    return rows.isEmpty ? AttendanceSettings.fallback : AttendanceSettings.fromJson(Map<String, dynamic>.from(rows.first as Map));
+  }
+
+  @override
+  Future<void> saveAttendanceSettings(String storeId, Map<String, Object?> changes) async {
+    if (changes.isEmpty) return;
+    await _db.rpc('attendance_settings_set', params: {'p_store': storeId, 'p_changes': changes});
+  }
+
 
   @override
   Future<String> uploadBookingAsset(String storeId, String kind, Uint8List bytes, String contentType) async {

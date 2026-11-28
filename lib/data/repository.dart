@@ -2,28 +2,37 @@ import 'shift_off_rules.dart';
 import 'dart:typed_data';
 
 import 'attendance_models.dart';
+import 'attendance_settings.dart';
+import 'attendance_setup.dart';
 import 'change_request_models.dart';
 import 'booking_profile.dart';
 import 'booking_assist.dart';
 import 'booking_import.dart';
 import 'line_bind.dart';
 import 'models.dart';
+import 'vendor_rules.dart';
+import 'pl_template.dart';
 import 'onboarding.dart';
 import 'payroll.dart';
+import 'product_import.dart';
 import 'platform_wish.dart';
 import 'purchase_items_math.dart';
 import 'reservation_models.dart';
+import 'revenue_import.dart';
 import 'shift_links.dart';
 import 'shift_planner.dart';
+import 'staff_import.dart';
 import 'store_ai.dart';
 import 'store_line.dart';
 export 'attendance_models.dart';
+export 'attendance_settings.dart';
 export 'booking_assist.dart';
 export 'change_request_models.dart';
 export 'line_bind.dart';
 export 'payroll.dart';
 export 'platform_wish.dart';
 export 'reservation_models.dart';
+export 'revenue_import.dart';
 export 'shift_planner.dart';
 export 'store_ai.dart';
 export 'store_line.dart';
@@ -112,6 +121,11 @@ abstract class Repository {
   Future<List<PlAccount>> plAccounts(String storeId);
   /// 損益表抬頭用的店名（ops 0142 store_settings.pl_title；沒設回 null＝用店名）
   Future<String?> plTitle(String storeId);
+  /// 損益設定（ops 0169，只有公版、只有老闆）：業態範本清單、套範本（回寫入幾個科目）、新增／修改科目、損益表抬頭
+  Future<List<PlTemplate>> plTemplates();
+  Future<int> applyPlTemplate(String storeId, String kind);
+  Future<void> savePlAccount(String storeId, PlAccount account, {bool isNew = false});
+  Future<void> savePlTitle(String storeId, String? title);
   Future<void> saveCardFeeRate(String storeId, double rate);
   Future<List<RecurringExpenseItem>> recurringExpenseItems(String storeId);
   Future<void> saveRecurringExpenseItem(String storeId, RecurringExpenseItem item, {bool isNew = false});
@@ -124,9 +138,19 @@ abstract class Repository {
   Future<void> saveVendorContact(String storeId, VendorContact v);
   Future<void> deleteVendorContact(String id);
 
+  // 廠商名稱設定（0166）：看得到進貨的人讀得到；只有老闆、店長能新增、修改、刪除（資料庫 RLS 也是這樣）
+  Future<List<VendorRule>> vendorRules(String storeId);
+  Future<void> saveVendorRule(String storeId, VendorRule rule);
+  Future<void> deleteVendorRule(String id);
+
   // 進貨
   Future<DateTime> businessDate(String storeId);
   Future<List<CostCategory>> costCategories();
+  /// 公版：新增或修改這家店的進貨類別（ops 0165，只有老闆；用過的類別不能改算在哪一類）。回傳類別代碼
+  Future<String> saveCostCategory(String storeId,
+      {String? code, required String name, required String costGroup, required bool inMiscRate, bool selectable = true});
+  /// 公版：一次帶入預設的 酒水／餐食／雜項（已經有類別就不動）。回傳新增幾個
+  Future<int> seedCostCategories(String storeId);
   Future<List<Supplier>> suppliers(String storeId);
   /// 各進貨類別常用的廠商（依日報表匯入的近半年進貨統計，最多 4 家）
   Future<VendorHints> vendorHints(String storeId);
@@ -253,9 +277,15 @@ abstract class Repository {
   Future<void> updateHandover(String noteId, String body, List<String> items, {bool? important}); // 0044／0060：任何成員都能改內容與清單；0079：null＝不改重要
   Future<bool> lineNotifyEnabled(String storeId); // 0079：這家店重要交接發不發 LINE（只有老闆讀得到，其他人回 true）
   Future<void> saveLineNotifyEnabled(String storeId, bool on); // 0079：只有老闆
+  Future<Set<String>> lineNotifyEvents(String storeId); // 0162：這家店哪些通知發到 LINE 群組（只有老闆讀得到；讀不到回預設＝只有重要交接）
+  Future<void> saveLineNotifyEvents(String storeId, Set<String> events); // 0162：只有老闆
   Future<int> lineOwnerLinks(); // 0081：我綁了幾個 LINE 私訊
   Future<void> linkLineOwner(String code); // 0081：老闆輸入 LINE 私訊給的代碼
   Future<void> unlinkLineOwner(); // 0081：解除自己的 LINE 私訊綁定
+  Future<bool> lineOwnerLinkedVia(String storeId); // 0161：我有沒有透過這家店自己的 LINE 官方帳號綁私訊
+  Future<void> unlinkLineOwnerVia(String storeId); // 0161：只解除透過這家店官方帳號的私訊綁定（平台的不動）
+  /// 0161：輸入私訊給的代碼綁定；回傳綁好之後是不是透過這家店的官方帳號（代碼是平台機器人給的就會是 false）
+  Future<bool> linkLineOwnerVia(String storeId, String code);
   Future<bool> lineGroupBound(String storeId); // 0156：這家店綁了 LINE 群組沒（只有老闆讀得到）
   Future<LineBindCode> createLineGroupBindCode(String storeId); // 0156：老闆產生群組綁定代碼（10 分鐘、一次性）
   Future<void> setHandoverItemDone(String itemId, bool done); // 0060：清單打勾
@@ -353,6 +383,31 @@ abstract class Repository {
   Future<int> undoReservationImport(String batchId);
   /// 匯出用：這家店全部的訂位（含已取消、隱藏的）
   Future<List<Reservation>> allReservations(String storeId);
+  // 盤點品項搬家（ops 0167，公版；老闆、店長）：先預覽（資料庫檢查每一列、不寫入），沒問題再匯入；每一批可以整批復原（停用，不刪）
+  Future<ImportResult> previewProductImport(String storeId, List<ProductImportRow> rows);
+  /// [requestId]：同一個檔案按兩次只匯一次
+  Future<ImportResult> importProducts(String storeId, List<ProductImportRow> rows, String? fileName, String requestId);
+  Future<List<ImportBatch>> productImports(String storeId);
+  /// 回停用了幾個（之前就停用的不算）
+  Future<int> undoProductImport(String batchId);
+  /// 成本價（v_product_costs，只有老闆、店長讀得到；App 只在老闆匯出時用）：品項 id → 成本價
+  Future<Map<String, double?>> productCosts(String storeId);
+  // 營收搬家（ops 0168，公版；老闆、店長）：過去的每日營收先預覽（資料庫檢查每一列、不寫入），沒問題再匯入；每一批可以整批復原
+  Future<RevenueImportResult> previewRevenueImport(String storeId, List<RevenueImportRow> rows);
+  /// [requestId]：同一個檔案按兩次只匯一次
+  Future<RevenueImportResult> importRevenue(String storeId, List<RevenueImportRow> rows, String? fileName, String requestId);
+  Future<List<RevenueImportBatch>> revenueImports(String storeId);
+  /// 回（刪掉幾天、留下幾天）：匯入之後改過的、鎖帳月份的留著
+  Future<(int, int)> undoRevenueImport(String batchId);
+  /// 匯出用：這家店全部的每日營收（舊到新）
+  Future<List<RevenueEntry>> allRevenueEntries(String storeId);
+  // 員工名冊搬家（ops 0170；老闆、店長；只有公版有入口）：先預覽（資料庫檢查每一列、不寫入），沒問題再匯入；每一批可以整批復原
+  Future<StaffImportResult> previewStaffImport(String storeId, List<StaffImportRow> rows);
+  /// [requestId]：同一個檔案按兩次只匯一次
+  Future<StaffImportResult> importStaff(String storeId, List<StaffImportRow> rows, String? fileName, String requestId);
+  Future<List<StaffImportBatch>> staffImports(String storeId);
+  /// 停用這一批匯入的人（不刪除）；已經有打卡或薪資的人留著
+  Future<StaffImportUndo> undoStaffImport(String batchId);
   // 許願單（ops 0149，公版；只有老闆、店長）：寫一則送到平台待辦，平台回覆狀態和說明
   /// 這家店的許願單（新的在前）
   Future<List<PlatformWish>> platformWishes(String storeId);
@@ -385,6 +440,10 @@ abstract class Repository {
   Future<StoreLineResult> testStoreLine(String storeId);
   /// 清除（透過這個帳號綁的群組一起拿掉）
   Future<void> clearStoreLine(String storeId);
+  // 打卡設定（ops 0163）：每家店自己設打卡開關、寬限、起算日、補登上限、店長看薪資；老闆、店長讀，只有老闆能改
+  Future<AttendanceSettings> attendanceSettings(String storeId);
+  /// 只送有改的項目（AttendanceSettings.changesFrom）
+  Future<void> saveAttendanceSettings(String storeId, Map<String, Object?> changes);
   Future<List<Reservation>> reservations(String storeId, DateTime from, DateTime to);
   Future<void> addReservation(String storeId,
       {required DateTime date, required String time, required int party, required String name, required String phone, String? email, String? note, List<String> tableIds = const []});
@@ -456,6 +515,12 @@ abstract class Repository {
   Future<List<KioskAccountCandidate>> kioskAccountCandidates(String storeId);
   /// 老闆：把這個帳號設成這家店的打卡用帳號（權限照舊，第一頁多一個密碼打卡）
   Future<void> setKioskAccount(String storeId, String userId);
+  /// 公版：打卡設定進度（ops 0164；老闆、店長）
+  Future<AttendanceSetupStatus> attendanceSetupStatus(String storeId);
+  /// 公版：老闆打開這家店的打卡
+  Future<void> attendanceSetupEnable(String storeId);
+  /// 公版：老闆產生「打卡用帳號」的邀請碼（14 天、一家店同時只有一組）；店裡的平板用新帳號輸入就直接成為打卡用帳號
+  Future<String> attendanceKioskInvite(String storeId);
   /// 登入的帳號是打卡用帳號就回它的店；不是（或資料庫還沒更新）回 null
   Future<KioskMine?> kioskMine();
   /// 打卡用帳號：輸入自己的 4 位數密碼打卡（ops 0131：靠密碼認人，時間是伺服器時間）
@@ -522,7 +587,7 @@ String friendlyError(Object e) {
   final s = e.toString();
   final m = RegExp(r'message: ([^,]+)').firstMatch(s);
   // 0113：資料庫擋下來的訊息前面有代碼（給 App 判斷用），顯示時拿掉
-  final msg = (m?.group(1) ?? s).replaceFirst(RegExp(r'^(SHIFT_BLOCKED|SHIFT_CODE_USED|SHIFT_UNDO_CONFLICT|SIGNUP_[A-Z]+|BOOKING_ASSIST_STALE|SHIFT_ASSIST_STALE|WISH_STALE|ONBOARD_[A-Z_]+)：'), '');
+  final msg = (m?.group(1) ?? s).replaceFirst(RegExp(r'^(SHIFT_BLOCKED|SHIFT_CODE_USED|SHIFT_UNDO_CONFLICT|SIGNUP_[A-Z]+|CATEGORY_[A-Z]+|BOOKING_ASSIST_STALE|SHIFT_ASSIST_STALE|WISH_STALE|ONBOARD_[A-Z_]+|PL_TEMPLATE_[A-Z_]+)：'), '');
   if (msg.contains('duplicate key') && msg.contains('client_request')) return '這筆已經送出過了，不會重複新增。';
   if (msg.contains('row-level security')) return '沒有權限執行這個動作。';
   if (msg.contains('function public.payroll_')) return '資料庫還沒更新到薪資版本，請等老闆核准上線。';
@@ -536,5 +601,9 @@ String friendlyError(Object e) {
   if (msg.contains('Password should be')) return '密碼太短，請至少 8 個字。';
   if (msg.contains('change_requests_title_check')) return '第一行請寫個簡短的標題。';
   if (msg.contains('staff_pay_rates_person_id_effective_from_key')) return '這個生效日已經有一筆薪資了，請直接點那一筆修改。';
+  // ops 0169 損益設定：科目名稱重複、自動帶入指定兩次、自動帶入跟大項對不上
+  if (msg.contains('pl_accounts_store_id_name_key')) return '這個科目名稱已經有了，請換一個名字。';
+  if (msg.contains('pl_accounts_store_auto')) return '這種自動帶入已經指定給別的科目了，請先把那個科目改成「不自動帶入」。';
+  if (msg.contains('pl_accounts_auto_category')) return '自動帶入跟大項對不上（人事基底放人事、租金基底放租金、刷卡手續費和進貨雜項放雜項）。';
   return msg.replaceAll('薪率', '薪資'); // 畫面上一律叫「薪資」（2026-11-15 老闆）；資料庫守衛的訊息還寫「薪率」（ops 0109、0110）
 }

@@ -8,11 +8,14 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import '../data/repository.dart';
 import '../config.dart';
+import 'attendance_setup_screen.dart';
 import 'change_requests_screen.dart';
 import 'platform_admin_wishes_screen.dart';
 import 'platform_wishes_screen.dart';
 import 'store_ai_screen.dart';
+import 'cost_categories_screen.dart';
 import 'store_line_screen.dart';
+import 'attendance_settings_screen.dart';
 import 'create_store_screen.dart';
 import 'dashboard_screen.dart';
 import 'members_screen.dart';
@@ -194,8 +197,20 @@ class _HomeShellState extends State<HomeShell> with SingleTickerProviderStateMix
                 Navigator.of(context).push(MaterialPageRoute(builder: (_) => StoreAiScreen(membership: m)));
                 return;
               }
+              if (v == 'asetup') {
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => AttendanceSetupScreen(membership: m)));
+                return;
+              }
+              if (v == 'cats') {
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => CostCategoriesScreen(membership: m)));
+                return;
+              }
               if (v == 'line') {
                 Navigator.of(context).push(MaterialPageRoute(builder: (_) => StoreLineScreen(membership: m)));
+                return;
+              }
+              if (v == 'attset') {
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => AttendanceSettingsScreen(membership: m)));
                 return;
               }
               if (v == 'code') {
@@ -244,8 +259,17 @@ class _HomeShellState extends State<HomeShell> with SingleTickerProviderStateMix
               // AI 設定（ops 0157）：公版那一份才有，只有老闆；接上店家自己的 Claude／OpenAI／Gemini
               if (AppConfig.selfSignup && m.role == Role.owner)
                 const PopupMenuItem(value: 'ai', child: ListTile(leading: Icon(Icons.memory_outlined), title: Text('AI 設定'))),
+              // 進貨類別（ops 0165）：公版那一份才有，只有老闆；照日報表的店（隱城、小城外）不出現
+              if (AppConfig.selfSignup && m.role == Role.owner && !StoreFeatures.of(m.storeName).excelSynced)
+                const PopupMenuItem(value: 'cats', child: ListTile(leading: Icon(Icons.category_outlined), title: Text('進貨類別'))),
               if (AppConfig.selfSignup && m.role == Role.owner)
                 const PopupMenuItem(value: 'line', child: ListTile(leading: Icon(Icons.forum_outlined), title: Text('LINE 官方帳號'))),
+              // 打卡設定（ops 0163）：公版那一份才有，只有老闆；開打卡、寬限、起算日、補登上限、店長看薪資
+              if (AppConfig.selfSignup && m.role == Role.owner)
+                const PopupMenuItem(value: 'attset', child: ListTile(leading: Icon(Icons.fingerprint), title: Text('打卡設定'))),
+              // 打卡開始使用（ops 0164）：公版那一份才有，老闆、店長一步一步把打卡設好
+              if (AppConfig.selfSignup && (m.role == Role.owner || m.role == Role.manager))
+                const PopupMenuItem(value: 'asetup', child: ListTile(leading: Icon(Icons.checklist_rtl), title: Text('打卡開始使用'))),
               const PopupMenuItem(value: 'code', child: ListTile(leading: Icon(Icons.key_outlined), title: Text('輸入邀請碼'))),
               const PopupMenuItem(value: 'speed', child: ListTile(leading: Icon(Icons.speed), title: Text('載入速度'))),
               const PopupMenuItem(value: 'logout', child: ListTile(leading: Icon(Icons.logout), title: Text('登出'))),

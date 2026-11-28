@@ -168,9 +168,10 @@ Map<String, Map<String, String>> _formulaCache(Uint8List bytes) {
   return out;
 }
 
-/// 讀 .xlsx：有「日期」那一欄的第一個工作表（範本是「訂位」）；沒有就讀第一個。
+/// 讀 .xlsx：[accept] 認得的第一個工作表（預設＝訂位搬家看得懂的，範本是「訂位」）；都不認得就讀第一個。
 /// 公式格用檔案裡存的計算結果；沒有結果的公式格不默默當成空白，回 problem 請人先「貼上值」。
-XlsxCells readXlsxCells(Uint8List bytes) {
+XlsxCells readXlsxCells(Uint8List bytes, {bool Function(List<List<String>> cells)? accept}) {
+  final ok = accept ?? (c) => readImportTable(c).problem == null;
   final excel = Excel.decodeBytes(bytes);
   Map<String, Map<String, String>>? cache;
   XlsxCells read(String name) {
@@ -199,7 +200,7 @@ XlsxCells readXlsxCells(Uint8List bytes) {
   for (final name in excel.tables.keys) {
     final x = read(name);
     first ??= x;
-    if (readImportTable(x.cells).problem == null) return x;
+    if (ok(x.cells)) return x;
   }
   return first ?? const XlsxCells([]);
 }

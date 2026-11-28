@@ -7,12 +7,14 @@ import 'package:intl/intl.dart';
 
 import '../app_state.dart';
 import '../config.dart';
+import '../data/line_notify_events.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
 import '../services/slip_scan.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../widgets/line_bind_dialog.dart';
+import 'line_notify_events_screen.dart';
 import 'store_line_screen.dart';
 
 /// 標題列（小鈴鐺左邊）的「交接・提醒」按鈕（老闆 2026-10-14，原本是總覽最上面的卡片）。
@@ -489,6 +491,7 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
   bool _lineLoading = false;
   int? _lineLinks; // 0081：我綁了 LINE 私訊沒
   bool? _lineGroupBound; // 0156：這家店綁了 LINE 群組沒（只有老闆）
+  Set<String>? _lineEvents; // 0162：哪些通知發到 LINE 群組（公版、只有老闆）
 
   // 0156：產生群組綁定代碼（只有老闆）。群組裡要打「綁定 店名 代碼」才綁得上
   Future<void> _lineBindCode() async {
@@ -576,6 +579,11 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
         }).catchError((_) {
           if (mounted) setState(() => _lineOn = true);
         });
+        if (AppConfig.selfSignup) {
+          _repo.lineNotifyEvents(_store).then((v) {
+            if (mounted) setState(() => _lineEvents = v);
+          }).catchError((_) {});
+        }
       }
     }
     final on = _lineOn ?? true;
@@ -593,7 +601,13 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
                       setState(() => _lineOn = v);
                       try {
                         await _repo.saveLineNotifyEnabled(_store, v);
-                        if (mounted) showMessage(context, v ? '已打開：重要交接會發到 LINE 群組' : '已關掉：交接只在 App 裡看');
+                        if (mounted) {
+                          showMessage(
+                              context,
+                              AppConfig.selfSignup
+                                  ? (v ? '已打開：勾選的通知會發到 LINE 群組' : '已關掉：通知只在 App 裡看')
+                                  : (v ? '已打開：重要交接會發到 LINE 群組' : '已關掉：交接只在 App 裡看'));
+                        }
                       } catch (e) {
                         if (mounted) {
                           setState(() => _lineOn = !v);
@@ -602,9 +616,30 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
                       }
                     },
               title: const Text('LINE 群組通知', style: TextStyle(fontWeight: FontWeight.w700)),
-              subtitle: Text(on ? '勾「重要」的交接會發到這家店的 LINE 群組' : '已關掉，交接只在 App 裡看',
+              subtitle: Text(
+                  on
+                      ? (AppConfig.selfSignup ? '下面勾選的通知會發到這家店的 LINE 群組' : '勾「重要」的交接會發到這家店的 LINE 群組')
+                      : (AppConfig.selfSignup ? '已關掉，通知只在 App 裡看' : '已關掉，交接只在 App 裡看'),
                   style: TextStyle(fontSize: AppType.small, color: AppColors.muted)),
             ),
+            // 0162：公版的店自己選哪些通知發到群組（只有老闆；隱城／小城外這一份不顯示）
+            if (AppConfig.selfSignup)
+              Row(children: [
+                Expanded(
+                  child: Text(_lineEvents == null ? '要發到群組的通知：讀取中…' : lineNotifySummary(_lineEvents!),
+                      style: TextStyle(fontSize: AppType.small, color: AppColors.muted, height: 1.5)),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    await Navigator.of(context)
+                        .push(MaterialPageRoute(builder: (_) => LineNotifyEventsScreen(membership: widget.membership)));
+                    _repo.lineNotifyEvents(_store).then((v) {
+                      if (mounted) setState(() => _lineEvents = v);
+                    }).catchError((_) {});
+                  },
+                  child: const Text('選擇'),
+                ),
+              ]),
             // 0156：群組要用老闆產生的代碼才綁得上
             Row(children: [
               Expanded(
@@ -637,10 +672,13 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
               ]),
             const Divider(height: 1),
           ],
-          // 0081／0084：老闆、店長私訊 AI 助理（也能許願改 App）
+          // 0081／0084：老闆、店長私訊 AI 助理（也能許願改 App）；公版沒有許願改 App（0161）
           Row(children: [
             Expanded(
-              child: Text((_lineLinks ?? 0) > 0 ? 'LINE 私訊助理：已綁定，私訊機器人不用 @ 就能問店裡的事、許願改 App' : 'LINE 私訊助理：綁定後可以私訊機器人問店裡的事、在 LINE 許願改 App',
+              child: Text(
+                  AppConfig.selfSignup
+                      ? ((_lineLinks ?? 0) > 0 ? 'LINE 私訊助理：已綁定，私訊機器人不用 @ 就能問店裡的事' : 'LINE 私訊助理：綁定後可以私訊機器人問店裡的事')
+                      : ((_lineLinks ?? 0) > 0 ? 'LINE 私訊助理：已綁定，私訊機器人不用 @ 就能問店裡的事、許願改 App' : 'LINE 私訊助理：綁定後可以私訊機器人問店裡的事、在 LINE 許願改 App'),
                   style: TextStyle(fontSize: AppType.small, color: AppColors.muted, height: 1.5)),
             ),
             (_lineLinks ?? 0) > 0

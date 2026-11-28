@@ -5,15 +5,21 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import '../config.dart';
+import 'attendance_setup.dart';
 import 'booking_import.dart';
 import 'booking_profile.dart';
+import 'line_notify_events.dart';
 import 'models.dart';
+import 'pl_template.dart';
 import 'onboarding.dart';
+import 'product_import.dart';
 import 'person_names.dart';
 import 'purchase_items_math.dart';
 import 'repository.dart';
+import 'vendor_rules.dart';
 import 'shift_links.dart';
 import 'shift_templates.dart';
+import 'staff_import.dart';
 import 'store_features.dart';
 import '../services/clock.dart';
 
@@ -466,6 +472,8 @@ class DemoRepository implements Repository {
             userVerified: i == 1,
             linkId: _demoLinks['p$i'],
           ),
+        // 公版示範：名冊匯入的人（ops 0170）
+        if (AppConfig.selfSignup) ...[for (final x in _demoStaffPeople) x.p],
       ],
       marks,
       future ? const {} : const {3: '月會日'},
@@ -994,7 +1002,25 @@ class DemoRepository implements Repository {
   }
 
   @override
-  Future<void> unlinkLineOwner() async => _lineLinks = 0;
+  Future<void> unlinkLineOwner() async {
+    _lineLinks = 0;
+    _lineLinksVia.clear();
+  }
+
+  // 0161：示範版——透過店家自己的官方帳號綁的私訊（代碼 6 位數就算綁上；這家店要先接上官方帳號）
+  final _lineLinksVia = <String>{};
+  @override
+  Future<bool> lineOwnerLinkedVia(String storeId) async => _lineLinksVia.contains(storeId);
+  @override
+  Future<void> unlinkLineOwnerVia(String storeId) async => _lineLinksVia.remove(storeId);
+  @override
+  Future<bool> linkLineOwnerVia(String storeId, String code) async {
+    if (code.trim().length != 6 || _storeLine[storeId]?.connected != true) {
+      throw Exception('message: 代碼不對或已過期，請在 LINE 私訊機器人重新打「綁定」,');
+    }
+    _lineLinksVia.add(storeId);
+    return true;
+  }
   // 0156：示範版——小城外假裝已經綁好群組，其他店還沒綁
   @override
   Future<bool> lineGroupBound(String storeId) async => storeId == 'xc';
@@ -1008,6 +1034,16 @@ class DemoRepository implements Repository {
   @override
   Future<void> saveLineNotifyEnabled(String storeId, bool on) async =>
       _lineOn[storeId] = on;
+  // 0162：示範版——小城外假裝另外勾了新網路訂位、訂位取消
+  final _lineEvents = <String, Set<String>>{
+    'xc': {'handover_important', 'reservation_new', 'reservation_cancel'},
+  };
+  @override
+  Future<Set<String>> lineNotifyEvents(String storeId) async =>
+      {...(_lineEvents[storeId] ?? lineNotifyDefault)};
+  @override
+  Future<void> saveLineNotifyEvents(String storeId, Set<String> events) async =>
+      _lineEvents[storeId] = {...events};
   @override
   Future<void> updateHandover(
     String noteId,
@@ -1200,6 +1236,19 @@ class DemoRepository implements Repository {
   // 示範自助註冊：帳號含 new＝還沒有任何店；建好之後這次登入就有一家店
   bool get _isNew => _email.contains('new');
   Membership? _newStore;
+  // 畫面預覽：網址再加 &store=店名＝這個新帳號已經開好一家店（自助註冊的店，有預設的進貨類別）
+  Membership? _demoNewStore() {
+    final name = Uri.base.queryParameters['store']?.trim() ?? '';
+    if (_newStore == null && name.isNotEmpty) {
+      _newStore = Membership(storeId: 'demo-new', storeName: name, role: Role.owner, displayName: '示範老闆');
+      _seedCats('demo-new');
+      final c = _storeCats['demo-new']!;
+      c.add(CostCategory.full('demo-c${++_catSeq}', '咖啡豆', name, costGroup: 'food', inMiscRate: false, storeId: 'demo-new'));
+      c.add(CostCategory.full('demo-c${++_catSeq}', '外帶杯', name,
+          costGroup: 'other', inMiscRate: true, selectable: false, storeId: 'demo-new'));
+    }
+    return _newStore;
+  }
   @override
   Future<String> signupCreateStore(String storeName, String displayName, {String? kind}) async {
     await Future<void>.delayed(const Duration(milliseconds: 400));
@@ -1207,6 +1256,7 @@ class DemoRepository implements Repository {
       throw Exception('message: SIGNUP_TAKEN：這個店名已經有人用了，請換一個（例如加上地區或分店名）');
     }
     _newStore = Membership(storeId: 'demo-new', storeName: storeName.trim(), role: Role.owner, displayName: displayName.trim());
+    _seedCats('demo-new');
     if (kind != null) {
       // 示範：新店照範本帶入（同資料庫 0152：人力、班別／時段、設定，打開班表分頁）
       _staffing = {};
@@ -1303,7 +1353,7 @@ class DemoRepository implements Repository {
 
   @override
   Future<List<Membership>> myMemberships() async => _isNew
-      ? [if (_newStore != null) _newStore!]
+      ? [if (_demoNewStore() != null) _newStore!]
       : _isKiosk
       ? [
           _kioskXc
@@ -1670,6 +1720,56 @@ class DemoRepository implements Repository {
     list.add(saved);
   }
 
+  // ---------------- 0166 廠商名稱設定（示範） ----------------
+  late final Map<String, List<VendorRule>> _vendorRules = {
+    for (final e in const {'yc': '隱城', 'xc': '小城外'}.entries)
+      e.key: [
+        for (final (i, r) in VendorRules.legacySeed(e.value).indexed)
+          VendorRule(id: 'vr-${e.key}-$i', kind: r.kind, category: r.category, name: r.name, target: r.target, sortOrder: r.sortOrder)
+      ],
+    // 公版新開的店：示範幾條自己設的
+    'demo-new': [
+      const VendorRule(id: 'vr-new-1', kind: 'alias', name: '欣力', target: '欣利實業', userMade: true),
+      const VendorRule(id: 'vr-new-2', kind: 'alias', name: '大倉', target: '大倉捷', userMade: true),
+      const VendorRule(id: 'vr-new-3', kind: 'list_hide', name: '全聯', userMade: true),
+      const VendorRule(id: 'vr-new-4', kind: 'list_add', name: '花都', userMade: true),
+      const VendorRule(id: 'vr-new-5', kind: 'hint_add', category: 'yc_drink', name: '示範酒商C', userMade: true),
+    ],
+  };
+
+  @override
+  Future<List<VendorRule>> vendorRules(String storeId) async => List.of(_vendorRules[storeId] ?? const <VendorRule>[]);
+
+  @override
+  Future<void> saveVendorRule(String storeId, VendorRule rule) async {
+    if (_isStaff) throw Exception('message: 沒有權限修改（只有老闆、店長可以）,');
+    final list = _vendorRules[storeId] ??= [];
+    final key = rule.kind + (rule.category ?? '') + (rule.name?.trim() ?? '');
+    if (list.any((x) => x.id != rule.id && x.kind + (x.category ?? '') + (x.name ?? '') == key)) {
+      throw Exception('message: 已經有同一條設定,');
+    }
+    final saved = VendorRule(
+      id: rule.id ?? 'vr${++_seq}',
+      kind: rule.kind,
+      category: rule.category,
+      name: rule.name?.trim(),
+      target: rule.target?.trim(),
+      sortOrder: rule.sortOrder,
+      // 跟資料庫一樣：設定畫面新增的記成自己設的，修改沿用原本的
+      userMade: rule.id == null || list.any((x) => x.id == rule.id && x.userMade),
+    );
+    list.removeWhere((x) => x.id == saved.id);
+    list.add(saved);
+  }
+
+  @override
+  Future<void> deleteVendorRule(String id) async {
+    if (_isStaff) throw Exception('message: 沒有權限刪除（只有老闆、店長可以）,');
+    for (final l in _vendorRules.values) {
+      l.removeWhere((x) => x.id == id);
+    }
+  }
+
   @override
   Future<void> deleteVendorContact(String id) async {
     if (_isStaff) throw Exception('message: 沒有權限刪除（只有老闆、店長可以）,');
@@ -1718,44 +1818,92 @@ class DemoRepository implements Repository {
   @override
   Future<double> cardFeeRate(String storeId) async =>
       _cardFeeRate[storeId] ?? 0.02;
-  // ops 0142 示範：隱城的科目（照老闆的損益表）
+  // ops 0142 示範：隱城的科目（照老闆的損益表）；自己開的新店（demo-new）一開始沒有科目（ops 0169）
+  final _plAccounts = <String, List<PlAccount>>{};
+  List<PlAccount> _accountsOf(String storeId) => _plAccounts.putIfAbsent(storeId, () {
+        if (storeId == _demoNewStoreId) return <PlAccount>[];
+        const names = [
+          ('薪資支出', 'payroll', 'payroll_base'),
+          ('保險費-勞健保+退休金', 'payroll', null),
+          ('租金支出-房屋', 'rent', 'rent_base'),
+          ('租金支出-租賃稅', 'rent', null),
+          ('租金支出-租賃補充保費', 'rent', null),
+          ('水電瓦斯費', 'misc', null),
+          ('租金支出-ICHEF', 'rent', null),
+          ('其他費用-垃圾清運費', 'misc', null),
+          ('其他費用-雜項', 'misc', 'purchase_misc'),
+          ('職工福利', 'payroll', null),
+          ('廣告費', 'misc', null),
+          ('郵電費', 'misc', null),
+          ('修繕費', 'misc', null),
+          ('保險費', 'misc', null),
+          ('手續費', 'misc', 'card_fee'),
+          ('會計師', 'misc', null),
+          ('內帳記帳費', 'misc', null),
+        ];
+        return [
+          for (final (i, n) in names.indexed)
+            PlAccount(id: 'acc$i', name: n.$1, category: n.$2, autoKind: n.$3, sortOrder: i + 1),
+        ];
+      });
   @override
   Future<List<PlAccount>> plAccounts(String storeId) async {
     if (_isStaff) return const [];
-    const names = [
-      ('薪資支出', 'payroll', 'payroll_base'),
-      ('保險費-勞健保+退休金', 'payroll', null),
-      ('租金支出-房屋', 'rent', 'rent_base'),
-      ('租金支出-租賃稅', 'rent', null),
-      ('租金支出-租賃補充保費', 'rent', null),
-      ('水電瓦斯費', 'misc', null),
-      ('租金支出-ICHEF', 'rent', null),
-      ('其他費用-垃圾清運費', 'misc', null),
-      ('其他費用-雜項', 'misc', 'purchase_misc'),
-      ('職工福利', 'payroll', null),
-      ('廣告費', 'misc', null),
-      ('郵電費', 'misc', null),
-      ('修繕費', 'misc', null),
-      ('保險費', 'misc', null),
-      ('手續費', 'misc', 'card_fee'),
-      ('會計師', 'misc', null),
-      ('內帳記帳費', 'misc', null),
-    ];
-    return [
-      for (final (i, n) in names.indexed)
-        PlAccount(
-          id: 'acc$i',
-          name: n.$1,
-          category: n.$2,
-          autoKind: n.$3,
-          sortOrder: i + 1,
-        ),
-    ];
+    return [..._accountsOf(storeId)]..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+  }
+
+  // ops 0169 示範：損益範本（內容同 lib/data/pl_template.dart 的 demoPlTemplates）
+  @override
+  Future<List<PlTemplate>> plTemplates() async => demoPlTemplates;
+  @override
+  Future<int> applyPlTemplate(String storeId, String kind) async {
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    if (_isStaff) throw Exception('message: 只有老闆能套用損益範本,');
+    if (storeId != _demoNewStoreId) throw Exception('message: PL_TEMPLATE_NEW_ONLY：損益範本只給自己開的新店,');
+    final t = demoPlTemplates.where((x) => x.kind == kind).firstOrNull;
+    if (t == null) throw Exception('message: PL_TEMPLATE_KIND：不認得這種店的類型,');
+    final list = _accountsOf(storeId);
+    if (list.isNotEmpty) {
+      throw Exception('message: PL_TEMPLATE_USED：這家店已經有會計科目了，範本只能套在還沒有科目的店（請直接在損益設定裡改）,');
+    }
+    for (final (i, a) in t.accounts.indexed) {
+      list.add(PlAccount(id: 'pla${_seq++}', name: a.name, category: a.category, autoKind: a.autoKind, sortOrder: i + 1));
+    }
+    return t.accounts.length;
   }
 
   @override
-  Future<String?> plTitle(String storeId) async =>
-      storeId == 'yc' ? '隱城(二店)' : null;
+  Future<void> savePlAccount(String storeId, PlAccount account, {bool isNew = false}) async {
+    if (_isStaff) throw Exception('message: 沒有權限修改（只有老闆可以）,');
+    final list = _accountsOf(storeId);
+    final name = account.name.trim();
+    if (list.any((a) => a.name == name && (isNew || a.id != account.id))) {
+      throw Exception('message: duplicate key value violates unique constraint "pl_accounts_store_id_name_key",');
+    }
+    if (account.autoKind != null && list.any((a) => a.autoKind == account.autoKind && (isNew || a.id != account.id))) {
+      throw Exception('message: duplicate key value violates unique constraint "pl_accounts_store_auto",');
+    }
+    final row = PlAccount(
+        id: isNew ? 'pla${_seq++}' : account.id,
+        name: name,
+        category: account.category,
+        autoKind: account.autoKind,
+        sortOrder: account.sortOrder,
+        active: account.active);
+    list.removeWhere((a) => a.id == row.id);
+    list.add(row);
+  }
+
+  final _plTitles = <String, String?>{'yc': '隱城(二店)'};
+  @override
+  Future<void> savePlTitle(String storeId, String? title) async {
+    if (_isStaff) throw Exception('message: 沒有權限,');
+    final t = (title ?? '').trim();
+    _plTitles[storeId] = t.isEmpty ? null : t;
+  }
+
+  @override
+  Future<String?> plTitle(String storeId) async => _plTitles[storeId];
   @override
   Future<void> saveCardFeeRate(String storeId, double rate) async {
     if (_isStaff) throw Exception('message: 沒有權限,');
@@ -1934,7 +2082,63 @@ class DemoRepository implements Repository {
   }
 
   @override
-  Future<List<CostCategory>> costCategories() async => _categories;
+  Future<List<CostCategory>> costCategories() async =>
+      _isNew ? List.of(_storeCats[_newStore?.storeId] ?? const <CostCategory>[]) : _categories;
+
+  // 公版新店的進貨類別（同資料庫 0165：自助註冊的店自動有 酒水／餐食／雜項，老闆可以新增、改名、停用）
+  final _storeCats = <String, List<CostCategory>>{};
+  int _catSeq = 0;
+  int _seedCats(String storeId) {
+    final list = _storeCats.putIfAbsent(storeId, () => []);
+    if (list.isNotEmpty) return 0;
+    for (final (n, g, misc) in const [('酒水', 'drink', false), ('餐食', 'food', false), ('雜項', 'other', true)]) {
+      list.add(CostCategory.full('demo-c${++_catSeq}', n, _newStore?.storeName,
+          costGroup: g, inMiscRate: misc, storeId: storeId));
+    }
+    return 3;
+  }
+
+  @override
+  Future<int> seedCostCategories(String storeId) async {
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    if (_newStore?.storeId != storeId) {
+      throw Exception('message: CATEGORY_EXCEL：這家店的進貨類別照日報表，不能在 App 改');
+    }
+    return _seedCats(storeId);
+  }
+
+  @override
+  Future<String> saveCostCategory(String storeId,
+      {String? code, required String name, required String costGroup, required bool inMiscRate, bool selectable = true}) async {
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    if (_newStore?.storeId != storeId) {
+      throw Exception('message: CATEGORY_EXCEL：這家店的進貨類別照日報表，不能在 App 改');
+    }
+    final list = _storeCats.putIfAbsent(storeId, () => []);
+    final n = name.trim();
+    if (n.isEmpty || n.length > 20) throw Exception('message: CATEGORY_NAME：類別名稱要 1～20 個字');
+    if (!CostCategory.groupLabels.containsKey(costGroup)) {
+      throw Exception('message: CATEGORY_GROUP：類別要算在酒水、餐食或雜項');
+    }
+    if (list.any((c) => c.name == n && c.code != code)) throw Exception('message: CATEGORY_TAKEN：這家店已經有同名的類別');
+    if (code == null) {
+      if (list.length >= 50) throw Exception('message: CATEGORY_LIMIT：一家店最多 50 個類別');
+      final c = CostCategory.full('demo-c${++_catSeq}', n, _newStore?.storeName,
+          costGroup: costGroup, inMiscRate: inMiscRate, selectable: selectable, storeId: storeId);
+      list.add(c);
+      return c.code;
+    }
+    final i = list.indexWhere((c) => c.code == code);
+    if (i < 0) throw Exception('message: 找不到這個類別');
+    final old = list[i];
+    final used = _purchases.any((p) => p.categoryCode == code);
+    if (used && (old.costGroup != costGroup || old.inMiscRate != inMiscRate)) {
+      throw Exception('message: CATEGORY_USED：這個類別已經有進貨，不能改算在哪一類（成本率會跟著變），可以停用後新增一個');
+    }
+    list[i] = CostCategory.full(code, n, old.storeName,
+        costGroup: costGroup, inMiscRate: inMiscRate, selectable: selectable, storeId: storeId);
+    return code;
+  }
   @override
   Future<List<Supplier>> suppliers(String storeId) async => _suppliers;
   @override
@@ -3066,7 +3270,34 @@ class DemoRepository implements Repository {
   }
 
   @override
-  Future<void> clearStoreLine(String storeId) async => _storeLine.remove(storeId);
+  Future<void> clearStoreLine(String storeId) async {
+    _storeLine.remove(storeId);
+    _lineLinksVia.remove(storeId); // 0161：解除帳號時，透過這個帳號綁的私訊一起拿掉
+  }
+
+  // 0163：打卡設定（示範：第一家店開著打卡、其他店關著；寬限 30、補登 3）
+  final Map<String, AttendanceSettings> _attSettings = {};
+  @override
+  Future<AttendanceSettings> attendanceSettings(String storeId) async =>
+      _attSettings[storeId] ?? AttendanceSettings(enabled: storeId == 'yc', graceMin: 30, canEdit: !_isStaff && !_isManager);
+  @override
+  Future<void> saveAttendanceSettings(String storeId, Map<String, Object?> changes) async {
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    if (_isStaff || _isManager) throw Exception('只有老闆能改打卡設定');
+    var s = await attendanceSettings(storeId);
+    for (final e in changes.entries) {
+      final v = e.value;
+      s = switch (e.key) {
+        'enabled' => s.copyWith(enabled: v as bool),
+        'grace_min' => s.copyWith(graceMin: v as int),
+        'check_from' => s.copyWith(checkFrom: () => v == null ? null : DateTime.parse(v as String)),
+        'amend_owner_after' => s.copyWith(amendOwnerAfter: () => v as int?),
+        'manager_payroll' => s.copyWith(managerPayroll: v as bool),
+        _ => throw Exception('不認得的設定：${e.key}'),
+      };
+    }
+    _attSettings[storeId] = s;
+  }
 
   @override
   Future<List<PlatformWish>> platformWishes(String storeId) async => [
@@ -3365,6 +3596,225 @@ class DemoRepository implements Repository {
     return res;
   }
 
+  // ---------------- 營收搬家（ops 0168，示範版：照資料庫的規則在記憶體裡檢查） ----------------
+  final _demoRevImports = <String, List<RevenueImportBatch>>{
+    'yc': [
+      RevenueImportBatch(
+        id: 'demo-rev-batch-old',
+        createdAt: DateTime.now().subtract(const Duration(days: 3, hours: 2)),
+        fileName: '舊系統匯出_試匯.csv',
+        total: 31,
+        inserted: 30,
+        skipped: 1,
+        dateFrom: DateTime(DateTime.now().year - 1, 1, 1),
+        dateTo: DateTime(DateTime.now().year - 1, 1, 31),
+        undoneAt: DateTime.now().subtract(const Duration(days: 3)),
+        undoneCount: 30,
+        undoneKept: 0,
+      ),
+    ],
+  };
+  final _demoRevImportReq = <String, String>{};
+
+  RevenueImportResult _demoRevCheck(String storeId, List<RevenueImportRow> rows, {String? batchId}) {
+    final multi = StoreFeatures.of(_demoStoreNames[storeId] ?? '').multiLineRevenue;
+    final n = DateTime.now().subtract(const Duration(hours: 6));
+    final today = DateTime(n.year, n.month, n.day);
+    final have = {for (final e in _revList(storeId)) DateTime(e.bizDate.year, e.bizDate.month, e.bizDate.day)};
+    const labels = {
+      'cash': '現金', 'credit_card': '刷卡', 'amex': 'AE', 'deposit': '訂金', 'drinks_revenue': '酒水',
+      'food_revenue': '餐食', 'project_amount': '專案', 'coffee_revenue': '咖啡', 'ramen_revenue': '拉麵',
+    };
+    final errors = <Map<String, dynamic>>[], skipped = <Map<String, dynamic>>[], warnings = <Map<String, dynamic>>[];
+    final ok = <(RevenueImportRow, DateTime, Map<String, double>, int)>[];
+    final seen = <DateTime>{};
+    for (var i = 0; i < rows.length; i++) {
+      final r = rows[i];
+      String? msg;
+      final d = RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(r.date) ? DateTime.tryParse(r.date) : null;
+      if (r.date.isEmpty) {
+        msg = '沒有日期';
+      } else if (d == null) {
+        msg = '日期看不懂（請寫成 2026-10-24）';
+      } else if (d.isAfter(today)) {
+        msg = '日期還沒到（只能匯入今天以前的營收）';
+      } else if (d.year < 2000) {
+        msg = '日期太早（2000 年以後）';
+      }
+      final g = r.v('guests').isEmpty ? 0 : int.tryParse(r.v('guests'));
+      if (msg == null && (g == null || g < 0 || g > 99999)) msg = '來客數要是 0～99999 的整數';
+      final amounts = <String, double>{};
+      if (msg == null) {
+        for (final k in labels.keys) {
+          final raw = r.v(k);
+          final v = raw.isEmpty ? 0.0 : double.tryParse(raw);
+          if (v == null) {
+            msg = '${labels[k]}看不懂（請填數字）';
+            break;
+          }
+          if (v < 0 || v > 100000000 || (v * 100).roundToDouble() != v * 100) {
+            msg = '${labels[k]}要是 0～1 億、最多兩位小數';
+            break;
+          }
+          amounts[k] = v;
+        }
+      }
+      if (msg == null && !multi && ((amounts['coffee_revenue'] ?? 0) != 0 || (amounts['ramen_revenue'] ?? 0) != 0)) {
+        msg = '這家店的營收沒有分咖啡、拉麵，請把那兩欄留空';
+      }
+      if (msg == null && r.v('note').length > 200) msg = '備註超過 200 個字';
+      if (msg != null) {
+        errors.add({'row': i + 1, 'message': msg});
+        continue;
+      }
+      final pay = ['cash', 'credit_card', 'amex', 'deposit'].fold<double>(0, (a, k) => a + amounts[k]!);
+      final lines = ['drinks_revenue', 'food_revenue', 'project_amount', 'coffee_revenue', 'ramen_revenue']
+          .fold<double>(0, (a, k) => a + amounts[k]!);
+      if (pay == 0 && lines == 0 && g == 0) {
+        skipped.add({'row': i + 1, 'reason': '這天全部是 0（公休不用匯入）'});
+        continue;
+      }
+      if (seen.contains(d)) {
+        skipped.add({'row': i + 1, 'reason': '檔案裡前面已經有這一天'});
+        continue;
+      }
+      seen.add(d!);
+      if (have.contains(d)) {
+        skipped.add({'row': i + 1, 'reason': '這天已經有營收資料（不會蓋掉）'});
+        continue;
+      }
+      if (lines > 0 && lines != pay) {
+        warnings.add({'row': i + 1, 'message': '營收分類合計 ${_fmtNum(lines)} 跟收款合計 ${_fmtNum(pay)} 不一樣（照樣匯入）'});
+      }
+      ok.add((r, d, amounts, g!));
+    }
+    DateTime? from, to;
+    for (final o in ok) {
+      if (from == null || o.$2.isBefore(from)) from = o.$2;
+      if (to == null || o.$2.isAfter(to)) to = o.$2;
+    }
+    if (from != null && to!.difference(from).inDays > 732) {
+      errors.add({'row': 0, 'message': '檔案的日期從 ${_ymd(from)} 到 ${_ymd(to)}，一次最多 2 年，請分成幾個檔案'});
+    }
+    String? day(DateTime? d) => d == null ? null : _ymd(d);
+    if (batchId == null || errors.isNotEmpty || ok.isEmpty) {
+      return RevenueImportResult.fromJson({
+        'batch': null,
+        'ready': errors.isEmpty ? ok.length : 0,
+        'errors': errors,
+        'skipped': skipped,
+        'warnings': warnings,
+        'date_from': day(from),
+        'date_to': day(to),
+      }, rows);
+    }
+    final list = _revList(storeId);
+    for (final o in ok) {
+      final a = o.$3;
+      list.add(RevenueEntry(
+        id: 'rev${++_seq}',
+        bizDate: o.$2,
+        guests: o.$4,
+        cash: a['cash']!,
+        creditCard: a['credit_card']!,
+        amex: a['amex']!,
+        deposit: a['deposit']!,
+        drinks: a['drinks_revenue']!,
+        food: a['food_revenue']!,
+        project: a['project_amount']!,
+        coffee: a['coffee_revenue']!,
+        ramen: a['ramen_revenue']!,
+        note: o.$1.v('note').isEmpty ? null : o.$1.v('note'),
+        fileImportId: batchId,
+      ));
+    }
+    return RevenueImportResult.fromJson({
+      'batch': batchId,
+      'inserted': ok.length,
+      'skipped': skipped,
+      'warnings': warnings,
+      'date_from': day(from),
+      'date_to': day(to),
+    }, rows);
+  }
+
+  static String _ymd(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  static String _fmtNum(double v) => v == v.roundToDouble() ? '${v.round()}' : '$v';
+
+  @override
+  Future<RevenueImportResult> previewRevenueImport(String storeId, List<RevenueImportRow> rows) async {
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    if (rows.length > revenueImportMax) throw Exception('一次最多匯入 $revenueImportMax 天，請分成幾個檔案');
+    return _demoRevCheck(storeId, rows);
+  }
+
+  @override
+  Future<RevenueImportResult> importRevenue(
+      String storeId, List<RevenueImportRow> rows, String? fileName, String requestId) async {
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    final prev = _demoRevImportReq[requestId];
+    if (prev != null) {
+      final b = _demoRevImports[storeId]!.firstWhere((x) => x.id == prev);
+      return RevenueImportResult(batchId: b.id, inserted: b.inserted, repeat: true);
+    }
+    final id = 'demo-rev-batch-${DateTime.now().microsecondsSinceEpoch}';
+    final res = _demoRevCheck(storeId, rows, batchId: id);
+    if (res.batchId == null) return res;
+    _demoRevImportReq[requestId] = id;
+    (_demoRevImports[storeId] ??= []).insert(
+      0,
+      RevenueImportBatch(
+        id: id,
+        createdAt: DateTime.now(),
+        fileName: fileName,
+        total: rows.length,
+        inserted: res.inserted,
+        skipped: res.skipped.length,
+        dateFrom: res.dateFrom!,
+        dateTo: res.dateTo!,
+      ),
+    );
+    return res;
+  }
+
+  @override
+  Future<List<RevenueImportBatch>> revenueImports(String storeId) async => [...?_demoRevImports[storeId]];
+
+  @override
+  Future<(int, int)> undoRevenueImport(String batchId) async {
+    for (final e in _demoRevImports.entries) {
+      final i = e.value.indexWhere((b) => b.id == batchId);
+      if (i < 0) continue;
+      final b = e.value[i];
+      if (b.undoneAt != null) throw Exception('這一批已經復原過了');
+      final list = _revList(e.key);
+      final before = list.length;
+      list.removeWhere((x) => x.fileImportId == batchId);
+      final deleted = before - list.length;
+      final kept = (b.inserted - deleted).clamp(0, b.inserted);
+      e.value[i] = RevenueImportBatch(
+        id: b.id,
+        createdAt: b.createdAt,
+        fileName: b.fileName,
+        total: b.total,
+        inserted: b.inserted,
+        skipped: b.skipped,
+        dateFrom: b.dateFrom,
+        dateTo: b.dateTo,
+        undoneAt: DateTime.now(),
+        undoneCount: deleted,
+        undoneKept: kept,
+      );
+      return (deleted, kept);
+    }
+    throw Exception('找不到這一批匯入，或你沒有權限');
+  }
+
+  @override
+  Future<List<RevenueEntry>> allRevenueEntries(String storeId) async =>
+      List.of(_revList(storeId))..sort((a, b) => a.bizDate.compareTo(b.bizDate));
+
   @override
   Future<List<ImportBatch>> reservationImports(String storeId) async => [
     ...?_demoImports[storeId],
@@ -3403,6 +3853,352 @@ class DemoRepository implements Repository {
       return count;
     }
     throw Exception('找不到這一批匯入，或你沒有權限');
+  }
+
+  // ---------------- 盤點品項搬家（0167）：檢查規則同資料庫 product_import ----------------
+  final _demoProductImports = <String, List<ImportBatch>>{};
+  final _demoProductImportReq = <String, String>{};
+  final _demoProductBatch = <String, List<String>>{}; // 批次 → 匯入的品項 id
+  final _demoCosts = <String, double?>{'p1': 1380, 'p2': 920, 'p3': 760, 'p5': 8};
+
+  String _productKey(String s) => s.replaceAll(RegExp(r'\s+'), '').toLowerCase();
+
+  ImportResult _demoProductCheck(List<ProductImportRow> rows, {String? batchId}) {
+    final errors = <Map<String, dynamic>>[], skipped = <Map<String, dynamic>>[];
+    final ok = <ProductImportRow>[];
+    final seen = <String>{};
+    for (var i = 0; i < rows.length; i++) {
+      final r = rows[i];
+      final name = r.name.trim().replaceAll(RegExp(r'\s+'), ' ');
+      String? msg;
+      if (name.isEmpty) {
+        msg = '沒有品名';
+      } else if (name.length > 60) {
+        msg = '品名超過 60 個字';
+      } else if (r.unit.trim().isEmpty) {
+        msg = '沒有單位（例：瓶、包、公斤）';
+      } else if (r.unit.trim().length > 10) {
+        msg = '單位超過 10 個字';
+      } else if (r.category.trim().isEmpty) {
+        msg = '沒有分類（例：酒水、餐食、雜項）';
+      } else if (r.category.trim().length > 20) {
+        msg = '分類超過 20 個字';
+      } else if (r.par.isNotEmpty && double.tryParse(r.par) == null) {
+        msg = '安全量要是數字';
+      } else if (!const {'', '每天', '每週'}.contains(r.cycle)) {
+        msg = '多久盤一次只能是「每天」「每週」或空白';
+      } else if (r.cost.isNotEmpty && double.tryParse(r.cost) == null) {
+        msg = '成本價要是數字';
+      }
+      if (msg != null) {
+        errors.add({'row': i + 1, 'message': msg});
+        continue;
+      }
+      final key = _productKey(name);
+      if (!seen.add(key)) {
+        skipped.add({'row': i + 1, 'reason': '檔案裡前面已經有同名的品項'});
+        continue;
+      }
+      final same = _products.where((p) => _productKey(p.name) == key).firstOrNull;
+      if (same != null) {
+        skipped.add({
+          'row': i + 1,
+          'reason': _inactive.contains(same.id)
+              ? '已經有同名的品項「${same.name}」（已停用，要用請到品項管理重新啟用）'
+              : same.unit != r.unit.trim()
+                  ? '已經有同名的品項「${same.name}」（單位是${same.unit}）'
+                  : '已經有這個品項',
+        });
+        continue;
+      }
+      ok.add(r);
+    }
+    if (batchId == null || errors.isNotEmpty || ok.isEmpty) {
+      return productImportResult({'ready': ok.length, 'errors': errors, 'skipped': skipped}, rows);
+    }
+    final ids = <String>[];
+    for (final r in ok) {
+      final id = 'pimp${_seq++}';
+      ids.add(id);
+      _products.add(Product(
+        id,
+        r.name.trim().replaceAll(RegExp(r'\s+'), ' '),
+        r.category.trim(),
+        r.unit.trim(),
+        parLevel: r.par.isEmpty ? null : double.parse(r.par),
+        countCycle: switch (r.cycle) { '每天' => 'daily', '每週' => 'weekly', _ => null },
+      ));
+      if (r.cost.isNotEmpty) _demoCosts[id] = double.parse(r.cost);
+    }
+    _demoProductBatch[batchId] = ids;
+    return productImportResult({'batch': batchId, 'inserted': ok.length, 'errors': [], 'skipped': skipped}, rows);
+  }
+
+  @override
+  Future<ImportResult> previewProductImport(String storeId, List<ProductImportRow> rows) async {
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    if (rows.length > 2000) throw Exception('一次最多匯入 2000 筆，請分成幾個檔案');
+    return _demoProductCheck(rows);
+  }
+
+  @override
+  Future<ImportResult> importProducts(
+      String storeId, List<ProductImportRow> rows, String? fileName, String requestId) async {
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    final prev = _demoProductImportReq[requestId];
+    if (prev != null) {
+      final b = _demoProductImports[storeId]!.firstWhere((x) => x.id == prev);
+      return ImportResult(batchId: b.id, inserted: b.inserted, repeat: true);
+    }
+    final id = 'demo-pbatch-${DateTime.now().microsecondsSinceEpoch}';
+    final res = _demoProductCheck(rows, batchId: id);
+    if (res.batchId == null) return res;
+    _demoProductImportReq[requestId] = id;
+    (_demoProductImports[storeId] ??= []).insert(
+        0,
+        ImportBatch(
+            id: id,
+            createdAt: DateTime.now(),
+            fileName: fileName,
+            total: rows.length,
+            inserted: res.inserted,
+            skipped: res.skipped.length));
+    return res;
+  }
+
+  @override
+  Future<List<ImportBatch>> productImports(String storeId) async => [...?_demoProductImports[storeId]];
+
+  @override
+  Future<int> undoProductImport(String batchId) async {
+    for (final e in _demoProductImports.entries) {
+      final i = e.value.indexWhere((b) => b.id == batchId);
+      if (i < 0) continue;
+      final b = e.value[i];
+      if (b.undoneAt != null) throw Exception('這一批已經復原過了');
+      var n = 0;
+      for (final id in _demoProductBatch[batchId] ?? const <String>[]) {
+        if (_inactive.add(id)) n++;
+      }
+      e.value[i] = ImportBatch(
+          id: b.id,
+          createdAt: b.createdAt,
+          fileName: b.fileName,
+          total: b.total,
+          inserted: b.inserted,
+          skipped: b.skipped,
+          undoneAt: DateTime.now(),
+          undoneCount: n);
+      return n;
+    }
+    throw Exception('找不到這一批');
+  }
+
+  @override
+  Future<Map<String, double?>> productCosts(String storeId) async => {
+        for (final p in _products)
+          if (!_inactive.contains(p.id)) p.id: _demoCosts[p.id],
+      };
+
+  // ---------------- 員工名冊搬家（示範；只有公版有入口，資料只存在記憶體） ----------------
+  final _demoStaffBatches = <String, List<StaffImportBatch>>{};
+  final _demoStaffReq = <String, String>{};
+  // 匯入的人（示範班表人員清單會接在最後）；batch＝哪一批
+  final _demoStaffPeople = <({ShiftPerson p, String batch})>[];
+  final _demoStaffSeeded = <String>{};
+
+  /// 公版示範：先放一批「之前匯入過的」，匯入紀錄、班表人員看得到
+  void _seedStaffImports(String storeId) {
+    if (!AppConfig.selfSignup || !_demoStaffSeeded.add(storeId)) return;
+    const id = 'demo-staff-batch-0';
+    final at = DateTime.now().subtract(const Duration(days: 3));
+    _demoStaffBatches[storeId] = [
+      StaffImportBatch(id: id, createdAt: at, fileName: '舊系統員工名單.xlsx', total: 3, inserted: 2, withPay: 1, skipped: 1),
+    ];
+    _demoStaffPeople.addAll([
+      (p: ShiftPerson(id: 'imp0', name: 'Kiki', fullName: '陳琪琪', kind: 'part', sortOrder: 20), batch: id),
+      (p: ShiftPerson(id: 'imp1', name: '大頭', fullName: '李大同', sortOrder: 21), batch: id),
+    ]);
+    _rates['imp1'] = [PayRate(id: 'r-imp1', effectiveFrom: DateTime(at.year, at.month, 1), payType: 'monthly', amount: 31000, note: '名冊匯入')];
+  }
+
+  StaffImportResult _demoStaffCheck(String storeId, List<StaffImportRow> rows, {bool canPay = true}) {
+    final n = DateTime.now();
+    final today = DateTime(n.year, n.month, n.day);
+    final errors = <StaffImportIssue>[], skipped = <StaffImportIssue>[];
+    var ready = 0, readyPay = 0;
+    final seen = <String, int>{};
+    final existing = <String, bool>{
+      for (final x in ['阿明', '小安', '阿哲', '小魚', '阿凱', '芳芳', '小白', '阿樂']) x: true,
+      for (final x in _demoStaffPeople) x.p.name: x.p.active,
+    };
+    DateTime? date(String v) =>
+        RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(v) ? DateTime.tryParse(v) : null;
+    final phone = RegExp(r'^\+?[0-9][0-9\- ]{5,19}$');
+    for (var i = 0; i < rows.length; i++) {
+      final r = rows[i];
+      final line = r.line;
+      String? msg;
+      final kind = r.kind.trim().toLowerCase();
+      if (r.name.isEmpty) {
+        msg = '沒有暱稱';
+      } else if (r.name.length > 20) {
+        msg = '暱稱最多 20 個字';
+      } else if (r.fullName.length > 40) {
+        msg = '全名最多 40 個字';
+      } else if (!['', '正職', '全職', 'full', '兼職', '工讀', 'part'].contains(kind)) {
+        msg = '正職／兼職看不懂（請寫正職或兼職）';
+      } else if (r.hireDate.isNotEmpty && date(r.hireDate) == null) {
+        msg = '到職日看不懂（請寫成 2026-03-01）';
+      } else if (r.hireDate.isNotEmpty && date(r.hireDate)!.isAfter(today.add(const Duration(days: 366)))) {
+        msg = '到職日太遠了';
+      } else if (r.phone.isNotEmpty && !phone.hasMatch(r.phone)) {
+        msg = '電話格式不對';
+      } else if (r.emergencyPhone.isNotEmpty && !phone.hasMatch(r.emergencyPhone)) {
+        msg = '緊急聯絡電話格式不對';
+      } else if (r.hasPay) {
+        final amt = double.tryParse(r.amount.replaceAll(',', ''));
+        if (!canPay) {
+          msg = '你沒有權限設定薪資（請老闆匯入，或把起薪的欄位清空）';
+        } else if (!['月薪', '時薪', '日薪', 'monthly', 'hourly', 'daily'].contains(r.payType.trim().toLowerCase())) {
+          msg = '計薪方式看不懂（請寫月薪、時薪或日薪）';
+        } else if (amt == null || amt <= 0) {
+          msg = '起薪金額看不懂';
+        } else if (r.effectiveFrom.isEmpty && r.hireDate.isEmpty) {
+          msg = '起薪要有生效日（或填到職日，會用到職日）';
+        } else if (r.effectiveFrom.isNotEmpty && date(r.effectiveFrom) == null) {
+          msg = '起薪生效日看不懂（請寫成 2026-03-01）';
+        } else if (r.insuredSalary.isNotEmpty && int.tryParse(r.insuredSalary) == null) {
+          msg = '投保級距看不懂';
+        }
+      }
+      if (msg != null) {
+        errors.add(StaffImportIssue(line, msg));
+        continue;
+      }
+      final prev = seen[r.name];
+      if (prev != null) {
+        errors.add(StaffImportIssue(line, '跟第 $prev 列的暱稱一樣（暱稱不能重複）'));
+        continue;
+      }
+      seen[r.name] = line;
+      if (existing.containsKey(r.name)) {
+        skipped.add(StaffImportIssue(line,
+            existing[r.name]! ? '班表上已經有這個名字，不會改原本的資料' : '班表上已經有這個名字（已停用），不會改原本的資料'));
+        continue;
+      }
+      ready++;
+      if (r.hasPay) readyPay++;
+    }
+    return StaffImportResult(ready: ready, readyPay: readyPay, errors: errors, skipped: skipped);
+  }
+
+  @override
+  Future<StaffImportResult> previewStaffImport(String storeId, List<StaffImportRow> rows) async {
+    _seedStaffImports(storeId);
+    if (_isStaff) throw Exception('message: 只有老闆、店長能匯入員工,');
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    if (rows.length > 500) throw Exception('message: 一次最多匯入 500 位，請分成幾個檔案,');
+    return _demoStaffCheck(storeId, rows);
+  }
+
+  @override
+  Future<StaffImportResult> importStaff(String storeId, List<StaffImportRow> rows, String? fileName, String requestId) async {
+    _seedStaffImports(storeId);
+    if (_isStaff) throw Exception('message: 只有老闆、店長能匯入員工,');
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    final prev = _demoStaffReq[requestId];
+    if (prev != null) {
+      final b = _demoStaffBatches[storeId]!.firstWhere((x) => x.id == prev);
+      return StaffImportResult(batchId: b.id, inserted: b.inserted, withPay: b.withPay, repeat: true);
+    }
+    final check = _demoStaffCheck(storeId, rows);
+    if (check.errors.isNotEmpty || check.ready == 0) return check;
+    final id = 'demo-staff-batch-${DateTime.now().microsecondsSinceEpoch}';
+    final skippedLines = {for (final s in check.skipped) s.line};
+    var order = 30 + _demoStaffPeople.length, withPay = 0;
+    for (final r in rows) {
+      if (skippedLines.contains(r.line)) continue;
+      final pid = 'imp-${DateTime.now().microsecondsSinceEpoch}-${r.line}';
+      final hire = r.hireDate.isEmpty ? null : DateTime.parse(r.hireDate);
+      final k = r.kind.trim().toLowerCase();
+      _demoStaffPeople.add((
+        p: ShiftPerson(
+          id: pid,
+          name: r.name,
+          fullName: r.fullName.isEmpty ? null : r.fullName,
+          kind: ['兼職', '工讀', 'part'].contains(k) ? 'part' : 'full',
+          sortOrder: order++,
+          hireDate: hire,
+        ),
+        batch: id,
+      ));
+      if (r.phone.isNotEmpty || r.emergencyContact.isNotEmpty || r.emergencyPhone.isNotEmpty) {
+        _hr[pid] = {'phone': r.phone.isEmpty ? null : r.phone, 'ec': r.emergencyContact.isEmpty ? null : r.emergencyContact,
+            'ep': r.emergencyPhone.isEmpty ? null : r.emergencyPhone};
+      }
+      if (r.hasPay) {
+        withPay++;
+        final pt = switch (r.payType.trim().toLowerCase()) { '時薪' || 'hourly' => 'hourly', '日薪' || 'daily' => 'daily', _ => 'monthly' };
+        _rates[pid] = [
+          PayRate(
+            id: 'r-$pid',
+            effectiveFrom: DateTime.parse(r.effectiveFrom.isEmpty ? r.hireDate : r.effectiveFrom),
+            payType: pt,
+            amount: double.parse(r.amount.replaceAll(',', '')),
+            insuredSalary: r.insuredSalary.isEmpty ? null : double.parse(r.insuredSalary),
+            note: '名冊匯入',
+          ),
+        ];
+      }
+    }
+    _demoStaffReq[requestId] = id;
+    (_demoStaffBatches[storeId] ??= []).insert(
+      0,
+      StaffImportBatch(id: id, createdAt: DateTime.now(), fileName: fileName, total: rows.length,
+          inserted: check.ready, withPay: withPay, skipped: check.skipped.length),
+    );
+    return StaffImportResult(batchId: id, inserted: check.ready, withPay: withPay, skipped: check.skipped);
+  }
+
+  @override
+  Future<List<StaffImportBatch>> staffImports(String storeId) async {
+    _seedStaffImports(storeId);
+    return [...?_demoStaffBatches[storeId]];
+  }
+
+  @override
+  Future<StaffImportUndo> undoStaffImport(String batchId) async {
+    for (final e in _demoStaffBatches.entries) {
+      final i = e.value.indexWhere((b) => b.id == batchId);
+      if (i < 0) continue;
+      final b = e.value[i];
+      if (b.undoneAt != null) throw Exception('message: 這一批已經復原過了,');
+      var n = 0;
+      final kept = <String>[];
+      for (var k = 0; k < _demoStaffPeople.length; k++) {
+        final x = _demoStaffPeople[k];
+        if (x.batch != batchId) continue;
+        // 示範：Kiki 已經打過卡，整批復原時留著
+        if (x.p.id == 'imp0') {
+          kept.add(x.p.name);
+          continue;
+        }
+        if (!x.p.active) continue;
+        final p = x.p;
+        _demoStaffPeople[k] = (
+          p: ShiftPerson(id: p.id, name: p.name, fullName: p.fullName, kind: p.kind, sortOrder: p.sortOrder, hireDate: p.hireDate, active: false),
+          batch: x.batch,
+        );
+        n++;
+      }
+      e.value[i] = StaffImportBatch(
+        id: b.id, createdAt: b.createdAt, fileName: b.fileName, total: b.total, inserted: b.inserted,
+        withPay: b.withPay, skipped: b.skipped, undoneAt: DateTime.now(), undoneCount: n, undoneKept: kept.length,
+      );
+      return StaffImportUndo(n, kept);
+    }
+    throw Exception('message: 找不到這一批匯入，或你沒有權限,');
   }
 
   @override
@@ -4134,7 +4930,7 @@ class DemoRepository implements Repository {
   Future<AttendanceMe?> attendanceMe(String storeId) async {
     final last = _att.where((r) => r.isPunch).lastOrNull;
     return AttendanceMe(
-      enabled: storeId == 'yc',
+      enabled: _attSettings[storeId]?.enabled ?? storeId == 'yc',
       canManage: !_isStaff, // 小城外沒開打卡，老闆照樣管員工資料
       personId: _bindingPending ? null : 'f0',
       personName: _bindingPending ? null : _dn('f0', '阿明'),
@@ -4819,6 +5615,47 @@ class DemoRepository implements Repository {
         accountName: '示範公用帳號',
       ),
     );
+  }
+
+  // 0164 公版：打卡設定進度（示範：隱城已打開、還沒有打卡用帳號；阿明還沒設密碼、O 沒設時間）
+  final _attEnabled = <String>{'yc'};
+  DateTime? _kioskInviteUntil;
+
+  @override
+  Future<AttendanceSetupStatus> attendanceSetupStatus(String storeId) async {
+    if (_isStaff || _isKiosk) throw Exception('message: 只有老闆或店長能看打卡設定,');
+    final m = await shiftMonth(storeId, DateTime.now());
+    final people = [for (final p in m.people) if (p.active) p];
+    final timed = {for (final t in await shiftMarkTimes(storeId)) t.mark};
+    final used = {for (final d in m.marks.values) ...d.values};
+    final kiosk = _kiosks.where((k) => k.active && k.accountUserId != null).firstOrNull;
+    final invite = _kioskInviteUntil;
+    return AttendanceSetupStatus(
+      canOwner: !_isManager,
+      enabled: _attEnabled.contains(storeId),
+      kioskName: kiosk?.accountName,
+      kioskInviteUntil: kiosk == null && invite != null && invite.isAfter(DateTime.now()) ? invite : null,
+      people: people.length,
+      unbound: [for (final p in people) if (p.userId == null || !p.userVerified) SetupPerson(p.id, p.label)],
+      noPin: [for (final p in people) if (!_pins.containsKey(p.id)) SetupPerson(p.id, p.label)],
+      shiftCodes: false,
+      hasTime: timed.contains('V'),
+      untimed: [for (final mk in const ['V', 'O']) if (used.contains(mk) && !timed.contains(mk)) mk],
+      lastPinPunch: _pinPunches.isEmpty ? null : _pinPunches.map((r) => r.punchedAt).reduce((a, b) => a.isAfter(b) ? a : b),
+    );
+  }
+
+  @override
+  Future<void> attendanceSetupEnable(String storeId) async {
+    if (_isManager || _isStaff) throw Exception('message: 只有老闆能打開打卡,');
+    _attEnabled.add(storeId);
+  }
+
+  @override
+  Future<String> attendanceKioskInvite(String storeId) async {
+    if (_isManager || _isStaff) throw Exception('message: 只有老闆能產生打卡用帳號的邀請碼,');
+    _kioskInviteUntil = DateTime.now().add(const Duration(days: 14));
+    return 'KIOSK-28DEM';
   }
 
   // 示範打卡密碼（虛構）：阿哲 2580、小魚 3691；阿明（示範員工自己）還沒設，班表頁會請他先設定。正式資料庫只存雜湊

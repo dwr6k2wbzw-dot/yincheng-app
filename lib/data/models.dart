@@ -126,11 +126,24 @@ class CostCategory {
   final bool inMiscRate; // 算進雜項成本率
   final bool selectable; // 新增進貨可不可以選（0046：停用的類別歷史資料照常顯示）
   final String? displayAs; // 進貨頁顯示時併入哪個類別（0047：小城外三個餐食→餐食、三個雜支→其他雜支）
+  final String? storeId; // ops 0165：類別跟著店（舊資料庫沒有這欄時是空的，改看店名）
   CostCategory(this.code, this.name, [this.storeName])
-      : costGroup = 'other', inMiscRate = false, selectable = true, displayAs = null;
+      : costGroup = 'other', inMiscRate = false, selectable = true, displayAs = null, storeId = null;
   CostCategory.full(this.code, this.name, this.storeName,
-      {required this.costGroup, required this.inMiscRate, this.selectable = true, this.displayAs});
+      {required this.costGroup, required this.inMiscRate, this.selectable = true, this.displayAs, this.storeId});
+
+  /// 這個類別是不是這家店的：有店的 id 就比 id，沒有就照舊比店名（店名空白＝每家店都能用，示範資料）
+  bool belongsTo(String id, String name) =>
+      storeId != null ? storeId == id : (storeName == null || storeName == name);
+
+  /// 公版的類別只分三種（ops 0165）
+  static const groupLabels = {'drink': '酒水', 'food': '餐食', 'other': '雜項'};
 }
+
+/// 只留這家店的類別（ops 0165）：同時是兩家店成員的人，資料庫兩家店的類別都讀得到，
+/// 進貨表單只能用這家店的（資料庫的複合外鍵也只收同一家店的類別）。
+List<CostCategory> categoriesOfStore(Iterable<CostCategory> all, String storeId, String storeName) =>
+    [for (final c in all) if (c.belongsTo(storeId, storeName)) c];
 
 /// 銷貨單分組（老闆 2026-10-12 改）：依當初新增進貨的付款方式分「月結銷貨單」「零用金發票／收據」。
 /// 對不到進貨的（舊 Dropbox 廠商進貨單、老闆／店長手動新增）都是廠商單據，歸月結銷貨單。
@@ -506,6 +519,8 @@ class RevenueEntry {
   final double ramen; // 小城外：拉麵
   final String? note;
   final String source; // app / import
+  /// 搬家匯入的是哪一批（ops 0168；只有匯出時讀，其他地方是 null）
+  final String? fileImportId;
   RevenueEntry({
     this.id,
     required this.bizDate,
@@ -521,6 +536,7 @@ class RevenueEntry {
     this.ramen = 0,
     this.note,
     this.source = 'app',
+    this.fileImportId,
   });
 
   /// 收款合計（＝資料庫的 revenue）
@@ -544,6 +560,7 @@ class RevenueEntry {
         ramen: _d(r['ramen_revenue']),
         note: r['note'] as String?,
         source: r['source'] as String? ?? 'app',
+        fileImportId: r['file_import_id'] as String?,
       );
 
   Map<String, dynamic> toValues() => {

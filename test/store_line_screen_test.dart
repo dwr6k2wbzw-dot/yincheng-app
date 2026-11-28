@@ -19,7 +19,16 @@ final _token = 'tok-${'t' * 60}WXYZ';
 
 class _Repo extends DemoRepository {
   bool offline = false;
+  bool platformCode = false; // 0161：模擬老闆貼了平台機器人給的代碼
   StoreLineResult? testResult;
+  @override
+  Future<bool> linkLineOwnerVia(String storeId, String code) async {
+    if (platformCode) {
+      await linkLineOwner(code);
+      return false;
+    }
+    return super.linkLineOwnerVia(storeId, code);
+  }
   @override
   Future<StoreLineResult> testStoreLine(String storeId) async =>
       testResult ?? await super.testStoreLine(storeId);
@@ -138,5 +147,70 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, '解除'));
     await tester.pumpAndSettle();
     expect(find.text('還沒接上自己的 LINE 官方帳號'), findsOneWidget);
+  });
+
+  // ---------------- 0161：私訊也走這個官方帳號 ----------------
+  Future<void> connect(WidgetTester tester) async {
+    await tester.enterText(_field('Channel secret'), _secret);
+    await tester.enterText(_field('Channel access token'), _token);
+    await tester.tap(find.text('驗證並接上'));
+    await tester.pumpAndSettle();
+    // 接上的提示先收掉，不然後面的提示排在它後面、還看不到
+    ScaffoldMessenger.of(tester.element(find.byType(Scaffold).first)).clearSnackBars();
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> bindDm(WidgetTester tester, String code) async {
+    await tester.tap(find.text('綁定我的私訊'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('私訊打「綁定」'), findsOneWidget);
+    expect(find.textContaining('示範小館通知'), findsWidgets, reason: '要說私訊哪個帳號');
+    await tester.enterText(_field('代碼'), code);
+    await tester.tap(find.widgetWithText(FilledButton, '綁定'));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('私訊（0161）：還沒接上不顯示；接上後可以用這個帳號綁定、解除', (tester) async {
+    await _open(tester);
+    expect(find.textContaining('私訊：'), findsNothing);
+    await connect(tester);
+    expect(find.text('私訊：還沒用這個帳號綁定'), findsOneWidget);
+    await bindDm(tester, '123456');
+    expect(find.text('私訊：已用這個帳號綁定'), findsOneWidget);
+    expect(find.textContaining('訂位異常會私訊你'), findsOneWidget);
+    await tester.tap(find.text('解除我的私訊綁定'));
+    await tester.pumpAndSettle();
+    expect(find.text('私訊：還沒用這個帳號綁定'), findsOneWidget);
+  });
+
+  testWidgets('私訊（0161）：代碼不對寫錯誤、不算綁上', (tester) async {
+    await _open(tester);
+    await connect(tester);
+    await bindDm(tester, '12');
+    expect(find.textContaining('代碼不對或已過期'), findsOneWidget);
+    expect(find.text('私訊：還沒用這個帳號綁定'), findsOneWidget);
+  });
+
+  testWidgets('私訊（0161）：貼了平台機器人的代碼 → 講清楚綁到平台、這個帳號還沒綁', (tester) async {
+    final repo = await _open(tester);
+    await connect(tester);
+    repo.platformCode = true;
+    await bindDm(tester, '654321');
+    expect(find.textContaining('平台的 LINE 機器人給的'), findsOneWidget);
+    expect(find.text('私訊：還沒用這個帳號綁定'), findsOneWidget);
+  });
+
+  testWidgets('私訊（0161）：解除官方帳號時私訊綁定一起拿掉', (tester) async {
+    final repo = await _open(tester);
+    await connect(tester);
+    await bindDm(tester, '123456');
+    expect(await repo.lineOwnerLinkedVia('s1'), isTrue);
+    await tester.tap(find.text('解除這個帳號'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('私訊也會一起解除'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, '解除'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('私訊：'), findsNothing);
+    expect(await repo.lineOwnerLinkedVia('s1'), isFalse);
   });
 }

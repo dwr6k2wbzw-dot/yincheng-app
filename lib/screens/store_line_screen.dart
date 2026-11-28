@@ -32,6 +32,7 @@ class _StoreLineScreenState extends State<StoreLineScreen> {
   bool _busy = false;
   String? _formError;
   String? _note; // 驗證已存金鑰的結果
+  bool? _dmLinked; // 0161：我有沒有透過這個官方帳號綁私訊（讀不到＝null）
 
   Repository get _repo => AppScope.of(context).repo;
   String get _store => widget.membership.storeId;
@@ -55,9 +56,18 @@ class _StoreLineScreenState extends State<StoreLineScreen> {
   Future<void> _load() async {
     try {
       final s = await _repo.storeLineStatus(_store);
+      bool? dm;
+      if (s.connected) {
+        try {
+          dm = await _repo.lineOwnerLinkedVia(_store);
+        } catch (_) {
+          dm = null; // 讀不到就不顯示狀態，綁定照樣能按
+        }
+      }
       if (mounted) {
         setState(() {
           _status = s;
+          _dmLinked = dm;
           _loadError = null;
         });
       }
@@ -181,8 +191,8 @@ class _StoreLineScreenState extends State<StoreLineScreen> {
       builder: (c) => AlertDialog(
         title: const Text('解除這個 LINE 官方帳號？'),
         content: Text(viaStore
-            ? '存著的金鑰會刪掉，透過這個帳號綁的工作群組也會一起解除，之後重要交接不會再發到 LINE。'
-            : '存著的金鑰會刪掉，之後不會再用這個帳號發訊息。'),
+            ? '存著的金鑰會刪掉，透過這個帳號綁的工作群組、私訊也會一起解除，之後重要交接不會再發到 LINE。'
+            : '存著的金鑰會刪掉，透過這個帳號綁的私訊也會一起解除，之後不會再用這個帳號發訊息。'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(c, false),
@@ -244,6 +254,10 @@ class _StoreLineScreenState extends State<StoreLineScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
                 children: [
                   _statusCard(s),
+                  if (s.connected) ...[
+                    const SizedBox(height: 12),
+                    _dmCard(s),
+                  ],
                   const SizedBox(height: 12),
                   _stepsCard(s),
                   const SizedBox(height: 12),
@@ -353,6 +367,86 @@ class _StoreLineScreenState extends State<StoreLineScreen> {
             ),
           ),
         ]),
+      ]),
+    );
+  }
+
+  // ---------------- 0161：私訊也走這個官方帳號 ----------------
+  Future<void> _linkDm(StoreLineStatus s) async {
+    final bot = s.botName ?? '這個官方帳號';
+    // 輸入框的 controller 由對話框自己管（關閉動畫還在用時不能先 dispose）
+    final code = await showDialog<String>(
+      context: context,
+      builder: (c) => _DmCodeDialog(bot: bot, basicId: s.basicId),
+    );
+    if (code == null || code.trim().isEmpty) return;
+    setState(() => _busy = true);
+    try {
+      final via = await _repo.linkLineOwnerVia(_store, code);
+      if (!mounted) return;
+      setState(() => _dmLinked = via);
+      showMessage(
+          context,
+          via
+              ? '綁定好了！訂位異常會私訊你，也可以私訊「$bot」問店裡的事'
+              : '這組代碼是平台的 LINE 機器人給的，已綁到平台的私訊。要用你自己的帳號，請私訊「$bot」打「綁定」');
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _unlinkDm() async {
+    setState(() => _busy = true);
+    try {
+      await _repo.unlinkLineOwnerVia(_store);
+      if (!mounted) return;
+      setState(() => _dmLinked = false);
+      showMessage(context, '已解除，這個帳號不會再私訊你');
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Widget _dmCard(StoreLineStatus s) {
+    final linked = _dmLinked == true;
+    return SectionCard(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(linked ? Icons.mark_chat_read_outlined : Icons.chat_bubble_outline,
+              color: linked ? AppColors.good : AppColors.muted),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(linked ? '私訊：已用這個帳號綁定' : '私訊：還沒用這個帳號綁定',
+                style: const TextStyle(fontSize: AppType.title, fontWeight: AppFont.heading)),
+          ),
+        ]),
+        const SizedBox(height: 6),
+        const InfoLine(
+          icon: null,
+          text: '訂位異常通知會用這個帳號私訊老闆',
+          detail: '接上自己的帳號之後，私訊也走這個帳號：訂位頁或線上訂位出問題時，私訊透過這個帳號綁定的老闆（訊息則數算你的，平台的帳號不會再私訊你）。'
+              '老闆、店長私訊這個帳號也能問店裡的事，只回答這家店；要用 AI 回答，這家店要接自己的 Claude（AI 設定）。'
+              '解除這個官方帳號時，私訊綁定會一起解除。',
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          width: double.infinity,
+          height: 48,
+          child: linked
+              ? OutlinedButton(
+                  onPressed: _busy ? null : _unlinkDm,
+                  child: const Text('解除我的私訊綁定'),
+                )
+              : FilledButton.tonalIcon(
+                  onPressed: _busy ? null : () => _linkDm(s),
+                  icon: const Icon(Icons.link, size: 20),
+                  label: const Text('綁定我的私訊'),
+                ),
+        ),
       ]),
     );
   }
@@ -553,5 +647,48 @@ class _ErrorLine extends StatelessWidget {
                       fontSize: AppType.small,
                       height: 1.4))),
         ]),
+      );
+}
+
+// 0161：輸入官方帳號私訊給的綁定代碼
+class _DmCodeDialog extends StatefulWidget {
+  const _DmCodeDialog({required this.bot, this.basicId});
+  final String bot;
+  final String? basicId;
+  @override
+  State<_DmCodeDialog> createState() => _DmCodeDialogState();
+}
+
+class _DmCodeDialogState extends State<_DmCodeDialog> {
+  final _ctrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: const Text('用這個帳號綁定我的私訊'),
+        content: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(
+                '1. 在 LINE 加「${widget.bot}」${widget.basicId == null ? '' : '（${widget.basicId}）'}好友，私訊打「綁定」\n2. 把它回的 6 位數代碼填在這裡（10 分鐘內）',
+                style: TextStyle(color: AppColors.muted, fontSize: AppType.small, height: 1.6)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _ctrl,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              decoration: const InputDecoration(labelText: '代碼', counterText: '', border: OutlineInputBorder()),
+            ),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(context, _ctrl.text), child: const Text('綁定')),
+        ],
       );
 }
