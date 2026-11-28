@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../app_state.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
+import '../data/staff_order.dart';
 import '../services/attendance_csv.dart';
 import '../services/clock.dart';
 import '../services/pl_export.dart' deferred as pl;
@@ -58,8 +59,8 @@ class _AttendanceManageScreenState extends State<AttendanceManageScreen> {
         body: TabBarView(children: [
           _AnomalyTab(membership: m, data: widget.data, codeTimes: widget.codeTimes, changed: _changed),
           ScheduleCheckTab(membership: m, data: widget.data, codeTimes: widget.codeTimes, changed: _changed),
-          OvertimeTab(membership: m, changed: _changed),
-          _SessionTab(membership: m, changed: _changed),
+          OvertimeTab(membership: m, data: widget.data, changed: _changed),
+          _SessionTab(membership: m, data: widget.data, changed: _changed),
           _RawTab(membership: m, changed: _changed),
           _KioskTab(membership: m),
           _StaffTab(membership: m),
@@ -165,9 +166,11 @@ class _AnomalyTabState extends State<_AnomalyTab> with AutomaticKeepAliveClientM
       _repo.shiftMarkTimes(store).catchError((_) => <ShiftMarkTime>[]),
     ]);
     const timeIssues = {'early_in', 'late_in', 'early_out', 'late_out'};
+    final full = await fullTimeIdsAllStores(_repo, store, widget.data); // 同一天裡正職在前（2026-11-28）
     return (
-      anomalies: r[0] as List<AttendanceAnomaly>,
-      offSchedule: [for (final x in r[1] as List<ScheduleCheckRow>) if (x.issues.any(timeIssues.contains)) x],
+      anomalies: fullTimeFirst(r[0] as List<AttendanceAnomaly>, (x) => full.contains(x.personId), group: (x) => x.businessDate),
+      offSchedule: fullTimeFirst([for (final x in r[1] as List<ScheduleCheckRow>) if (x.issues.any(timeIssues.contains)) x],
+          (x) => full.contains(x.personId), group: (x) => x.businessDate),
       markTimes: r[2] as List<ShiftMarkTime>,
     );
   }
@@ -366,8 +369,9 @@ typedef _AnomalyData = ({List<AttendanceAnomaly> anomalies, List<ScheduleCheckRo
 // ---------------- 出勤與匯出 ----------------
 
 class _SessionTab extends StatefulWidget {
-  const _SessionTab({required this.membership, required this.changed});
+  const _SessionTab({required this.membership, required this.data, required this.changed});
   final Membership membership;
+  final ShiftMonth data; // 誰是正職（排序用）
   final ValueNotifier<int> changed;
   @override
   State<_SessionTab> createState() => _SessionTabState();
@@ -387,9 +391,11 @@ class _SessionTabState extends State<_SessionTab> with AutomaticKeepAliveClientM
 
   Repository get _repo => AppScope.of(context).repo;
 
-  Future<List<AttendanceSession>> _load() {
-    final d = _rangeDates(_range);
-    return _repo.attendanceSessions(widget.membership.storeId, d.from, d.to);
+  /// 同一天裡正職在前（2026-11-28）
+  Future<List<AttendanceSession>> _load() async {
+    final d = _rangeDates(_range), full = await fullTimeIdsAllStores(_repo, widget.membership.storeId, widget.data);
+    return fullTimeFirst(await _repo.attendanceSessions(widget.membership.storeId, d.from, d.to), (x) => full.contains(x.personId),
+        group: (x) => x.businessDate);
   }
 
   Future<void> _export() async {
@@ -826,7 +832,8 @@ class _StaffTabState extends State<_StaffTab> {
     final repo = AppScope.of(context).repo, store = widget.membership.storeId;
     final pins = repo.pinStatus(store).then<List<PinStatus>?>((v) => v, onError: (_) => null);
     final ex = repo.punchExemptIds(store).then<Set<String>?>((v) => v, onError: (_) => null);
-    final list = await repo.staffDirectory(store);
+    // 正職在前（2026-11-28）；停用的照舊放最後
+    final list = fullTimeFirst(await repo.staffDirectory(store), (s) => s.kind == 'full', group: (s) => s.active);
     final p = await pins;
     _exempt = await ex;
     return (list, p == null ? null : {for (final x in p) x.personId: x});
