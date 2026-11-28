@@ -2,6 +2,7 @@ import 'shift_off_rules.dart';
 import 'dart:typed_data';
 
 import 'attendance_models.dart';
+import 'attendance_setup.dart';
 import 'change_request_models.dart';
 import 'booking_profile.dart';
 import 'booking_assist.dart';
@@ -456,6 +457,12 @@ abstract class Repository {
   Future<List<KioskAccountCandidate>> kioskAccountCandidates(String storeId);
   /// 老闆：把這個帳號設成這家店的打卡用帳號（權限照舊，第一頁多一個密碼打卡）
   Future<void> setKioskAccount(String storeId, String userId);
+  /// 公版：打卡設定進度（ops 0164；老闆、店長）
+  Future<AttendanceSetupStatus> attendanceSetupStatus(String storeId);
+  /// 公版：老闆打開這家店的打卡
+  Future<void> attendanceSetupEnable(String storeId);
+  /// 公版：老闆產生「打卡用帳號」的邀請碼（14 天、一家店同時只有一組）；店裡的平板用新帳號輸入就直接成為打卡用帳號
+  Future<String> attendanceKioskInvite(String storeId);
   /// 登入的帳號是打卡用帳號就回它的店；不是（或資料庫還沒更新）回 null
   Future<KioskMine?> kioskMine();
   /// 打卡用帳號：輸入自己的 4 位數密碼打卡（ops 0131：靠密碼認人，時間是伺服器時間）

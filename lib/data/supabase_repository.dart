@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide toDouble;
 
 import '../config.dart';
+import 'attendance_setup.dart';
 import 'booking_import.dart';
 import 'booking_profile.dart';
 import 'models.dart';
@@ -2200,6 +2201,21 @@ class SupabaseRepository implements Repository {
   Future<void> clearStoreAi(String storeId) async {
     await _db.rpc('store_ai_clear', params: {'p_store': storeId});
   }
+
+  @override
+  Future<AttendanceSetupStatus> attendanceSetupStatus(String storeId) async {
+    final r = await _db.rpc('attendance_setup_status', params: {'p_store': storeId});
+    return AttendanceSetupStatus.fromJson(r is Map ? Map<String, dynamic>.from(r) : const {});
+  }
+
+  @override
+  Future<void> attendanceSetupEnable(String storeId) async {
+    await _db.rpc('attendance_setup_enable', params: {'p_store': storeId});
+  }
+
+  @override
+  Future<String> attendanceKioskInvite(String storeId) async =>
+      (await _db.rpc('attendance_kiosk_invite', params: {'p_store': storeId})) as String;
 
   @override
   Future<StoreLineStatus> storeLineStatus(String storeId) async {

@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import '../config.dart';
+import 'attendance_setup.dart';
 import 'booking_import.dart';
 import 'booking_profile.dart';
 import 'models.dart';
@@ -4819,6 +4820,47 @@ class DemoRepository implements Repository {
         accountName: '示範公用帳號',
       ),
     );
+  }
+
+  // 0164 公版：打卡設定進度（示範：隱城已打開、還沒有打卡用帳號；阿明還沒設密碼、O 沒設時間）
+  final _attEnabled = <String>{'yc'};
+  DateTime? _kioskInviteUntil;
+
+  @override
+  Future<AttendanceSetupStatus> attendanceSetupStatus(String storeId) async {
+    if (_isStaff || _isKiosk) throw Exception('message: 只有老闆或店長能看打卡設定,');
+    final m = await shiftMonth(storeId, DateTime.now());
+    final people = [for (final p in m.people) if (p.active) p];
+    final timed = {for (final t in await shiftMarkTimes(storeId)) t.mark};
+    final used = {for (final d in m.marks.values) ...d.values};
+    final kiosk = _kiosks.where((k) => k.active && k.accountUserId != null).firstOrNull;
+    final invite = _kioskInviteUntil;
+    return AttendanceSetupStatus(
+      canOwner: !_isManager,
+      enabled: _attEnabled.contains(storeId),
+      kioskName: kiosk?.accountName,
+      kioskInviteUntil: kiosk == null && invite != null && invite.isAfter(DateTime.now()) ? invite : null,
+      people: people.length,
+      unbound: [for (final p in people) if (p.userId == null || !p.userVerified) SetupPerson(p.id, p.label)],
+      noPin: [for (final p in people) if (!_pins.containsKey(p.id)) SetupPerson(p.id, p.label)],
+      shiftCodes: false,
+      hasTime: timed.contains('V'),
+      untimed: [for (final mk in const ['V', 'O']) if (used.contains(mk) && !timed.contains(mk)) mk],
+      lastPinPunch: _pinPunches.isEmpty ? null : _pinPunches.map((r) => r.punchedAt).reduce((a, b) => a.isAfter(b) ? a : b),
+    );
+  }
+
+  @override
+  Future<void> attendanceSetupEnable(String storeId) async {
+    if (_isManager || _isStaff) throw Exception('message: 只有老闆能打開打卡,');
+    _attEnabled.add(storeId);
+  }
+
+  @override
+  Future<String> attendanceKioskInvite(String storeId) async {
+    if (_isManager || _isStaff) throw Exception('message: 只有老闆能產生打卡用帳號的邀請碼,');
+    _kioskInviteUntil = DateTime.now().add(const Duration(days: 14));
+    return 'KIOSK-28DEM';
   }
 
   // 示範打卡密碼（虛構）：阿哲 2580、小魚 3691；阿明（示範員工自己）還沒設，班表頁會請他先設定。正式資料庫只存雜湊

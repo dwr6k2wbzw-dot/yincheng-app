@@ -8,6 +8,7 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import '../data/repository.dart';
 import '../config.dart';
+import 'attendance_setup_screen.dart';
 import 'change_requests_screen.dart';
 import 'platform_admin_wishes_screen.dart';
 import 'platform_wishes_screen.dart';
@@ -194,6 +195,10 @@ class _HomeShellState extends State<HomeShell> with SingleTickerProviderStateMix
                 Navigator.of(context).push(MaterialPageRoute(builder: (_) => StoreAiScreen(membership: m)));
                 return;
               }
+              if (v == 'asetup') {
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => AttendanceSetupScreen(membership: m)));
+                return;
+              }
               if (v == 'line') {
                 Navigator.of(context).push(MaterialPageRoute(builder: (_) => StoreLineScreen(membership: m)));
                 return;
@@ -246,6 +251,9 @@ class _HomeShellState extends State<HomeShell> with SingleTickerProviderStateMix
                 const PopupMenuItem(value: 'ai', child: ListTile(leading: Icon(Icons.memory_outlined), title: Text('AI 設定'))),
               if (AppConfig.selfSignup && m.role == Role.owner)
                 const PopupMenuItem(value: 'line', child: ListTile(leading: Icon(Icons.forum_outlined), title: Text('LINE 官方帳號'))),
+              // 打卡開始使用（ops 0164）：公版那一份才有，老闆、店長一步一步把打卡設好
+              if (AppConfig.selfSignup && (m.role == Role.owner || m.role == Role.manager))
+                const PopupMenuItem(value: 'asetup', child: ListTile(leading: Icon(Icons.fingerprint), title: Text('打卡開始使用'))),
               const PopupMenuItem(value: 'code', child: ListTile(leading: Icon(Icons.key_outlined), title: Text('輸入邀請碼'))),
               const PopupMenuItem(value: 'speed', child: ListTile(leading: Icon(Icons.speed), title: Text('載入速度'))),
               const PopupMenuItem(value: 'logout', child: ListTile(leading: Icon(Icons.logout), title: Text('登出'))),
