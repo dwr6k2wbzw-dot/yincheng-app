@@ -158,15 +158,15 @@ class _AnomalyTabState extends State<_AnomalyTab> with AutomaticKeepAliveClientM
 
   /// 異常清單＋跟班表差超過 30 分鐘的（老闆 2026-11-18：列為異常並標紅）＋V／O 的時間（核准補登時對照班表用）
   Future<_AnomalyData> _load() async {
-    final d = _rangeDates(_range);
+    final d = _rangeDates(_range), repo = _repo; // await 之後不再讀 context（離開頁面時元件已卸載）
     final store = widget.membership.storeId;
     final r = await Future.wait<Object>([
-      _repo.attendanceAnomalies(store, d.from, d.to),
-      _repo.scheduleCheck(store, d.from, d.to).catchError((_) => <ScheduleCheckRow>[]),
-      _repo.shiftMarkTimes(store).catchError((_) => <ShiftMarkTime>[]),
+      repo.attendanceAnomalies(store, d.from, d.to),
+      repo.scheduleCheck(store, d.from, d.to).catchError((_) => <ScheduleCheckRow>[]),
+      repo.shiftMarkTimes(store).catchError((_) => <ShiftMarkTime>[]),
     ]);
     const timeIssues = {'early_in', 'late_in', 'early_out', 'late_out'};
-    final full = await fullTimeIdsAllStores(_repo, store, widget.data); // 同一天裡正職在前（2026-11-28）
+    final full = await fullTimeIdsAllStores(repo, store, widget.data); // 同一天裡正職在前（2026-11-28）
     return (
       anomalies: fullTimeFirst(r[0] as List<AttendanceAnomaly>, (x) => full.contains(x.personId), group: (x) => x.businessDate),
       offSchedule: fullTimeFirst([for (final x in r[1] as List<ScheduleCheckRow>) if (x.issues.any(timeIssues.contains)) x],
@@ -393,8 +393,8 @@ class _SessionTabState extends State<_SessionTab> with AutomaticKeepAliveClientM
 
   /// 同一天裡正職在前（2026-11-28）
   Future<List<AttendanceSession>> _load() async {
-    final d = _rangeDates(_range), full = await fullTimeIdsAllStores(_repo, widget.membership.storeId, widget.data);
-    return fullTimeFirst(await _repo.attendanceSessions(widget.membership.storeId, d.from, d.to), (x) => full.contains(x.personId),
+    final d = _rangeDates(_range), repo = _repo, full = await fullTimeIdsAllStores(repo, widget.membership.storeId, widget.data);
+    return fullTimeFirst(await repo.attendanceSessions(widget.membership.storeId, d.from, d.to), (x) => full.contains(x.personId),
         group: (x) => x.businessDate);
   }
 

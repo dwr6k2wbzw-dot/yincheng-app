@@ -111,10 +111,10 @@ class _ScheduleCheckTabState extends State<ScheduleCheckTab> with AutomaticKeepA
   void reload() => setState(() => _future = _load());
 
   Future<(List<ScheduleCheckRow>, List<ShiftMarkTime>)> _load() async {
-    final d = _spanDates(_span);
+    final d = _spanDates(_span), repo = _repo; // await 之後不再讀 context（離開頁面時元件已卸載）
     final store = widget.membership.storeId;
-    final r = await Future.wait([_repo.scheduleCheck(store, d.from, d.to), _repo.shiftMarkTimes(store)]);
-    final full = await fullTimeIdsAllStores(_repo, store, widget.data); // 同一天裡正職在前（2026-11-28）
+    final r = await Future.wait([repo.scheduleCheck(store, d.from, d.to), repo.shiftMarkTimes(store)]);
+    final full = await fullTimeIdsAllStores(repo, store, widget.data); // 同一天裡正職在前（2026-11-28）
     return (
       fullTimeFirst(r[0] as List<ScheduleCheckRow>, (x) => full.contains(x.personId), group: (x) => x.businessDate),
       r[1] as List<ShiftMarkTime>
@@ -373,8 +373,8 @@ class _OvertimeTabState extends State<OvertimeTab> with AutomaticKeepAliveClient
 
   /// 同一天裡正職在前（2026-11-28）；待審的照舊排在已處理前面
   Future<List<OvertimeRequest>> _load() async {
-    final d = _spanDates(_span), full = await fullTimeIdsAllStores(_repo, widget.membership.storeId, widget.data);
-    return fullTimeFirst(await _repo.overtimeList(widget.membership.storeId, d.from, d.to), (x) => full.contains(x.personId),
+    final d = _spanDates(_span), repo = _repo, full = await fullTimeIdsAllStores(repo, widget.membership.storeId, widget.data);
+    return fullTimeFirst(await repo.overtimeList(widget.membership.storeId, d.from, d.to), (x) => full.contains(x.personId),
         group: (x) => (x.pending, x.businessDate));
   }
 
