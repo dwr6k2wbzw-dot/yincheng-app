@@ -10,6 +10,7 @@ import 'line_bind.dart';
 import 'models.dart';
 import 'onboarding.dart';
 import 'payroll.dart';
+import 'product_import.dart';
 import 'platform_wish.dart';
 import 'purchase_items_math.dart';
 import 'reservation_models.dart';
@@ -353,6 +354,15 @@ abstract class Repository {
   Future<int> undoReservationImport(String batchId);
   /// 匯出用：這家店全部的訂位（含已取消、隱藏的）
   Future<List<Reservation>> allReservations(String storeId);
+  // 盤點品項搬家（ops 0167，公版；老闆、店長）：先預覽（資料庫檢查每一列、不寫入），沒問題再匯入；每一批可以整批復原（停用，不刪）
+  Future<ImportResult> previewProductImport(String storeId, List<ProductImportRow> rows);
+  /// [requestId]：同一個檔案按兩次只匯一次
+  Future<ImportResult> importProducts(String storeId, List<ProductImportRow> rows, String? fileName, String requestId);
+  Future<List<ImportBatch>> productImports(String storeId);
+  /// 回停用了幾個（之前就停用的不算）
+  Future<int> undoProductImport(String batchId);
+  /// 成本價（v_product_costs，只有老闆、店長讀得到；App 只在老闆匯出時用）：品項 id → 成本價
+  Future<Map<String, double?>> productCosts(String storeId);
   // 許願單（ops 0149，公版；只有老闆、店長）：寫一則送到平台待辦，平台回覆狀態和說明
   /// 這家店的許願單（新的在前）
   Future<List<PlatformWish>> platformWishes(String storeId);
