@@ -208,6 +208,38 @@ class _AttendanceSetupScreenState extends State<AttendanceSetupScreen> {
       )
       .then((_) => _load());
 
+  // 已經有進度、重新整理失敗時（例如設完密碼、產生邀請碼之後）：照樣顯示上一次的進度，
+  // 上面標出「這不是最新的」和重試（Codex：原本這種失敗看不到）
+  Widget _staleBanner(String message) => Semantics(
+        liveRegion: true,
+        child: Container(
+          key: const Key('setup_stale_banner'),
+          padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+          decoration: BoxDecoration(
+            color: AppColors.bad.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.bad.withValues(alpha: 0.5)),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.error_outline, size: 20, color: AppColors.bad),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  '沒有更新到最新的進度：$message',
+                  style: const TextStyle(fontSize: 13.5, height: 1.4),
+                ),
+              ),
+              TextButton(
+                onPressed: _busy ? null : _load,
+                style: TextButton.styleFrom(minimumSize: const Size(64, 44)),
+                child: const Text('重試'),
+              ),
+            ],
+          ),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     final s = _s;
@@ -222,6 +254,10 @@ class _AttendanceSetupScreenState extends State<AttendanceSetupScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
                 children: [
+                  if (_loadError != null) ...[
+                    _staleBanner(_loadError!),
+                    const SizedBox(height: 12),
+                  ],
                   _progress(s),
                   const SizedBox(height: 12),
                   _step(

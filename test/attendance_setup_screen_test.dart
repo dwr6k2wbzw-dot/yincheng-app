@@ -126,4 +126,20 @@ void main() {
     expect(find.text('打卡開始使用'), findsOneWidget);
     expect(find.text('打開打卡'), findsOneWidget);
   });
+
+  testWidgets('已經有進度、之後重新整理失敗：照樣顯示上次的進度，上面標出沒更新到並可重試', (tester) async {
+    final repo = await _open(tester, s: _fresh);
+    repo.offline = true; // 打開打卡成功，但之後重新讀進度失敗
+    await tester.tap(find.widgetWithText(FilledButton, '打開打卡'));
+    await tester.pumpAndSettle();
+    expect(repo.enabled, 1);
+    expect(find.byKey(const Key('setup_stale_banner')), findsOneWidget);
+    expect(find.textContaining('沒有更新到最新的進度'), findsOneWidget);
+    expect(find.text('還差 5 項就能開始打卡'), findsOneWidget); // 上一次的進度還在
+    repo.offline = false;
+    await tester.tap(find.widgetWithText(TextButton, '重試'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('setup_stale_banner')), findsNothing);
+    expect(find.text('已經打開'), findsOneWidget);
+  });
 }
