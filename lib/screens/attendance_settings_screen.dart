@@ -129,6 +129,8 @@ class _AttendanceSettingsScreenState extends State<AttendanceSettingsScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+    // 存檔途中老闆已經按返回離開這頁：通知照發（上面），這頁不用再讀（Codex P2）。
+    if (!mounted) return;
     await _load();
     if (mounted) showMessage(context, '打卡設定已儲存');
   }
@@ -329,18 +331,22 @@ class _AttendanceSettingsScreenState extends State<AttendanceSettingsScreen> {
       Padding(
         padding: const EdgeInsets.only(bottom: 12),
         child: SectionCard(
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Icon(icon, color: AppColors.primary, size: 20),
-              const SizedBox(width: 8),
-              Text(title,
-                  style: const TextStyle(
-                      fontSize: AppType.title, fontWeight: AppFont.heading)),
+          // SwitchListTile 要自己的一層 Material，不然被卡片底色蓋住、除錯版會跳警告
+          child: Material(
+            type: MaterialType.transparency,
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Icon(icon, color: AppColors.primary, size: 20),
+                const SizedBox(width: 8),
+                Text(title,
+                    style: const TextStyle(
+                        fontSize: AppType.title, fontWeight: AppFont.heading)),
+              ]),
+              const SizedBox(height: 8),
+              ...children,
             ]),
-            const SizedBox(height: 8),
-            ...children,
-          ]),
+          ),
         ),
       );
 }
