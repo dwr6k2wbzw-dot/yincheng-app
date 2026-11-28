@@ -8,6 +8,7 @@ import 'booking_assist.dart';
 import 'booking_import.dart';
 import 'line_bind.dart';
 import 'models.dart';
+import 'vendor_rules.dart';
 import 'onboarding.dart';
 import 'payroll.dart';
 import 'platform_wish.dart';
@@ -123,6 +124,11 @@ abstract class Repository {
   Future<List<VendorContact>> vendorContacts(String storeId);
   Future<void> saveVendorContact(String storeId, VendorContact v);
   Future<void> deleteVendorContact(String id);
+
+  // 廠商名稱設定（0166）：看得到進貨的人讀得到；只有老闆、店長能新增、修改、刪除（資料庫 RLS 也是這樣）
+  Future<List<VendorRule>> vendorRules(String storeId);
+  Future<void> saveVendorRule(String storeId, VendorRule rule);
+  Future<void> deleteVendorRule(String id);
 
   // 進貨
   Future<DateTime> businessDate(String storeId);

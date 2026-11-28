@@ -13,6 +13,7 @@ import 'onboarding.dart';
 import 'purchase_items_math.dart';
 import 'row_cache.dart';
 import 'repository.dart';
+import 'vendor_rules.dart';
 import 'shift_links.dart';
 
 /// 透過 Supabase（PostgREST）讀寫。所有權限由資料庫的 RLS 與觸發器把關，App 端不做權限判斷以外的假設。
@@ -502,6 +503,34 @@ class SupabaseRepository implements Repository {
   @override
   Future<void> deleteVendorContact(String id) async {
     final r = await _db.from('vendor_contacts').delete().eq('id', id).select('id');
+    if (r.isEmpty) throw Exception('message: 沒有權限刪除（只有老闆、店長可以）,');
+  }
+
+  // ---------------- 0166 廠商名稱設定 ----------------
+  @override
+  Future<List<VendorRule>> vendorRules(String storeId) async {
+    final rows = await _db
+        .from('vendor_name_rules')
+        .select('id, kind, category_code, name, target, sort_order')
+        .eq('store_id', storeId)
+        .order('kind')
+        .order('sort_order');
+    return rows.map(VendorRule.fromRow).toList();
+  }
+
+  @override
+  Future<void> saveVendorRule(String storeId, VendorRule rule) async {
+    if (rule.id == null) {
+      await _db.from('vendor_name_rules').insert({...rule.toRow(), 'store_id': storeId});
+    } else {
+      final r = await _db.from('vendor_name_rules').update(rule.toRow()).eq('id', rule.id!).select('id');
+      if (r.isEmpty) throw Exception('message: 沒有權限修改（只有老闆、店長可以）,');
+    }
+  }
+
+  @override
+  Future<void> deleteVendorRule(String id) async {
+    final r = await _db.from('vendor_name_rules').delete().eq('id', id).select('id');
     if (r.isEmpty) throw Exception('message: 沒有權限刪除（只有老闆、店長可以）,');
   }
 

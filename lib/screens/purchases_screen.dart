@@ -9,12 +9,14 @@ import '../config.dart';
 import '../data/models.dart';
 import '../data/purchase_items_math.dart';
 import '../data/repository.dart';
+import '../data/vendor_rules.dart';
 import '../theme.dart';
 import '../services/slip_scan.dart';
 import '../widgets/common.dart';
 import '../widgets/photo_thumb.dart';
 import 'purchase_quotes_card.dart';
 import 'vendor_contacts_screen.dart';
+import 'vendor_rules_screen.dart';
 
 part 'purchase_extras.dart';
 
@@ -67,6 +69,7 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
     final repo = AppScope.of(context).repo;
     final id = widget.membership.storeId;
     final r = await Future.wait([repo.monthPurchases(id, _month), repo.costCategories()]);
+    await VendorRules.load(repo, id, widget.membership.storeName); // 廠商名稱設定（0166），讀不到用以前寫死的
     try {
       _today = await repo.businessDate(id);
     } catch (_) {
@@ -174,14 +177,29 @@ class _PurchasesScreenState extends State<PurchasesScreen> {
                 if (widget.membership.isManager)
                   Align(
                     alignment: Alignment.centerRight,
-                    child: TextButton.icon(
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => VendorContactsScreen(membership: widget.membership)),
+                    child: Wrap(alignment: WrapAlignment.end, children: [
+                      // 廠商名稱設定（0166）：只有公版有入口；兩家店照舊
+                      if (AppConfig.selfSignup)
+                        TextButton.icon(
+                          onPressed: () async {
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => VendorRulesScreen(membership: widget.membership)),
+                            );
+                            if (mounted) _reload(quotes: false); // 合併寫法改了，區塊要重新分組
+                          },
+                          icon: const Icon(Icons.rule_outlined, size: 18),
+                          label: const Text('廠商名稱設定'),
+                        ),
+                      TextButton.icon(
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => VendorContactsScreen(membership: widget.membership)),
+                        ),
+                        icon: const Icon(Icons.contacts_outlined, size: 18),
+                        label: const Text('廠商資料'),
                       ),
-                      icon: const Icon(Icons.contacts_outlined, size: 18),
-                      label: const Text('廠商資料'),
-                    ),
+                    ]),
                   ),
                 const SizedBox(height: 4),
                 FutureBuilder<List<PurchaseMatch>>(
@@ -352,6 +370,8 @@ class _CategoryPurchasesScreen extends StatefulWidget {
 
 class _CategoryPurchasesScreenState extends State<_CategoryPurchasesScreen> {
   late List<Purchase> _items = List.of(widget.items);
+  // 廠商名稱設定（0166）：進貨頁讀過資料庫就用資料庫的，讀不到用以前寫死的
+  VendorRules get _rules => VendorRules.of(widget.membership.storeId, widget.membership.storeName);
 
   Future<void> _openVendor(String vendor) async {
     await Navigator.push(
@@ -360,7 +380,7 @@ class _CategoryPurchasesScreenState extends State<_CategoryPurchasesScreen> {
         builder: (_) => _CategoryPurchasesScreen(
           title: '${widget.title}・$vendor',
           month: widget.month,
-          items: _items.where((p) => vendorGroupName(p) == vendor).toList(),
+          items: _items.where((p) => vendorGroupName(p, _rules) == vendor).toList(),
           categoryNames: widget.categoryNames,
           canReconcile: widget.canReconcile,
           membership: widget.membership,
@@ -381,7 +401,7 @@ class _CategoryPurchasesScreenState extends State<_CategoryPurchasesScreen> {
   Widget _blocks(double total) {
     final groups = <String, List<Purchase>>{};
     for (final p in _items) {
-      groups.putIfAbsent(vendorGroupName(p), () => []).add(p);
+      groups.putIfAbsent(vendorGroupName(p, _rules), () => []).add(p);
     }
     double sum(List<Purchase> l) => l.fold<double>(0, (t, p) => t + p.amount);
     final names = groups.keys.toList()..sort((a, b) => sum(groups[b]!).compareTo(sum(groups[a]!)));
@@ -581,19 +601,11 @@ class _PurchaseTile extends StatelessWidget {
 }
 
 /// 新增進貨（PRD 畫面 04）
-final _vendorParen = RegExp(r'\s*[(（][^()（）]*[)）]\s*$');
 
 /// 廠商的統一名稱（區塊分組、新增進貨的廠商清單共用）：去掉名稱最後的括號說明（大倉捷(退酒) → 大倉捷），
-/// 再照 AppConfig.vendorGroupAlias 合併別名（德哥 → 阿德水果）。只影響畫面，資料不改。
-String vendorGroupName(Purchase p) => normalizeVendorName((p.supplierName ?? '').trim().isNotEmpty ? p.supplierName! : (p.memo ?? '')) ?? '未填廠商';
-
-String? normalizeVendorName(String raw) {
-  var n = raw.trim();
-  if (n.isEmpty) return null;
-  final base = n.replaceFirst(_vendorParen, '').trim();
-  if (base.isNotEmpty) n = base;
-  return AppConfig.vendorGroupAlias[n] ?? n;
-}
+/// 再照這家店的廠商名稱設定合併別名（德哥 → 阿德水果；ops 0166，見 data/vendor_rules.dart）。只影響畫面，資料不改。
+String vendorGroupName(Purchase p, VendorRules rules) =>
+    normalizeVendorName((p.supplierName ?? '').trim().isNotEmpty ? p.supplierName! : (p.memo ?? ''), rules) ?? '未填廠商';
 
 class PurchaseFormScreen extends StatefulWidget {
   const PurchaseFormScreen({super.key, required this.membership, this.editing});
@@ -653,6 +665,10 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   List<Supplier> _sups = [];
   Map<String, String> _displayAs = {}; // 舊類別 → 合併後的類別（0048）
   String _paidBy = 'vendor';
+  // 廠商名稱設定（0166）：讀不到資料庫時用以前寫死的
+  late VendorRules _rules = VendorRules.of(widget.membership.storeId, widget.membership.storeName);
+  // 常用廠商提示（只有公版顯示；兩家店 2026-10-13 起不顯示）
+  VendorHints? _hints;
   // 依付款方式隱藏的類別（只有開了 paidByCategories 的店套用；目前是隱城）
   /// 某類別在某付款方式下可自動帶入的預設廠商名稱（依合併後類別比對、排除該付款方式不適用的來源類別）
   List<String> _autoSuppliers(List<Supplier> sups, String category, String paidBy) => sups
@@ -666,7 +682,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   bool _sourceHidden(String? code, String paidBy) =>
       code != null &&
       ((StoreFeatures.of(widget.membership.storeName).paidByCategories && (_hiddenCatsByPaidBy[paidBy]?.contains(code) ?? false)) ||
-          (paidBy == 'petty_cash' && AppConfig.pettyCashHintHidden.contains(code)));
+          (paidBy == 'petty_cash' && _rules.pettyHintHide.contains(code)));
 
   Set<String> get _hiddenCats => StoreFeatures.of(widget.membership.storeName).paidByCategories
       ? (_hiddenCatsByPaidBy[_paidBy] ?? const <String>{})
@@ -699,6 +715,12 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
     final repo = AppScope.of(context).repo;
     final id = widget.membership.storeId;
     final r = await Future.wait([repo.costCategories(), repo.suppliers(id), repo.businessDate(id)]);
+    _rules = await VendorRules.load(repo, id, widget.membership.storeName);
+    if (AppConfig.selfSignup) {
+      try {
+        _hints = await repo.vendorHints(id);
+      } catch (_) {} // 提示讀不到不影響新增
+    }
     final e = widget.editing;
     if (e != null && _category == null) {
       _date = e.purchaseDate;
@@ -720,7 +742,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
       _members = await repo.memberNames(id);
     } catch (_) {} // 名單讀不到不影響新增
     try {
-      _monthlyVendors = await _recentMonthlyVendors(repo, id, widget.membership.storeName, r[2] as DateTime);
+      _monthlyVendors = await _recentMonthlyVendors(repo, id, _rules, r[2] as DateTime);
     } catch (_) {} // 讀不到時清單只剩「手動新增廠商」
     _sups = r[1] as List<Supplier>;
     _cats = r[0] as List<CostCategory>;
@@ -754,6 +776,37 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   }
 
   final _vendorFocus = FocusNode();
+
+  /// 這個類別的常用廠商（依合併後類別比對；零用金時排除不顯示提示的來源類別），最多 6 個
+  List<String> _hintsFor(String? category) {
+    final h = _hints;
+    if (h == null || category == null) return const [];
+    final src = adjustVendorHints(_paidBy == 'petty_cash' ? h.petty : h.vendor, _rules);
+    final out = <String>[];
+    for (final e in src.entries) {
+      if ((_displayAs[e.key] ?? e.key) != category || _sourceHidden(e.key, _paidBy)) continue;
+      for (final n in e.value) {
+        if (!out.contains(n)) out.add(n);
+      }
+    }
+    return out.take(6).toList();
+  }
+
+  Widget _hintChips() {
+    final list = _hintsFor(_category);
+    if (list.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+        Text('常用廠商', style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+        for (final n in list)
+          ActionChip(
+            label: Text(n),
+            onPressed: () => setState(() => _vendor.text = n),
+          ),
+      ]),
+    );
+  }
 
   void _clearDraft() {
     _drafts.remove(_draftKey);
@@ -805,7 +858,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   /// - 同一段時間在零用金出現得比月結多（或一樣多）的名字（例：全聯）也排除；兩邊都有、月結比較多的（例：小郭）保留
   /// - 「廠商資料」裡的月結廠商一律列入（只有老闆、店長讀得到；讀不到就略過）
   static final _newReportFormatFrom = DateTime(2026, 9, 1);
-  static Future<List<String>> _recentMonthlyVendors(Repository repo, String storeId, String storeName, DateTime today) async {
+  static Future<List<String>> _recentMonthlyVendors(Repository repo, String storeId, VendorRules rules, DateTime today) async {
     final months = [for (var i = 0; i < 3; i++) DateTime(today.year, today.month - i, 1)];
     final lists = await Future.wait(months.map((m) => repo.monthPurchases(storeId, m)));
     final counts = <String, int>{};
@@ -813,7 +866,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
     for (final p in lists.expand((l) => l)) {
       // 已被日報表取代、不計入的 App 暫記不算（2026-10-29：隱城的小郭食材、薯條、布布拉麵就是這樣混進來的）
       if (!p.counted) continue;
-      final n = vendorGroupName(p);
+      final n = vendorGroupName(p, rules);
       if (n == '未填廠商') continue;
       if (p.paidBy == 'petty_cash') {
         petty[n] = (petty[n] ?? 0) + 1;
@@ -821,7 +874,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
       }
       if (p.paidBy != 'vendor') continue;
       if (p.source == 'import' && p.purchaseDate.isBefore(_newReportFormatFrom)) continue;
-      final m = AppConfig.vendorListRename[storeName]?[n] ?? n;
+      final m = rules.listAlias[n] ?? n;
       counts[m] = (counts[m] ?? 0) + 1;
     }
     counts.removeWhere((v, c) {
@@ -835,14 +888,13 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
     try {
       for (final c in await repo.vendorContacts(storeId)) {
         if (c.kind != 'monthly') continue;
-        final n = normalizeVendorName(c.name);
+        final n = normalizeVendorName(c.name, rules);
         if (n != null && !out.contains(n)) out.add(n);
       }
     } catch (_) {} // 正職、兼職讀不到廠商資料
-    // 老闆指定的調整（AppConfig.vendorListRemove／vendorListAdd）
-    final remove = AppConfig.vendorListRemove[storeName] ?? const <String>{};
-    out.removeWhere(remove.contains);
-    for (final n in AppConfig.vendorListAdd[storeName] ?? const <String>[]) {
+    // 這家店的廠商名稱設定：不顯示、一定列出（0166；以前寫在 config.dart vendorListRemove／vendorListAdd）
+    out.removeWhere(rules.listHide.contains);
+    for (final n in rules.listAdd) {
       if (!out.contains(n)) out.add(n);
     }
     return out;
@@ -1362,11 +1414,13 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                 onChanged: (v) => setState(() {
                   _category = v;
                   // 只有一家預設廠商、而且還沒填廠商時自動帶入（例：水果＝德哥）
-                  // 依合併後類別比對；零用金時排除 pettyCashHintHidden 來源類別的廠商（與提示一致）
+                  // 依合併後類別比對；零用金時排除「零用金不帶廠商」來源類別的廠商（與提示一致）
                   final match = v == null ? const <String>[] : _autoSuppliers(sups, v, _paidBy);
                   if (_vendor.text.trim().isEmpty && match.length == 1) _vendor.text = match.first;
                 }),
               ),
+              // 常用廠商提示（只有公版：照最近半年的進貨＋這家店的廠商名稱設定；點一下帶入廠商）
+              if (AppConfig.selfSignup) _hintChips(),
               const SizedBox(height: 12),
               if (_paidBy == 'vendor') _monthlyVendorField() else RawAutocomplete<String>(
                 textEditingController: _vendor,
@@ -1451,23 +1505,6 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
       );
 }
 
-
-/// 套用老闆指定的提示調整：隱藏、改名、加入（去除重複）
-Map<String, List<String>> adjustVendorHints(Map<String, List<String>> hints) {
-  final out = <String, List<String>>{};
-  final codes = {...hints.keys, ...AppConfig.vendorHintAdd.keys};
-  for (final c in codes) {
-    if (AppConfig.vendorHintHidden.contains(c)) continue;
-    final list = <String>[];
-    for (final n in [...?hints[c], ...?AppConfig.vendorHintAdd[c]]) {
-      if (AppConfig.vendorHintRemove[c]?.contains(n) ?? false) continue;
-      final name = AppConfig.vendorHintRename[n] ?? n;
-      if (!list.contains(name)) list.add(name);
-    }
-    if (list.isNotEmpty) out[c] = list;
-  }
-  return out;
-}
 
 bool isSameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
 
