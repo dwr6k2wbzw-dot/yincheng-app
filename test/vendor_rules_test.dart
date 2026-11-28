@@ -257,6 +257,27 @@ void main() {
     });
   });
 
+  test('合併寫法照到底（德哥 → 阿德 → 阿德水果），繞回自己不會卡住', () {
+    final r = VendorRules(const [
+      VendorRule(kind: 'alias', name: '德哥', target: '阿德'),
+      VendorRule(kind: 'alias', name: '阿德', target: '阿德水果'),
+      VendorRule(kind: 'alias', name: '甲', target: '乙'),
+      VendorRule(kind: 'alias', name: '乙', target: '甲'),
+    ], fromDb: true);
+    expect(normalizeVendorName('德哥', r), '阿德水果');
+    expect(normalizeVendorName('阿德', r), '阿德水果');
+    expect(normalizeVendorName('德哥(退貨)', r), '阿德水果');
+    expect(normalizeVendorName('甲', r), '乙');
+    expect(normalizeVendorName('乙', r), '甲');
+    expect(
+        adjustVendorHints({
+          'c': ['德哥', '阿德']
+        }, r),
+        {
+          'c': ['阿德水果']
+        });
+  });
+
   test('新開的店（資料庫沒有規則）什麼都不調整', () {
     final r = VendorRules(const [], fromDb: true);
     expect(normalizeVendorName('德哥', r), '德哥');

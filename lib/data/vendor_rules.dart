@@ -105,6 +105,17 @@ class VendorRules {
   /// 同一家廠商的不同寫法 → 統一的名字
   late final Map<String, String> groupAlias = _map('alias');
 
+  /// 合併寫法照到底：德哥 → 阿德、阿德 → 阿德水果 時德哥也算阿德水果；繞回自己就停在繞回前那個名字（Codex 第六輪）
+  String resolveAlias(String n) {
+    final seen = <String>{n};
+    var cur = n;
+    while (true) {
+      final next = groupAlias[cur];
+      if (next == null || !seen.add(next)) return cur;
+      cur = next;
+    }
+  }
+
   /// 「選擇廠商」清單：改名、不顯示、一定列出
   late final Map<String, String> listAlias = _map('list_alias');
   late final Set<String> listHide = {for (final r in _of('list_hide')) r.name!};
@@ -259,7 +270,7 @@ String? normalizeVendorName(String raw, VendorRules rules) {
   if (n.isEmpty) return null;
   final base = n.replaceFirst(_vendorParen, '').trim();
   if (base.isNotEmpty) n = base;
-  return rules.groupAlias[n] ?? n;
+  return rules.resolveAlias(n);
 }
 
 /// 常用廠商提示的調整：不顯示的類別、拿掉、改名、加入（去除重複）
@@ -274,7 +285,7 @@ Map<String, List<String>> adjustVendorHints(
     final list = <String>[];
     for (final n in [...?hints[c], ...?rules.hintAdd[c]]) {
       if (rules.hintRemove[c]?.contains(n) ?? false) continue;
-      final name = rules.hintAlias[n] ?? rules.groupAlias[n] ?? n;
+      final name = rules.hintAlias[n] ?? rules.resolveAlias(n);
       if (!list.contains(name)) list.add(name);
     }
     if (list.isNotEmpty) out[c] = list;
@@ -301,7 +312,7 @@ List<String> vendorHintsForCategory(
   final removed = <String>{
     for (final n in rules.hintRemove[category] ?? const <String>{}) ...[
       n,
-      rules.hintAlias[n] ?? rules.groupAlias[n] ?? n,
+      rules.hintAlias[n] ?? rules.resolveAlias(n),
     ],
   };
   final out = <String>[];
