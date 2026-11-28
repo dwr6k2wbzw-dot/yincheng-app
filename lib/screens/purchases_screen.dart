@@ -881,7 +881,9 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
     try {
       for (final c in await repo.vendorContacts(storeId)) {
         if (c.kind != 'monthly') continue;
-        final n = normalizeVendorName(c.name, rules);
+        final raw = normalizeVendorName(c.name, rules);
+        // 清單改名也套到廠商資料帶進來的名字，免得同一家出現新舊兩個名字（Codex 第四輪）
+        final n = raw == null ? null : (rules.listAlias[raw] ?? raw);
         if (n != null && !out.contains(n)) out.add(n);
       }
     } catch (_) {} // 正職、兼職讀不到廠商資料

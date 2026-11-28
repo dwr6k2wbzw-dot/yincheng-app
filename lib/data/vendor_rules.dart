@@ -389,9 +389,10 @@ String? validateVendorRule(
   }
   if (VendorRule.needsName(kind) && name.trim().isEmpty) return '請填廠商名稱';
   if (name.trim().length > 60 || target.trim().length > 60) return '名稱最多 60 個字';
-  // 合併寫法、清單改名、清單不顯示比對的是去掉最後括號說明之後的名字（[normalizeVendorName]），
-  // 填「欣利實業（茗茶酒）」永遠對不到，所以直接請店長改填括號前面的名字（Codex 第三輪）
-  if (const {'alias', 'list_alias', 'list_hide'}.contains(kind)) {
+  // 合併寫法、清單改名比對的是去掉最後括號說明之後的名字（[normalizeVendorName]），
+  // 填「欣利實業（茗茶酒）」永遠對不到，所以直接請店長改填括號前面的名字（Codex 第三輪）。
+  // 清單不顯示不擋：它比對的是清單改名之後的名字，改名的結果本身可以有括號（Codex 第四輪）
+  if (kind == 'alias' || kind == 'list_alias') {
     final n = name.trim();
     final base = n.replaceFirst(_vendorParen, '').trim();
     if (base.isNotEmpty && base != n) {

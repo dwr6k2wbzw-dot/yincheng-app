@@ -295,8 +295,8 @@ void main() {
       // 比對的是去掉括號說明之後的名字：填了括號的寫法對不到，請店長改填括號前面的
       expect(validateVendorRule('alias', null, '欣利實業（茗茶酒）', '欣利'),
           '最後的括號說明會自動去掉，請填「欣利實業」就好');
-      expect(validateVendorRule('list_hide', null, '大倉捷(退酒)', ''),
-          '最後的括號說明會自動去掉，請填「大倉捷」就好');
+      // 清單不顯示比對的是改名之後的名字（例如改成「欣利實業（茗茶酒）」），可以有括號
+      expect(validateVendorRule('list_hide', null, '欣利實業（茗茶酒）', ''), isNull);
       expect(validateVendorRule('list_alias', null, '大倉捷 (退酒)', '大倉'),
           '最後的括號說明會自動去掉，請填「大倉捷」就好');
       // 只有括號、或常用廠商類（比對原本的名字）照舊可以存
