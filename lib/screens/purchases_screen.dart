@@ -723,7 +723,8 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
       _monthlyVendors = await _recentMonthlyVendors(repo, id, widget.membership.storeName, r[2] as DateTime);
     } catch (_) {} // 讀不到時清單只剩「手動新增廠商」
     _sups = r[1] as List<Supplier>;
-    _cats = r[0] as List<CostCategory>;
+    // ops 0165：只留這家店的類別（兩家店都有身分的人讀得到兩家的類別，同名的「酒水」不能混在一起）
+    _cats = categoriesOfStore(r[0] as List<CostCategory>, id, widget.membership.storeName);
     if (e != null) {
       try {
         _items = withoutDiffLine(await repo.purchaseItems(e.id));
@@ -750,7 +751,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
       _restored = true;
     }
     _ready = true;
-    return (r[0] as List<CostCategory>, r[1] as List<Supplier>);
+    return (_cats, r[1] as List<Supplier>);
   }
 
   final _vendorFocus = FocusNode();

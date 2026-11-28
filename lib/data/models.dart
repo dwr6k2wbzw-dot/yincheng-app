@@ -140,6 +140,11 @@ class CostCategory {
   static const groupLabels = {'drink': '酒水', 'food': '餐食', 'other': '雜項'};
 }
 
+/// 只留這家店的類別（ops 0165）：同時是兩家店成員的人，資料庫兩家店的類別都讀得到，
+/// 進貨表單只能用這家店的（資料庫的複合外鍵也只收同一家店的類別）。
+List<CostCategory> categoriesOfStore(Iterable<CostCategory> all, String storeId, String storeName) =>
+    [for (final c in all) if (c.belongsTo(storeId, storeName)) c];
+
 /// 銷貨單分組（老闆 2026-10-12 改）：依當初新增進貨的付款方式分「月結銷貨單」「零用金發票／收據」。
 /// 對不到進貨的（舊 Dropbox 廠商進貨單、老闆／店長手動新增）都是廠商單據，歸月結銷貨單。
 const slipGroups = ['月結銷貨單', '零用金發票／收據'];

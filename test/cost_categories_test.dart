@@ -24,6 +24,22 @@ void main() {
     });
   });
 
+  test('進貨表單只留這家店的類別：兩家店都有「酒水」時不會混在一起（Codex P2）', () {
+    final all = [
+      CostCategory.full('a1', '酒水', '甲店', costGroup: 'drink', inMiscRate: false, storeId: 's1'),
+      CostCategory.full('b1', '酒水', '乙店', costGroup: 'drink', inMiscRate: false, storeId: 's2'),
+      CostCategory.full('a2', '雜項', '甲店', costGroup: 'other', inMiscRate: true, storeId: 's1'),
+    ];
+    expect(categoriesOfStore(all, 's1', '甲店').map((c) => c.code), ['a1', 'a2']);
+    expect(categoriesOfStore(all, 's2', '乙店').map((c) => c.code), ['b1']);
+    // 資料庫還沒更新（沒有 store_id）：照店名
+    final legacy = [
+      CostCategory.full('yc_drink', '酒水', '隱城', costGroup: 'drink', inMiscRate: false),
+      CostCategory.full('xc_bar_liquor', '酒水', '小城外', costGroup: 'drink', inMiscRate: false),
+    ];
+    expect(categoriesOfStore(legacy, 'x', '小城外').map((c) => c.code), ['xc_bar_liquor']);
+  });
+
   test('錯誤訊息前面的代碼拿掉', () {
     expect(
         friendlyError(
