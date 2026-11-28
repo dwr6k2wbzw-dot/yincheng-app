@@ -10,6 +10,7 @@ import 'booking_import.dart';
 import 'booking_profile.dart';
 import 'line_notify_events.dart';
 import 'models.dart';
+import 'pl_template.dart';
 import 'onboarding.dart';
 import 'product_import.dart';
 import 'person_names.dart';
@@ -1814,44 +1815,92 @@ class DemoRepository implements Repository {
   @override
   Future<double> cardFeeRate(String storeId) async =>
       _cardFeeRate[storeId] ?? 0.02;
-  // ops 0142 示範：隱城的科目（照老闆的損益表）
+  // ops 0142 示範：隱城的科目（照老闆的損益表）；自己開的新店（demo-new）一開始沒有科目（ops 0169）
+  final _plAccounts = <String, List<PlAccount>>{};
+  List<PlAccount> _accountsOf(String storeId) => _plAccounts.putIfAbsent(storeId, () {
+        if (storeId == _demoNewStoreId) return <PlAccount>[];
+        const names = [
+          ('薪資支出', 'payroll', 'payroll_base'),
+          ('保險費-勞健保+退休金', 'payroll', null),
+          ('租金支出-房屋', 'rent', 'rent_base'),
+          ('租金支出-租賃稅', 'rent', null),
+          ('租金支出-租賃補充保費', 'rent', null),
+          ('水電瓦斯費', 'misc', null),
+          ('租金支出-ICHEF', 'rent', null),
+          ('其他費用-垃圾清運費', 'misc', null),
+          ('其他費用-雜項', 'misc', 'purchase_misc'),
+          ('職工福利', 'payroll', null),
+          ('廣告費', 'misc', null),
+          ('郵電費', 'misc', null),
+          ('修繕費', 'misc', null),
+          ('保險費', 'misc', null),
+          ('手續費', 'misc', 'card_fee'),
+          ('會計師', 'misc', null),
+          ('內帳記帳費', 'misc', null),
+        ];
+        return [
+          for (final (i, n) in names.indexed)
+            PlAccount(id: 'acc$i', name: n.$1, category: n.$2, autoKind: n.$3, sortOrder: i + 1),
+        ];
+      });
   @override
   Future<List<PlAccount>> plAccounts(String storeId) async {
     if (_isStaff) return const [];
-    const names = [
-      ('薪資支出', 'payroll', 'payroll_base'),
-      ('保險費-勞健保+退休金', 'payroll', null),
-      ('租金支出-房屋', 'rent', 'rent_base'),
-      ('租金支出-租賃稅', 'rent', null),
-      ('租金支出-租賃補充保費', 'rent', null),
-      ('水電瓦斯費', 'misc', null),
-      ('租金支出-ICHEF', 'rent', null),
-      ('其他費用-垃圾清運費', 'misc', null),
-      ('其他費用-雜項', 'misc', 'purchase_misc'),
-      ('職工福利', 'payroll', null),
-      ('廣告費', 'misc', null),
-      ('郵電費', 'misc', null),
-      ('修繕費', 'misc', null),
-      ('保險費', 'misc', null),
-      ('手續費', 'misc', 'card_fee'),
-      ('會計師', 'misc', null),
-      ('內帳記帳費', 'misc', null),
-    ];
-    return [
-      for (final (i, n) in names.indexed)
-        PlAccount(
-          id: 'acc$i',
-          name: n.$1,
-          category: n.$2,
-          autoKind: n.$3,
-          sortOrder: i + 1,
-        ),
-    ];
+    return [..._accountsOf(storeId)]..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+  }
+
+  // ops 0169 示範：損益範本（內容同 lib/data/pl_template.dart 的 demoPlTemplates）
+  @override
+  Future<List<PlTemplate>> plTemplates() async => demoPlTemplates;
+  @override
+  Future<int> applyPlTemplate(String storeId, String kind) async {
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    if (_isStaff) throw Exception('message: 只有老闆能套用損益範本,');
+    if (storeId != _demoNewStoreId) throw Exception('message: PL_TEMPLATE_NEW_ONLY：損益範本只給自己開的新店,');
+    final t = demoPlTemplates.where((x) => x.kind == kind).firstOrNull;
+    if (t == null) throw Exception('message: PL_TEMPLATE_KIND：不認得這種店的類型,');
+    final list = _accountsOf(storeId);
+    if (list.isNotEmpty) {
+      throw Exception('message: PL_TEMPLATE_USED：這家店已經有會計科目了，範本只能套在還沒有科目的店（請直接在損益設定裡改）,');
+    }
+    for (final (i, a) in t.accounts.indexed) {
+      list.add(PlAccount(id: 'pla${_seq++}', name: a.name, category: a.category, autoKind: a.autoKind, sortOrder: i + 1));
+    }
+    return t.accounts.length;
   }
 
   @override
-  Future<String?> plTitle(String storeId) async =>
-      storeId == 'yc' ? '隱城(二店)' : null;
+  Future<void> savePlAccount(String storeId, PlAccount account, {bool isNew = false}) async {
+    if (_isStaff) throw Exception('message: 沒有權限修改（只有老闆可以）,');
+    final list = _accountsOf(storeId);
+    final name = account.name.trim();
+    if (list.any((a) => a.name == name && (isNew || a.id != account.id))) {
+      throw Exception('message: duplicate key value violates unique constraint "pl_accounts_store_id_name_key",');
+    }
+    if (account.autoKind != null && list.any((a) => a.autoKind == account.autoKind && (isNew || a.id != account.id))) {
+      throw Exception('message: duplicate key value violates unique constraint "pl_accounts_store_auto",');
+    }
+    final row = PlAccount(
+        id: isNew ? 'pla${_seq++}' : account.id,
+        name: name,
+        category: account.category,
+        autoKind: account.autoKind,
+        sortOrder: account.sortOrder,
+        active: account.active);
+    list.removeWhere((a) => a.id == row.id);
+    list.add(row);
+  }
+
+  final _plTitles = <String, String?>{'yc': '隱城(二店)'};
+  @override
+  Future<void> savePlTitle(String storeId, String? title) async {
+    if (_isStaff) throw Exception('message: 沒有權限,');
+    final t = (title ?? '').trim();
+    _plTitles[storeId] = t.isEmpty ? null : t;
+  }
+
+  @override
+  Future<String?> plTitle(String storeId) async => _plTitles[storeId];
   @override
   Future<void> saveCardFeeRate(String storeId, double rate) async {
     if (_isStaff) throw Exception('message: 沒有權限,');

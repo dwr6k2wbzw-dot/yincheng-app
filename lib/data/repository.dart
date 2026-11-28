@@ -11,6 +11,7 @@ import 'booking_import.dart';
 import 'line_bind.dart';
 import 'models.dart';
 import 'vendor_rules.dart';
+import 'pl_template.dart';
 import 'onboarding.dart';
 import 'payroll.dart';
 import 'product_import.dart';
@@ -119,6 +120,11 @@ abstract class Repository {
   Future<List<PlAccount>> plAccounts(String storeId);
   /// 損益表抬頭用的店名（ops 0142 store_settings.pl_title；沒設回 null＝用店名）
   Future<String?> plTitle(String storeId);
+  /// 損益設定（ops 0169，只有公版、只有老闆）：業態範本清單、套範本（回寫入幾個科目）、新增／修改科目、損益表抬頭
+  Future<List<PlTemplate>> plTemplates();
+  Future<int> applyPlTemplate(String storeId, String kind);
+  Future<void> savePlAccount(String storeId, PlAccount account, {bool isNew = false});
+  Future<void> savePlTitle(String storeId, String? title);
   Future<void> saveCardFeeRate(String storeId, double rate);
   Future<List<RecurringExpenseItem>> recurringExpenseItems(String storeId);
   Future<void> saveRecurringExpenseItem(String storeId, RecurringExpenseItem item, {bool isNew = false});
@@ -573,7 +579,7 @@ String friendlyError(Object e) {
   final s = e.toString();
   final m = RegExp(r'message: ([^,]+)').firstMatch(s);
   // 0113：資料庫擋下來的訊息前面有代碼（給 App 判斷用），顯示時拿掉
-  final msg = (m?.group(1) ?? s).replaceFirst(RegExp(r'^(SHIFT_BLOCKED|SHIFT_CODE_USED|SHIFT_UNDO_CONFLICT|SIGNUP_[A-Z]+|CATEGORY_[A-Z]+|BOOKING_ASSIST_STALE|SHIFT_ASSIST_STALE|WISH_STALE|ONBOARD_[A-Z_]+)：'), '');
+  final msg = (m?.group(1) ?? s).replaceFirst(RegExp(r'^(SHIFT_BLOCKED|SHIFT_CODE_USED|SHIFT_UNDO_CONFLICT|SIGNUP_[A-Z]+|CATEGORY_[A-Z]+|BOOKING_ASSIST_STALE|SHIFT_ASSIST_STALE|WISH_STALE|ONBOARD_[A-Z_]+|PL_TEMPLATE_[A-Z_]+)：'), '');
   if (msg.contains('duplicate key') && msg.contains('client_request')) return '這筆已經送出過了，不會重複新增。';
   if (msg.contains('row-level security')) return '沒有權限執行這個動作。';
   if (msg.contains('function public.payroll_')) return '資料庫還沒更新到薪資版本，請等老闆核准上線。';
@@ -587,5 +593,9 @@ String friendlyError(Object e) {
   if (msg.contains('Password should be')) return '密碼太短，請至少 8 個字。';
   if (msg.contains('change_requests_title_check')) return '第一行請寫個簡短的標題。';
   if (msg.contains('staff_pay_rates_person_id_effective_from_key')) return '這個生效日已經有一筆薪資了，請直接點那一筆修改。';
+  // ops 0169 損益設定：科目名稱重複、自動帶入指定兩次、自動帶入跟大項對不上
+  if (msg.contains('pl_accounts_store_id_name_key')) return '這個科目名稱已經有了，請換一個名字。';
+  if (msg.contains('pl_accounts_store_auto')) return '這種自動帶入已經指定給別的科目了，請先把那個科目改成「不自動帶入」。';
+  if (msg.contains('pl_accounts_auto_category')) return '自動帶入跟大項對不上（人事基底放人事、租金基底放租金、刷卡手續費和進貨雜項放雜項）。';
   return msg.replaceAll('薪率', '薪資'); // 畫面上一律叫「薪資」（2026-11-15 老闆）；資料庫守衛的訊息還寫「薪率」（ops 0109、0110）
 }

@@ -11,6 +11,7 @@ import 'booking_import.dart';
 import 'booking_profile.dart';
 import 'line_notify_events.dart';
 import 'models.dart';
+import 'pl_template.dart';
 import 'onboarding.dart';
 import 'product_import.dart';
 import 'purchase_items_math.dart';
@@ -571,6 +572,42 @@ class SupabaseRepository implements Repository {
       if (e.code == '42703') return null;
       rethrow;
     }
+  }
+
+  // ---------------- 0169 損益設定（只有公版、只有老闆）----------------
+  @override
+  Future<List<PlTemplate>> plTemplates() async {
+    final r = await _db.rpc('pl_template_list');
+    return [for (final x in (r as List? ?? const [])) PlTemplate.fromJson(x as Map<String, dynamic>)];
+  }
+
+  @override
+  Future<int> applyPlTemplate(String storeId, String kind) async =>
+      ((await _db.rpc('pl_apply_template', params: {'p_store': storeId, 'p_kind': kind})) as num?)?.toInt() ?? 0;
+
+  @override
+  Future<void> savePlAccount(String storeId, PlAccount account, {bool isNew = false}) async {
+    final row = {
+      'name': account.name.trim(),
+      'category': account.category,
+      'auto_kind': account.autoKind,
+      'sort_order': account.sortOrder,
+      'active': account.active,
+    };
+    if (isNew) {
+      await _db.from('pl_accounts').insert({...row, 'store_id': storeId});
+    } else {
+      final r = await _db.from('pl_accounts').update(row).eq('id', account.id).eq('store_id', storeId).select('id');
+      if (r.isEmpty) throw Exception('message: 沒有權限修改（只有老闆可以）,');
+    }
+  }
+
+  @override
+  Future<void> savePlTitle(String storeId, String? title) async {
+    final t = (title ?? '').trim();
+    await _db
+        .from('store_settings')
+        .upsert({'store_id': storeId, 'pl_title': t.isEmpty ? null : t}, onConflict: 'store_id');
   }
 
   @override
