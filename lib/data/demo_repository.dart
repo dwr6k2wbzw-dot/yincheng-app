@@ -14,6 +14,7 @@ import 'onboarding.dart';
 import 'person_names.dart';
 import 'purchase_items_math.dart';
 import 'repository.dart';
+import 'vendor_rules.dart';
 import 'shift_links.dart';
 import 'shift_templates.dart';
 import 'store_features.dart';
@@ -1712,6 +1713,56 @@ class DemoRepository implements Repository {
     );
     list.removeWhere((x) => x.id == saved.id);
     list.add(saved);
+  }
+
+  // ---------------- 0166 廠商名稱設定（示範） ----------------
+  late final Map<String, List<VendorRule>> _vendorRules = {
+    for (final e in const {'yc': '隱城', 'xc': '小城外'}.entries)
+      e.key: [
+        for (final (i, r) in VendorRules.legacySeed(e.value).indexed)
+          VendorRule(id: 'vr-${e.key}-$i', kind: r.kind, category: r.category, name: r.name, target: r.target, sortOrder: r.sortOrder)
+      ],
+    // 公版新開的店：示範幾條自己設的
+    'demo-new': [
+      const VendorRule(id: 'vr-new-1', kind: 'alias', name: '欣力', target: '欣利實業', userMade: true),
+      const VendorRule(id: 'vr-new-2', kind: 'alias', name: '大倉', target: '大倉捷', userMade: true),
+      const VendorRule(id: 'vr-new-3', kind: 'list_hide', name: '全聯', userMade: true),
+      const VendorRule(id: 'vr-new-4', kind: 'list_add', name: '花都', userMade: true),
+      const VendorRule(id: 'vr-new-5', kind: 'hint_add', category: 'yc_drink', name: '示範酒商C', userMade: true),
+    ],
+  };
+
+  @override
+  Future<List<VendorRule>> vendorRules(String storeId) async => List.of(_vendorRules[storeId] ?? const <VendorRule>[]);
+
+  @override
+  Future<void> saveVendorRule(String storeId, VendorRule rule) async {
+    if (_isStaff) throw Exception('message: 沒有權限修改（只有老闆、店長可以）,');
+    final list = _vendorRules[storeId] ??= [];
+    final key = rule.kind + (rule.category ?? '') + (rule.name?.trim() ?? '');
+    if (list.any((x) => x.id != rule.id && x.kind + (x.category ?? '') + (x.name ?? '') == key)) {
+      throw Exception('message: 已經有同一條設定,');
+    }
+    final saved = VendorRule(
+      id: rule.id ?? 'vr${++_seq}',
+      kind: rule.kind,
+      category: rule.category,
+      name: rule.name?.trim(),
+      target: rule.target?.trim(),
+      sortOrder: rule.sortOrder,
+      // 跟資料庫一樣：設定畫面新增的記成自己設的，修改沿用原本的
+      userMade: rule.id == null || list.any((x) => x.id == rule.id && x.userMade),
+    );
+    list.removeWhere((x) => x.id == saved.id);
+    list.add(saved);
+  }
+
+  @override
+  Future<void> deleteVendorRule(String id) async {
+    if (_isStaff) throw Exception('message: 沒有權限刪除（只有老闆、店長可以）,');
+    for (final l in _vendorRules.values) {
+      l.removeWhere((x) => x.id == id);
+    }
   }
 
   @override

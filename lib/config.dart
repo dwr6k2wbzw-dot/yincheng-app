@@ -35,35 +35,9 @@ class AppConfig {
     'xc_bar_misc': '非酒材與食材的項目皆列為雜項',
   };
 
-  /// 新增進貨「類別（常用廠商）」提示的手動調整（2026-10-13 起不再顯示提示，保留設定以便恢復）（老闆指定；其餘照日報表統計）
-  static const vendorHintHidden = {'xc_ramen_misc'}; // 布布拉麵-雜項：不顯示提示
   // 只在「零用金」付款時套用（老闆 2026-10-11；月結廠商維持原樣）：
   // 小城外 酒吧-酒水 顯示為「現結酒商」（只改顯示，類別代碼不變，匯入與成本率不受影響）
   static const pettyCashCategoryLabel = <String, String>{}; // 0048 起兩種付款都叫「酒水」，不再改名
-  // 零用金時不顯示廠商提示：酒吧-酒水（月結廠商不適用）、布布拉麵-食材（信功、立成）
-  static const pettyCashHintHidden = {'xc_bar_liquor', 'xc_ramen_food'};
-  static const vendorHintRemove = {
-    'xc_cafe_food': {'柳橙汁'}, // 咖啡吧-餐食（老闆 2026-10-13 移除）
-  };
-  static const vendorHintRename = {'二店拉麵食材': '立成'}; // 布布拉麵-食材
-  /// 進貨「月結廠商」區塊：同一家廠商的不同寫法併成一塊（老闆 2026-10-29）。
-  /// 名稱最後的括號會先去掉，所以這裡寫去掉括號後的名字。
-  static const vendorGroupAlias = <String, String>{'德哥': '阿德水果'};
-  /// 新增進貨「選擇廠商」清單的手動調整（老闆 2026-10-29），依店名：改名 → 移除 → 補上
-  static const vendorListRename = <String, Map<String, String>>{
-    // 欣利實業統一叫「欣利實業（茗茶酒）」（老闆 2026-11-05；日報表寫欣利／欣利實業）
-    '小城外': {'小郭食材': '小郭', 'yoyo': 'YOYO', '欣利': '欣利實業（茗茶酒）', '欣力': '欣利實業（茗茶酒）', '欣利實業': '欣利實業（茗茶酒）'},
-    '隱城': {'欣利': '欣利實業（茗茶酒）', '欣力': '欣利實業（茗茶酒）', '欣利實業': '欣利實業（茗茶酒）'},
-  };
-  static const vendorListRemove = <String, Set<String>>{
-    '小城外': {'布布拉麵', '二店拉麵食材', '小郭抽成', '廣泰', '瑪格莉特比薩', '瑪格麗特披薩', '生蠔'},
-    '隱城': {'薯條', '布布拉麵', '小郭食材'},
-  };
-  static const vendorListAdd = <String, List<String>>{
-    '隱城': ['喝酒生活'],
-    '小城外': ['花都'],
-  };
-  static const vendorHintAdd = {
-    'xc_bar_food': ['小郭'], // 酒吧-食材
-  };
+  // 廠商名稱的調整（同一家的不同寫法、「選擇廠商」清單的改名／不顯示／一定列出、常用廠商提示、零用金不帶廠商的類別）
+  // 改放資料庫每家店一份（ops 0166 vendor_name_rules），見 data/vendor_rules.dart；以前寫在這裡的內容在 VendorRules.legacy
 }
