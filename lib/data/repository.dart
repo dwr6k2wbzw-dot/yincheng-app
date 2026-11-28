@@ -2,6 +2,7 @@ import 'shift_off_rules.dart';
 import 'dart:typed_data';
 
 import 'attendance_models.dart';
+import 'attendance_settings.dart';
 import 'change_request_models.dart';
 import 'booking_profile.dart';
 import 'booking_assist.dart';
@@ -18,6 +19,7 @@ import 'shift_planner.dart';
 import 'store_ai.dart';
 import 'store_line.dart';
 export 'attendance_models.dart';
+export 'attendance_settings.dart';
 export 'booking_assist.dart';
 export 'change_request_models.dart';
 export 'line_bind.dart';
@@ -391,6 +393,10 @@ abstract class Repository {
   Future<StoreLineResult> testStoreLine(String storeId);
   /// 清除（透過這個帳號綁的群組一起拿掉）
   Future<void> clearStoreLine(String storeId);
+  // 打卡設定（ops 0163）：每家店自己設打卡開關、寬限、起算日、補登上限、店長看薪資；老闆、店長讀，只有老闆能改
+  Future<AttendanceSettings> attendanceSettings(String storeId);
+  /// 只送有改的項目（AttendanceSettings.changesFrom）
+  Future<void> saveAttendanceSettings(String storeId, Map<String, Object?> changes);
   Future<List<Reservation>> reservations(String storeId, DateTime from, DateTime to);
   Future<void> addReservation(String storeId,
       {required DateTime date, required String time, required int party, required String name, required String phone, String? email, String? note, List<String> tableIds = const []});

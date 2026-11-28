@@ -163,12 +163,14 @@ class _AnomalyTabState extends State<_AnomalyTab> with AutomaticKeepAliveClientM
       _repo.attendanceAnomalies(store, d.from, d.to),
       _repo.scheduleCheck(store, d.from, d.to).catchError((_) => <ScheduleCheckRow>[]),
       _repo.shiftMarkTimes(store).catchError((_) => <ShiftMarkTime>[]),
+      attendanceSettingsOrFallback(_repo, store), // 0163：寬限、補登上限每家店自己設
     ]);
     const timeIssues = {'early_in', 'late_in', 'early_out', 'late_out'};
     return (
       anomalies: r[0] as List<AttendanceAnomaly>,
       offSchedule: [for (final x in r[1] as List<ScheduleCheckRow>) if (x.issues.any(timeIssues.contains)) x],
       markTimes: r[2] as List<ShiftMarkTime>,
+      settings: r[3] as AttendanceSettings,
     );
   }
 
@@ -182,8 +184,8 @@ class _AnomalyTabState extends State<_AnomalyTab> with AutomaticKeepAliveClientM
     return widget.codeTimes[mark] ?? markTimeOn(times, mark, day);
   }
 
-  /// 核准補登時看的那一行：班表時間，跟補登時間差超過 30 分鐘標紅
-  Widget _planLine(AttendanceAnomaly a, List<ShiftMarkTime> times) {
+  /// 核准補登時看的那一行：班表時間，跟補登時間差超過寬限（預設 30 分鐘，0163 每家店自己設）標紅
+  Widget _planLine(AttendanceAnomaly a, List<ShiftMarkTime> times, int grace) {
     final day = a.businessDate;
     if (day == null || a.personId == null || a.at == null || a.punchType == null) return const SizedBox.shrink();
     final m = widget.data.month;
@@ -191,7 +193,7 @@ class _AnomalyTabState extends State<_AnomalyTab> with AutomaticKeepAliveClientM
     final mark = inMonth ? widget.data.mark(a.personId!, day.day) : null;
     final range = _planRange(a.personId!, day, times);
     final diff = scheduleDiffMinutes(businessDate: day, range: range, punchType: a.punchType!, at: toTaipei(a.at!));
-    final off = diff != null && diff.abs() > 30;
+    final off = diff != null && diff.abs() > grace;
     final String text;
     if (!inMonth) {
       text = '班表：請到班表頁切到 ${day.month} 月對照';
@@ -274,15 +276,17 @@ class _AnomalyTabState extends State<_AnomalyTab> with AutomaticKeepAliveClientM
             final list = snap.data?.anomalies ?? const <AttendanceAnomaly>[];
             final off = snap.data?.offSchedule ?? const <ScheduleCheckRow>[];
             final times = snap.data?.markTimes ?? const <ShiftMarkTime>[];
+            final set = snap.data?.settings ?? AttendanceSettings.fallback;
+            final grace = set.graceMin;
             return ListView(padding: const EdgeInsets.fromLTRB(16, 8, 16, 32), children: [
               _rangeChips(_range, (r) => setState(() {
                     _range = r;
                     _future = _load();
                   })),
-              const InfoLine(
-                  text: '店長每天看一次：漏打、待確認、待審補登、跟班表差超過 30 分鐘',
+              InfoLine(
+                  text: '店長每天看一次：漏打、待確認、待審補登、跟班表差超過 $grace 分鐘',
                   icon: Icons.info_outline,
-                  detail: '補登只能本人在「我的出勤」申請，店長核准；同一個人一個月第 4 次補登起只有老闆能核准。核准時對照班表時間，差超過 30 分鐘標紅。'
+                  detail: '補登只能本人在「我的出勤」申請，店長核准；${set.amendRuleLabel}。核准時對照班表時間，差超過 $grace 分鐘標紅。'
                       '確認／不採用都要寫原因，會記在異動紀錄。店長不能審自己的打卡和補登（老闆可以）。原始打卡不會被改掉，「不採用」只是不算。已經審過的要改，到「原始紀錄」點那一筆重新審核。'),
               if (snap.hasError) ErrorView(message: friendlyError(snap.error!), onRetry: _reload),
               if (!snap.hasData && !snap.hasError) const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator())),
@@ -309,7 +313,7 @@ class _AnomalyTabState extends State<_AnomalyTab> with AutomaticKeepAliveClientM
                               if (a.detail != null && a.detail!.isNotEmpty) a.detail!,
                             ].join('・'),
                             style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
-                        if (a.kind == 'amendment') _planLine(a, times),
+                        if (a.kind == 'amendment') _planLine(a, times, grace),
                         Row(mainAxisAlignment: MainAxisAlignment.end, children: _actions(a)),
                       ]),
                     ),
@@ -317,7 +321,7 @@ class _AnomalyTabState extends State<_AnomalyTab> with AutomaticKeepAliveClientM
               if (off.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(4, 12, 0, 6),
-                  child: Text('跟班表差超過 30 分鐘・${off.length}',
+                  child: Text('跟班表差超過 $grace 分鐘・${off.length}',
                       style: TextStyle(color: AppColors.bad, fontWeight: AppFont.label)),
                 ),
               for (final r in off) _offCard(r),
@@ -361,7 +365,7 @@ class _AnomalyTabState extends State<_AnomalyTab> with AutomaticKeepAliveClientM
   }
 }
 
-typedef _AnomalyData = ({List<AttendanceAnomaly> anomalies, List<ScheduleCheckRow> offSchedule, List<ShiftMarkTime> markTimes});
+typedef _AnomalyData = ({List<AttendanceAnomaly> anomalies, List<ScheduleCheckRow> offSchedule, List<ShiftMarkTime> markTimes, AttendanceSettings settings});
 
 // ---------------- 出勤與匯出 ----------------
 

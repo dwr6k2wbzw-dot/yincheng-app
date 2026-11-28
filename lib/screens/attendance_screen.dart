@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../app_state.dart';
+import '../config.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
 import '../services/clock.dart';
@@ -10,6 +11,7 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import 'attendance_check_screen.dart' show MyOvertimeSection;
 import 'attendance_manage_screen.dart';
+import 'attendance_settings_screen.dart';
 import 'payroll_screen.dart';
 import 'pin_punch_screen.dart' show editPunchPin;
 
@@ -100,6 +102,7 @@ class _AttendanceCardState extends State<AttendanceCard> {
   @override
   void initState() {
     super.initState();
+    attendanceSettingsSaved.addListener(_onSettingsSaved);
     () async {
       try {
         final v = (await SharedPreferences.getInstance()).getBool(_openKey) ?? false;
@@ -161,6 +164,17 @@ class _AttendanceCardState extends State<AttendanceCard> {
   void _reload() => setState(() {
         _future = _load();
       });
+
+  /// 打卡設定在別的畫面（⋯ 選單）存好了：這張卡片留在 IndexedStack 裡不會重建，要自己重新讀。
+  void _onSettingsSaved() {
+    if (mounted && attendanceSettingsSaved.value == widget.membership.storeId) _reload();
+  }
+
+  @override
+  void dispose() {
+    attendanceSettingsSaved.removeListener(_onSettingsSaved);
+    super.dispose();
+  }
 
   /// 自己設打卡密碼（只有還沒設的時候；ops 0141 起店長也能自己設）
   Future<void> _editPin(PinStatus p) async {
@@ -232,6 +246,14 @@ class _AttendanceCardState extends State<AttendanceCard> {
                   child: const Text('員工資料'),
                 ),
               ..._payrollButtons(me),
+              // 打卡設定（ops 0163）：公版的老闆在這裡打開打卡
+              if (AppConfig.selfSignup && _owner)
+                FilledButton.tonal(
+                  onPressed: () => Navigator.of(context)
+                      .push(MaterialPageRoute(builder: (_) => AttendanceSettingsScreen(membership: widget.membership)))
+                      .then((_) => _reload()),
+                  child: const Text('打卡設定'),
+                ),
             ]),
           ],
         ]),

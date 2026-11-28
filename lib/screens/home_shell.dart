@@ -13,6 +13,7 @@ import 'platform_admin_wishes_screen.dart';
 import 'platform_wishes_screen.dart';
 import 'store_ai_screen.dart';
 import 'store_line_screen.dart';
+import 'attendance_settings_screen.dart';
 import 'create_store_screen.dart';
 import 'dashboard_screen.dart';
 import 'members_screen.dart';
@@ -198,6 +199,10 @@ class _HomeShellState extends State<HomeShell> with SingleTickerProviderStateMix
                 Navigator.of(context).push(MaterialPageRoute(builder: (_) => StoreLineScreen(membership: m)));
                 return;
               }
+              if (v == 'attset') {
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => AttendanceSettingsScreen(membership: m)));
+                return;
+              }
               if (v == 'code') {
                 enterInviteCode(context);
                 return;
@@ -246,6 +251,9 @@ class _HomeShellState extends State<HomeShell> with SingleTickerProviderStateMix
                 const PopupMenuItem(value: 'ai', child: ListTile(leading: Icon(Icons.memory_outlined), title: Text('AI 設定'))),
               if (AppConfig.selfSignup && m.role == Role.owner)
                 const PopupMenuItem(value: 'line', child: ListTile(leading: Icon(Icons.forum_outlined), title: Text('LINE 官方帳號'))),
+              // 打卡設定（ops 0163）：公版那一份才有，只有老闆；開打卡、寬限、起算日、補登上限、店長看薪資
+              if (AppConfig.selfSignup && m.role == Role.owner)
+                const PopupMenuItem(value: 'attset', child: ListTile(leading: Icon(Icons.fingerprint), title: Text('打卡設定'))),
               const PopupMenuItem(value: 'code', child: ListTile(leading: Icon(Icons.key_outlined), title: Text('輸入邀請碼'))),
               const PopupMenuItem(value: 'speed', child: ListTile(leading: Icon(Icons.speed), title: Text('載入速度'))),
               const PopupMenuItem(value: 'logout', child: ListTile(leading: Icon(Icons.logout), title: Text('登出'))),

@@ -3100,6 +3100,30 @@ class DemoRepository implements Repository {
     _lineLinksVia.remove(storeId); // 0161：解除帳號時，透過這個帳號綁的私訊一起拿掉
   }
 
+  // 0163：打卡設定（示範：第一家店開著打卡、其他店關著；寬限 30、補登 3）
+  final Map<String, AttendanceSettings> _attSettings = {};
+  @override
+  Future<AttendanceSettings> attendanceSettings(String storeId) async =>
+      _attSettings[storeId] ?? AttendanceSettings(enabled: storeId == 'yc', graceMin: 30, canEdit: !_isStaff && !_isManager);
+  @override
+  Future<void> saveAttendanceSettings(String storeId, Map<String, Object?> changes) async {
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    if (_isStaff || _isManager) throw Exception('只有老闆能改打卡設定');
+    var s = await attendanceSettings(storeId);
+    for (final e in changes.entries) {
+      final v = e.value;
+      s = switch (e.key) {
+        'enabled' => s.copyWith(enabled: v as bool),
+        'grace_min' => s.copyWith(graceMin: v as int),
+        'check_from' => s.copyWith(checkFrom: () => v == null ? null : DateTime.parse(v as String)),
+        'amend_owner_after' => s.copyWith(amendOwnerAfter: () => v as int?),
+        'manager_payroll' => s.copyWith(managerPayroll: v as bool),
+        _ => throw Exception('不認得的設定：${e.key}'),
+      };
+    }
+    _attSettings[storeId] = s;
+  }
+
   @override
   Future<List<PlatformWish>> platformWishes(String storeId) async => [
     ..._wishesOf(storeId),
@@ -4166,7 +4190,7 @@ class DemoRepository implements Repository {
   Future<AttendanceMe?> attendanceMe(String storeId) async {
     final last = _att.where((r) => r.isPunch).lastOrNull;
     return AttendanceMe(
-      enabled: storeId == 'yc',
+      enabled: _attSettings[storeId]?.enabled ?? storeId == 'yc',
       canManage: !_isStaff, // 小城外沒開打卡，老闆照樣管員工資料
       personId: _bindingPending ? null : 'f0',
       personName: _bindingPending ? null : _dn('f0', '阿明'),

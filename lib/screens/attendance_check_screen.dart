@@ -102,6 +102,7 @@ class _ScheduleCheckTabState extends State<ScheduleCheckTab> with AutomaticKeepA
   String? _filter; // 只看某一種異常
   late Future<(List<ScheduleCheckRow>, List<ShiftMarkTime>)> _future = _load();
   bool _exporting = false;
+  int _grace = 30; // 0163：每家店自己設的寬限（讀不到照以前 30 分鐘）
 
   Repository get _repo => AppScope.of(context).repo;
   @override
@@ -112,7 +113,13 @@ class _ScheduleCheckTabState extends State<ScheduleCheckTab> with AutomaticKeepA
   Future<(List<ScheduleCheckRow>, List<ShiftMarkTime>)> _load() async {
     final d = _spanDates(_span);
     final store = widget.membership.storeId;
-    final r = await Future.wait([_repo.scheduleCheck(store, d.from, d.to), _repo.shiftMarkTimes(store)]);
+    final r = await Future.wait<Object>([
+      _repo.scheduleCheck(store, d.from, d.to),
+      _repo.shiftMarkTimes(store),
+      attendanceSettingsOrFallback(_repo, store),
+    ]);
+    final grace = (r[2] as AttendanceSettings).graceMin;
+    if (mounted && grace != _grace) setState(() => _grace = grace);
     return (r[0] as List<ScheduleCheckRow>, r[1] as List<ShiftMarkTime>);
   }
 
@@ -254,8 +261,8 @@ class _ScheduleCheckTabState extends State<ScheduleCheckTab> with AutomaticKeepA
                   _future = _load();
                 }),
               ),
-              const InfoLine(
-                text: '跟班表差超過 30 分鐘就列出來',
+              InfoLine(
+                text: '跟班表差超過 $_grace 分鐘就列出來',
                 icon: Icons.info_outline,
                 detail:
                     '早到、遲到、早退、晚走都是跟班表上的時間比；沒排班（或排休）卻有打卡、有排班卻整天沒打卡也列出來。'

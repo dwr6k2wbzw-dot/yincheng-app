@@ -2279,6 +2279,19 @@ class SupabaseRepository implements Repository {
   Future<void> clearStoreLine(String storeId) async {
     await _db.rpc('store_line_clear', params: {'p_store': storeId});
   }
+  @override
+  Future<AttendanceSettings> attendanceSettings(String storeId) async {
+    final r = await _db.rpc('attendance_settings', params: {'p_store': storeId});
+    final rows = r is List ? r : const [];
+    return rows.isEmpty ? AttendanceSettings.fallback : AttendanceSettings.fromJson(Map<String, dynamic>.from(rows.first as Map));
+  }
+
+  @override
+  Future<void> saveAttendanceSettings(String storeId, Map<String, Object?> changes) async {
+    if (changes.isEmpty) return;
+    await _db.rpc('attendance_settings_set', params: {'p_store': storeId, 'p_changes': changes});
+  }
+
 
   @override
   Future<String> uploadBookingAsset(String storeId, String kind, Uint8List bytes, String contentType) async {
