@@ -104,6 +104,40 @@ void main() {
       expect(t.skipped.single.text, '合計列');
     });
 
+    test('認不得的欄位底下有資料 → 不默默丟掉，要改欄名或標成不要', () {
+      // Codex：「刷卡金額」沒對上，刷卡的錢就會少算
+      final t = readRevenueTable([
+        ['日期', '現金', '刷卡金額'],
+        ['2025-10-01', '1000', '2000'],
+      ]);
+      expect(t.rows, isEmpty);
+      expect(t.problem, contains('「刷卡金額」（第 C 欄）'));
+      // 重複的欄名（第二個「現金」）也算認不得
+      expect(
+          readRevenueTable([
+            ['日期', '現金', '現金'],
+            ['2025-10-01', '1000', '500'],
+          ]).problem,
+          contains('「現金」（第 C 欄）'));
+      // 沒有欄名但底下有數字
+      expect(
+          readRevenueTable([
+            ['日期', '現金', ''],
+            ['2025-10-01', '1000', '500'],
+          ]).problem,
+          contains('第 C 欄（沒有欄名）'));
+      // 欄名前加 # 或「略過」＝不要；認不得但整欄空白的不擋
+      final ok = readRevenueTable([
+        ['日期', '現金', '#合計', '略過 備用', '店長簽名'],
+        ['2025-10-01', '1000', '1000', 'x', ''],
+      ]);
+      expect(ok.problem, isNull);
+      expect(ok.rows.single.values, {'cash': '1000'});
+      expect(columnLetter(0), 'A');
+      expect(columnLetter(25), 'Z');
+      expect(columnLetter(26), 'AA');
+    });
+
     test('找不到日期、或只有日期沒有營收欄位 → 看不懂', () {
       expect(
           readRevenueTable([

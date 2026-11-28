@@ -3,6 +3,7 @@
 /// 對不對（日期過了沒、金額範圍、這家店有沒有分咖啡拉麵…）一律由資料庫的 revenue_import 檢查，App 不重複判斷。
 library;
 
+import '../services/reservation_xlsx.dart' show columnLetter;
 import 'booking_import.dart' show ImportIssue, normDate;
 
 /// 範本的欄位（順序就是範本的順序）；[multi]＝這家店的營收有分咖啡、拉麵（功能開關 multi_line_revenue）
@@ -65,6 +66,9 @@ const _moneyKeys = [
 const _totalWords = {'合計', '總計', '小計', '總和', '加總', 'total', 'sum', 'subtotal'};
 
 String _norm(String s) => s.replaceAll(RegExp(r'\s+'), '').toLowerCase();
+
+/// 欄名前加「#」或「略過」＝這一欄不要（例如舊系統的合計欄）
+bool _ignoredHeader(String h) => h.startsWith('#') || h.startsWith('＃') || h.startsWith('略過');
 
 /// 檔案裡的一天（line＝在檔案裡是第幾列，給人看的）；values 的 key＝資料庫的欄位名稱（沒有這一欄就沒有 key）
 class RevenueImportRow {
@@ -141,6 +145,28 @@ RevenueImportTable readRevenueTable(List<List<String>> cells) {
   String at(List<String> r, String k) {
     final c = col[k];
     return c == null || c >= r.length ? '' : r[c].trim();
+  }
+
+  // 表頭認不得、底下卻有資料的欄位：不默默丟掉（例如「刷卡金額」沒對上，刷卡的錢就會少算），
+  // 要使用者改成範本的欄名，或在欄名前加「#」表示這欄不要
+  final mapped = col.values.toSet();
+  final width = cells.skip(head).fold<int>(0, (w, r) => r.length > w ? r.length : w);
+  final unknown = <String>[];
+  for (var c = 0; c < width; c++) {
+    if (mapped.contains(c)) continue;
+    final h = c < cells[head].length ? cells[head][c].trim() : '';
+    if (_ignoredHeader(h)) continue;
+    final hasData = cells.skip(head + 1).any((r) => c < r.length && r[c].trim().isNotEmpty);
+    if (!hasData) continue;
+    unknown.add(h.isEmpty ? '第 ${columnLetter(c)} 欄（沒有欄名）' : '「$h」（第 ${columnLetter(c)} 欄）');
+  }
+  if (unknown.isNotEmpty) {
+    return RevenueImportTable(
+      const [],
+      '這幾欄看不懂：${unknown.join('、')}。'
+      '請把欄名改成範本的寫法（日期、來客數、現金、刷卡、AE、訂金、酒水、餐食、專案…），'
+      '不要的欄位在欄名前加「#」或整欄刪掉，再選一次檔案',
+    );
   }
 
   final rows = <RevenueImportRow>[];
