@@ -253,6 +253,8 @@ abstract class Repository {
   Future<void> updateHandover(String noteId, String body, List<String> items, {bool? important}); // 0044／0060：任何成員都能改內容與清單；0079：null＝不改重要
   Future<bool> lineNotifyEnabled(String storeId); // 0079：這家店重要交接發不發 LINE（只有老闆讀得到，其他人回 true）
   Future<void> saveLineNotifyEnabled(String storeId, bool on); // 0079：只有老闆
+  Future<Set<String>> lineNotifyEvents(String storeId); // 0162：這家店哪些通知發到 LINE 群組（只有老闆讀得到；讀不到回預設＝只有重要交接）
+  Future<void> saveLineNotifyEvents(String storeId, Set<String> events); // 0162：只有老闆
   Future<int> lineOwnerLinks(); // 0081：我綁了幾個 LINE 私訊
   Future<void> linkLineOwner(String code); // 0081：老闆輸入 LINE 私訊給的代碼
   Future<void> unlinkLineOwner(); // 0081：解除自己的 LINE 私訊綁定

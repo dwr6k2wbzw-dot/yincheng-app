@@ -7,6 +7,7 @@ import 'dart:typed_data';
 import '../config.dart';
 import 'booking_import.dart';
 import 'booking_profile.dart';
+import 'line_notify_events.dart';
 import 'models.dart';
 import 'onboarding.dart';
 import 'person_names.dart';
@@ -1008,6 +1009,16 @@ class DemoRepository implements Repository {
   @override
   Future<void> saveLineNotifyEnabled(String storeId, bool on) async =>
       _lineOn[storeId] = on;
+  // 0162：示範版——小城外假裝另外勾了新網路訂位、訂位取消
+  final _lineEvents = <String, Set<String>>{
+    'xc': {'handover_important', 'reservation_new', 'reservation_cancel'},
+  };
+  @override
+  Future<Set<String>> lineNotifyEvents(String storeId) async =>
+      {...(_lineEvents[storeId] ?? lineNotifyDefault)};
+  @override
+  Future<void> saveLineNotifyEvents(String storeId, Set<String> events) async =>
+      _lineEvents[storeId] = {...events};
   @override
   Future<void> updateHandover(
     String noteId,

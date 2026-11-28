@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart' hide toDouble;
 import '../config.dart';
 import 'booking_import.dart';
 import 'booking_profile.dart';
+import 'line_notify_events.dart';
 import 'models.dart';
 import 'onboarding.dart';
 import 'purchase_items_math.dart';
@@ -887,6 +888,25 @@ class SupabaseRepository implements Repository {
   @override
   Future<void> saveLineNotifyEnabled(String storeId, bool on) async {
     await _db.from('store_settings').upsert({'store_id': storeId, 'line_notify_enabled': on}, onConflict: 'store_id');
+  }
+
+  // 0162：哪些通知發到 LINE 群組（資料庫還沒有 0162 的欄位時當作預設＝只有重要交接）
+  @override
+  Future<Set<String>> lineNotifyEvents(String storeId) async {
+    try {
+      final r = await _db.from('store_settings').select('line_notify_events').eq('store_id', storeId).maybeSingle();
+      return r == null ? {...lineNotifyDefault} : parseLineNotifyEvents(r['line_notify_events']);
+    } on PostgrestException catch (e) {
+      if (e.code == '42703' || e.code == 'PGRST204') return {...lineNotifyDefault};
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> saveLineNotifyEvents(String storeId, Set<String> events) async {
+    await _db.from('store_settings').upsert(
+        {'store_id': storeId, 'line_notify_events': lineNotifyEventsToList(events)},
+        onConflict: 'store_id');
   }
 
   // 0081：老闆 LINE 私訊綁定（只看得到自己的）
