@@ -235,7 +235,11 @@ class _ShiftRequestScreenState extends State<ShiftRequestScreen> {
         _takenDb = r[2] as Map<int, Set<String>>?;
         _personId ??= me?.id ??
             (_manager
-                ? sm.people.where((p) => p.active).firstOrNull?.id
+                // 預選照班表排序的第一位（名單顯示改成正職在前，預選不跟著變；2026-11-28）
+                ? (sm.people.where((p) => p.active).toList()
+                      ..sort((a, b) => a.sortOrder != b.sortOrder ? a.sortOrder.compareTo(b.sortOrder) : a.name.compareTo(b.name)))
+                    .firstOrNull
+                    ?.id
                 : null);
         if (!_manager) _personId = me?.id;
         _error = null;

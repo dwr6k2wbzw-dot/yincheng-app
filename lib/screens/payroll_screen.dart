@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../app_state.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
+import '../data/staff_order.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import '../services/payroll_export.dart' deferred as px;
@@ -48,7 +49,8 @@ class _PayrollScreenState extends State<PayrollScreen> {
       month: m,
       settings: r[0] as PayrollSettings,
       report: r[1] as PayrollReport,
-      rows: r[2] as List<PayrollRow>,
+      // 正職在前（2026-11-28）；沒有薪資資料、不計薪的照舊放後面
+      rows: fullTimeFirst(r[2] as List<PayrollRow>, (x) => x.kind == 'full', group: (x) => (x.missingRate, x.exempt)),
       estimate: r[3] as PayrollEstimate?,
     );
   }

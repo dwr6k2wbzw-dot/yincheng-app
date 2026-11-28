@@ -20,6 +20,7 @@ import 'repository.dart';
 import 'vendor_rules.dart';
 import 'shift_links.dart';
 import 'staff_import.dart';
+import 'staff_order.dart';
 
 /// 透過 Supabase（PostgREST）讀寫。所有權限由資料庫的 RLS 與觸發器把關，App 端不做權限判斷以外的假設。
 class SupabaseRepository implements Repository {
@@ -768,7 +769,8 @@ class SupabaseRepository implements Repository {
               .order('sort_order')
               .order('mark')),
     ]);
-    final people = (r[0] as List).map((x) => ShiftPerson.fromRow(x as Map<String, dynamic>)).toList();
+    // 正職在前（2026-11-28）：今天上班、交接、班表人員、排休這些名單都照這個順序
+    final people = fullTimeFirst((r[0] as List).map((x) => ShiftPerson.fromRow(x as Map<String, dynamic>)).toList(), (p) => p.isFull);
     final marks = <String, Map<int, String>>{};
     for (final e in r[1] as List) {
       final d = DateTime.parse(e['work_date'] as String).day;

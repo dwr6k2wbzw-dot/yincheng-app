@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../app_state.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
+import '../data/staff_order.dart';
 import '../data/store_features.dart';
 import '../services/attendance_csv.dart';
 import '../services/clock.dart';
@@ -111,16 +112,20 @@ class _ScheduleCheckTabState extends State<ScheduleCheckTab> with AutomaticKeepA
   void reload() => setState(() => _future = _load());
 
   Future<(List<ScheduleCheckRow>, List<ShiftMarkTime>)> _load() async {
-    final d = _spanDates(_span);
+    final d = _spanDates(_span), repo = _repo; // await 之後不再讀 context（離開頁面時元件已卸載）
     final store = widget.membership.storeId;
     final r = await Future.wait<Object>([
-      _repo.scheduleCheck(store, d.from, d.to),
-      _repo.shiftMarkTimes(store),
-      attendanceSettingsOrFallback(_repo, store),
+      repo.scheduleCheck(store, d.from, d.to),
+      repo.shiftMarkTimes(store),
+      attendanceSettingsOrFallback(repo, store),
     ]);
     final grace = (r[2] as AttendanceSettings).graceMin;
     if (mounted && grace != _grace) setState(() => _grace = grace);
-    return (r[0] as List<ScheduleCheckRow>, r[1] as List<ShiftMarkTime>);
+    final full = await fullTimeIdsAllStores(repo, store, widget.data); // 同一天裡正職在前（2026-11-28）
+    return (
+      fullTimeFirst(r[0] as List<ScheduleCheckRow>, (x) => full.contains(x.personId), group: (x) => x.businessDate),
+      r[1] as List<ShiftMarkTime>
+    );
   }
 
   /// 班表用 V（沒開班別代碼）而且還沒設 V 的時間：早到、遲到、早退、晚走比不出來
@@ -355,8 +360,9 @@ class _ScheduleCheckTabState extends State<ScheduleCheckTab> with AutomaticKeepA
 // =====================================================================
 
 class OvertimeTab extends StatefulWidget {
-  const OvertimeTab({super.key, required this.membership, required this.changed});
+  const OvertimeTab({super.key, required this.membership, required this.data, required this.changed});
   final Membership membership;
+  final ShiftMonth data; // 誰是正職（排序用）
   final ValueNotifier<int> changed;
   @override
   State<OvertimeTab> createState() => _OvertimeTabState();
@@ -372,9 +378,11 @@ class _OvertimeTabState extends State<OvertimeTab> with AutomaticKeepAliveClient
   @override
   void reload() => setState(() => _future = _load());
 
-  Future<List<OvertimeRequest>> _load() {
-    final d = _spanDates(_span);
-    return _repo.overtimeList(widget.membership.storeId, d.from, d.to);
+  /// 同一天裡正職在前（2026-11-28）；待審的照舊排在已處理前面
+  Future<List<OvertimeRequest>> _load() async {
+    final d = _spanDates(_span), repo = _repo, full = await fullTimeIdsAllStores(repo, widget.membership.storeId, widget.data);
+    return fullTimeFirst(await repo.overtimeList(widget.membership.storeId, d.from, d.to), (x) => full.contains(x.personId),
+        group: (x) => (x.pending, x.businessDate));
   }
 
   Future<void> _approve(OvertimeRequest o) async {
