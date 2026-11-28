@@ -19,6 +19,7 @@ import 'row_cache.dart';
 import 'repository.dart';
 import 'vendor_rules.dart';
 import 'shift_links.dart';
+import 'staff_import.dart';
 
 /// 透過 Supabase（PostgREST）讀寫。所有權限由資料庫的 RLS 與觸發器把關，App 端不做權限判斷以外的假設。
 class SupabaseRepository implements Repository {
@@ -2325,6 +2326,42 @@ class SupabaseRepository implements Repository {
   Future<Map<String, double?>> productCosts(String storeId) async {
     final rows = await _db.from('v_product_costs').select('id, cost_price').eq('store_id', storeId);
     return {for (final r in rows) r['id'] as String: r['cost_price'] == null ? null : toDouble(r['cost_price'])};
+  }
+
+  Future<StaffImportResult> _staffImport(String storeId, List<StaffImportRow> rows, String? fileName, String? requestId, bool dry) async {
+    final r = await _db.rpc('staff_import', params: {
+      'p_store': storeId,
+      'p_rows': [for (final x in rows) x.toJson()],
+      'p_file': fileName,
+      'p_request': requestId,
+      'p_dry_run': dry,
+    });
+    return StaffImportResult.fromJson(Map<String, dynamic>.from(r as Map), rows);
+  }
+
+  @override
+  Future<StaffImportResult> previewStaffImport(String storeId, List<StaffImportRow> rows) =>
+      _staffImport(storeId, rows, null, null, true);
+
+  @override
+  Future<StaffImportResult> importStaff(String storeId, List<StaffImportRow> rows, String? fileName, String requestId) =>
+      _staffImport(storeId, rows, fileName, requestId, false);
+
+  @override
+  Future<List<StaffImportBatch>> staffImports(String storeId) async {
+    final rows = await _db
+        .from('staff_imports')
+        .select('id, created_at, file_name, total_rows, inserted, with_pay, skipped, undone_at, undone_count, undone_kept')
+        .eq('store_id', storeId)
+        .order('created_at', ascending: false)
+        .limit(50);
+    return [for (final r in rows) StaffImportBatch.fromRow(r)];
+  }
+
+  @override
+  Future<StaffImportUndo> undoStaffImport(String batchId) async {
+    final r = await _db.rpc('staff_import_undo', params: {'p_batch': batchId});
+    return StaffImportUndo.fromJson(Map<String, dynamic>.from(r as Map));
   }
 
   @override

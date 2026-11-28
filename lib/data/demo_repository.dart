@@ -19,6 +19,7 @@ import 'repository.dart';
 import 'vendor_rules.dart';
 import 'shift_links.dart';
 import 'shift_templates.dart';
+import 'staff_import.dart';
 import 'store_features.dart';
 import '../services/clock.dart';
 
@@ -471,6 +472,8 @@ class DemoRepository implements Repository {
             userVerified: i == 1,
             linkId: _demoLinks['p$i'],
           ),
+        // 公版示範：名冊匯入的人（ops 0170）
+        if (AppConfig.selfSignup) ...[for (final x in _demoStaffPeople) x.p],
       ],
       marks,
       future ? const {} : const {3: '月會日'},
@@ -3996,6 +3999,207 @@ class DemoRepository implements Repository {
         for (final p in _products)
           if (!_inactive.contains(p.id)) p.id: _demoCosts[p.id],
       };
+
+  // ---------------- 員工名冊搬家（示範；只有公版有入口，資料只存在記憶體） ----------------
+  final _demoStaffBatches = <String, List<StaffImportBatch>>{};
+  final _demoStaffReq = <String, String>{};
+  // 匯入的人（示範班表人員清單會接在最後）；batch＝哪一批
+  final _demoStaffPeople = <({ShiftPerson p, String batch})>[];
+  final _demoStaffSeeded = <String>{};
+
+  /// 公版示範：先放一批「之前匯入過的」，匯入紀錄、班表人員看得到
+  void _seedStaffImports(String storeId) {
+    if (!AppConfig.selfSignup || !_demoStaffSeeded.add(storeId)) return;
+    const id = 'demo-staff-batch-0';
+    final at = DateTime.now().subtract(const Duration(days: 3));
+    _demoStaffBatches[storeId] = [
+      StaffImportBatch(id: id, createdAt: at, fileName: '舊系統員工名單.xlsx', total: 3, inserted: 2, withPay: 1, skipped: 1),
+    ];
+    _demoStaffPeople.addAll([
+      (p: ShiftPerson(id: 'imp0', name: 'Kiki', fullName: '陳琪琪', kind: 'part', sortOrder: 20), batch: id),
+      (p: ShiftPerson(id: 'imp1', name: '大頭', fullName: '李大同', sortOrder: 21), batch: id),
+    ]);
+    _rates['imp1'] = [PayRate(id: 'r-imp1', effectiveFrom: DateTime(at.year, at.month, 1), payType: 'monthly', amount: 31000, note: '名冊匯入')];
+  }
+
+  StaffImportResult _demoStaffCheck(String storeId, List<StaffImportRow> rows, {bool canPay = true}) {
+    final n = DateTime.now();
+    final today = DateTime(n.year, n.month, n.day);
+    final errors = <StaffImportIssue>[], skipped = <StaffImportIssue>[];
+    var ready = 0, readyPay = 0;
+    final seen = <String, int>{};
+    final existing = <String, bool>{
+      for (final x in ['阿明', '小安', '阿哲', '小魚', '阿凱', '芳芳', '小白', '阿樂']) x: true,
+      for (final x in _demoStaffPeople) x.p.name: x.p.active,
+    };
+    DateTime? date(String v) =>
+        RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(v) ? DateTime.tryParse(v) : null;
+    final phone = RegExp(r'^\+?[0-9][0-9\- ]{5,19}$');
+    for (var i = 0; i < rows.length; i++) {
+      final r = rows[i];
+      final line = r.line;
+      String? msg;
+      final kind = r.kind.trim().toLowerCase();
+      if (r.name.isEmpty) {
+        msg = '沒有暱稱';
+      } else if (r.name.length > 20) {
+        msg = '暱稱最多 20 個字';
+      } else if (r.fullName.length > 40) {
+        msg = '全名最多 40 個字';
+      } else if (!['', '正職', '全職', 'full', '兼職', '工讀', 'part'].contains(kind)) {
+        msg = '正職／兼職看不懂（請寫正職或兼職）';
+      } else if (r.hireDate.isNotEmpty && date(r.hireDate) == null) {
+        msg = '到職日看不懂（請寫成 2026-03-01）';
+      } else if (r.hireDate.isNotEmpty && date(r.hireDate)!.isAfter(today.add(const Duration(days: 366)))) {
+        msg = '到職日太遠了';
+      } else if (r.phone.isNotEmpty && !phone.hasMatch(r.phone)) {
+        msg = '電話格式不對';
+      } else if (r.emergencyPhone.isNotEmpty && !phone.hasMatch(r.emergencyPhone)) {
+        msg = '緊急聯絡電話格式不對';
+      } else if (r.hasPay) {
+        final amt = double.tryParse(r.amount.replaceAll(',', ''));
+        if (!canPay) {
+          msg = '你沒有權限設定薪資（請老闆匯入，或把起薪的欄位清空）';
+        } else if (!['月薪', '時薪', '日薪', 'monthly', 'hourly', 'daily'].contains(r.payType.trim().toLowerCase())) {
+          msg = '計薪方式看不懂（請寫月薪、時薪或日薪）';
+        } else if (amt == null || amt <= 0) {
+          msg = '起薪金額看不懂';
+        } else if (r.effectiveFrom.isEmpty && r.hireDate.isEmpty) {
+          msg = '起薪要有生效日（或填到職日，會用到職日）';
+        } else if (r.effectiveFrom.isNotEmpty && date(r.effectiveFrom) == null) {
+          msg = '起薪生效日看不懂（請寫成 2026-03-01）';
+        } else if (r.insuredSalary.isNotEmpty && int.tryParse(r.insuredSalary) == null) {
+          msg = '投保級距看不懂';
+        }
+      }
+      if (msg != null) {
+        errors.add(StaffImportIssue(line, msg));
+        continue;
+      }
+      final prev = seen[r.name];
+      if (prev != null) {
+        errors.add(StaffImportIssue(line, '跟第 $prev 列的暱稱一樣（暱稱不能重複）'));
+        continue;
+      }
+      seen[r.name] = line;
+      if (existing.containsKey(r.name)) {
+        skipped.add(StaffImportIssue(line,
+            existing[r.name]! ? '班表上已經有這個名字，不會改原本的資料' : '班表上已經有這個名字（已停用），不會改原本的資料'));
+        continue;
+      }
+      ready++;
+      if (r.hasPay) readyPay++;
+    }
+    return StaffImportResult(ready: ready, readyPay: readyPay, errors: errors, skipped: skipped);
+  }
+
+  @override
+  Future<StaffImportResult> previewStaffImport(String storeId, List<StaffImportRow> rows) async {
+    _seedStaffImports(storeId);
+    if (_isStaff) throw Exception('message: 只有老闆、店長能匯入員工,');
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    if (rows.length > 500) throw Exception('message: 一次最多匯入 500 位，請分成幾個檔案,');
+    return _demoStaffCheck(storeId, rows);
+  }
+
+  @override
+  Future<StaffImportResult> importStaff(String storeId, List<StaffImportRow> rows, String? fileName, String requestId) async {
+    _seedStaffImports(storeId);
+    if (_isStaff) throw Exception('message: 只有老闆、店長能匯入員工,');
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    final prev = _demoStaffReq[requestId];
+    if (prev != null) {
+      final b = _demoStaffBatches[storeId]!.firstWhere((x) => x.id == prev);
+      return StaffImportResult(batchId: b.id, inserted: b.inserted, withPay: b.withPay, repeat: true);
+    }
+    final check = _demoStaffCheck(storeId, rows);
+    if (check.errors.isNotEmpty || check.ready == 0) return check;
+    final id = 'demo-staff-batch-${DateTime.now().microsecondsSinceEpoch}';
+    final skippedLines = {for (final s in check.skipped) s.line};
+    var order = 30 + _demoStaffPeople.length, withPay = 0;
+    for (final r in rows) {
+      if (skippedLines.contains(r.line)) continue;
+      final pid = 'imp-${DateTime.now().microsecondsSinceEpoch}-${r.line}';
+      final hire = r.hireDate.isEmpty ? null : DateTime.parse(r.hireDate);
+      final k = r.kind.trim().toLowerCase();
+      _demoStaffPeople.add((
+        p: ShiftPerson(
+          id: pid,
+          name: r.name,
+          fullName: r.fullName.isEmpty ? null : r.fullName,
+          kind: ['兼職', '工讀', 'part'].contains(k) ? 'part' : 'full',
+          sortOrder: order++,
+          hireDate: hire,
+        ),
+        batch: id,
+      ));
+      if (r.phone.isNotEmpty || r.emergencyContact.isNotEmpty || r.emergencyPhone.isNotEmpty) {
+        _hr[pid] = {'phone': r.phone.isEmpty ? null : r.phone, 'ec': r.emergencyContact.isEmpty ? null : r.emergencyContact,
+            'ep': r.emergencyPhone.isEmpty ? null : r.emergencyPhone};
+      }
+      if (r.hasPay) {
+        withPay++;
+        final pt = switch (r.payType.trim().toLowerCase()) { '時薪' || 'hourly' => 'hourly', '日薪' || 'daily' => 'daily', _ => 'monthly' };
+        _rates[pid] = [
+          PayRate(
+            id: 'r-$pid',
+            effectiveFrom: DateTime.parse(r.effectiveFrom.isEmpty ? r.hireDate : r.effectiveFrom),
+            payType: pt,
+            amount: double.parse(r.amount.replaceAll(',', '')),
+            insuredSalary: r.insuredSalary.isEmpty ? null : double.parse(r.insuredSalary),
+            note: '名冊匯入',
+          ),
+        ];
+      }
+    }
+    _demoStaffReq[requestId] = id;
+    (_demoStaffBatches[storeId] ??= []).insert(
+      0,
+      StaffImportBatch(id: id, createdAt: DateTime.now(), fileName: fileName, total: rows.length,
+          inserted: check.ready, withPay: withPay, skipped: check.skipped.length),
+    );
+    return StaffImportResult(batchId: id, inserted: check.ready, withPay: withPay, skipped: check.skipped);
+  }
+
+  @override
+  Future<List<StaffImportBatch>> staffImports(String storeId) async {
+    _seedStaffImports(storeId);
+    return [...?_demoStaffBatches[storeId]];
+  }
+
+  @override
+  Future<StaffImportUndo> undoStaffImport(String batchId) async {
+    for (final e in _demoStaffBatches.entries) {
+      final i = e.value.indexWhere((b) => b.id == batchId);
+      if (i < 0) continue;
+      final b = e.value[i];
+      if (b.undoneAt != null) throw Exception('message: 這一批已經復原過了,');
+      var n = 0;
+      final kept = <String>[];
+      for (var k = 0; k < _demoStaffPeople.length; k++) {
+        final x = _demoStaffPeople[k];
+        if (x.batch != batchId) continue;
+        // 示範：Kiki 已經打過卡，整批復原時留著
+        if (x.p.id == 'imp0') {
+          kept.add(x.p.name);
+          continue;
+        }
+        if (!x.p.active) continue;
+        final p = x.p;
+        _demoStaffPeople[k] = (
+          p: ShiftPerson(id: p.id, name: p.name, fullName: p.fullName, kind: p.kind, sortOrder: p.sortOrder, hireDate: p.hireDate, active: false),
+          batch: x.batch,
+        );
+        n++;
+      }
+      e.value[i] = StaffImportBatch(
+        id: b.id, createdAt: b.createdAt, fileName: b.fileName, total: b.total, inserted: b.inserted,
+        withPay: b.withPay, skipped: b.skipped, undoneAt: DateTime.now(), undoneCount: n, undoneKept: kept.length,
+      );
+      return StaffImportUndo(n, kept);
+    }
+    throw Exception('message: 找不到這一批匯入，或你沒有權限,');
+  }
 
   @override
   Future<List<Reservation>> allReservations(String storeId) async => [
