@@ -16,6 +16,7 @@ import '../widgets/common.dart';
 import 'attendance_screen.dart';
 import 'shift_history_screen.dart';
 import 'shift_plan_screen.dart';
+import 'staff_import_screen.dart';
 
 /// 班表（隱城、小城外）：一週一張表；最下面是每天人力。
 /// 隱城：記號 V／休／指休／O，正職看「本週休」、兼職看「本週上班」。
@@ -424,7 +425,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
   Future<void> _managePeople(ShiftMonth d) async {
     await Navigator.of(context).push(MaterialPageRoute(
-        builder: (_) => _PeopleScreen(storeId: _store, people: d.people, isOwner: widget.membership.role == Role.owner, myUserId: _repo.currentUserId)));
+        builder: (_) => _PeopleScreen(storeId: _store, people: d.people, isOwner: widget.membership.role == Role.owner, myUserId: _repo.currentUserId, storeName: widget.membership.storeName)));
     _reload();
   }
 
@@ -1154,8 +1155,9 @@ String _num(double v) => v == v.roundToDouble() ? v.toInt().toString() : v.toStr
 
 /// 班表人員：新增、全名／暱稱、正職／兼職、排序、隱藏、對應 App 帳號
 class _PeopleScreen extends StatefulWidget {
-  const _PeopleScreen({required this.storeId, required this.people, this.isOwner = false, this.myUserId});
+  const _PeopleScreen({required this.storeId, required this.people, this.isOwner = false, this.myUserId, this.storeName = ''});
   final String storeId;
+  final String storeName; // 匯出名冊的檔名（ops 0170，只有公版）
   final List<ShiftPerson> people;
   final bool isOwner; // 老闆：什麼都能改。店長：只能替別人對應還沒對應好的（0125）
   final String? myUserId;
@@ -1530,13 +1532,34 @@ class _PeopleScreenState extends State<_PeopleScreen> {
     }
   }
 
+  Future<void> _openImport() async {
+    final changed = await Navigator.of(context).push<bool>(MaterialPageRoute(
+        builder: (_) => StaffImportScreen(storeId: widget.storeId, storeName: widget.storeName)));
+    if (changed != true || !mounted) return;
+    final repo = AppScope.of(context).repo;
+    try {
+      final d = await repo.shiftMonth(widget.storeId, DateTime.now());
+      if (mounted) setState(() => _people = d.people);
+    } catch (e) {
+      if (mounted) showMessage(context, friendlyError(e), error: true);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final active = _people.where((p) => p.active).toList();
     final noAccount = active.where((p) => p.userId == null || !p.userVerified).length;
     final noFull = active.where((p) => p.fullName == null).length;
     return Scaffold(
-      appBar: AppBar(title: const Text('班表人員')),
+      appBar: AppBar(title: const Text('班表人員'), actions: [
+        // 員工名冊搬家（ops 0170）：只有公版有入口；隱城／小城外這一份畫面不變
+        if (AppConfig.selfSignup)
+          IconButton(
+            tooltip: '匯入、匯出員工名冊',
+            icon: const Icon(Icons.import_export),
+            onPressed: _openImport,
+          ),
+      ]),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _edit(null),
         icon: const Icon(Icons.person_add_alt_1),

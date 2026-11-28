@@ -15,6 +15,7 @@ import 'purchase_items_math.dart';
 import 'reservation_models.dart';
 import 'shift_links.dart';
 import 'shift_planner.dart';
+import 'staff_import.dart';
 import 'store_ai.dart';
 import 'store_line.dart';
 export 'attendance_models.dart';
@@ -353,6 +354,13 @@ abstract class Repository {
   Future<int> undoReservationImport(String batchId);
   /// 匯出用：這家店全部的訂位（含已取消、隱藏的）
   Future<List<Reservation>> allReservations(String storeId);
+  // 員工名冊搬家（ops 0170；老闆、店長；只有公版有入口）：先預覽（資料庫檢查每一列、不寫入），沒問題再匯入；每一批可以整批復原
+  Future<StaffImportResult> previewStaffImport(String storeId, List<StaffImportRow> rows);
+  /// [requestId]：同一個檔案按兩次只匯一次
+  Future<StaffImportResult> importStaff(String storeId, List<StaffImportRow> rows, String? fileName, String requestId);
+  Future<List<StaffImportBatch>> staffImports(String storeId);
+  /// 停用這一批匯入的人（不刪除）；已經有打卡或薪資的人留著
+  Future<StaffImportUndo> undoStaffImport(String batchId);
   // 許願單（ops 0149，公版；只有老闆、店長）：寫一則送到平台待辦，平台回覆狀態和說明
   /// 這家店的許願單（新的在前）
   Future<List<PlatformWish>> platformWishes(String storeId);
