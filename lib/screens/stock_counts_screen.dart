@@ -8,9 +8,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../app_state.dart';
+import '../config.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
 import '../data/stock_math.dart';
+import 'product_import_screen.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 
@@ -931,6 +933,15 @@ class _ProductsScreenState extends State<ProductsScreen> {
     }
   }
 
+  Future<void> _openImport() async {
+    final changed = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(builder: (_) => ProductImportScreen(membership: widget.membership)));
+    if (changed == true && mounted) {
+      _changed = true;
+      setState(() => _future = _load());
+    }
+  }
+
   @override
   Widget build(BuildContext context) => PopScope(
         canPop: false,
@@ -938,7 +949,15 @@ class _ProductsScreenState extends State<ProductsScreen> {
           if (!didPop) Navigator.of(context).pop(_changed);
         },
         child: Scaffold(
-          appBar: AppBar(title: const Text('品項管理')),
+          appBar: AppBar(title: const Text('品項管理'), actions: [
+            // 品項搬家（ops 0167）：只有公版、只有老闆店長
+            if (AppConfig.selfSignup && widget.membership.isManager)
+              IconButton(
+                tooltip: '匯入、匯出品項',
+                icon: const Icon(Icons.import_export),
+                onPressed: _openImport,
+              ),
+          ]),
           floatingActionButton: FloatingActionButton.extended(
             onPressed: () => _edit(null),
             icon: const Icon(Icons.add),

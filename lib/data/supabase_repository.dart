@@ -12,6 +12,7 @@ import 'booking_profile.dart';
 import 'line_notify_events.dart';
 import 'models.dart';
 import 'onboarding.dart';
+import 'product_import.dart';
 import 'purchase_items_math.dart';
 import 'row_cache.dart';
 import 'repository.dart';
@@ -2182,6 +2183,48 @@ class SupabaseRepository implements Repository {
   Future<int> undoReservationImport(String batchId) async {
     final r = await _db.rpc('reservation_import_undo', params: {'p_batch': batchId});
     return ((r as Map)['cancelled'] as num?)?.toInt() ?? 0;
+  }
+
+  Future<ImportResult> _productImport(String storeId, List<ProductImportRow> rows, String? fileName, String? requestId, bool dry) async {
+    final r = await _db.rpc('product_import', params: {
+      'p_store': storeId,
+      'p_rows': [for (final x in rows) x.toJson()],
+      'p_file': fileName,
+      'p_request': requestId,
+      'p_dry_run': dry,
+    });
+    return productImportResult(Map<String, dynamic>.from(r as Map), rows);
+  }
+
+  @override
+  Future<ImportResult> previewProductImport(String storeId, List<ProductImportRow> rows) =>
+      _productImport(storeId, rows, null, null, true);
+
+  @override
+  Future<ImportResult> importProducts(String storeId, List<ProductImportRow> rows, String? fileName, String requestId) =>
+      _productImport(storeId, rows, fileName, requestId, false);
+
+  @override
+  Future<List<ImportBatch>> productImports(String storeId) async {
+    final rows = await _db
+        .from('product_imports')
+        .select('id, created_at, file_name, total_rows, inserted, skipped, undone_at, undone_count')
+        .eq('store_id', storeId)
+        .order('created_at', ascending: false)
+        .limit(50);
+    return [for (final r in rows) ImportBatch.fromRow(r)];
+  }
+
+  @override
+  Future<int> undoProductImport(String batchId) async {
+    final r = await _db.rpc('product_import_undo', params: {'p_batch': batchId});
+    return ((r as Map)['deactivated'] as num?)?.toInt() ?? 0;
+  }
+
+  @override
+  Future<Map<String, double?>> productCosts(String storeId) async {
+    final rows = await _db.from('v_product_costs').select('id, cost_price').eq('store_id', storeId);
+    return {for (final r in rows) r['id'] as String: r['cost_price'] == null ? null : toDouble(r['cost_price'])};
   }
 
   @override

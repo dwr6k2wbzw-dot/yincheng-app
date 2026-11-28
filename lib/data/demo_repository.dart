@@ -11,6 +11,7 @@ import 'booking_profile.dart';
 import 'line_notify_events.dart';
 import 'models.dart';
 import 'onboarding.dart';
+import 'product_import.dart';
 import 'person_names.dart';
 import 'purchase_items_math.dart';
 import 'repository.dart';
@@ -3582,6 +3583,151 @@ class DemoRepository implements Repository {
     }
     throw Exception('找不到這一批匯入，或你沒有權限');
   }
+
+  // ---------------- 盤點品項搬家（0167）：檢查規則同資料庫 product_import ----------------
+  final _demoProductImports = <String, List<ImportBatch>>{};
+  final _demoProductImportReq = <String, String>{};
+  final _demoProductBatch = <String, List<String>>{}; // 批次 → 匯入的品項 id
+  final _demoCosts = <String, double?>{'p1': 1380, 'p2': 920, 'p3': 760, 'p5': 8};
+
+  String _productKey(String s) => s.replaceAll(RegExp(r'\s+'), '').toLowerCase();
+
+  ImportResult _demoProductCheck(List<ProductImportRow> rows, {String? batchId}) {
+    final errors = <Map<String, dynamic>>[], skipped = <Map<String, dynamic>>[];
+    final ok = <ProductImportRow>[];
+    final seen = <String>{};
+    for (var i = 0; i < rows.length; i++) {
+      final r = rows[i];
+      final name = r.name.trim().replaceAll(RegExp(r'\s+'), ' ');
+      String? msg;
+      if (name.isEmpty) {
+        msg = '沒有品名';
+      } else if (name.length > 60) {
+        msg = '品名超過 60 個字';
+      } else if (r.unit.trim().isEmpty) {
+        msg = '沒有單位（例：瓶、包、公斤）';
+      } else if (r.unit.trim().length > 10) {
+        msg = '單位超過 10 個字';
+      } else if (r.category.trim().isEmpty) {
+        msg = '沒有分類（例：酒水、餐食、雜項）';
+      } else if (r.category.trim().length > 20) {
+        msg = '分類超過 20 個字';
+      } else if (r.par.isNotEmpty && double.tryParse(r.par) == null) {
+        msg = '安全量要是數字';
+      } else if (!const {'', '每天', '每週'}.contains(r.cycle)) {
+        msg = '多久盤一次只能是「每天」「每週」或空白';
+      } else if (r.cost.isNotEmpty && double.tryParse(r.cost) == null) {
+        msg = '成本價要是數字';
+      }
+      if (msg != null) {
+        errors.add({'row': i + 1, 'message': msg});
+        continue;
+      }
+      final key = _productKey(name);
+      if (!seen.add(key)) {
+        skipped.add({'row': i + 1, 'reason': '檔案裡前面已經有同名的品項'});
+        continue;
+      }
+      final same = _products.where((p) => _productKey(p.name) == key).firstOrNull;
+      if (same != null) {
+        skipped.add({
+          'row': i + 1,
+          'reason': _inactive.contains(same.id)
+              ? '已經有同名的品項「${same.name}」（已停用，要用請到品項管理重新啟用）'
+              : same.unit != r.unit.trim()
+                  ? '已經有同名的品項「${same.name}」（單位是${same.unit}）'
+                  : '已經有這個品項',
+        });
+        continue;
+      }
+      ok.add(r);
+    }
+    if (batchId == null || errors.isNotEmpty || ok.isEmpty) {
+      return productImportResult({'ready': ok.length, 'errors': errors, 'skipped': skipped}, rows);
+    }
+    final ids = <String>[];
+    for (final r in ok) {
+      final id = 'pimp${_seq++}';
+      ids.add(id);
+      _products.add(Product(
+        id,
+        r.name.trim().replaceAll(RegExp(r'\s+'), ' '),
+        r.category.trim(),
+        r.unit.trim(),
+        parLevel: r.par.isEmpty ? null : double.parse(r.par),
+        countCycle: switch (r.cycle) { '每天' => 'daily', '每週' => 'weekly', _ => null },
+      ));
+      if (r.cost.isNotEmpty) _demoCosts[id] = double.parse(r.cost);
+    }
+    _demoProductBatch[batchId] = ids;
+    return productImportResult({'batch': batchId, 'inserted': ok.length, 'errors': [], 'skipped': skipped}, rows);
+  }
+
+  @override
+  Future<ImportResult> previewProductImport(String storeId, List<ProductImportRow> rows) async {
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    if (rows.length > 2000) throw Exception('一次最多匯入 2000 筆，請分成幾個檔案');
+    return _demoProductCheck(rows);
+  }
+
+  @override
+  Future<ImportResult> importProducts(
+      String storeId, List<ProductImportRow> rows, String? fileName, String requestId) async {
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    final prev = _demoProductImportReq[requestId];
+    if (prev != null) {
+      final b = _demoProductImports[storeId]!.firstWhere((x) => x.id == prev);
+      return ImportResult(batchId: b.id, inserted: b.inserted, repeat: true);
+    }
+    final id = 'demo-pbatch-${DateTime.now().microsecondsSinceEpoch}';
+    final res = _demoProductCheck(rows, batchId: id);
+    if (res.batchId == null) return res;
+    _demoProductImportReq[requestId] = id;
+    (_demoProductImports[storeId] ??= []).insert(
+        0,
+        ImportBatch(
+            id: id,
+            createdAt: DateTime.now(),
+            fileName: fileName,
+            total: rows.length,
+            inserted: res.inserted,
+            skipped: res.skipped.length));
+    return res;
+  }
+
+  @override
+  Future<List<ImportBatch>> productImports(String storeId) async => [...?_demoProductImports[storeId]];
+
+  @override
+  Future<int> undoProductImport(String batchId) async {
+    for (final e in _demoProductImports.entries) {
+      final i = e.value.indexWhere((b) => b.id == batchId);
+      if (i < 0) continue;
+      final b = e.value[i];
+      if (b.undoneAt != null) throw Exception('這一批已經復原過了');
+      var n = 0;
+      for (final id in _demoProductBatch[batchId] ?? const <String>[]) {
+        if (_inactive.add(id)) n++;
+      }
+      e.value[i] = ImportBatch(
+          id: b.id,
+          createdAt: b.createdAt,
+          fileName: b.fileName,
+          total: b.total,
+          inserted: b.inserted,
+          skipped: b.skipped,
+          undoneAt: DateTime.now(),
+          undoneCount: n);
+      return n;
+    }
+    throw Exception('找不到這一批');
+  }
+
+  @override
+  Future<Map<String, double?>> productCosts(String storeId) async => {
+        for (final p in _products)
+          if (!_inactive.contains(p.id)) p.id: _demoCosts[p.id],
+      };
 
   @override
   Future<List<Reservation>> allReservations(String storeId) async => [
