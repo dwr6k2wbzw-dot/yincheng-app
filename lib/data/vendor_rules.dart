@@ -389,6 +389,15 @@ String? validateVendorRule(
   }
   if (VendorRule.needsName(kind) && name.trim().isEmpty) return '請填廠商名稱';
   if (name.trim().length > 60 || target.trim().length > 60) return '名稱最多 60 個字';
+  // 合併寫法、清單改名、清單不顯示比對的是去掉最後括號說明之後的名字（[normalizeVendorName]），
+  // 填「欣利實業（茗茶酒）」永遠對不到，所以直接請店長改填括號前面的名字（Codex 第三輪）
+  if (const {'alias', 'list_alias', 'list_hide'}.contains(kind)) {
+    final n = name.trim();
+    final base = n.replaceFirst(_vendorParen, '').trim();
+    if (base.isNotEmpty && base != n) {
+      return '最後的括號說明會自動去掉，請填「$base」就好';
+    }
+  }
   if (VendorRule.needsTarget(kind)) {
     if (target.trim().isEmpty) return '請填要改成的名字';
     if (target.trim() == name.trim()) return '兩個名字一樣，不用設定';

@@ -292,6 +292,16 @@ void main() {
       expect(validateVendorRule('alias', null, '德哥', ''), '請填要改成的名字');
       expect(validateVendorRule('alias', null, 'A', ' A '), '兩個名字一樣，不用設定');
       expect(validateVendorRule('hint_add', null, '小郭', ''), '請選類別');
+      // 比對的是去掉括號說明之後的名字：填了括號的寫法對不到，請店長改填括號前面的
+      expect(validateVendorRule('alias', null, '欣利實業（茗茶酒）', '欣利'),
+          '最後的括號說明會自動去掉，請填「欣利實業」就好');
+      expect(validateVendorRule('list_hide', null, '大倉捷(退酒)', ''),
+          '最後的括號說明會自動去掉，請填「大倉捷」就好');
+      expect(validateVendorRule('list_alias', null, '大倉捷 (退酒)', '大倉'),
+          '最後的括號說明會自動去掉，請填「大倉捷」就好');
+      // 只有括號、或常用廠商類（比對原本的名字）照舊可以存
+      expect(validateVendorRule('alias', null, '（茗茶酒）', '欣利'), isNull);
+      expect(validateVendorRule('hint_add', 'yc_drink', '大倉捷(退酒)', ''), isNull);
       expect(validateVendorRule('list_hide', null, '  ', ''), '請填廠商名稱');
       expect(validateVendorRule('list_hide', null, '長' * 61, ''), '名稱最多 60 個字');
       expect(validateVendorRule('hint_hide', 'yc_food', '', ''), isNull);
