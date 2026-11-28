@@ -126,10 +126,18 @@ class CostCategory {
   final bool inMiscRate; // 算進雜項成本率
   final bool selectable; // 新增進貨可不可以選（0046：停用的類別歷史資料照常顯示）
   final String? displayAs; // 進貨頁顯示時併入哪個類別（0047：小城外三個餐食→餐食、三個雜支→其他雜支）
+  final String? storeId; // ops 0165：類別跟著店（舊資料庫沒有這欄時是空的，改看店名）
   CostCategory(this.code, this.name, [this.storeName])
-      : costGroup = 'other', inMiscRate = false, selectable = true, displayAs = null;
+      : costGroup = 'other', inMiscRate = false, selectable = true, displayAs = null, storeId = null;
   CostCategory.full(this.code, this.name, this.storeName,
-      {required this.costGroup, required this.inMiscRate, this.selectable = true, this.displayAs});
+      {required this.costGroup, required this.inMiscRate, this.selectable = true, this.displayAs, this.storeId});
+
+  /// 這個類別是不是這家店的：有店的 id 就比 id，沒有就照舊比店名（店名空白＝每家店都能用，示範資料）
+  bool belongsTo(String id, String name) =>
+      storeId != null ? storeId == id : (storeName == null || storeName == name);
+
+  /// 公版的類別只分三種（ops 0165）
+  static const groupLabels = {'drink': '酒水', 'food': '餐食', 'other': '雜項'};
 }
 
 /// 銷貨單分組（老闆 2026-10-12 改）：依當初新增進貨的付款方式分「月結銷貨單」「零用金發票／收據」。

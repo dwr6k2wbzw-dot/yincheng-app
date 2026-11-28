@@ -610,12 +610,20 @@ class SupabaseRepository implements Repository {
 
   @override
   Future<List<CostCategory>> costCategories() async {
-    final rows =
-        await _db.from('cost_categories').select('code, name, store_name, cost_group, in_misc_rate, selectable, display_as').order('sort_order');
+    const cols = 'code, name, store_name, cost_group, in_misc_rate, selectable, display_as';
+    List<Map<String, dynamic>> rows;
+    try {
+      // ops 0165：類別跟著店（多讀 store_id）；資料庫還沒更新時退回舊的欄位
+      rows = await _db.from('cost_categories').select('$cols, store_id').order('sort_order');
+    } on PostgrestException catch (e) {
+      if (e.code != '42703' && !e.message.contains('store_id')) rethrow;
+      rows = await _db.from('cost_categories').select(cols).order('sort_order');
+    }
     final list = rows
         .map((r) => CostCategory.full(r['code'] as String, r['name'] as String, r['store_name'] as String?,
             costGroup: r['cost_group'] as String? ?? 'other', inMiscRate: r['in_misc_rate'] as bool? ?? false,
-            selectable: r['selectable'] as bool? ?? true, displayAs: r['display_as'] as String?))
+            selectable: r['selectable'] as bool? ?? true, displayAs: r['display_as'] as String?,
+            storeId: r['store_id'] as String?))
         .toList();
     // 老闆指定的順序優先（List.sort 不穩定，所以用原本位置當第二排序）
     final pos = {for (final (i, c) in list.indexed) c.code: i};
@@ -625,6 +633,26 @@ class SupabaseRepository implements Repository {
     }
     list.sort((a, b) => rank(a).compareTo(rank(b)));
     return list;
+  }
+
+  @override
+  Future<String> saveCostCategory(String storeId,
+      {String? code, required String name, required String costGroup, required bool inMiscRate, bool selectable = true}) async {
+    final r = await _db.rpc('cost_category_save', params: {
+      'p_store': storeId,
+      'p_code': code,
+      'p_name': name,
+      'p_cost_group': costGroup,
+      'p_in_misc_rate': inMiscRate,
+      'p_selectable': selectable,
+    });
+    return r as String;
+  }
+
+  @override
+  Future<int> seedCostCategories(String storeId) async {
+    final r = await _db.rpc('cost_category_seed', params: {'p_store': storeId});
+    return (r as num?)?.toInt() ?? 0;
   }
 
   // ---------------- 班表 ----------------

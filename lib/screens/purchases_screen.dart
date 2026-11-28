@@ -1022,9 +1022,9 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
 
   /// 酒水／餐食／雜項 → 這家店、這個付款方式可以選的類別代碼
   String? _categoryFor(String label) {
-    final store = widget.membership.storeName;
+    final m = widget.membership;
     final ok = _cats.where((c) =>
-        (c.storeName == null || c.storeName == store) && c.selectable && !_hiddenCats.contains(c.code));
+        c.belongsTo(m.storeId, m.storeName) && c.selectable && !_hiddenCats.contains(c.code));
     return ok.where((c) => c.name == label).firstOrNull?.code ??
         ok.where((c) => c.name.contains(label)).firstOrNull?.code;
   }
@@ -1341,7 +1341,7 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
                 decoration: const InputDecoration(labelText: '進貨類別'),
                 items: [
                   for (final c in cats.where((c) =>
-                      (c.storeName == null || c.storeName == widget.membership.storeName) &&
+                      c.belongsTo(widget.membership.storeId, widget.membership.storeName) &&
                       // 依付款方式隱藏、停用的類別（0046）不出現；但正在編輯的那筆既有類別仍保留，避免下拉值不在清單內
                       ((!_hiddenCats.contains(c.code) && c.selectable) || c.code == _category)))
                     DropdownMenuItem(

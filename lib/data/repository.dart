@@ -127,6 +127,11 @@ abstract class Repository {
   // 進貨
   Future<DateTime> businessDate(String storeId);
   Future<List<CostCategory>> costCategories();
+  /// 公版：新增或修改這家店的進貨類別（ops 0165，只有老闆；用過的類別不能改算在哪一類）。回傳類別代碼
+  Future<String> saveCostCategory(String storeId,
+      {String? code, required String name, required String costGroup, required bool inMiscRate, bool selectable = true});
+  /// 公版：一次帶入預設的 酒水／餐食／雜項（已經有類別就不動）。回傳新增幾個
+  Future<int> seedCostCategories(String storeId);
   Future<List<Supplier>> suppliers(String storeId);
   /// 各進貨類別常用的廠商（依日報表匯入的近半年進貨統計，最多 4 家）
   Future<VendorHints> vendorHints(String storeId);
@@ -522,7 +527,7 @@ String friendlyError(Object e) {
   final s = e.toString();
   final m = RegExp(r'message: ([^,]+)').firstMatch(s);
   // 0113：資料庫擋下來的訊息前面有代碼（給 App 判斷用），顯示時拿掉
-  final msg = (m?.group(1) ?? s).replaceFirst(RegExp(r'^(SHIFT_BLOCKED|SHIFT_CODE_USED|SHIFT_UNDO_CONFLICT|SIGNUP_[A-Z]+|BOOKING_ASSIST_STALE|SHIFT_ASSIST_STALE|WISH_STALE|ONBOARD_[A-Z_]+)：'), '');
+  final msg = (m?.group(1) ?? s).replaceFirst(RegExp(r'^(SHIFT_BLOCKED|SHIFT_CODE_USED|SHIFT_UNDO_CONFLICT|SIGNUP_[A-Z]+|CATEGORY_[A-Z]+|BOOKING_ASSIST_STALE|SHIFT_ASSIST_STALE|WISH_STALE|ONBOARD_[A-Z_]+)：'), '');
   if (msg.contains('duplicate key') && msg.contains('client_request')) return '這筆已經送出過了，不會重複新增。';
   if (msg.contains('row-level security')) return '沒有權限執行這個動作。';
   if (msg.contains('function public.payroll_')) return '資料庫還沒更新到薪資版本，請等老闆核准上線。';

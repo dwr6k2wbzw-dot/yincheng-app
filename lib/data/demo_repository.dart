@@ -1200,6 +1200,19 @@ class DemoRepository implements Repository {
   // 示範自助註冊：帳號含 new＝還沒有任何店；建好之後這次登入就有一家店
   bool get _isNew => _email.contains('new');
   Membership? _newStore;
+  // 畫面預覽：網址再加 &store=店名＝這個新帳號已經開好一家店（自助註冊的店，有預設的進貨類別）
+  Membership? _demoNewStore() {
+    final name = Uri.base.queryParameters['store']?.trim() ?? '';
+    if (_newStore == null && name.isNotEmpty) {
+      _newStore = Membership(storeId: 'demo-new', storeName: name, role: Role.owner, displayName: '示範老闆');
+      _seedCats('demo-new');
+      final c = _storeCats['demo-new']!;
+      c.add(CostCategory.full('demo-c${++_catSeq}', '咖啡豆', name, costGroup: 'food', inMiscRate: false, storeId: 'demo-new'));
+      c.add(CostCategory.full('demo-c${++_catSeq}', '外帶杯', name,
+          costGroup: 'other', inMiscRate: true, selectable: false, storeId: 'demo-new'));
+    }
+    return _newStore;
+  }
   @override
   Future<String> signupCreateStore(String storeName, String displayName, {String? kind}) async {
     await Future<void>.delayed(const Duration(milliseconds: 400));
@@ -1207,6 +1220,7 @@ class DemoRepository implements Repository {
       throw Exception('message: SIGNUP_TAKEN：這個店名已經有人用了，請換一個（例如加上地區或分店名）');
     }
     _newStore = Membership(storeId: 'demo-new', storeName: storeName.trim(), role: Role.owner, displayName: displayName.trim());
+    _seedCats('demo-new');
     if (kind != null) {
       // 示範：新店照範本帶入（同資料庫 0152：人力、班別／時段、設定，打開班表分頁）
       _staffing = {};
@@ -1303,7 +1317,7 @@ class DemoRepository implements Repository {
 
   @override
   Future<List<Membership>> myMemberships() async => _isNew
-      ? [if (_newStore != null) _newStore!]
+      ? [if (_demoNewStore() != null) _newStore!]
       : _isKiosk
       ? [
           _kioskXc
@@ -1934,7 +1948,63 @@ class DemoRepository implements Repository {
   }
 
   @override
-  Future<List<CostCategory>> costCategories() async => _categories;
+  Future<List<CostCategory>> costCategories() async =>
+      _isNew ? List.of(_storeCats[_newStore?.storeId] ?? const <CostCategory>[]) : _categories;
+
+  // 公版新店的進貨類別（同資料庫 0165：自助註冊的店自動有 酒水／餐食／雜項，老闆可以新增、改名、停用）
+  final _storeCats = <String, List<CostCategory>>{};
+  int _catSeq = 0;
+  int _seedCats(String storeId) {
+    final list = _storeCats.putIfAbsent(storeId, () => []);
+    if (list.isNotEmpty) return 0;
+    for (final (n, g, misc) in const [('酒水', 'drink', false), ('餐食', 'food', false), ('雜項', 'other', true)]) {
+      list.add(CostCategory.full('demo-c${++_catSeq}', n, _newStore?.storeName,
+          costGroup: g, inMiscRate: misc, storeId: storeId));
+    }
+    return 3;
+  }
+
+  @override
+  Future<int> seedCostCategories(String storeId) async {
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    if (_newStore?.storeId != storeId) {
+      throw Exception('message: CATEGORY_EXCEL：這家店的進貨類別照日報表，不能在 App 改');
+    }
+    return _seedCats(storeId);
+  }
+
+  @override
+  Future<String> saveCostCategory(String storeId,
+      {String? code, required String name, required String costGroup, required bool inMiscRate, bool selectable = true}) async {
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    if (_newStore?.storeId != storeId) {
+      throw Exception('message: CATEGORY_EXCEL：這家店的進貨類別照日報表，不能在 App 改');
+    }
+    final list = _storeCats.putIfAbsent(storeId, () => []);
+    final n = name.trim();
+    if (n.isEmpty || n.length > 20) throw Exception('message: CATEGORY_NAME：類別名稱要 1～20 個字');
+    if (!CostCategory.groupLabels.containsKey(costGroup)) {
+      throw Exception('message: CATEGORY_GROUP：類別要算在酒水、餐食或雜項');
+    }
+    if (list.any((c) => c.name == n && c.code != code)) throw Exception('message: CATEGORY_TAKEN：這家店已經有同名的類別');
+    if (code == null) {
+      if (list.length >= 50) throw Exception('message: CATEGORY_LIMIT：一家店最多 50 個類別');
+      final c = CostCategory.full('demo-c${++_catSeq}', n, _newStore?.storeName,
+          costGroup: costGroup, inMiscRate: inMiscRate, selectable: selectable, storeId: storeId);
+      list.add(c);
+      return c.code;
+    }
+    final i = list.indexWhere((c) => c.code == code);
+    if (i < 0) throw Exception('message: 找不到這個類別');
+    final old = list[i];
+    final used = _purchases.any((p) => p.categoryCode == code);
+    if (used && (old.costGroup != costGroup || old.inMiscRate != inMiscRate)) {
+      throw Exception('message: CATEGORY_USED：這個類別已經有進貨，不能改算在哪一類（成本率會跟著變），可以停用後新增一個');
+    }
+    list[i] = CostCategory.full(code, n, old.storeName,
+        costGroup: costGroup, inMiscRate: inMiscRate, selectable: selectable, storeId: storeId);
+    return code;
+  }
   @override
   Future<List<Supplier>> suppliers(String storeId) async => _suppliers;
   @override
