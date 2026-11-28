@@ -245,7 +245,12 @@ class _PlSettingsScreenState extends State<PlSettingsScreen> {
             set(() => saving = true);
             try {
               await _repo.savePlAccount(_store, row, isNew: isNew);
-              if (c.mounted) Navigator.pop(c, true);
+              if (c.mounted) {
+                Navigator.pop(c, true);
+              } else if (mounted) {
+                // 面板在儲存中被拉下來關掉了：照樣重新讀，免得以為沒存又新增一次
+                await _load();
+              }
             } catch (e) {
               if (c.mounted) {
                 set(() {
@@ -256,95 +261,100 @@ class _PlSettingsScreenState extends State<PlSettingsScreen> {
             }
           }
 
-          return Padding(
-            padding: EdgeInsets.fromLTRB(
-                20, 0, 20, 20 + MediaQuery.of(c).viewInsets.bottom),
-            child: SingleChildScrollView(
-              child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(isNew ? '新增科目' : '修改科目',
-                        style: const TextStyle(
-                            fontSize: AppType.title,
-                            fontWeight: AppFont.heading)),
-                    if (err != null) ...[
-                      const SizedBox(height: 12),
-                      _ErrorLine(text: err!)
-                    ],
-                    const SizedBox(height: 14),
-                    TextField(
-                      controller: name,
-                      maxLength: 40,
-                      decoration:
-                          const InputDecoration(labelText: '科目名稱（例：水電瓦斯費）'),
-                      onChanged: (_) => set(() => err = null),
-                    ),
-                    const SizedBox(height: 4),
-                    Text('算進損益卡片的哪一大項',
-                        style: TextStyle(
-                            color: AppColors.muted, fontSize: AppType.small)),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      child: SegmentedButton<String>(
-                        showSelectedIcon: false,
-                        segments: [
-                          for (final e in plCategoryLabels.entries)
-                            ButtonSegment(value: e.key, label: Text(e.value))
+          // 儲存中不能按返回、點外面關掉面板
+          return PopScope(
+            canPop: !saving,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                  20, 0, 20, 20 + MediaQuery.of(c).viewInsets.bottom),
+              child: SingleChildScrollView(
+                child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(isNew ? '新增科目' : '修改科目',
+                          style: const TextStyle(
+                              fontSize: AppType.title,
+                              fontWeight: AppFont.heading)),
+                      if (err != null) ...[
+                        const SizedBox(height: 12),
+                        _ErrorLine(text: err!)
+                      ],
+                      const SizedBox(height: 14),
+                      TextField(
+                        controller: name,
+                        maxLength: 40,
+                        decoration:
+                            const InputDecoration(labelText: '科目名稱（例：水電瓦斯費）'),
+                        onChanged: (_) => set(() => err = null),
+                      ),
+                      const SizedBox(height: 4),
+                      Text('算進損益卡片的哪一大項',
+                          style: TextStyle(
+                              color: AppColors.muted, fontSize: AppType.small)),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: SegmentedButton<String>(
+                          showSelectedIcon: false,
+                          segments: [
+                            for (final e in plCategoryLabels.entries)
+                              ButtonSegment(value: e.key, label: Text(e.value))
+                          ],
+                          selected: {category},
+                          onSelectionChanged: (s) => set(() {
+                            category = s.first;
+                            if (auto != null &&
+                                plAutoKinds[auto]!.$2 != category) {
+                              auto = null;
+                            }
+                            err = null;
+                          }),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String?>(
+                        key: ValueKey('auto-$category'),
+                        initialValue: autoOptions.contains(auto) ? auto : null,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                            labelText: '自動帶入（匯出損益表時歸到這個科目）'),
+                        items: [
+                          const DropdownMenuItem<String?>(
+                              value: null, child: Text('不自動帶入')),
+                          for (final k in autoOptions)
+                            DropdownMenuItem<String?>(
+                                value: k,
+                                child: Text(plAutoKinds[k]!.$1,
+                                    overflow: TextOverflow.ellipsis)),
                         ],
-                        selected: {category},
-                        onSelectionChanged: (s) => set(() {
-                          category = s.first;
-                          if (auto != null && plAutoKinds[auto]!.$2 != category) {
-                            auto = null;
-                          }
+                        onChanged: (v) => set(() {
+                          auto = v;
                           err = null;
                         }),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String?>(
-                      key: ValueKey('auto-$category'),
-                      initialValue: autoOptions.contains(auto) ? auto : null,
-                      isExpanded: true,
-                      decoration: const InputDecoration(
-                          labelText: '自動帶入（匯出損益表時歸到這個科目）'),
-                      items: [
-                        const DropdownMenuItem<String?>(
-                            value: null, child: Text('不自動帶入')),
-                        for (final k in autoOptions)
-                          DropdownMenuItem<String?>(
-                              value: k,
-                              child: Text(plAutoKinds[k]!.$1,
-                                  overflow: TextOverflow.ellipsis)),
+                      if (!isNew) ...[
+                        const SizedBox(height: 8),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('使用中'),
+                          subtitle: Text('停用後新增支出時選不到；舊的支出照樣算在這個科目（科目不能刪）',
+                              style: TextStyle(
+                                  color: AppColors.muted,
+                                  fontSize: AppType.caption)),
+                          value: active,
+                          onChanged: (v) => set(() => active = v),
+                        ),
                       ],
-                      onChanged: (v) => set(() {
-                        auto = v;
-                        err = null;
-                      }),
-                    ),
-                    if (!isNew) ...[
-                      const SizedBox(height: 8),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('使用中'),
-                        subtitle: Text('停用後新增支出時選不到；舊的支出照樣算在這個科目（科目不能刪）',
-                            style: TextStyle(
-                                color: AppColors.muted,
-                                fontSize: AppType.caption)),
-                        value: active,
-                        onChanged: (v) => set(() => active = v),
-                      ),
-                    ],
-                    const SizedBox(height: 16),
-                    SizedBox(
-                        width: double.infinity,
-                        height: 48,
-                        child: FilledButton(
-                            onPressed: saving ? null : save,
-                            child: Text(saving ? '儲存中…' : '儲存'))),
-                  ]),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                          width: double.infinity,
+                          height: 48,
+                          child: FilledButton(
+                              onPressed: saving ? null : save,
+                              child: Text(saving ? '儲存中…' : '儲存'))),
+                    ]),
+              ),
             ),
           );
         },
@@ -433,7 +443,12 @@ class _PlSettingsScreenState extends State<PlSettingsScreen> {
               ),
               isNew: isNew,
             );
-            if (c.mounted) Navigator.pop(c, 'saved');
+            if (c.mounted) {
+              Navigator.pop(c, 'saved');
+            } else if (mounted) {
+              // 面板在儲存中被拉下來關掉了：照樣重新讀，免得以為沒存又新增一次（每月重複扣）
+              await _load();
+            }
           } catch (e) {
             if (c.mounted) {
               set(() {
@@ -444,111 +459,116 @@ class _PlSettingsScreenState extends State<PlSettingsScreen> {
           }
         }
 
-        return Padding(
-          padding: EdgeInsets.fromLTRB(
-              20, 0, 20, 20 + MediaQuery.of(c).viewInsets.bottom),
-          child: SingleChildScrollView(
-            child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(isNew ? '新增每月固定支出' : '修改每月固定支出',
-                      style: const TextStyle(
-                          fontSize: AppType.title,
-                          fontWeight: AppFont.heading)),
-                  if (err != null) ...[
-                    const SizedBox(height: 12),
-                    _ErrorLine(text: err!)
-                  ],
-                  const SizedBox(height: 14),
-                  TextField(
-                    controller: name,
-                    decoration: const InputDecoration(labelText: '名稱（例：記帳費）'),
-                    onChanged: (_) => set(() => err = null),
-                  ),
-                  const SizedBox(height: 12),
-                  if (isNew)
+        // 儲存中不能按返回、點外面關掉面板
+        return PopScope(
+          canPop: !saving,
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+                20, 0, 20, 20 + MediaQuery.of(c).viewInsets.bottom),
+            child: SingleChildScrollView(
+              child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(isNew ? '新增每月固定支出' : '修改每月固定支出',
+                        style: const TextStyle(
+                            fontSize: AppType.title,
+                            fontWeight: AppFont.heading)),
+                    if (err != null) ...[
+                      const SizedBox(height: 12),
+                      _ErrorLine(text: err!)
+                    ],
+                    const SizedBox(height: 14),
                     TextField(
-                      controller: amount,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(
-                          labelText: '每月金額', prefixText: 'NT\$ '),
+                      controller: name,
+                      decoration: const InputDecoration(labelText: '名稱（例：記帳費）'),
                       onChanged: (_) => set(() => err = null),
-                    )
-                  else
-                    Text(
-                        '每月金額 ${ntd(it.amountFor(DateTime.now()))}。改金額請到總覽的本月損益點這一筆，可以選從哪個月起改。',
-                        style: TextStyle(
-                            color: AppColors.muted,
-                            fontSize: AppType.small,
-                            height: 1.5)),
-                  const SizedBox(height: 14),
-                  SizedBox(
-                    width: double.infinity,
-                    child: SegmentedButton<String>(
-                      showSelectedIcon: false,
-                      segments: [
-                        for (final e in ExpenseItem.categoryLabels.entries)
-                          ButtonSegment(value: e.key, label: Text(e.value))
-                      ],
-                      selected: {category},
-                      onSelectionChanged: (s) => set(() => category = s.first),
                     ),
-                  ),
-                  if (_accounts.isNotEmpty) ...[
                     const SizedBox(height: 12),
-                    DropdownButtonFormField<String?>(
-                      initialValue: options.any((a) => a.id == accountId)
-                          ? accountId
-                          : null,
-                      isExpanded: true,
-                      decoration:
-                          const InputDecoration(labelText: '會計科目（匯出損益表照這個加總）'),
-                      items: [
-                        const DropdownMenuItem<String?>(
-                            value: null, child: Text('未選')),
-                        for (final a in options)
-                          DropdownMenuItem<String?>(
-                              value: a.id,
-                              child: Text(a.name,
-                                  overflow: TextOverflow.ellipsis)),
-                      ],
-                      onChanged: (v) => set(() {
-                        accountId = v;
-                        final a = _accountOf(v);
-                        if (a != null) category = a.category;
-                      }),
-                    ),
-                  ],
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: note,
-                    maxLength: 100,
-                    decoration:
-                        const InputDecoration(labelText: '備註（損益表上看得到，可空白）'),
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                      width: double.infinity,
-                      height: 48,
-                      child: FilledButton(
-                          onPressed: saving ? null : save,
-                          child: Text(saving ? '儲存中…' : '儲存'))),
-                  if (!isNew) ...[
-                    const SizedBox(height: 8),
+                    if (isNew)
+                      TextField(
+                        controller: amount,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        decoration: const InputDecoration(
+                            labelText: '每月金額', prefixText: 'NT\$ '),
+                        onChanged: (_) => set(() => err = null),
+                      )
+                    else
+                      Text(
+                          '每月金額 ${ntd(it.amountFor(DateTime.now()))}。改金額請到總覽的本月損益點這一筆，可以選從哪個月起改。',
+                          style: TextStyle(
+                              color: AppColors.muted,
+                              fontSize: AppType.small,
+                              height: 1.5)),
+                    const SizedBox(height: 14),
                     SizedBox(
                       width: double.infinity,
-                      height: 48,
-                      child: TextButton(
-                        onPressed:
-                            saving ? null : () => Navigator.pop(c, 'delete'),
-                        child: Text('刪除這筆固定支出',
-                            style: TextStyle(color: AppColors.bad)),
+                      child: SegmentedButton<String>(
+                        showSelectedIcon: false,
+                        segments: [
+                          for (final e in ExpenseItem.categoryLabels.entries)
+                            ButtonSegment(value: e.key, label: Text(e.value))
+                        ],
+                        selected: {category},
+                        onSelectionChanged: (s) =>
+                            set(() => category = s.first),
                       ),
                     ),
-                  ],
-                ]),
+                    if (_accounts.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String?>(
+                        initialValue: options.any((a) => a.id == accountId)
+                            ? accountId
+                            : null,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                            labelText: '會計科目（匯出損益表照這個加總）'),
+                        items: [
+                          const DropdownMenuItem<String?>(
+                              value: null, child: Text('未選')),
+                          for (final a in options)
+                            DropdownMenuItem<String?>(
+                                value: a.id,
+                                child: Text(a.name,
+                                    overflow: TextOverflow.ellipsis)),
+                        ],
+                        onChanged: (v) => set(() {
+                          accountId = v;
+                          final a = _accountOf(v);
+                          if (a != null) category = a.category;
+                        }),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: note,
+                      maxLength: 100,
+                      decoration:
+                          const InputDecoration(labelText: '備註（損益表上看得到，可空白）'),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: FilledButton(
+                            onPressed: saving ? null : save,
+                            child: Text(saving ? '儲存中…' : '儲存'))),
+                    if (!isNew) ...[
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: TextButton(
+                          onPressed:
+                              saving ? null : () => Navigator.pop(c, 'delete'),
+                          child: Text('刪除這筆固定支出',
+                              style: TextStyle(color: AppColors.bad)),
+                        ),
+                      ),
+                    ],
+                  ]),
+            ),
           ),
         );
       }),

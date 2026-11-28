@@ -20,11 +20,22 @@ class _SlowRepo extends DemoRepository {
   int recurringSaves = 0;
   final gate = Completer<void>();
   @override
-  Future<void> saveRecurringExpenseItem(String storeId, RecurringExpenseItem item,
+  Future<void> saveRecurringExpenseItem(
+      String storeId, RecurringExpenseItem item,
       {bool isNew = false}) async {
     recurringSaves++;
     await gate.future;
     return super.saveRecurringExpenseItem(storeId, item, isNew: isNew);
+  }
+
+  int accountSaves = 0;
+  final accountGate = Completer<void>();
+  @override
+  Future<void> savePlAccount(String storeId, PlAccount account,
+      {bool isNew = false}) async {
+    accountSaves++;
+    await accountGate.future;
+    return super.savePlAccount(storeId, account, isNew: isNew);
   }
 }
 
@@ -116,6 +127,61 @@ void main() {
     await tester.pumpAndSettle();
     expect(repo.recurringSaves, 1);
     expect((await repo.recurringExpenseItems('demo-new')).length, before + 1);
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('每月固定支出儲存中：按返回、點外面都關不掉；硬拉下來關掉，存好後清單照樣更新', (tester) async {
+    final repo = _SlowRepo();
+    await _open(tester, 'demo-new', repo);
+    await tester.ensureVisible(find.text('新增').last);
+    await tester.tap(find.text('新增').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, '名稱（例：記帳費）'), '記帳費');
+    await tester.enterText(find.widgetWithText(TextField, '每月金額'), '3000');
+    await tester.tap(find.widgetWithText(FilledButton, '儲存').last);
+    await tester.pump();
+    expect(find.text('儲存中…'), findsOneWidget);
+    // 按返回
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('儲存中…'), findsOneWidget);
+    // 點面板外面
+    await tester.tapAt(const Offset(20, 20));
+    await tester.pumpAndSettle();
+    expect(find.text('儲存中…'), findsOneWidget);
+    // 硬拉下來關掉
+    await tester.drag(find.text('新增每月固定支出'), const Offset(0, 1200));
+    await tester.pumpAndSettle();
+    expect(find.text('儲存中…'), findsNothing);
+    expect(find.text('記帳費'), findsNothing);
+    repo.gate.complete();
+    await tester.pumpAndSettle();
+    expect(repo.recurringSaves, 1);
+    // 父畫面重新讀了：新的那筆出現在清單上，不會以為沒存又新增一次
+    expect(find.text('記帳費'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('科目儲存中：按返回關不掉；硬拉下來關掉，存好後清單照樣更新', (tester) async {
+    final repo = _SlowRepo();
+    await _open(tester, 'yc', repo);
+    await tester.tap(find.text('修繕費'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, '修繕費'), '修繕維護費');
+    await tester.tap(find.widgetWithText(FilledButton, '儲存').last);
+    await tester.pump();
+    expect(find.text('儲存中…'), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('儲存中…'), findsOneWidget);
+    await tester.drag(find.text('修改科目'), const Offset(0, 1200));
+    await tester.pumpAndSettle();
+    expect(find.text('儲存中…'), findsNothing);
+    expect(find.text('修繕維護費'), findsNothing);
+    repo.accountGate.complete();
+    await tester.pumpAndSettle();
+    expect(repo.accountSaves, 1);
+    expect(find.text('修繕維護費'), findsOneWidget);
     await tester.pump(const Duration(seconds: 1));
   });
 }
