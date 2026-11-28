@@ -637,10 +637,13 @@ class _HandoverScreenState extends State<HandoverScreen> with SingleTickerProvid
               ]),
             const Divider(height: 1),
           ],
-          // 0081／0084：老闆、店長私訊 AI 助理（也能許願改 App）
+          // 0081／0084：老闆、店長私訊 AI 助理（也能許願改 App）；公版沒有許願改 App（0161）
           Row(children: [
             Expanded(
-              child: Text((_lineLinks ?? 0) > 0 ? 'LINE 私訊助理：已綁定，私訊機器人不用 @ 就能問店裡的事、許願改 App' : 'LINE 私訊助理：綁定後可以私訊機器人問店裡的事、在 LINE 許願改 App',
+              child: Text(
+                  AppConfig.selfSignup
+                      ? ((_lineLinks ?? 0) > 0 ? 'LINE 私訊助理：已綁定，私訊機器人不用 @ 就能問店裡的事' : 'LINE 私訊助理：綁定後可以私訊機器人問店裡的事')
+                      : ((_lineLinks ?? 0) > 0 ? 'LINE 私訊助理：已綁定，私訊機器人不用 @ 就能問店裡的事、許願改 App' : 'LINE 私訊助理：綁定後可以私訊機器人問店裡的事、在 LINE 許願改 App'),
                   style: TextStyle(fontSize: AppType.small, color: AppColors.muted, height: 1.5)),
             ),
             (_lineLinks ?? 0) > 0

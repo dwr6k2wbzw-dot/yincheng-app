@@ -256,6 +256,10 @@ abstract class Repository {
   Future<int> lineOwnerLinks(); // 0081：我綁了幾個 LINE 私訊
   Future<void> linkLineOwner(String code); // 0081：老闆輸入 LINE 私訊給的代碼
   Future<void> unlinkLineOwner(); // 0081：解除自己的 LINE 私訊綁定
+  Future<bool> lineOwnerLinkedVia(String storeId); // 0161：我有沒有透過這家店自己的 LINE 官方帳號綁私訊
+  Future<void> unlinkLineOwnerVia(String storeId); // 0161：只解除透過這家店官方帳號的私訊綁定（平台的不動）
+  /// 0161：輸入私訊給的代碼綁定；回傳綁好之後是不是透過這家店的官方帳號（代碼是平台機器人給的就會是 false）
+  Future<bool> linkLineOwnerVia(String storeId, String code);
   Future<bool> lineGroupBound(String storeId); // 0156：這家店綁了 LINE 群組沒（只有老闆讀得到）
   Future<LineBindCode> createLineGroupBindCode(String storeId); // 0156：老闆產生群組綁定代碼（10 分鐘、一次性）
   Future<void> setHandoverItemDone(String itemId, bool done); // 0060：清單打勾

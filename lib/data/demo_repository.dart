@@ -994,7 +994,25 @@ class DemoRepository implements Repository {
   }
 
   @override
-  Future<void> unlinkLineOwner() async => _lineLinks = 0;
+  Future<void> unlinkLineOwner() async {
+    _lineLinks = 0;
+    _lineLinksVia.clear();
+  }
+
+  // 0161：示範版——透過店家自己的官方帳號綁的私訊（代碼 6 位數就算綁上；這家店要先接上官方帳號）
+  final _lineLinksVia = <String>{};
+  @override
+  Future<bool> lineOwnerLinkedVia(String storeId) async => _lineLinksVia.contains(storeId);
+  @override
+  Future<void> unlinkLineOwnerVia(String storeId) async => _lineLinksVia.remove(storeId);
+  @override
+  Future<bool> linkLineOwnerVia(String storeId, String code) async {
+    if (code.trim().length != 6 || _storeLine[storeId]?.connected != true) {
+      throw Exception('message: 代碼不對或已過期，請在 LINE 私訊機器人重新打「綁定」,');
+    }
+    _lineLinksVia.add(storeId);
+    return true;
+  }
   // 0156：示範版——小城外假裝已經綁好群組，其他店還沒綁
   @override
   Future<bool> lineGroupBound(String storeId) async => storeId == 'xc';
@@ -3066,7 +3084,10 @@ class DemoRepository implements Repository {
   }
 
   @override
-  Future<void> clearStoreLine(String storeId) async => _storeLine.remove(storeId);
+  Future<void> clearStoreLine(String storeId) async {
+    _storeLine.remove(storeId);
+    _lineLinksVia.remove(storeId); // 0161：解除帳號時，透過這個帳號綁的私訊一起拿掉
+  }
 
   @override
   Future<List<PlatformWish>> platformWishes(String storeId) async => [

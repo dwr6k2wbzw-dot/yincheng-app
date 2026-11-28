@@ -903,6 +903,24 @@ class SupabaseRepository implements Repository {
     await _db.from('line_owner_links').delete().eq('user_id', me);
   }
 
+  // 0161：透過這家店自己的 LINE 官方帳號綁的私訊（綁定一樣用 line_owner_link，代碼本身記是哪個帳號發的）
+  @override
+  Future<bool> lineOwnerLinkedVia(String storeId) async =>
+      (await _db.from('line_owner_links').select('line_user_id').eq('via_store', storeId)).isNotEmpty;
+
+  @override
+  Future<bool> linkLineOwnerVia(String storeId, String code) async {
+    await linkLineOwner(code);
+    return lineOwnerLinkedVia(storeId);
+  }
+
+  @override
+  Future<void> unlinkLineOwnerVia(String storeId) async {
+    final me = currentUserId;
+    if (me == null) return;
+    await _db.from('line_owner_links').delete().eq('user_id', me).eq('via_store', storeId);
+  }
+
   // 0156：LINE 群組綁定（line_groups 只有老闆讀得到；代碼只在產生的這一次看得到）
   @override
   Future<bool> lineGroupBound(String storeId) async =>
