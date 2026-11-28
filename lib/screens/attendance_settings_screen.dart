@@ -122,6 +122,7 @@ class _AttendanceSettingsScreenState extends State<AttendanceSettingsScreen> {
     });
     try {
       await _repo.saveAttendanceSettings(_store, changes);
+      notifyAttendanceSettingsSaved(_store);
     } catch (e) {
       if (mounted) setState(() => _formError = friendlyError(e));
       return;

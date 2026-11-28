@@ -1,4 +1,16 @@
+import 'package:flutter/foundation.dart';
+
 import 'repository.dart';
+
+/// 打卡設定存好之後通知（值＝剛存的店的 id）：班表頁的打卡卡片留在 IndexedStack 裡不會重建，
+/// 從 ⋯ 選單改完回來要靠這個重新讀（Codex P2）。
+final ValueNotifier<String?> attendanceSettingsSaved = ValueNotifier<String?>(null);
+
+/// 存好設定時呼叫；同一家店連存兩次也要通知，所以先清掉再設。
+void notifyAttendanceSettingsSaved(String storeId) {
+  attendanceSettingsSaved.value = null;
+  attendanceSettingsSaved.value = storeId;
+}
 
 /// 打卡設定（ops 0163）：每家店自己設的打卡規則。
 /// 老闆、店長讀得到（店長要用寬限把差太多的時間標紅）；只有老闆能改，改了記在出勤異動紀錄。

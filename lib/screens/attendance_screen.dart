@@ -102,6 +102,7 @@ class _AttendanceCardState extends State<AttendanceCard> {
   @override
   void initState() {
     super.initState();
+    attendanceSettingsSaved.addListener(_onSettingsSaved);
     () async {
       try {
         final v = (await SharedPreferences.getInstance()).getBool(_openKey) ?? false;
@@ -163,6 +164,17 @@ class _AttendanceCardState extends State<AttendanceCard> {
   void _reload() => setState(() {
         _future = _load();
       });
+
+  /// 打卡設定在別的畫面（⋯ 選單）存好了：這張卡片留在 IndexedStack 裡不會重建，要自己重新讀。
+  void _onSettingsSaved() {
+    if (mounted && attendanceSettingsSaved.value == widget.membership.storeId) _reload();
+  }
+
+  @override
+  void dispose() {
+    attendanceSettingsSaved.removeListener(_onSettingsSaved);
+    super.dispose();
+  }
 
   /// 自己設打卡密碼（只有還沒設的時候；ops 0141 起店長也能自己設）
   Future<void> _editPin(PinStatus p) async {
