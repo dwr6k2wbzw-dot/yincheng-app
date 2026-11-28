@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yincheng_ops/data/repository.dart';
 import 'package:yincheng_ops/data/vendor_rules.dart';
-import 'package:yincheng_ops/screens/vendor_rules_screen.dart';
 
 // ---- 2026-11-28 以前 lib/config.dart 寫死的內容（原樣抄下來，用來證明搬進資料庫後結果一模一樣）----
 const oldHintHidden = {'xc_ramen_misc'};

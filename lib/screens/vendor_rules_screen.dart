@@ -16,19 +16,6 @@ class VendorRulesScreen extends StatefulWidget {
   State<VendorRulesScreen> createState() => _VendorRulesScreenState();
 }
 
-/// 每一種規則在畫面上怎麼稱呼、什麼意思
-const vendorRuleLabels = <String, (String, String)>{
-  'alias': ('合併寫法', '這個寫法一律當成同一家：進貨區塊、選擇廠商、常用廠商都會合併'),
-  'list_alias': ('清單改名', '只在新增進貨「選擇廠商」清單裡換成另一個名字'),
-  'list_hide': ('清單不顯示', '「選擇廠商」清單不列出這個名字'),
-  'list_add': ('清單一定列出', '就算最近沒進貨，「選擇廠商」清單也列出來'),
-  'hint_add': ('常用廠商', '選了這個類別時，提示這家廠商'),
-  'hint_remove': ('提示拿掉', '這個類別不提示這家廠商'),
-  'hint_alias': ('提示改名', '提示裡的這個名字換成另一個'),
-  'hint_hide': ('這類不提示', '這個類別不顯示常用廠商'),
-  'petty_hint_hide': ('零用金不帶廠商', '用零用金付款時，這個類別不自動帶入、不提示廠商'),
-};
-
 class _VendorRulesScreenState extends State<VendorRulesScreen> {
   late Future<(List<VendorRule>, List<CostCategory>)> _future;
   bool _started = false;
@@ -225,39 +212,6 @@ class _VendorRulesScreenState extends State<VendorRulesScreen> {
           ),
         ]),
       );
-}
-
-/// 一條規則用一句話講出來（清單上顯示）
-String describeVendorRule(VendorRule r, Map<String, String> catName) {
-  final cat = r.category == null ? '' : (catName[r.category] ?? r.category!);
-  return switch (r.kind) {
-    'alias' => '${r.name} → ${r.target}',
-    'list_alias' => '清單裡 ${r.name} → ${r.target}',
-    'list_hide' => '清單不顯示 ${r.name}',
-    'list_add' => '清單一定列出 ${r.name}',
-    'hint_add' => '$cat：${r.name}',
-    'hint_remove' => '$cat：不提示 ${r.name}',
-    'hint_alias' => '提示裡 ${r.name} → ${r.target}',
-    'hint_hide' => '$cat：不顯示常用廠商',
-    'petty_hint_hide' => '$cat：零用金時不帶廠商',
-    _ => [r.category, r.name, r.target].whereType<String>().join(' '),
-  };
-}
-
-/// 檢查一條規則（跟資料庫的格式檢查一樣）；沒問題回傳 null
-String? validateVendorRule(
-    String kind, String? category, String name, String target) {
-  if (VendorRule.needsCategory(kind) &&
-      (category == null || category.isEmpty)) {
-    return '請選類別';
-  }
-  if (VendorRule.needsName(kind) && name.trim().isEmpty) return '請填廠商名稱';
-  if (name.trim().length > 60 || target.trim().length > 60) return '名稱最多 60 個字';
-  if (VendorRule.needsTarget(kind)) {
-    if (target.trim().isEmpty) return '請填要改成的名字';
-    if (target.trim() == name.trim()) return '兩個名字一樣，不用設定';
-  }
-  return null;
 }
 
 class _RuleSheet extends StatefulWidget {
