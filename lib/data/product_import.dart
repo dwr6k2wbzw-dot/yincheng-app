@@ -101,6 +101,9 @@ String normCycle(String s) {
 
 /// 第一個有「品名」「單位」的列當表頭（前面幾列可以是標題、說明）；表頭之後的空白列跳過。
 ProductImportTable readProductImportTable(List<List<String>> cells) {
+  // 只有「品名」沒有單位或分類的列（例如標題寫「品項」）先記下來，繼續往下找完整的表頭；
+  // 都找不到才回這個錯誤。
+  String? missing;
   for (var h = 0; h < cells.length && h < 20; h++) {
     final head = [for (final c in cells[h]) _norm(c)];
     int col(String key) {
@@ -116,10 +119,12 @@ ProductImportTable readProductImportTable(List<List<String>> cells) {
     if (name < 0) continue;
     final unit = col('unit'), category = col('category');
     if (unit < 0) {
-      return const ProductImportTable([], '找不到「單位」那一欄（第一列要有品名、單位、分類）');
+      missing ??= '找不到「單位」那一欄（第一列要有品名、單位、分類）';
+      continue;
     }
     if (category < 0) {
-      return const ProductImportTable([], '找不到「分類」那一欄（第一列要有品名、單位、分類）');
+      missing ??= '找不到「分類」那一欄（第一列要有品名、單位、分類）';
+      continue;
     }
     final par = col('par'), cycle = col('cycle'), cost = col('cost');
     String at(List<String> r, int i) =>
@@ -145,7 +150,10 @@ ProductImportTable readProductImportTable(List<List<String>> cells) {
     }
     return ProductImportTable(rows, null, hasCost);
   }
-  return const ProductImportTable([], '找不到「品名」那一欄（第一列要有品名、單位、分類）');
+  return ProductImportTable(
+    const [],
+    missing ?? '找不到「品名」那一欄（第一列要有品名、單位、分類）',
+  );
 }
 
 /// 資料庫 product_import 回的結果（預覽或真的匯入）；rows：送出去的那些列（row 從 1 開始，換成檔案裡的列號）

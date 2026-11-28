@@ -31,6 +31,26 @@ void main() {
           reason: '沒填成本價就不送這個欄位');
     });
 
+    test('標題列剛好是「品項」「商品」→ 繼續往下找真正的表頭', () {
+      final t = readProductImportTable([
+        ['品項'],
+        ['商品', '', ''],
+        ['品名', '單位', '分類'],
+        ['琴酒', '瓶', '酒水'],
+      ]);
+      expect(t.problem, isNull);
+      expect(t.rows.length, 1);
+      expect(t.rows.single.line, 4);
+      expect(t.rows.single.name, '琴酒');
+      // 一直找不到完整的表頭，才回第一個缺的欄位
+      expect(
+          readProductImportTable([
+            ['品項'],
+            ['品名', '分類'],
+          ]).problem,
+          contains('單位'));
+    });
+
     test('缺品名、單位、分類那一欄 → 說清楚缺哪一欄', () {
       expect(
           readProductImportTable([
