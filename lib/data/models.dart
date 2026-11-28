@@ -506,6 +506,8 @@ class RevenueEntry {
   final double ramen; // 小城外：拉麵
   final String? note;
   final String source; // app / import
+  /// 搬家匯入的是哪一批（ops 0168；只有匯出時讀，其他地方是 null）
+  final String? fileImportId;
   RevenueEntry({
     this.id,
     required this.bizDate,
@@ -521,6 +523,7 @@ class RevenueEntry {
     this.ramen = 0,
     this.note,
     this.source = 'app',
+    this.fileImportId,
   });
 
   /// 收款合計（＝資料庫的 revenue）
@@ -544,6 +547,7 @@ class RevenueEntry {
         ramen: _d(r['ramen_revenue']),
         note: r['note'] as String?,
         source: r['source'] as String? ?? 'app',
+        fileImportId: r['file_import_id'] as String?,
       );
 
   Map<String, dynamic> toValues() => {

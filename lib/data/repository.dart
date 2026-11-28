@@ -13,6 +13,7 @@ import 'payroll.dart';
 import 'platform_wish.dart';
 import 'purchase_items_math.dart';
 import 'reservation_models.dart';
+import 'revenue_import.dart';
 import 'shift_links.dart';
 import 'shift_planner.dart';
 import 'store_ai.dart';
@@ -24,6 +25,7 @@ export 'line_bind.dart';
 export 'payroll.dart';
 export 'platform_wish.dart';
 export 'reservation_models.dart';
+export 'revenue_import.dart';
 export 'shift_planner.dart';
 export 'store_ai.dart';
 export 'store_line.dart';
@@ -353,6 +355,15 @@ abstract class Repository {
   Future<int> undoReservationImport(String batchId);
   /// 匯出用：這家店全部的訂位（含已取消、隱藏的）
   Future<List<Reservation>> allReservations(String storeId);
+  // 營收搬家（ops 0168，公版；老闆、店長）：過去的每日營收先預覽（資料庫檢查每一列、不寫入），沒問題再匯入；每一批可以整批復原
+  Future<RevenueImportResult> previewRevenueImport(String storeId, List<RevenueImportRow> rows);
+  /// [requestId]：同一個檔案按兩次只匯一次
+  Future<RevenueImportResult> importRevenue(String storeId, List<RevenueImportRow> rows, String? fileName, String requestId);
+  Future<List<RevenueImportBatch>> revenueImports(String storeId);
+  /// 回（刪掉幾天、留下幾天）：匯入之後改過的、鎖帳月份的留著
+  Future<(int, int)> undoRevenueImport(String batchId);
+  /// 匯出用：這家店全部的每日營收（舊到新）
+  Future<List<RevenueEntry>> allRevenueEntries(String storeId);
   // 許願單（ops 0149，公版；只有老闆、店長）：寫一則送到平台待辦，平台回覆狀態和說明
   /// 這家店的許願單（新的在前）
   Future<List<PlatformWish>> platformWishes(String storeId);
