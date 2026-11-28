@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../app_state.dart';
+import '../config.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
 import '../theme.dart';
@@ -11,6 +12,7 @@ import '../widgets/common.dart';
 import '../widgets/item_sections.dart';
 import '../widgets/month_switcher.dart';
 import '../widgets/revenue_mix.dart';
+import 'revenue_import_screen.dart';
 
 /// 每日營收：列表＋手動登記／修改。老闆／店長／正職可手動登記暫記（source=app）；
 /// 營收以 Dropbox 日報表為準，匯入同一天會自動覆蓋暫記。Excel 匯入的那筆只有老闆／店長能改。
@@ -43,6 +45,31 @@ class _RevenueScreenState extends State<RevenueScreen> {
   /// 能不能點開這一筆：老闆／店長／正職都能點開看；
   /// 能不能「改」由表單判斷（Excel 匯入的那筆正職只能看，見 RevenueFormScreen._readOnly）
   bool _canOpenRow(RevenueEntry e) => _canWrite;
+
+  /// 營收搬家（ops 0168）：老闆、店長匯入過去的營收、匯出。老闆 2026-11-27：公版功能只在公版（自助註冊那一份）出現，
+  /// 隱城／小城外這一份畫面不變
+  bool get _canImport => AppConfig.selfSignup && widget.membership.isManager;
+
+  Future<void> _openImport() async {
+    final changed = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => RevenueImportScreen(membership: widget.membership)),
+    );
+    if (changed == true) _reload();
+  }
+
+  Widget _importEntry() => SectionCard(
+        padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
+        child: Row(children: [
+          Icon(Icons.import_export, size: 20, color: AppColors.muted),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text('從舊系統搬營收過來、或匯出 Excel',
+                style: TextStyle(color: AppColors.muted, fontSize: AppType.small)),
+          ),
+          TextButton(key: const Key('revenue-import'), onPressed: _openImport, child: const Text('匯入、匯出')),
+        ]),
+      );
 
   @override
   void didChangeDependencies() {
@@ -136,6 +163,7 @@ class _RevenueScreenState extends State<RevenueScreen> {
             if (data.first == null && list.isEmpty) {
               return ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 96), children: [
                 if (banner != null) banner,
+                if (_canImport) _importEntry(),
                 const SizedBox(height: 120),
                 Text(
                     !_canWrite
@@ -151,6 +179,7 @@ class _RevenueScreenState extends State<RevenueScreen> {
               // 固定佔一格：載入條出現、消失時，下面的卡片位置不變，品項累計才不會被重建、重查
               SizedBox(height: 2, child: loading ? const LinearProgressIndicator(minHeight: 2) : null),
               if (banner != null) banner,
+              if (_canImport) _importEntry(),
               _WeekdayStats(entries: _shown(data.week, today), multi: isMultiLineStore(widget.membership.storeName)),
               // 銷售品項累計（老闆 2026-11-13）：只算有 iCHEF 的日子，沒有的列「未計入」；跟著切換的月份
               if (data.ichef.isNotEmpty)

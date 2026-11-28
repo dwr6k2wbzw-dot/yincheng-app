@@ -3544,6 +3544,225 @@ class DemoRepository implements Repository {
     return res;
   }
 
+  // ---------------- 營收搬家（ops 0168，示範版：照資料庫的規則在記憶體裡檢查） ----------------
+  final _demoRevImports = <String, List<RevenueImportBatch>>{
+    'yc': [
+      RevenueImportBatch(
+        id: 'demo-rev-batch-old',
+        createdAt: DateTime.now().subtract(const Duration(days: 3, hours: 2)),
+        fileName: '舊系統匯出_試匯.csv',
+        total: 31,
+        inserted: 30,
+        skipped: 1,
+        dateFrom: DateTime(DateTime.now().year - 1, 1, 1),
+        dateTo: DateTime(DateTime.now().year - 1, 1, 31),
+        undoneAt: DateTime.now().subtract(const Duration(days: 3)),
+        undoneCount: 30,
+        undoneKept: 0,
+      ),
+    ],
+  };
+  final _demoRevImportReq = <String, String>{};
+
+  RevenueImportResult _demoRevCheck(String storeId, List<RevenueImportRow> rows, {String? batchId}) {
+    final multi = StoreFeatures.of(_demoStoreNames[storeId] ?? '').multiLineRevenue;
+    final n = DateTime.now().subtract(const Duration(hours: 6));
+    final today = DateTime(n.year, n.month, n.day);
+    final have = {for (final e in _revList(storeId)) DateTime(e.bizDate.year, e.bizDate.month, e.bizDate.day)};
+    const labels = {
+      'cash': '現金', 'credit_card': '刷卡', 'amex': 'AE', 'deposit': '訂金', 'drinks_revenue': '酒水',
+      'food_revenue': '餐食', 'project_amount': '專案', 'coffee_revenue': '咖啡', 'ramen_revenue': '拉麵',
+    };
+    final errors = <Map<String, dynamic>>[], skipped = <Map<String, dynamic>>[], warnings = <Map<String, dynamic>>[];
+    final ok = <(RevenueImportRow, DateTime, Map<String, double>, int)>[];
+    final seen = <DateTime>{};
+    for (var i = 0; i < rows.length; i++) {
+      final r = rows[i];
+      String? msg;
+      final d = RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(r.date) ? DateTime.tryParse(r.date) : null;
+      if (r.date.isEmpty) {
+        msg = '沒有日期';
+      } else if (d == null) {
+        msg = '日期看不懂（請寫成 2026-10-24）';
+      } else if (d.isAfter(today)) {
+        msg = '日期還沒到（只能匯入今天以前的營收）';
+      } else if (d.year < 2000) {
+        msg = '日期太早（2000 年以後）';
+      }
+      final g = r.v('guests').isEmpty ? 0 : int.tryParse(r.v('guests'));
+      if (msg == null && (g == null || g < 0 || g > 99999)) msg = '來客數要是 0～99999 的整數';
+      final amounts = <String, double>{};
+      if (msg == null) {
+        for (final k in labels.keys) {
+          final raw = r.v(k);
+          final v = raw.isEmpty ? 0.0 : double.tryParse(raw);
+          if (v == null) {
+            msg = '${labels[k]}看不懂（請填數字）';
+            break;
+          }
+          if (v < 0 || v > 100000000 || (v * 100).roundToDouble() != v * 100) {
+            msg = '${labels[k]}要是 0～1 億、最多兩位小數';
+            break;
+          }
+          amounts[k] = v;
+        }
+      }
+      if (msg == null && !multi && ((amounts['coffee_revenue'] ?? 0) != 0 || (amounts['ramen_revenue'] ?? 0) != 0)) {
+        msg = '這家店的營收沒有分咖啡、拉麵，請把那兩欄留空';
+      }
+      if (msg == null && r.v('note').length > 200) msg = '備註超過 200 個字';
+      if (msg != null) {
+        errors.add({'row': i + 1, 'message': msg});
+        continue;
+      }
+      final pay = ['cash', 'credit_card', 'amex', 'deposit'].fold<double>(0, (a, k) => a + amounts[k]!);
+      final lines = ['drinks_revenue', 'food_revenue', 'project_amount', 'coffee_revenue', 'ramen_revenue']
+          .fold<double>(0, (a, k) => a + amounts[k]!);
+      if (pay == 0 && lines == 0 && g == 0) {
+        skipped.add({'row': i + 1, 'reason': '這天全部是 0（公休不用匯入）'});
+        continue;
+      }
+      if (seen.contains(d)) {
+        skipped.add({'row': i + 1, 'reason': '檔案裡前面已經有這一天'});
+        continue;
+      }
+      seen.add(d!);
+      if (have.contains(d)) {
+        skipped.add({'row': i + 1, 'reason': '這天已經有營收資料（不會蓋掉）'});
+        continue;
+      }
+      if (lines > 0 && lines != pay) {
+        warnings.add({'row': i + 1, 'message': '營收分類合計 ${_fmtNum(lines)} 跟收款合計 ${_fmtNum(pay)} 不一樣（照樣匯入）'});
+      }
+      ok.add((r, d, amounts, g!));
+    }
+    DateTime? from, to;
+    for (final o in ok) {
+      if (from == null || o.$2.isBefore(from)) from = o.$2;
+      if (to == null || o.$2.isAfter(to)) to = o.$2;
+    }
+    if (from != null && to!.difference(from).inDays > 732) {
+      errors.add({'row': 0, 'message': '檔案的日期從 ${_ymd(from)} 到 ${_ymd(to)}，一次最多 2 年，請分成幾個檔案'});
+    }
+    String? day(DateTime? d) => d == null ? null : _ymd(d);
+    if (batchId == null || errors.isNotEmpty || ok.isEmpty) {
+      return RevenueImportResult.fromJson({
+        'batch': null,
+        'ready': errors.isEmpty ? ok.length : 0,
+        'errors': errors,
+        'skipped': skipped,
+        'warnings': warnings,
+        'date_from': day(from),
+        'date_to': day(to),
+      }, rows);
+    }
+    final list = _revList(storeId);
+    for (final o in ok) {
+      final a = o.$3;
+      list.add(RevenueEntry(
+        id: 'rev${++_seq}',
+        bizDate: o.$2,
+        guests: o.$4,
+        cash: a['cash']!,
+        creditCard: a['credit_card']!,
+        amex: a['amex']!,
+        deposit: a['deposit']!,
+        drinks: a['drinks_revenue']!,
+        food: a['food_revenue']!,
+        project: a['project_amount']!,
+        coffee: a['coffee_revenue']!,
+        ramen: a['ramen_revenue']!,
+        note: o.$1.v('note').isEmpty ? null : o.$1.v('note'),
+        fileImportId: batchId,
+      ));
+    }
+    return RevenueImportResult.fromJson({
+      'batch': batchId,
+      'inserted': ok.length,
+      'skipped': skipped,
+      'warnings': warnings,
+      'date_from': day(from),
+      'date_to': day(to),
+    }, rows);
+  }
+
+  static String _ymd(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+  static String _fmtNum(double v) => v == v.roundToDouble() ? '${v.round()}' : '$v';
+
+  @override
+  Future<RevenueImportResult> previewRevenueImport(String storeId, List<RevenueImportRow> rows) async {
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    if (rows.length > revenueImportMax) throw Exception('一次最多匯入 $revenueImportMax 天，請分成幾個檔案');
+    return _demoRevCheck(storeId, rows);
+  }
+
+  @override
+  Future<RevenueImportResult> importRevenue(
+      String storeId, List<RevenueImportRow> rows, String? fileName, String requestId) async {
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    final prev = _demoRevImportReq[requestId];
+    if (prev != null) {
+      final b = _demoRevImports[storeId]!.firstWhere((x) => x.id == prev);
+      return RevenueImportResult(batchId: b.id, inserted: b.inserted, repeat: true);
+    }
+    final id = 'demo-rev-batch-${DateTime.now().microsecondsSinceEpoch}';
+    final res = _demoRevCheck(storeId, rows, batchId: id);
+    if (res.batchId == null) return res;
+    _demoRevImportReq[requestId] = id;
+    (_demoRevImports[storeId] ??= []).insert(
+      0,
+      RevenueImportBatch(
+        id: id,
+        createdAt: DateTime.now(),
+        fileName: fileName,
+        total: rows.length,
+        inserted: res.inserted,
+        skipped: res.skipped.length,
+        dateFrom: res.dateFrom!,
+        dateTo: res.dateTo!,
+      ),
+    );
+    return res;
+  }
+
+  @override
+  Future<List<RevenueImportBatch>> revenueImports(String storeId) async => [...?_demoRevImports[storeId]];
+
+  @override
+  Future<(int, int)> undoRevenueImport(String batchId) async {
+    for (final e in _demoRevImports.entries) {
+      final i = e.value.indexWhere((b) => b.id == batchId);
+      if (i < 0) continue;
+      final b = e.value[i];
+      if (b.undoneAt != null) throw Exception('這一批已經復原過了');
+      final list = _revList(e.key);
+      final before = list.length;
+      list.removeWhere((x) => x.fileImportId == batchId);
+      final deleted = before - list.length;
+      final kept = (b.inserted - deleted).clamp(0, b.inserted);
+      e.value[i] = RevenueImportBatch(
+        id: b.id,
+        createdAt: b.createdAt,
+        fileName: b.fileName,
+        total: b.total,
+        inserted: b.inserted,
+        skipped: b.skipped,
+        dateFrom: b.dateFrom,
+        dateTo: b.dateTo,
+        undoneAt: DateTime.now(),
+        undoneCount: deleted,
+        undoneKept: kept,
+      );
+      return (deleted, kept);
+    }
+    throw Exception('找不到這一批匯入，或你沒有權限');
+  }
+
+  @override
+  Future<List<RevenueEntry>> allRevenueEntries(String storeId) async =>
+      List.of(_revList(storeId))..sort((a, b) => a.bizDate.compareTo(b.bizDate));
+
   @override
   Future<List<ImportBatch>> reservationImports(String storeId) async => [
     ...?_demoImports[storeId],

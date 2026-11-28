@@ -2168,6 +2168,69 @@ class SupabaseRepository implements Repository {
   Future<ImportResult> importReservations(String storeId, List<ImportRow> rows, String? fileName, String requestId) =>
       _reservationImport(storeId, rows, fileName, requestId, false);
 
+  // ---------------- 營收搬家（ops 0168） ----------------
+  Future<RevenueImportResult> _revenueImport(
+      String storeId, List<RevenueImportRow> rows, String? fileName, String? requestId, bool dry) async {
+    final r = await _db.rpc('revenue_import', params: {
+      'p_store': storeId,
+      'p_rows': [for (final x in rows) x.toJson()],
+      'p_file': fileName,
+      'p_request': requestId,
+      'p_dry_run': dry,
+    });
+    return RevenueImportResult.fromJson(Map<String, dynamic>.from(r as Map), rows);
+  }
+
+  @override
+  Future<RevenueImportResult> previewRevenueImport(String storeId, List<RevenueImportRow> rows) =>
+      _revenueImport(storeId, rows, null, null, true);
+
+  @override
+  Future<RevenueImportResult> importRevenue(
+          String storeId, List<RevenueImportRow> rows, String? fileName, String requestId) =>
+      _revenueImport(storeId, rows, fileName, requestId, false);
+
+  @override
+  Future<List<RevenueImportBatch>> revenueImports(String storeId) async {
+    final rows = await _db
+        .from('revenue_imports')
+        .select('id, created_at, file_name, total_rows, inserted, skipped, date_from, date_to, undone_at, undone_count, undone_kept')
+        .eq('store_id', storeId)
+        .order('created_at', ascending: false)
+        .limit(50);
+    return [for (final r in rows) RevenueImportBatch.fromRow(r)];
+  }
+
+  @override
+  Future<(int, int)> undoRevenueImport(String batchId) async {
+    final r = Map<String, dynamic>.from(await _db.rpc('revenue_import_undo', params: {'p_batch': batchId}) as Map);
+    return ((r['deleted'] as num?)?.toInt() ?? 0, (r['kept'] as num?)?.toInt() ?? 0);
+  }
+
+  @override
+  Future<List<RevenueEntry>> allRevenueEntries(String storeId) async {
+    // 資料庫還沒有 0168 時讀不到 file_import_id：拿掉再讀一次
+    var select = '$_revCols, file_import_id';
+    final out = <RevenueEntry>[];
+    const page = 1000;
+    for (var from = 0;; from += page) {
+      List<Map<String, dynamic>> rows;
+      try {
+        rows = await _db.from('daily_revenue').select(select).eq('store_id', storeId).eq('kind', 'daily')
+            .order('biz_date').range(from, from + page - 1);
+      } on PostgrestException catch (e) {
+        if (from == 0 && select != _revCols && e.code == '42703') {
+          select = _revCols;
+          from -= page;
+          continue;
+        }
+        rethrow;
+      }
+      out.addAll(rows.map(RevenueEntry.fromRow));
+      if (rows.length < page) return out;
+    }
+  }
+
   @override
   Future<List<ImportBatch>> reservationImports(String storeId) async {
     final rows = await _db
