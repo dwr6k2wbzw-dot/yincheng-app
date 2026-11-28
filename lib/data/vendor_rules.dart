@@ -269,6 +269,41 @@ Map<String, List<String>> adjustVendorHints(
   return out;
 }
 
+/// 新增進貨畫面某個類別的常用廠商提示（最多 [limit] 個）。
+/// [hints] 是依來源類別分的原始提示；[displayAs] 是舊類別 → 合併後的類別（0048）。
+/// 排除規則兩層都看（Codex P2）：來源類別的（以前就有的設定，例如 xc_ramen_misc）
+/// 和畫面上選的類別本身的（設定畫面只能選目前的類別，店長設「這類不提示」「提示拿掉」「零用金不帶廠商」都是設在這裡）。
+/// [sourceHidden]：這個來源類別在目前付款方式下要不要整個排除（隱城依付款方式隱藏的舊類別等）。
+List<String> vendorHintsForCategory(
+  Map<String, List<String>> hints,
+  VendorRules rules,
+  Map<String, String> displayAs,
+  String category, {
+  required bool petty,
+  bool Function(String code)? sourceHidden,
+  int limit = 6,
+}) {
+  if (rules.hintHide.contains(category)) return const [];
+  if (petty && rules.pettyHintHide.contains(category)) return const [];
+  final removed = <String>{
+    for (final n in rules.hintRemove[category] ?? const <String>{}) ...[
+      n,
+      rules.hintAlias[n] ?? rules.groupAlias[n] ?? n,
+    ],
+  };
+  final out = <String>[];
+  for (final e in adjustVendorHints(hints, rules).entries) {
+    if ((displayAs[e.key] ?? e.key) != category) continue;
+    if (petty && rules.pettyHintHide.contains(e.key)) continue;
+    if (sourceHidden?.call(e.key) ?? false) continue;
+    for (final n in e.value) {
+      if (removed.contains(n) || out.contains(n)) continue;
+      out.add(n);
+    }
+  }
+  return out.take(limit).toList();
+}
+
 /// 每一種規則在畫面上怎麼稱呼、什麼意思
 const vendorRuleLabels = <String, (String, String)>{
   'alias': ('合併寫法', '這個寫法一律當成同一家：進貨區塊、選擇廠商、常用廠商都會合併'),

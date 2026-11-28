@@ -186,6 +186,76 @@ void main() {
         });
   });
 
+  group('類別的提示排除：畫面上選的類別也算（Codex P2）', () {
+    // 酒水 yc_drink 合併了舊類別 liquor_monthly（0048 display_as）
+    const displayAs = {'liquor_monthly': 'yc_drink', 'liquor_cash': 'yc_drink'};
+    final hints = {
+      'liquor_monthly': ['大倉捷', '德哥'],
+      'liquor_cash': ['喝酒生活'],
+      'yc_drink': ['欣利'],
+      'yc_food': ['小郭'],
+    };
+    List<String> hintsOf(List<VendorRule> rules, String cat,
+            {bool petty = false}) =>
+        vendorHintsForCategory(hints, VendorRules(rules), displayAs, cat,
+            petty: petty);
+
+    test('沒有規則：合併的舊類別一起列', () {
+      expect(hintsOf(const [], 'yc_drink'), ['大倉捷', '德哥', '喝酒生活', '欣利']);
+    });
+    test('「這類不提示」設在選的類別：合併進來的舊類別也不提示', () {
+      expect(
+          hintsOf(const [VendorRule(kind: 'hint_hide', category: 'yc_drink')],
+              'yc_drink'),
+          isEmpty);
+      expect(
+          hintsOf(const [VendorRule(kind: 'hint_hide', category: 'yc_drink')],
+              'yc_food'),
+          ['小郭']);
+    });
+    test('「提示拿掉」設在選的類別：舊類別來的同一家也拿掉（含合併寫法）', () {
+      const rules = [
+        VendorRule(kind: 'hint_remove', category: 'yc_drink', name: '大倉捷'),
+        VendorRule(kind: 'hint_remove', category: 'yc_drink', name: '阿德'),
+        VendorRule(kind: 'alias', name: '阿德', target: '阿德水果'),
+        VendorRule(kind: 'alias', name: '德哥', target: '阿德水果'),
+      ];
+      expect(hintsOf(rules, 'yc_drink'), ['喝酒生活', '欣利']);
+    });
+    test('「零用金不帶廠商」設在選的類別：零用金時整類不提示，月結照舊', () {
+      const r = [VendorRule(kind: 'petty_hint_hide', category: 'yc_drink')];
+      expect(hintsOf(r, 'yc_drink', petty: true), isEmpty);
+      expect(hintsOf(r, 'yc_drink'), ['大倉捷', '德哥', '喝酒生活', '欣利']);
+    });
+    test('設在舊類別的照舊只排除那一類', () {
+      expect(
+          hintsOf(
+              const [VendorRule(kind: 'hint_hide', category: 'liquor_monthly')],
+              'yc_drink'),
+          ['喝酒生活', '欣利']);
+      expect(
+          hintsOf(const [
+            VendorRule(kind: 'petty_hint_hide', category: 'liquor_cash')
+          ], 'yc_drink', petty: true),
+          ['大倉捷', '德哥', '欣利']);
+    });
+    test('來源類別被付款方式隱藏時照舊排除；最多 6 個', () {
+      expect(
+          vendorHintsForCategory(
+              hints, VendorRules(const []), displayAs, 'yc_drink',
+              petty: false, sourceHidden: (c) => c == 'liquor_monthly'),
+          ['喝酒生活', '欣利']);
+      final many = {
+        'a': [for (var i = 0; i < 9; i++) 'v$i']
+      };
+      expect(
+          vendorHintsForCategory(many, VendorRules(const []), const {}, 'a',
+                  petty: false)
+              .length,
+          6);
+    });
+  });
+
   test('新開的店（資料庫沒有規則）什麼都不調整', () {
     final r = VendorRules(const [], fromDb: true);
     expect(normalizeVendorName('德哥', r), '德哥');

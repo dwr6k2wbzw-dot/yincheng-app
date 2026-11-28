@@ -777,19 +777,13 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
 
   final _vendorFocus = FocusNode();
 
-  /// 這個類別的常用廠商（依合併後類別比對；零用金時排除不顯示提示的來源類別），最多 6 個
+  /// 這個類別的常用廠商（依合併後類別比對；來源類別、畫面上選的類別兩層的排除都看），最多 6 個
   List<String> _hintsFor(String? category) {
     final h = _hints;
     if (h == null || category == null) return const [];
-    final src = adjustVendorHints(_paidBy == 'petty_cash' ? h.petty : h.vendor, _rules);
-    final out = <String>[];
-    for (final e in src.entries) {
-      if ((_displayAs[e.key] ?? e.key) != category || _sourceHidden(e.key, _paidBy)) continue;
-      for (final n in e.value) {
-        if (!out.contains(n)) out.add(n);
-      }
-    }
-    return out.take(6).toList();
+    final petty = _paidBy == 'petty_cash';
+    return vendorHintsForCategory(petty ? h.petty : h.vendor, _rules, _displayAs, category,
+        petty: petty, sourceHidden: (c) => _sourceHidden(c, _paidBy));
   }
 
   Widget _hintChips() {
