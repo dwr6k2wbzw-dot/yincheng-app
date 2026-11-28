@@ -670,12 +670,11 @@ class _PurchaseFormScreenState extends State<PurchaseFormScreen> {
   // 常用廠商提示（只有公版顯示；兩家店 2026-10-13 起不顯示）
   VendorHints? _hints;
   // 依付款方式隱藏的類別（只有開了 paidByCategories 的店套用；目前是隱城）
-  /// 某類別在某付款方式下可自動帶入的預設廠商名稱（依合併後類別比對、排除該付款方式不適用的來源類別）
-  List<String> _autoSuppliers(List<Supplier> sups, String category, String paidBy) => sups
-      .where((s) => (_displayAs[s.defaultCategory] ?? s.defaultCategory) == category)
-      .where((s) => !_sourceHidden(s.defaultCategory, paidBy))
-      .map((s) => s.name)
-      .toList();
+  /// 某類別在某付款方式下可自動帶入的預設廠商名稱（依合併後類別比對、排除該付款方式不適用的來源類別；
+  /// 店長自己在選的類別設「零用金不帶廠商」也排除，見 autoSupplierNames）
+  List<String> _autoSuppliers(List<Supplier> sups, String category, String paidBy) => autoSupplierNames(
+      sups, _rules, _displayAs, category,
+      petty: paidBy == 'petty_cash', sourceHidden: (c) => _sourceHidden(c, paidBy));
 
   /// 這個來源類別在某付款方式下要不要排除（合併提示、自動帶入廠商用）：
   /// 隱城依付款方式不提供的類別＋零用金不顯示提示的類別（Codex 審查）

@@ -1,3 +1,4 @@
+import 'models.dart';
 import 'repository.dart';
 
 /// 廠商名稱設定的一條規則（ops 0166 `vendor_name_rules`）。
@@ -18,6 +19,7 @@ class VendorRule {
     this.name,
     this.target,
     this.sortOrder = 0,
+    this.userMade = false,
   });
   final String? id;
   final String kind;
@@ -25,6 +27,10 @@ class VendorRule {
   final String? name;
   final String? target;
   final int sortOrder;
+
+  /// 店長、老闆在設定畫面自己新增的（資料庫 created_by 有值）。
+  /// 0166 從以前寫死的設定搬進來的（created_by 空白）和讀不到資料庫時的 [VendorRules.legacy] 都是 false。
+  final bool userMade;
 
   static const kinds = [
     'alias',
@@ -56,6 +62,7 @@ class VendorRule {
     name: r['name'] as String?,
     target: r['target'] as String?,
     sortOrder: (r['sort_order'] as num?)?.toInt() ?? 0,
+    userMade: r['created_by'] != null,
   );
 
   Map<String, dynamic> toRow() => {
@@ -116,6 +123,12 @@ class VendorRules {
   /// 零用金付款時不自動帶入廠商、不顯示提示的類別
   late final Set<String> pettyHintHide = {
     for (final r in _of('petty_hint_hide')) r.category!,
+  };
+
+  /// 上面那些裡面，店長、老闆在設定畫面自己新增的（自動帶入廠商時也看畫面上選的類別，見 [autoSupplierNames]）
+  late final Set<String> pettyHintHideUserMade = {
+    for (final r in _of('petty_hint_hide'))
+      if (r.userMade) r.category!,
   };
 
   // ---------------- 讀取與暫存 ----------------
@@ -303,6 +316,38 @@ List<String> vendorHintsForCategory(
   }
   return out.take(limit).toList();
 }
+
+/// 新增進貨畫面選了類別 [category] 時，可以自動帶入的廠商（依合併後的類別比對，[displayAs] 同上）。
+/// 排除：來源類別在目前付款方式不適用的（[sourceHidden]）、零用金付款時來源類別設了「零用金不帶廠商」的。
+/// 畫面上選的類別本身設的「零用金不帶廠商」只算店長、老闆在設定畫面自己新增的那幾條（[VendorRules.pettyHintHideUserMade]）：
+/// 0166 從以前寫死的設定搬進來的那幾條維持只看來源類別——小城外的 xc_bar_liquor（酒水）那條如果也看選的類別，
+/// 零用金選「酒水」時併進來的酒水副材料、咖啡吧-酒水廠商就不會再自動帶入，兩家店的結果會變（Codex 第二輪）。
+List<String> autoSupplierNames(
+  Iterable<Supplier> sups,
+  VendorRules rules,
+  Map<String, String> displayAs,
+  String category, {
+  required bool petty,
+  bool Function(String code)? sourceHidden,
+}) {
+  if (petty && rules.pettyHintHideUserMade.contains(category)) return const [];
+  return [
+    for (final s in sups)
+      if ((displayAs[s.defaultCategory] ?? s.defaultCategory) == category &&
+          !_autoSourceHidden(s.defaultCategory, rules, petty, sourceHidden))
+        s.name,
+  ];
+}
+
+bool _autoSourceHidden(
+  String? code,
+  VendorRules rules,
+  bool petty,
+  bool Function(String code)? sourceHidden,
+) =>
+    code != null &&
+    ((sourceHidden?.call(code) ?? false) ||
+        (petty && rules.pettyHintHide.contains(code)));
 
 /// 每一種規則在畫面上怎麼稱呼、什麼意思
 const vendorRuleLabels = <String, (String, String)>{

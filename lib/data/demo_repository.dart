@@ -1679,12 +1679,12 @@ class DemoRepository implements Repository {
           VendorRule(id: 'vr-${e.key}-$i', kind: r.kind, category: r.category, name: r.name, target: r.target, sortOrder: r.sortOrder)
       ],
     // 公版新開的店：示範幾條自己設的
-    'demo-new': const [
-      VendorRule(id: 'vr-new-1', kind: 'alias', name: '欣力', target: '欣利實業'),
-      VendorRule(id: 'vr-new-2', kind: 'alias', name: '大倉', target: '大倉捷'),
-      VendorRule(id: 'vr-new-3', kind: 'list_hide', name: '全聯'),
-      VendorRule(id: 'vr-new-4', kind: 'list_add', name: '花都'),
-      VendorRule(id: 'vr-new-5', kind: 'hint_add', category: 'yc_drink', name: '示範酒商C'),
+    'demo-new': [
+      const VendorRule(id: 'vr-new-1', kind: 'alias', name: '欣力', target: '欣利實業', userMade: true),
+      const VendorRule(id: 'vr-new-2', kind: 'alias', name: '大倉', target: '大倉捷', userMade: true),
+      const VendorRule(id: 'vr-new-3', kind: 'list_hide', name: '全聯', userMade: true),
+      const VendorRule(id: 'vr-new-4', kind: 'list_add', name: '花都', userMade: true),
+      const VendorRule(id: 'vr-new-5', kind: 'hint_add', category: 'yc_drink', name: '示範酒商C', userMade: true),
     ],
   };
 
@@ -1706,6 +1706,8 @@ class DemoRepository implements Repository {
       name: rule.name?.trim(),
       target: rule.target?.trim(),
       sortOrder: rule.sortOrder,
+      // 跟資料庫一樣：設定畫面新增的記成自己設的，修改沿用原本的
+      userMade: rule.id == null || list.any((x) => x.id == rule.id && x.userMade),
     );
     list.removeWhere((x) => x.id == saved.id);
     list.add(saved);

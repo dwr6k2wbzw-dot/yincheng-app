@@ -511,7 +511,7 @@ class SupabaseRepository implements Repository {
   Future<List<VendorRule>> vendorRules(String storeId) async {
     final rows = await _db
         .from('vendor_name_rules')
-        .select('id, kind, category_code, name, target, sort_order')
+        .select('id, kind, category_code, name, target, sort_order, created_by')
         .eq('store_id', storeId)
         .order('kind')
         .order('sort_order');

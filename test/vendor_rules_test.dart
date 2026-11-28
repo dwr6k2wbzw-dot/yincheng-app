@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:yincheng_ops/data/models.dart';
 import 'package:yincheng_ops/data/repository.dart';
 import 'package:yincheng_ops/data/vendor_rules.dart';
 
@@ -320,6 +321,116 @@ void main() {
       for (final k in VendorRule.kinds) {
         expect(vendorRuleLabels[k], isNotNull, reason: k);
       }
+    });
+  });
+
+  // Codex 第二輪（app #240）：自動帶入廠商也要看畫面上選的類別。只有店長自己新增的「零用金不帶廠商」多看選的類別，
+  // 0166 搬進來的那幾條照舊只看來源類別 → 兩家店自動帶入的結果跟 0166 以前一模一樣。
+  group('自動帶入廠商（autoSupplierNames）', () {
+    // 兩家店實際的合併（ops seed.sql／0047／0048 的 cost_categories.display_as）
+    const displayAs = {
+      'liquor_monthly': 'yc_drink',
+      'liquor_cash': 'yc_drink',
+      'fruit': 'yc_drink',
+      'ice': 'yc_drink',
+      'food': 'yc_food',
+      'bar_misc': 'yc_misc',
+      'petty_misc': 'yc_misc',
+      'service': 'yc_misc',
+      'xc_cafe_food': 'xc_bar_food',
+      'xc_ramen_food': 'xc_bar_food',
+      'xc_ramen_broth': 'xc_bar_food',
+      'xc_cafe_misc': 'xc_bar_misc',
+      'xc_ramen_misc': 'xc_bar_misc',
+      'xc_bar_supply': 'xc_bar_liquor',
+      'xc_cafe_liquor': 'xc_bar_liquor',
+    };
+    final codes = {
+      ...displayAs.keys,
+      ...displayAs.values,
+      'xc_coffee', 'xc_ramen', 'xc_deposit', //
+    }.toList();
+    final sups = [
+      for (final c in codes) Supplier('s-$c', '廠商-$c', c),
+      Supplier('s-none', '沒有類別的廠商', null),
+    ];
+
+    // 0166 以前 purchases_screen.dart 的 _autoSuppliers／_sourceHidden（原樣抄下來，零用金規則用以前 config.dart 的）
+    List<String> oldAuto(String category, bool petty, Set<String> hiddenByPaid) => sups
+        .where((s) => (displayAs[s.defaultCategory] ?? s.defaultCategory) == category)
+        .where((s) =>
+            !(s.defaultCategory != null &&
+                (hiddenByPaid.contains(s.defaultCategory) ||
+                    (petty && oldPettyCashHintHidden.contains(s.defaultCategory)))))
+        .map((s) => s.name)
+        .toList();
+
+    // 資料庫裡 0166 搬進來的那幾條：created_by 空白
+    VendorRules seededFromDb(String store) => VendorRules([
+          for (final (i, r) in VendorRules.legacySeed(store).indexed)
+            VendorRule.fromRow({...r.toRow(), 'id': 'r$i', 'created_by': null}),
+        ], fromDb: true);
+
+    for (final store in ['隱城', '小城外']) {
+      for (final (label, rules) in [
+        ('資料庫（0166 搬進來的）', seededFromDb(store)),
+        ('讀不到資料庫（legacy）', VendorRules.legacy(store)),
+      ]) {
+        test('$store・$label：每個類別、兩種付款方式都跟以前一樣', () {
+          expect(rules.pettyHintHideUserMade, isEmpty);
+          for (final hidden in [<String>{}, {'liquor_cash', 'xc_cafe_liquor'}]) {
+            for (final c in codes) {
+              for (final petty in [false, true]) {
+                expect(
+                  autoSupplierNames(sups, rules, displayAs, c,
+                      petty: petty, sourceHidden: hidden.contains),
+                  oldAuto(c, petty, hidden),
+                  reason: '$c petty=$petty hidden=$hidden',
+                );
+              }
+            }
+          }
+        });
+      }
+    }
+
+    test('小城外零用金選「酒水」：併進來的酒水副材料、咖啡吧-酒水廠商照舊自動帶入（兩邊都看的話會被拿掉）', () {
+      final r = autoSupplierNames(sups, seededFromDb('小城外'), displayAs, 'xc_bar_liquor', petty: true);
+      expect(r, ['廠商-xc_bar_supply', '廠商-xc_cafe_liquor']);
+      // 來源是 xc_bar_liquor 本身的照舊排除
+      expect(r, isNot(contains('廠商-xc_bar_liquor')));
+    });
+
+    test('店長自己在選的類別設「零用金不帶廠商」：併進來的舊類別廠商也不帶', () {
+      final rules = VendorRules([
+        ...seededFromDb('隱城').rules,
+        VendorRule.fromRow({
+          'id': 'u1',
+          'kind': 'petty_hint_hide',
+          'category_code': 'yc_drink',
+          'created_by': '00000000-0000-0000-0000-0000000000a1',
+        }),
+      ], fromDb: true);
+      expect(rules.pettyHintHideUserMade, {'yc_drink'});
+      expect(autoSupplierNames(sups, rules, displayAs, 'yc_drink', petty: true), isEmpty);
+      // 月結不受影響
+      expect(autoSupplierNames(sups, rules, displayAs, 'yc_drink', petty: false),
+          ['廠商-liquor_monthly', '廠商-liquor_cash', '廠商-fruit', '廠商-ice', '廠商-yc_drink']);
+      // 別的類別不受影響
+      expect(autoSupplierNames(sups, rules, displayAs, 'yc_food', petty: true), ['廠商-food', '廠商-yc_food']);
+    });
+
+    test('店長自己設在舊類別上的照舊只排除那個來源', () {
+      final rules = VendorRules([
+        VendorRule.fromRow({
+          'id': 'u2',
+          'kind': 'petty_hint_hide',
+          'category_code': 'fruit',
+          'created_by': '00000000-0000-0000-0000-0000000000a1',
+        }),
+      ], fromDb: true);
+      expect(autoSupplierNames(sups, rules, displayAs, 'yc_drink', petty: true),
+          ['廠商-liquor_monthly', '廠商-liquor_cash', '廠商-ice', '廠商-yc_drink']);
     });
   });
 }
