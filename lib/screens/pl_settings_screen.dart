@@ -245,7 +245,9 @@ class _PlSettingsScreenState extends State<PlSettingsScreen> {
             set(() => saving = true);
             try {
               await _repo.savePlAccount(_store, row, isNew: isNew);
-              if (c.mounted) {
+              // 面板還開著（不是正在被拉下來關掉的動畫中）才關：動畫中 c 還在，
+              // 這時再 pop 會把底下的設定畫面關掉（Codex 第三輪）
+              if (c.mounted && (ModalRoute.of(c)?.isCurrent ?? false)) {
                 Navigator.pop(c, true);
               } else if (mounted) {
                 // 面板在儲存中被拉下來關掉了：照樣重新讀，免得以為沒存又新增一次
@@ -443,7 +445,9 @@ class _PlSettingsScreenState extends State<PlSettingsScreen> {
               ),
               isNew: isNew,
             );
-            if (c.mounted) {
+            // 面板還開著（不是正在被拉下來關掉的動畫中）才關：動畫中 c 還在，
+            // 這時再 pop 會把底下的設定畫面關掉（Codex 第三輪）
+            if (c.mounted && (ModalRoute.of(c)?.isCurrent ?? false)) {
               Navigator.pop(c, 'saved');
             } else if (mounted) {
               // 面板在儲存中被拉下來關掉了：照樣重新讀，免得以為沒存又新增一次（每月重複扣）
