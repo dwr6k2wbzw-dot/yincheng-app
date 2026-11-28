@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../app_state.dart';
+import '../config.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
 import '../services/clock.dart';
@@ -10,6 +11,7 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import 'attendance_check_screen.dart' show MyOvertimeSection;
 import 'attendance_manage_screen.dart';
+import 'attendance_settings_screen.dart';
 import 'payroll_screen.dart';
 import 'pin_punch_screen.dart' show editPunchPin;
 
@@ -232,6 +234,14 @@ class _AttendanceCardState extends State<AttendanceCard> {
                   child: const Text('員工資料'),
                 ),
               ..._payrollButtons(me),
+              // 打卡設定（ops 0163）：公版的老闆在這裡打開打卡
+              if (AppConfig.selfSignup && _owner)
+                FilledButton.tonal(
+                  onPressed: () => Navigator.of(context)
+                      .push(MaterialPageRoute(builder: (_) => AttendanceSettingsScreen(membership: widget.membership)))
+                      .then((_) => _reload()),
+                  child: const Text('打卡設定'),
+                ),
             ]),
           ],
         ]),
