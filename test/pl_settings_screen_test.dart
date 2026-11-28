@@ -4,6 +4,8 @@
 @TestOn('browser')
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -13,12 +15,26 @@ import 'package:yincheng_ops/data/models.dart';
 import 'package:yincheng_ops/screens/pl_settings_screen.dart';
 import 'package:yincheng_ops/theme.dart';
 
-Future<DemoRepository> _open(WidgetTester tester, String storeId) async {
+/// 存每月固定支出時先卡住，數被叫了幾次（模擬慢網路連按）。
+class _SlowRepo extends DemoRepository {
+  int recurringSaves = 0;
+  final gate = Completer<void>();
+  @override
+  Future<void> saveRecurringExpenseItem(String storeId, RecurringExpenseItem item,
+      {bool isNew = false}) async {
+    recurringSaves++;
+    await gate.future;
+    return super.saveRecurringExpenseItem(storeId, item, isNew: isNew);
+  }
+}
+
+Future<DemoRepository> _open(WidgetTester tester, String storeId,
+    [DemoRepository? given]) async {
   SharedPreferences.setMockInitialValues({});
   tester.view.physicalSize = const Size(390 * 3, 1400 * 3);
   tester.view.devicePixelRatio = 3;
   addTearDown(tester.view.reset);
-  final repo = DemoRepository();
+  final repo = given ?? DemoRepository();
   final m = Membership(
       storeId: storeId, storeName: '示範小館', role: Role.owner, displayName: '示範');
   await tester.pumpWidget(AppScope(
@@ -75,5 +91,31 @@ void main() {
     await tester.pumpAndSettle();
     expect(await repo.cardFeeRate('demo-new'), closeTo(0.0191, 1e-9));
     expect(await repo.plTitle('demo-new'), '一店');
+  });
+
+  testWidgets('新增每月固定支出：送出中連按不會重複新增', (tester) async {
+    final repo = _SlowRepo();
+    await _open(tester, 'demo-new', repo);
+    final before = (await repo.recurringExpenseItems('demo-new')).length;
+    await tester.ensureVisible(find.text('新增').last);
+    await tester.tap(find.text('新增').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, '名稱（例：記帳費）'), '記帳費');
+    await tester.enterText(find.widgetWithText(TextField, '每月金額'), '3000');
+    final save = find.widgetWithText(FilledButton, '儲存').last;
+    await tester.tap(save);
+    await tester.pump();
+    // 送出中：按鈕變「儲存中…」而且按不了
+    final busy = find.widgetWithText(FilledButton, '儲存中…');
+    expect(busy, findsOneWidget);
+    expect(tester.widget<FilledButton>(busy).onPressed, isNull);
+    await tester.tap(busy, warnIfMissed: false);
+    await tester.pump();
+    expect(repo.recurringSaves, 1);
+    repo.gate.complete();
+    await tester.pumpAndSettle();
+    expect(repo.recurringSaves, 1);
+    expect((await repo.recurringExpenseItems('demo-new')).length, before + 1);
+    await tester.pump(const Duration(seconds: 1));
   });
 }

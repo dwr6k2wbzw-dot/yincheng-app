@@ -209,6 +209,8 @@ class _PlSettingsScreenState extends State<PlSettingsScreen> {
     String? auto = a?.autoKind;
     var active = a?.active ?? true;
     String? err;
+    // 送出中不能再按（慢網路連按會重複新增）
+    var saving = false;
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -220,6 +222,7 @@ class _PlSettingsScreenState extends State<PlSettingsScreen> {
               if (e.value.$2 == category) e.key
           ];
           Future<void> save() async {
+            if (saving) return;
             final n = name.text.trim();
             if (n.isEmpty || n.length > 40) {
               set(() => err = '科目名稱要 1～40 個字');
@@ -239,11 +242,17 @@ class _PlSettingsScreenState extends State<PlSettingsScreen> {
                           1),
               active: active,
             );
+            set(() => saving = true);
             try {
               await _repo.savePlAccount(_store, row, isNew: isNew);
               if (c.mounted) Navigator.pop(c, true);
             } catch (e) {
-              set(() => err = friendlyError(e));
+              if (c.mounted) {
+                set(() {
+                  saving = false;
+                  err = friendlyError(e);
+                });
+              }
             }
           }
 
@@ -333,7 +342,8 @@ class _PlSettingsScreenState extends State<PlSettingsScreen> {
                         width: double.infinity,
                         height: 48,
                         child: FilledButton(
-                            onPressed: save, child: const Text('儲存'))),
+                            onPressed: saving ? null : save,
+                            child: Text(saving ? '儲存中…' : '儲存'))),
                   ]),
             ),
           );
@@ -385,6 +395,8 @@ class _PlSettingsScreenState extends State<PlSettingsScreen> {
     var category = it?.category ?? 'misc';
     String? accountId = it?.accountId;
     String? err;
+    // 送出中不能再按：新增是每按一次就多一筆，連按會讓每個月重複扣
+    var saving = false;
     final result = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
@@ -395,6 +407,7 @@ class _PlSettingsScreenState extends State<PlSettingsScreen> {
             if (a.active || a.id == accountId) a
         ];
         Future<void> save() async {
+          if (saving) return;
           final n = name.text.trim();
           final amt = double.tryParse(amount.text.trim());
           if (n.isEmpty) {
@@ -405,6 +418,7 @@ class _PlSettingsScreenState extends State<PlSettingsScreen> {
             set(() => err = '請填每月金額（0 以上）');
             return;
           }
+          set(() => saving = true);
           try {
             await _repo.saveRecurringExpenseItem(
               _store,
@@ -421,7 +435,12 @@ class _PlSettingsScreenState extends State<PlSettingsScreen> {
             );
             if (c.mounted) Navigator.pop(c, 'saved');
           } catch (e) {
-            set(() => err = friendlyError(e));
+            if (c.mounted) {
+              set(() {
+                saving = false;
+                err = friendlyError(e);
+              });
+            }
           }
         }
 
@@ -514,14 +533,16 @@ class _PlSettingsScreenState extends State<PlSettingsScreen> {
                       width: double.infinity,
                       height: 48,
                       child: FilledButton(
-                          onPressed: save, child: const Text('儲存'))),
+                          onPressed: saving ? null : save,
+                          child: Text(saving ? '儲存中…' : '儲存'))),
                   if (!isNew) ...[
                     const SizedBox(height: 8),
                     SizedBox(
                       width: double.infinity,
                       height: 48,
                       child: TextButton(
-                        onPressed: () => Navigator.pop(c, 'delete'),
+                        onPressed:
+                            saving ? null : () => Navigator.pop(c, 'delete'),
                         child: Text('刪除這筆固定支出',
                             style: TextStyle(color: AppColors.bad)),
                       ),
