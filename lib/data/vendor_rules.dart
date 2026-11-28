@@ -284,7 +284,8 @@ const vendorRuleLabels = <String, (String, String)>{
 
 /// 一條規則用一句話講出來（清單上顯示）
 String describeVendorRule(VendorRule r, Map<String, String> catName) {
-  final cat = r.category == null ? '' : (catName[r.category] ?? r.category!);
+  // 這家店沒有的類別（例如從舊設定帶過來、只有另一家店才有的類別）不露出代碼
+  final cat = r.category == null ? '' : (catName[r.category] ?? '其他店的類別');
   return switch (r.kind) {
     'alias' => '${r.name} → ${r.target}',
     'list_alias' => '清單裡 ${r.name} → ${r.target}',

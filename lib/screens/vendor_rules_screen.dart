@@ -18,6 +18,8 @@ class VendorRulesScreen extends StatefulWidget {
 
 class _VendorRulesScreenState extends State<VendorRulesScreen> {
   late Future<(List<VendorRule>, List<CostCategory>)> _future;
+  // 規則上的類別名稱：停用的、別家店的類別也照名稱顯示（例如已停用的舊類別），不要露出代碼
+  Map<String, String> _allCatNames = const {};
   bool _started = false;
 
   @override
@@ -33,6 +35,7 @@ class _VendorRulesScreenState extends State<VendorRulesScreen> {
     final r = await Future.wait(
         [repo.vendorRules(widget.membership.storeId), repo.costCategories()]);
     final rules = r[0] as List<VendorRule>;
+    _allCatNames = {for (final c in r[1] as List<CostCategory>) c.code: c.name};
     VendorRules.put(
         widget.membership.storeId, VendorRules(rules, fromDb: true));
     final cats = (r[1] as List<CostCategory>)
@@ -97,7 +100,7 @@ class _VendorRulesScreenState extends State<VendorRulesScreen> {
               return const Center(child: CircularProgressIndicator());
             }
             final (rules, cats) = snap.data!;
-            final catName = {for (final c in cats) c.code: c.name};
+            final catName = {..._allCatNames, for (final c in cats) c.code: c.name};
             List<VendorRule> of(Set<String> kinds) =>
                 rules.where((r) => kinds.contains(r.kind)).toList();
             return RefreshIndicator(

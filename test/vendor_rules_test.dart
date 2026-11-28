@@ -244,7 +244,7 @@ void main() {
               const VendorRule(
                   kind: 'petty_hint_hide', category: 'xc_ramen_food'),
               cats),
-          'xc_ramen_food：零用金時不帶廠商');
+          '其他店的類別：零用金時不帶廠商');
     });
     test('每一種都有中文說明', () {
       for (final k in VendorRule.kinds) {
